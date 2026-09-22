@@ -182,3 +182,264 @@
 - Is any extra Save button limited to a GM review/edit draft flow?
 - If this is a historical view, do phase panels and modifiers show history markers and historical values?
 - Does the result panel read command facts rather than recomputing?
+
+## 12. Consolidating Actions and tasks into the Combat Inspector
+
+Recorded 2026-09-22 from the Product Owner specification in Forgejo issue #287, against
+`dev` at `c2c0f2a96f86d12686a325d173ef57d12704d781`. This section extends the panel
+ownership rules in sections 1-11; it does not restate them, and it changes no decision
+already recorded above.
+
+This is **composition and routing**. It is not authorization to redesign Combat. Where a
+capability cannot be routed without changing a panel's meaning or the combat domain, this
+section records the conflict in
+[12.6 Returned contract mismatches — unresolved](#126-returned-contract-mismatches--unresolved)
+and stops there.
+
+### 12.1 The Round Manager is retained
+
+The Combat Round Manager remains. It is fundamental shared board-game state showing round,
+phase and participant progression, and it is not removed, replaced or redesigned by this
+work. Its purpose is unchanged from [section 2](#2-gm-combat-round-manager) and
+[section 6](#6-tracker--timeline). Player Play V1 records the same retention for the player
+round tracker in
+[Player Play V1 section 10.1](../architecture/player-play-v1.md#101-round-tracker).
+
+### 12.2 The standalone Actions and tasks surface is removed
+
+`GenericCombatActionPanel` (`apps/web/src/features/combat-generic-actions/GenericCombatActionPanel.tsx`)
+renders a second, parallel action system. Its heading is `Actions and tasks` for the GM and
+`Items and task history` for the player. It is rendered above the Combat Inspector in
+`apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx` and in
+`apps/web/app/(app)/campaigns/[campaignId]/scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent.tsx`,
+and it embeds `CombatItemInteractionPanel` and `EncounterItemsPanel`.
+
+It must stop existing as a separate action system. Its capabilities belong to the Combat
+Inspector panels already contracted above, entering through the approved declaration path
+rather than a parallel action channel. The Combat Inspector's form and layout stay
+substantially as they are.
+
+**Generic task and action functionality enters through the approved Perform Task or other
+appropriate declaration path.** A second declaration channel is not reopened because a
+control does not fit.
+
+### 12.3 Panel destinations
+
+These restate no panel's purpose; they name which existing contract receives the work.
+
+| Destination                                                                 | Receives                                                                                                                    | Still must not own                         |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Action selector ([section 4](#4-action-selector-and-shared-phase-panels))   | Declaration input: primary action, secondary action, movement and facing, conditional declaration fields, declaration notes | Roll resolution, damage, round advancement |
+| Phase 1 / Phase 2 ([section 4](#4-action-selector-and-shared-phase-panels)) | Their existing combat, loadout and calculation role                                                                         | Unrelated task authoring                   |
+| Combat situation ([section 5](#5-combat-modifiers-panel))                   | Current combat state, modifiers, planning information                                                                       | Action entry                               |
+| Current action ([section 8](#8-action-button-area))                         | What the current step requires, and the commit/declaration/resolution command for that step                                 | Explanation of prior results               |
+| Current step results ([section 7](#7-action-result-panel))                  | The result of the current step                                                                                              | Declaration controls                       |
+| Combat Log ([section 7](#7-action-result-panel))                            | Accepted Combat outcomes and events under its existing contract                                                             | Draft declarations or raw calculations     |
+| Round Manager ([section 2](#2-gm-combat-round-manager))                     | Shared progression and tracking, unchanged in purpose                                                                       | Command logic belonging to a panel above   |
+
+Item and Encounter context presented today inside Actions and tasks becomes **context
+supplied to the correct existing declaration path**, not another action system.
+
+### 12.4 Capability mapping
+
+Derived from the code at the recorded baseline. Line numbers are orientation, not contract.
+
+| Current capability                                                                | Current implementation site                                                                                                              | Destination panel                   | Existing governing contract                                                                                                                                                                                                                                                              |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intent text, `What do you intend to do?`                                          | `GenericCombatActionPanel.tsx:433`                                                                                                       | Action selector                     | Perform Task `description` (max 2000) in `packages/domain/src/encounter/combatDeclarationIntent.ts`; rendered as `Task description` in `apps/web/src/features/player-combat/PlayerCombatPanels.tsx`                                                                                      |
+| Generic action preset `look_around` / `other`                                     | `GenericCombatActionPanel.tsx:416`                                                                                                       | Action selector                     | Primary/secondary action ids in `packages/domain/src/encounter/combatDeclarationCompatibility.ts` — see [M1](#126-returned-contract-mismatches--unresolved)                                                                                                                              |
+| Duration: one phase / one round / several rounds / GM decides                     | `GenericCombatActionPanel.tsx:443-479`                                                                                                   | Action selector, conditional        | No declaration-intent field exists — see [M2](#126-returned-contract-mismatches--unresolved)                                                                                                                                                                                             |
+| Roll basis (none / Skill / Stat), Skill, Stat, Difficulty                         | `GenericCombatActionPanel.tsx:480-535`                                                                                                   | Action selector, conditional        | Held only on `CombatGenericAction` (`packages/domain/src/encounter/combatGenericAction.ts`) — see [M2](#126-returned-contract-mismatches--unresolved)                                                                                                                                    |
+| Reference: participant / Item / environment                                       | `GenericCombatActionPanel.tsx:536-583`                                                                                                   | Action selector, conditional        | `combatGenericActionReferenceSchema` in `packages/domain/src/encounter/combatGenericAction.ts` — see [M2](#126-returned-contract-mismatches--unresolved)                                                                                                                                 |
+| `Declare generic action` submit                                                   | `GenericCombatActionPanel.tsx:584`; POST `/encounters/:id/combat-round/generic-actions`                                                  | Current action                      | `submit_declaration` descriptor in [Combat task integration matrix](../architecture/combat-task-integration-matrix.md) — see [M3](#126-returned-contract-mismatches--unresolved)                                                                                                         |
+| Action and task history selector and read-only detail                             | `GenericCombatActionPanel.tsx:594-683`                                                                                                   | Combat Log                          | `packages/domain/src/encounter/combatLogProjection.ts` — see [M4](#126-returned-contract-mismatches--unresolved)                                                                                                                                                                         |
+| GM review adjustments (duration, roll, Skill, Stat, Difficulty, reference)        | `GenericCombatActionPanel.tsx:684-868`                                                                                                   | Action selector under GM permission | Permitted declaration review, [section 4](#4-action-selector-and-shared-phase-panels); GM draft/commit split, [section 8](#8-action-button-area) — see [M5](#126-returned-contract-mismatches--unresolved)                                                                               |
+| Lifecycle commands: Start action, Roll, Resolve, Interrupt, Cancel                | `GenericCombatActionPanel.tsx:870-941`                                                                                                   | Current action                      | Current combat-step command, `CombatRoundCommandType` in `packages/domain/src/encounter/combatRoundManager.ts` — see [M3](#126-returned-contract-mismatches--unresolved)                                                                                                                 |
+| Player-safe result text and `Who receives this result?` audience                  | `GenericCombatActionPanel.tsx:887-921`                                                                                                   | Current action, then Combat Log     | Outcome visibility, [section 7](#7-action-result-panel); projection authority, [Product & Presentation Principles 4.5](./product-presentation-principles.md#45-respect-perspective-knowledge-ownership-privacy-and-visibility) — see [M6](#126-returned-contract-mismatches--unresolved) |
+| Item operations: draw/ready, drop, pass/give, pick up, stow/unequip, use/interact | `apps/web/src/features/combat-generic-actions/CombatItemInteractionPanel.tsx:198`; POST `/encounters/:id/combat-round/item-interactions` | Action selector, secondary action   | Secondary `equip_unequip` / `small_action` in `combatDeclarationCompatibility.ts`, versus `combatItemInteractionOperationSchema` — see [M7](#126-returned-contract-mismatches--unresolved)                                                                                               |
+| Pass recipient and per-Item intent detail                                         | `CombatItemInteractionPanel.tsx:158-197`                                                                                                 | Action selector, secondary action   | As above — see [M7](#126-returned-contract-mismatches--unresolved)                                                                                                                                                                                                                       |
+| Encounter Item presence: add, remove, Players / GM only visibility                | `apps/web/src/features/encounters/EncounterItemsPanel.tsx:99-191`; PUT `/encounters/:id`                                                 | Not a Combat Inspector panel        | `encounterItemReferenceSchema` (presence and audience only) in `packages/domain/src/encounter/session.ts` — see [M8](#126-returned-contract-mismatches--unresolved)                                                                                                                      |
+| Player `Items and task history` read-only view                                    | `ScenarioPlayerCombatPageContent.tsx` player render of `GenericCombatActionPanel`                                                        | Combat Log                          | Combat Log contract, [section 7](#7-action-result-panel) — subject to [M4](#126-returned-contract-mismatches--unresolved)                                                                                                                                                                |
+
+Perform Task already materializes a `CombatGenericAction` server-side in
+`apps/api/src/routes/scenarios/encounterRoutes.ts`, and the secondary equivalent
+materializes `small_action`. Declarations and the generic-action record therefore already
+meet; the mismatches below are about which fields and which commands that meeting carries.
+
+### 12.5 Reference panels and the surface that becomes redundant
+
+Once 12.4 is routed, `GenericCombatActionPanel` has no remaining responsibility and is the
+surface that becomes redundant. `EncounterItemsPanel` does not, because it is also rendered
+outside Combat in `apps/web/src/features/roleplay/RoleplayEncounterScreens.tsx`; only its
+Combat embedding is in scope.
+
+### 12.6 Returned contract mismatches — unresolved
+
+These are genuine conflicts between two existing contracts, or capabilities with no clean
+existing destination. They are recorded, not resolved. Each requires a Product Owner
+decision before the affected row in 12.4 may be implemented. **Do not invent semantics to
+make a control fit.**
+
+- **M1 — `look_around` has no declaration identity.** The preset selects a static
+  Perception roll, but there is no `look_around` primary action id. The nearest existing
+  concept, `observe_opponent`, is primary-ineligible and is selectable only as a typed Parry
+  secondary declaration with an independently persisted participant target, per the
+  declaration-context ownership rule in
+  [Combat task integration matrix](../architecture/combat-task-integration-matrix.md).
+  Routing `look_around` to either would change a declaration's meaning.
+- **M2 — Perform Task carries no rule inputs.** The Perform Task declaration path records
+  only `actionId`, `description` and `taskId`, and materializes a generic action with a
+  fixed `gm_decided` duration. Duration, roll basis, Skill, Stat, Difficulty and reference
+  exist only on the `CombatGenericAction` record and are reachable only through GM review
+  after declaration. Carrying them on the declaration would extend the declaration intent
+  contract; leaving them behind would lose the capability.
+- **M3 — generic actions are not progression tasks.** `CombatGenericAction` lifecycle
+  operations (declare, review, activate, roll, resolve, interrupt, cancel) are not
+  `CombatRoundCommandType` values, project no task, and appear nowhere in the
+  [Combat task integration matrix](../architecture/combat-task-integration-matrix.md). The
+  Current action panel owns the _projected_ current step and its descriptor-bound command.
+  Routing these commands into Current action requires the combat domain to project generic
+  tasks — a subsystem change, excluded by 12.8.
+- **M4 — the Combat Log cannot currently show tasks.** `buildCombatLogProjection` is built
+  from `CombatStepEvent` records. Generic actions emit none. A resolved task therefore has
+  no event to log, and the history selector cannot simply move into the Combat Log without a
+  new event source.
+- **M5 — two contracts plausibly own GM declaration review.** Section 4 gives the Action
+  Selector "permitted declaration review"; section 8 allows a GM draft Save separate from
+  the primary commit button. The GM review fieldset is both. Which panel owns it decides
+  whether a second Save button appears inside the Action Selector.
+- **M6 — per-result audience authoring has no contracted home.** The GM composes
+  player-safe result text and selects recipients. Current step results must not own
+  declaration controls; the Combat Log must not own draft state; Current action is the next
+  command, not prior results. The capability is also a privacy control and cannot be dropped.
+- **M7 — Item interaction is governed by two contracts at once.** The same act is expressible
+  as a secondary declaration (`equip_unequip`, `small_action`) and as a
+  `combatItemInteractionOperationSchema` operation on its own route with its own
+  `expectedItemRevision` guard. Both plausibly own it; they carry different authority and
+  different undo behaviour.
+- **M8 — Encounter Item presence is not combat declaration context.** Adding, removing and
+  changing the audience of Encounter Items authors encounter state. Section 10 reference
+  panels are read-only and are explicitly not command surfaces, so there is no Combat
+  Inspector panel that may receive it. Its canonical home is an Encounter authoring surface,
+  which this section does not define.
+
+### 12.7 Logging and the Activity projection
+
+**Do not introduce another independent log.** Detailed canonical Combat history is preserved;
+what changes is which projection publishes what.
+
+- **Situation Activity** carries concise, player-safe, narratively meaningful outcomes: GM
+  announcements, meaningful visible events, concise Skill and Combat outcomes, and important
+  visible state changes.
+- Situation Activity **must not** carry routine process noise: round and phase bookkeeping,
+  declaration and review steps, routine round-end persistence updates, raw calculations, or
+  debug and reconciliation events.
+- **Action and Combat detail** may retain detailed outcome and calculation appropriate to the
+  player. **GM audit and history** may expose more detailed authorized records.
+
+> **Privacy and narrative selection are enforced in the projection and at the data boundary,
+> not by hiding fields client-side.**
+
+This is binding, not advisory. An implementation satisfies it only if the excluded events are
+**not written into, or not selected by, the Activity projection on the server**. Filtering an
+already-published Activity payload in a React component, in a view-model, or in any code that
+runs after the payload leaves the API does **not** satisfy it, even when the rendered result
+looks correct and every gate passes. The governing principle is
+[Product & Presentation Principles 4.5](./product-presentation-principles.md#45-respect-perspective-knowledge-ownership-privacy-and-visibility):
+client-side hiding is not an adequate privacy boundary. The QA failure on issue #271 turned on
+exactly this class of defect, with all gates green, and that precedent applies here.
+
+At the recorded baseline the data boundary does not yet meet this rule:
+
+- `packages/database/src/services/encounterService.ts` forwards **every** new `CombatStepEvent`
+  as an Activity `objectiveEvent`, and
+  `packages/database/src/repositories/encounterRepository.ts` writes each one as an
+  `encounter_combat_outcome` row whose summary is derived mechanically from the event type.
+  `declaration`, `modifier_review`, `round_boundary`, `combat_experience`, `initiative`,
+  `damage_proposed`, `participant_su_review`, `effect_review` and the feint, break-off,
+  adjust-distance and disarm intermediates are all included. This is the round and phase
+  bookkeeping the rule excludes, and it is already persisted.
+- `projectScenarioObjectiveHistory` in `packages/domain/src/campaign/scenarioSession.ts` filters
+  by event **type** and by viewer entitlement. It does not narrow within
+  `encounter_combat_outcome`, so the bookkeeping passes through.
+- Conversely, `CombatGenericAction` lifecycle operations record only an `encounter_updated`
+  event, which is not an allowed Activity type and is therefore dropped for every viewer. A
+  resolved task — a narratively meaningful outcome — currently reaches Activity not at all.
+
+That last point is the sharper constraint. The 2026-09-22 Product Owner ruling on Forgejo
+issue #284 (comment 7792) makes the player-safe Activity projection the **exclusive** source
+for an AI session summary. It follows that **anything that ought to appear in a session recap
+must exist as a player-visible Activity event.** Narrowing Activity to remove process noise
+must therefore be paired with publishing the meaningful task and Item outcomes that Activity
+does not carry today; narrowing alone would make the recap source poorer, not cleaner. The
+ruling is cross-referenced, not restated.
+
+Activity remains one event model with several projections, per
+[Player Play V1 section 9.2](../architecture/player-play-v1.md#92-the-visibility-rule).
+
+### 12.8 Exclusions
+
+This work does not authorize: replacing the Combat Inspector; redesigning the Action Selector;
+redesigning Phase 1 or Phase 2; redesigning Combat Situation; replacing the Round Manager;
+adding new Combat rules; or implementing Player Play navigation or composition.
+
+If the mapping in 12.4 cannot be achieved without redesigning a panel, it is returned under
+12.6 rather than designed.
+
+### 12.9 Player Play integration boundary — record only
+
+Recorded so that later composition work is not surprised by it. **No relocation is performed
+or designed here.**
+
+When Player Play composition reaches Action, general Character information currently
+duplicated around and below Combat should move to the Play Character view where appropriate.
+Only combat-specific planning information is preserved in Combat situation. Full Character,
+Physical State, Skill tables and equipment management remain in their canonical
+Character and Campaign locations with click-throughs.
+
+That side is already governed by
+[Player Play V1 section 10](../architecture/player-play-v1.md#10-action-composition) and its
+[canonical-detail and click-through rule](../architecture/player-play-v1.md#13-canonical-detail-and-click-through-rule).
+Those decisions are cross-referenced, not duplicated or reopened.
+
+### 12.10 Proposed bounded implementation slice
+
+Proposed only. Not authorized and not dispatched by this section.
+
+**Slice 287-1 — retire the standalone surface for the player.**
+
+- **Outcome visible to the player:** the player's Combat screen no longer shows a second
+  `Items and task history` block above the Combat Inspector. The same task and Item history is
+  reachable from the existing Combat Log area inside the Inspector. Nothing the player can do
+  changes; one duplicated surface disappears.
+- **Reused, by path:** `apps/web/src/features/combat-history/components/CombatLog.tsx`;
+  `apps/web/src/features/combat-generic-actions/GenericCombatActionPanel.tsx` (its read-only
+  player branch only); `apps/web/app/(app)/campaigns/[campaignId]/scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent.tsx`.
+  No new route, no new client, no new component family.
+- **New glue:** placement of the existing read-only history beside the existing Combat Log,
+  and removal of the player render of `GenericCombatActionPanel`.
+- **Out of scope:** every row in 12.4 that references a mismatch M1-M8; the GM surface; the
+  Activity projection; `EncounterItemsPanel`; `CombatItemInteractionPanel`.
+- **Dependencies:** none. It is blocked by no mismatch because it moves no declaration and no
+  command.
+- **Hotspots,** per [reserved integration hotspots](../architecture/ownership.md#reserved-integration-hotspots):
+  none of the reserved hotspots are written. `ScenarioPlayerCombatPageContent.tsx` and
+  `CombatRoundManagerPanel.tsx` are not reserved but are heavily contended Combat experience
+  surfaces; issues #180 and #182 both claim `CombatRoundManagerPanel.tsx`, and #180 is under an
+  explicit stop. This slice must therefore be serialized against those lanes, and must not
+  touch `CombatRoundManagerPanel.tsx` beyond removing one render.
+- **Persistence or schema changes:** none. No migration, no stored-data semantics, no
+  authorization change.
+- **Character:** composition and thin adaptation. It requires no subsystem redesign.
+- **QA level:** ordinary independent immutable-head QA. The mandatory QA floor in
+  [AGENTS.md](../../AGENTS.md#mandatory-qa-floor) is not engaged by this slice, and the floor
+  is not downgradable for any later slice that is.
+
+**What cannot yet be sliced.** The GM Actions and tasks surface, the Item interaction routing
+and the Encounter Item presence surface all depend on M1-M8 and must not be implemented before
+those decisions. The Activity projection work in 12.7 changes persisted event semantics and a
+privacy projection, so it is **floor class** under
+[AGENTS.md](../../AGENTS.md#mandatory-qa-floor): full adversarial independent QA at the
+strongest reasonably capable model, in a visible dedicated QA session, non-downgradable. It is
+also coupled to the #284 exclusive-source ruling and should not be narrowed without the
+matching publication of meaningful outcomes.
