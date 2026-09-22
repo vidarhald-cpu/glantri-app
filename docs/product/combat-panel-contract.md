@@ -366,6 +366,15 @@ At the recorded baseline the data boundary does not yet meet this rule:
   event, which is not an allowed Activity type and is therefore dropped for every viewer. A
   resolved task — a narratively meaningful outcome — currently reaches Activity not at all.
 
+> **Correction, recorded 2026-09-22 and confirmed by the control plane on Forgejo issue #287.**
+> The sentence immediately above is **true for Perform Task and false for Item interactions.**
+> `packages/database/src/services/combatItemInteractionService.ts` already writes an
+> `encounter_combat_outcome` row carrying `eventKind: "item_resolution"`, a GM-authored
+> player-safe summary and an audience intersected from the interaction and its resolution, with
+> `canViewCurrentItemOutcome` in `packages/domain/src/campaign/scenarioSession.ts` re-verifying
+> entitlement at projection time. **That is a working, tested template, and the publication half
+> of [A2](#1213-a2--player-safe-activity-projection) follows it rather than redesigning it.**
+
 That last point is the sharper constraint. The 2026-09-22 Product Owner ruling on Forgejo
 issue #284 (comment 7792) makes the player-safe Activity projection the **exclusive** source
 for an AI session summary. It follows that **anything that ought to appear in a session recap
@@ -443,3 +452,656 @@ privacy projection, so it is **floor class** under
 strongest reasonably capable model, in a visible dedicated QA session, non-downgradable. It is
 also coupled to the #284 exclusive-source ruling and should not be narrowed without the
 matching publication of meaningful outcomes.
+
+### 12.11 The four convergence contracts — status and reading order
+
+Recorded 2026-09-22 against `dev` at `c7ec1800df48a5f375088322b0feec122cab8a87`, under the two
+Product Owner rulings on Forgejo issue #287 — _M3/M4 domain change authorized in principle;
+A1/A2/A3 decomposition required_ and _A1 QA class, Perform Task timing, A2-Q1, M7 and M8
+settled_ — the ruling _M5 and M6 settled_, and the control-plane decomposition analysis that precedes
+them. **Those rulings are authoritative and are cross-referenced, not re-decided.**
+
+**All eight mismatches M1-M8 are now resolved or ruled, and issue #287 carries no remaining open
+Product Owner question.** These contracts therefore hold no open-decision section.
+
+**These are task contracts, not authorization.** Nothing here is dispatched. Each contract
+becomes executable only after a Forgejo issue body carries it through the canonical
+[task contract](../process/task-contract.md) lifecycle to `Authorized` and the control plane
+approves the final decomposition.
+
+They **extend** [12.4's mapping](#124-capability-mapping) and
+[12.6's mismatches](#126-returned-contract-mismatches--unresolved). They introduce no competing
+Combat architecture, and [12.8's exclusions](#128-exclusions) govern all four: no Combat
+Inspector replacement, no Action Selector, Phase 1/2 or Combat Situation redesign, no Round
+Manager replacement, no new Combat rules.
+
+| Contract                                          | Character                        | QA class        | Depends on                           |
+| ------------------------------------------------- | -------------------------------- | --------------- | ------------------------------------ |
+| [A1](#1212-a1--combat-task-lifecycle-convergence) | Combat domain subsystem change   | **Floor class** | none of M5-M8                        |
+| [A2](#1213-a2--player-safe-activity-projection)   | Data-boundary and privacy change | **Floor class** | A1 (for `task_resolved`)             |
+| [M7](#1214-m7--item-interaction-authority)        | Declaration/service seam         | **Floor class** | A1                                   |
+| [A3](#1215-a3--ui-consolidation)                  | Composition and routing          | Ordinary        | A1, A2, M7, parity matrix, M8 access |
+
+**Relationship to [12.10's slice 287-1](#1210-proposed-bounded-implementation-slice).** That
+slice relocates the existing read-only player component verbatim and therefore keeps
+`GenericCombatActionPanel`'s read-only branch alive. It is cosmetic de-duplication, **not the
+retirement**, and its "blocked by no mismatch" claim holds only under that reading. Retirement
+belongs to A3 alone. If 287-1 runs, it serializes with A1/A2/M7/A3 like everything else in
+[12.16](#1216-serialization-hotspots-and-merge-order).
+
+**Introduce-then-retire governs the whole set.** No surface is removed before replacement parity
+is demonstrated on the surface that replaces it.
+
+---
+
+### 12.12 A1 — Combat task lifecycle convergence
+
+**Outcome.** A declared Perform Task is a first-class Combat task for its whole life. The GM and
+the owning player drive it from the Combat Inspector's Current action panel at the actor's normal
+primary-action opportunity, its required Skill, difficulty, timing and context semantics survive,
+and resolving it emits canonical Combat outcome data the Combat Log projects. The parallel
+generic-action channel stops being the only way a task can be advanced.
+
+**Settled input this contract builds on, and must not re-decide.** Perform Task is a **normal
+primary action**. It uses the **same initiative ordering and action opportunity as other primary
+actions** and has **no parallel generic-action clock**. A one-round task resolves at the actor's
+normal primary-action opportunity; an **N-round task advances once at that corresponding
+opportunity in each round and completes after N advances**; GM adjudication may interrupt or rule
+feasibility. This settles the question the control-plane analysis returned as A1's largest risk:
+`combatGenericActionDurationSchema` maps onto the actor's own primary-action opportunity, **not
+onto a separate boundary model**, and `COMBAT_ROUND_STEPS` reasoning in
+`canCompleteCombatGenericAction` is not a second timing authority.
+
+#### Scope
+
+In scope:
+
+- Project an active `CombatGenericAction` as a combat task at its owner's primary-action
+  opportunity, so Current action can render and authorize it.
+- New `CombatRoundCommandType` members for the task lifecycle, with matching
+  `CombatStepEventType` members and descriptor authorization entries.
+- Event emission on resolution, plus **compact versioned inverse undo facts**. Full
+  `CombatRoundState` snapshots are forbidden for new commits by the
+  [integration matrix](../architecture/combat-task-integration-matrix.md).
+- A `CombatLogSummaryFacts` variant for the resolved task.
+- Converge the parallel route so it authorizes on task and boundary identity rather than an
+  arbitrary client-supplied action id, closing the **second creation path**.
+- Rule inputs (duration, roll basis, Skill, Stat, Difficulty, reference) set on the task through
+  a **canonical GM review command**. Under the settled M5 split, the Action Selector owns those
+  **fields** and Current action owns the **command**; **no second Save or commit control appears
+  inside the Action Selector**.
+- The task **resolve command carries audience selection and, because Perform Task is a
+  GM-adjudicated outcome, the GM-authored player-safe result text — both as command inputs**,
+  under the settled M6 ruling. Existing audience semantics are preserved; no new privacy mode is
+  invented unless implementation proves them insufficient.
+- A new row in `docs/architecture/combat-task-integration-matrix.md`, which today states _"There
+  are no remaining task-integration gaps."_
+
+Out of scope: every [12.8](#128-exclusions) exclusion; Activity projection changes (A2); Item
+interaction authority (M7); removing any surface (A3); widening
+`combatDeclarationPrimaryIntentSchema`.
+
+#### Dependencies and gates
+
+- **Not blocked by M5 or M6, which are now settled.** A1 keeps `GenericCombatActionPanel` alive
+  as a temporary invoker regardless — introduce-then-retire requires it.
+- Blocks A2 (`task_resolved` must exist before A2's publish list is fixed), M7 and A3.
+- May be split as **A1a** (domain projection, commands, authorization, event emission, undo
+  facts, Combat Log rendering) and **A1b** (route convergence and closing the second creation
+  path). The split is a sizing choice for the control plane, not a contract change.
+
+#### Reused, by path
+
+- `packages/domain/src/encounter/combatRoundManager.ts` — `combatRoundCommandTypeSchema`,
+  `CombatRoundCommandType`, descriptor projection. **Reserved hotspot.**
+- `packages/domain/src/encounter/combatStepEventSchema.ts` — `combatStepEventTypeSchema`,
+  `combatStepEventOutcomeScopeSchema`, `combatStepEventStatusSchema`.
+- `packages/domain/src/encounter/combatGenericAction.ts` — `combatGenericActionSchema` and its
+  existing `declarationKind`, `duration`, `progress`, `reference`, `resolution`, `rollRequest`,
+  `awarenessContext` fields. **`CombatGenericAction` needs no new fields.**
+- `packages/domain/src/encounter/combatDeclarationCompatibility.ts` — `perform_task` is already a
+  real, available primary action.
+- `packages/domain/src/encounter/combatDeclarationIntent.ts` — `description` (max 2000) and
+  `taskId`. **Not widened.**
+- `packages/domain/src/encounter/combatLogProjection.ts` — `CombatLogSummaryFacts`,
+  `buildCombatLogProjection`.
+- `apps/api/src/routes/scenarios/encounterRoutes.ts` — `materializeCombatDeclarationTasks` and
+  `POST /encounters/:encounterId/combat-round/generic-actions`. **Reserved hotspot.**
+- `apps/web/src/features/combat-history/components/CombatLog.tsx`;
+  `apps/web/src/features/player-combat/PlayerCombatPanels.tsx`.
+
+#### Minimal new domain, API and UI
+
+- New members of `combatRoundCommandTypeSchema` for task advance, roll, resolve, interrupt and
+  cancel, each with a descriptor authorization entry.
+- New member(s) of `combatStepEventTypeSchema` — at minimum `task_resolved`.
+- A new `CombatLogSummaryFacts` variant for the resolved task.
+- A canonical GM review command carrying the rule inputs M2 names.
+- No new component family. Current action and Combat Log render the new projected task and its
+  summary facts through their existing contracts.
+
+#### Persistence and schema
+
+**No Prisma migration.** A1 must assert that positively in evidence. **But new persisted command
+and event type values and new inverse undo facts are written into
+`EncounterActiveCombatState.stateJson` and archived round rows**, which is a change to stored
+data semantics.
+
+#### Hotspots
+
+Reserved, per [reserved integration hotspots](../architecture/ownership.md#reserved-integration-hotspots):
+`apps/api/src/routes/scenarios/encounterRoutes.ts`;
+`packages/domain/src/encounter/combatRoundManager.ts`; package root exports; Encounter API
+clients and mutation responses. Prisma schema and migrations are **not** touched.
+`apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx` is not reserved but is
+heavily contended — A1 should avoid it entirely if Current-action invocation can be proven from
+the player surface.
+
+#### QA level
+
+**Floor class, non-downgradable.** [AGENTS.md's mandatory QA floor](../../AGENTS.md#mandatory-qa-floor)
+item 1 covers _any change to persisted schema **or stored data semantics**_, and A1 changes
+persisted command and event semantics, undo facts and archived state. Full adversarial
+independent QA at the strongest reasonably capable model, in a visible dedicated QA session.
+The Product Owner ruling of 2026-09-22 confirms this and supersedes the earlier ruling's
+classification, which named only A2.
+
+#### Redundant surface
+
+**None retired by A1.** `GenericCombatActionPanel` stays mounted as the temporary invoker.
+
+#### Acceptance checks
+
+Mismatches discharged, and how each is demonstrated:
+
+- **M1** — `look_around` becomes a **preset of the Perform Task declaration**, not a new action
+  id: `rollRequest.basis` set to Perception and the existing
+  `awarenessContext: { kind: "survey" }` retained. No id is added and `observe_opponent` is
+  untouched. **A behaviour loss requires explicit Product Owner acceptance inside this
+  contract's issue body before `Ready`: today `look_around` can be declared mid-round; routed
+  through declaration it can only be declared at the declaration boundary.**
+- **M2** — rule inputs reach the task through the canonical GM review command.
+  `combatDeclarationPrimaryIntentSchema` is unchanged; demonstrated by a test asserting the
+  declaration intent schema's members are identical to baseline.
+- **M3** — demonstrated by the task appearing as a projected `CurrentActionCommandDescriptor`
+  and by every lifecycle mutation being rejected without the exact projected task, execution
+  group, boundary and revision.
+- **M4** — demonstrated by a resolved task appearing in `buildCombatLogProjection` output, and
+  by undo restoring exactly the pre-resolution state from the compact inverse facts with no
+  state snapshot written.
+
+Also required: a one-round task resolves at the actor's primary-action opportunity; an N-round
+task advances once per round at that opportunity and completes after exactly N advances; GM
+adjudication can interrupt it; the second creation path no longer accepts an arbitrary client id.
+
+---
+
+### 12.13 A2 — player-safe Activity projection
+
+**Outcome.** Situation Activity carries the concise, player-safe, narratively meaningful
+outcomes [12.7](#127-logging-and-the-activity-projection) requires and stops carrying round and
+phase bookkeeping — **in both directions at once**, so the recap source becomes cleaner without
+becoming poorer.
+
+**Why both directions are one contract.** Because
+[§11.2 of the People / Artifact / GM-authoring model](./people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source)
+makes the player-safe Activity projection the **exclusive** source for an AI session summary,
+anything suppressed is permanently unrecappable. Narrowing alone is a regression.
+
+#### Scope
+
+In scope:
+
+- Write-side narrowing: which `CombatStepEvent` records `packages/database/src/services/encounterService.ts`
+  forwards as Activity `objectiveEvents` at all.
+- **Projection-side narrowing keyed on `payloadJson.eventKind`**, because **historical rows are
+  not backfilled** and roughly eleven bookkeeping types are already persisted.
+- Publishing the meaningful task and Item outcomes Activity does not carry today.
+- Producing the Activity summary **through the authorized viewer projection**.
+
+Out of scope: A1's domain work; M7; A3's deletion; any backfill; any new player log.
+
+#### The A2-Q1 ruling, and what it requires
+
+**Settled, and not re-decided here.** Where **player-visible identity can differ by viewer**, a
+**single stored summary string is not authoritative player text**. A2 must **persist sufficient
+structured event facts and produce the Activity summary through the authorized viewer
+projection**. Both options as originally posed — publish only public-scope plus
+involved-audience rows, or write per-audience rows — are rejected.
+
+Concretely: `CombatStepEvent.visibility.identityRefs` already supports per-viewer identity
+fallbacks (`unseen_attacker` / `unseen_target`), and one stored string on
+`encounter_combat_outcome` cannot express them. **Activity summaries derive from the same
+`CombatLogSummaryFacts` the Combat Log already uses** — which satisfies _do not introduce
+another independent log_ and stops a second summariser drifting.
+
+**The two paths divide cleanly, and A2 must implement both.** The settled M6 ruling bounds A2-Q1
+rather than competing with it:
+
+| Outcome class                                     | Player-facing text is                                                                       |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| **Automatic** combat outcomes                     | derived from persisted structured facts at projection time, per viewer                      |
+| **GM-adjudicated** outcomes, such as Perform Task | GM-authored, supplied as an input to the resolve command, under existing audience semantics |
+
+**Neither path uses a single stored rendered string as cross-viewer authority**, and neither
+invents a new privacy mode unless implementation proves the existing audience semantics
+insufficient.
+
+#### Positive publish list — asserted by test, never a deny list
+
+**A2 must be specified as a positive publish list asserted by test.** A deny list silently loses
+any event type added later; a positive list fails loudly.
+
+Recorded from the control-plane analysis, confirmed by the control plane:
+
+- **Publish:** `attack`, `parry`, `damage_committed`, `hit_location`, `critical`, `observation`,
+  visible `health_check`, and the **terminal** `*_result` / `*_committed` members of feint,
+  break-off, adjust-distance, disarm and distance-control — plus the new `task_resolved` from
+  [A1](#1212-a1--combat-task-lifecycle-convergence) and the existing `item_resolution`
+  `eventKind`. `parry` is on this list because
+  [Player Play V1 §9.2](../architecture/player-play-v1.md#92-the-visibility-rule)'s own worked
+  example is _"Sergeant attacks Test Hunter — PARRIED"_.
+- **Suppress:** `declaration`, `modifier_review`, `initiative`, `combat_experience`,
+  `action_skipped`, `missile_readiness`, `damage_proposed`, `participant_su_review`,
+  `effect_review`, `round_boundary`, and the `*_roll` / `*_response` / `*_review` /
+  `*_feasibility` intermediates.
+- **`round_boundary` is safe to suppress** because `ScenarioEventLog.roundNumber` already exists
+  and is populated. Temporal structure survives as a row attribute without publishing the event.
+  Confirmed by the control plane.
+
+**Residual itemization, to be completed before this contract is `Ready`.** Six members of
+`combatStepEventTypeSchema` fall under neither recorded set and must be assigned explicitly
+rather than by pattern: `offensive_parry_brawling`, `continued_contact_maintenance`,
+`feint_impossible`, `adjust_distance_adjustment`, `distance_control_applied` and `disarm_opened`.
+The positive-list test must enumerate **every** member of the enum, so no member can be left
+unclassified.
+
+#### Dependencies and gates
+
+- **Blocked on A1** for `task_resolved`, so the publish list includes it from the start.
+- **Not blocked on M5 or M6, which are now settled.**
+- One decision must be taken **before dispatch, not during**: whether already-persisted
+  bookkeeping rows are retained for GM audit under a distinct `eventType`. Retaining them leaves
+  historical encounters inconsistent unless backfilled — **and a backfill would be a migration**,
+  which changes A2's shape.
+
+#### Reused, by path
+
+- `packages/database/src/services/encounterService.ts` — `collectCombatStepEvents` and the
+  `objectiveEvents` forward.
+- `packages/database/src/repositories/encounterRepository.ts` — the `encounter_combat_outcome`
+  write.
+- `packages/domain/src/campaign/scenarioSession.ts` — `scenarioObjectiveHistoryEventTypeSchema`,
+  `projectScenarioObjectiveHistory`, `canViewCurrentItemOutcome`.
+- `packages/domain/src/encounter/combatLogProjection.ts` — `CombatLogSummaryFacts`.
+- `packages/domain/src/encounter/combatStepEventSchema.ts` — the enum the positive list asserts
+  against.
+- **`packages/database/src/services/combatItemInteractionService.ts` — the working template**, per
+  the correction in [12.7](#127-logging-and-the-activity-projection). Copy it; do not redesign it.
+
+#### Minimal new domain, API and UI
+
+No new event type beyond A1's. No new route. No new panel. The change is which rows are written,
+which rows the projection selects, and where the player-facing sentence is produced.
+
+#### Persistence and schema
+
+**No Prisma migration** — `ScenarioEventLog.eventType` is a `String`. **But stored-data semantics
+change three ways:** which rows are written at all; what `summary` _means_ (today mechanically
+derived from the event type, afterwards produced per viewer from structured facts); and which
+`payloadJson` fields projection authority depends on. A2 must assert positively that Prisma schema
+and migrations are untouched.
+
+#### Hotspots
+
+Package root exports. `packages/domain/src/campaign/scenarioSession.ts` is the shared privacy
+projection and must be treated as a coordination surface even though it is not listed as reserved.
+
+#### QA level
+
+**Floor class, non-downgradable** on two independent grounds:
+[floor](../../AGENTS.md#mandatory-qa-floor) item 1 (stored-data semantics) and item 2 (privacy
+projection). Full adversarial independent QA at the strongest reasonably capable model, in a
+visible dedicated QA session.
+
+**The #271 precedent applies directly.** An implementation satisfies
+[12.7](#127-logging-and-the-activity-projection) only if excluded events are **not written into,
+or not selected by, the Activity projection on the server**. Filtering an already-published
+payload in a React component or a view-model does not satisfy it, even when the rendered result
+looks correct and every gate passes.
+
+#### Redundant surface
+
+**None retired by A2.**
+
+#### Acceptance checks
+
+- **Positive publish assertion:** a test enumerating every `combatStepEventTypeSchema` member and
+  asserting its publish/suppress classification. Adding a member without classifying it fails.
+- **Negative payload assertions on the API response**, not the DOM: suppressed types absent;
+  non-entitled viewers receive no row for a `gm_only` or unperceived outcome.
+- **Per-viewer identity:** a partially perceived event yields different authorized sentences for
+  two viewers from the same stored facts, with no single stored string treated as authoritative.
+- **Item parity:** existing `item_resolution` behaviour and its intersected audience are
+  unchanged, re-verified by `canViewCurrentItemOutcome` at projection time.
+- **Recap sufficiency:** a resolved Perform Task and a resolved Item interaction both appear in
+  the player-safe Activity projection for their entitled audience.
+
+**M1-M8 discharged: none directly.** A2 discharges
+[12.7](#127-logging-and-the-activity-projection)'s binding rule and carries
+[M4](#126-returned-contract-mismatches--unresolved)'s resolved event substrate onward into
+Activity. It is named as a discharge route for no M row, and its acceptance must not be credited
+against one.
+
+---
+
+### 12.14 M7 — Item interaction authority
+
+**Outcome.** A Combat declaration can name an Item and the act to perform on it, and resolution
+delegates to the existing Item interaction authority. No second Item-action channel is created,
+and no revision, transaction or staleness guarantee is duplicated or weakened.
+
+**Settled input this contract builds on, and must not re-decide.** The **existing Item
+interaction service remains authoritative** for Item mutation, revision/staleness protection and
+transaction semantics. **Declarations may identify the Item and action, but resolution delegates
+to that authority rather than duplicating it.** **Item identity is preserved in declarations
+where necessary.** M7 gets **its own contract, settled before A3**.
+
+**Why it cannot be folded into A3.** These are not two spellings of one act. The Item service
+carries `expectedItemRevision` guards, serializable transactions with retry,
+`CombatItemUnavailableError` and its own Activity publication.
+`materializeCombatDeclarationTasks` carries **none of that**, and a `small_action` today
+materializes a generic action with **no Item identity at all**. That missing identity is exactly
+what "preserve Item identity in declarations where necessary" closes.
+
+#### Scope
+
+In scope: carry Item identity and operation on the secondary declaration; delegate resolution to
+the Item interaction service; preserve its guards, errors and existing `item_resolution`
+publication unchanged.
+
+Out of scope: moving Item mutation into `combatRoundManager.ts`; changing
+`combatItemInteractionOperationSchema`; changing undo or staleness behaviour; Encounter Item
+presence editing (that is [M8](#126-returned-contract-mismatches--unresolved), settled as
+Encounter/context management and **not** an Inspector action); removing any surface.
+
+#### Dependencies and gates
+
+- **Blocked on A1**, whose declaration-to-task convergence it extends.
+- **Blocks A3** — A3's parity check P6 cannot pass without it.
+- Not blocked on M5 or M6, which are now settled.
+
+#### Reused, by path
+
+- `packages/database/src/services/combatItemInteractionService.ts` — the authority. Unchanged in
+  its guarantees.
+- `apps/api/src/routes/scenarios/combatItemInteractionRoutes.ts` —
+  `POST /encounters/:encounterId/combat-round/item-interactions` and its `/options` sibling.
+- `packages/domain/src/encounter/combatGenericAction.ts` —
+  `combatItemInteractionOperationSchema`, `combatItemInteractionSchema`,
+  `combatItemInteractionStateSchema`.
+- `packages/domain/src/encounter/combatDeclarationCompatibility.ts` — secondary `equip_unequip`
+  and `small_action`.
+- `apps/api/src/routes/scenarios/encounterRoutes.ts` — `materializeCombatDeclarationTasks`.
+  **Reserved hotspot.**
+- `apps/web/src/features/combat-generic-actions/CombatItemInteractionPanel.tsx` — pass recipient
+  and per-Item intent detail, as the temporary invoker.
+
+#### Minimal new domain, API and UI
+
+Item identity and operation carried on the secondary declaration context. No new service, no new
+route, no new panel.
+
+#### Persistence and schema
+
+**No Prisma migration.** Declaration context gains Item identity, which is persisted combat state
+and therefore a stored-data-semantics change. Must be asserted positively in evidence.
+
+#### Hotspots
+
+`apps/api/src/routes/scenarios/encounterRoutes.ts` (reserved); Combat Item services/projections
+and shared Item/Combat/Lost Seal fixtures (reserved); Campaign/Scenario Item routes, services,
+repositories and UI (reserved).
+
+#### QA level
+
+**Floor class, non-downgradable.** It changes persisted declaration semantics and sits directly
+on the Item revision/staleness authority whose fixtures are a reserved hotspot; a weakened guard
+here is exactly the adversarial case the [floor](../../AGENTS.md#mandatory-qa-floor) exists for.
+
+#### Redundant surface
+
+**None retired by M7.** `CombatItemInteractionPanel` stays mounted until A3.
+
+#### Acceptance checks
+
+- **M7 discharged**, demonstrated by: a secondary declaration naming an Item resolves through
+  `combatItemInteractionService.ts` and not through a duplicate path; `expectedItemRevision`
+  still rejects a stale revision with `CombatItemUnavailableError`; the serializable transaction
+  and its retry are unchanged; `item_resolution` still publishes with its intersected audience.
+- A `small_action` declaration that names an Item retains that Item identity through
+  materialization — the specific gap the control-plane analysis identified.
+
+---
+
+### 12.15 A3 — UI consolidation
+
+**Outcome.** One Combat action system. `GenericCombatActionPanel` is removed, its capabilities
+reach the player and the GM through the Combat Inspector panels
+[12.3](#123-panel-destinations) and [12.4](#124-capability-mapping) already name, and **no
+capability is lost**.
+
+**A3 is gated on the parity matrix and on M8's Encounter-management access, not on any open
+Product Owner question.** M5 and M6 are settled; the destinations they fix are recorded in
+[12.17](#1217-m5-and-m6--settled-and-the-remaining-blockers-to-a3).
+
+#### Scope
+
+In scope: route the [12.4](#124-capability-mapping) rows into their destination panels; remove
+the player and GM renders of `GenericCombatActionPanel`; remove its Combat embedding of
+`CombatItemInteractionPanel` and `EncounterItemsPanel`; delete the panel in **one deletion commit
+after the parity matrix passes**.
+
+Out of scope: all of [12.8](#128-exclusions); `EncounterItemsPanel` itself, which stays because
+it is also rendered outside Combat in
+`apps/web/src/features/roleplay/RoleplayEncounterScreens.tsx` — **only its Combat embedding is in
+scope**, per [12.5](#125-reference-panels-and-the-surface-that-becomes-redundant); any Activity or
+domain change (A1, A2, M7 own those); Player Play navigation or composition.
+
+#### Dependencies and gates
+
+- **Blocked on A1, A2 and M7**, all three integrated.
+- **Not blocked on M5 or M6.** Both are settled; where A3 routes each
+  [12.4](#124-capability-mapping) row under them is recorded in
+  [12.17](#1217-m5-and-m6--settled-and-the-remaining-blockers-to-a3).
+- **M8's gate:** Encounter Item presence editing is **GM Encounter/context management, not an
+  Inspector action**, and no writable Combat Inspector panel may be invented for it. Combat
+  consumes Item presence as **read-only context**; player Item operations use normal Combat
+  declarations. **A3's removal of the old Combat embedding is gated on appropriate
+  Encounter-management access existing.** A3 does not build that access and does not define that
+  surface.
+- **Blocked on the nine-check parity matrix below.**
+
+#### Reused, by path
+
+- `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx` — **one render
+  removal only.**
+- `apps/web/app/(app)/campaigns/[campaignId]/scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent.tsx`
+  — player render removal.
+- `apps/web/src/features/combat-history/components/CombatLog.tsx`;
+  `apps/web/src/features/player-combat/PlayerCombatPanels.tsx`;
+  `apps/web/src/features/encounters/EncounterItemsPanel.tsx` (retained, embedding removed);
+  `apps/web/src/features/combat-generic-actions/CombatItemInteractionPanel.tsx` (embedding
+  removed).
+- `apps/api/src/routes/scenarios/encounterRoutes.ts` — removal of the superseded generic-action
+  creation path. **Reserved hotspot.**
+
+#### Minimal new domain, API and UI
+
+**None.** If A3 needs a new domain type, an API change or a new panel, A1/A2/M7 did not finish
+and A3 is not ready. Composition and routing only.
+
+#### Persistence and schema
+
+**None.** No migration, no stored-data semantics, no authorization change. A3 must assert this
+positively.
+
+#### Hotspots
+
+`CombatRoundManagerPanel.tsx` is not reserved but is heavily contended and is claimed by **#180,
+under an explicit STOP**, and by **#182**. A3 touches it for **exactly one render removal** and
+nothing else. `apps/api/src/routes/scenarios/encounterRoutes.ts` is reserved.
+
+#### QA level
+
+**Ordinary independent immutable-head QA.** The [floor](../../AGENTS.md#mandatory-qa-floor) is not
+engaged by A3 itself — it introduces no persisted-data, privacy-projection, `dev`-gate, CI or
+branch-protection change. **The floor is not thereby downgraded for A1, A2 or M7**, and if A3's
+scope ever grows to include any of their work, the floor governs the whole task.
+
+**A3's QA additionally verifies the parity matrix before the deletion commit**, and that
+verification is where A3's real adversarial value sits.
+
+#### Redundant surface, and when
+
+`GenericCombatActionPanel.tsx` (954 lines) becomes redundant, and **only at the end of A3**, in
+one deletion commit after every parity row is ticked. Introduce-then-retire: **nothing is removed
+before replacement parity is demonstrated.**
+
+#### Acceptance gate — the nine-check parity matrix
+
+**One evidence line per [12.4](#124-capability-mapping) row**, verified by independent QA before
+the deletion commit, with **every check run with `GenericCombatActionPanel` unmounted** and every
+assertion made **on API payloads, not the DOM** — the #271 lesson.
+
+| Check   | Assertion                                                                                                                                       |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P1**  | GM drives a full task lifecycle from the Combat Inspector.                                                                                      |
+| **P2**  | The same, for a player-owned task.                                                                                                              |
+| **P3**  | A resolved task appears in the Combat Log, and is **absent from the API payload** for non-entitled players.                                     |
+| **P4**  | It appears in Activity for the entitled audience, and is absent from the payload for others.                                                    |
+| **P4'** | **The enumerated publish list is present** — a positive assertion, not a deny check.                                                            |
+| **P5**  | Suppressed event types are absent from the payload.                                                                                             |
+| **P6**  | Item operations behave with unchanged staleness and `item_resolution` semantics, **or M7 is returned and the Combat embedding is not removed**. |
+| **P7**  | History is readable from the Combat Log **including archived rounds**.                                                                          |
+| **P8**  | Existing e2e specs pass, or are replaced by demonstrated equivalents.                                                                           |
+| **P9**  | **Every [12.4](#124-capability-mapping) row is demonstrated or explicitly returned. None silently dropped.**                                    |
+
+**Any unticked row blocks the deletion commit.**
+
+#### M1-M8 discharged by A3
+
+- **M1, M2, M3, M4** — not resolved by A3; **demonstrated** by it, through P1, P2, P3, P7 and P9
+  running against A1's converged lifecycle with the old panel unmounted.
+- **M7** — demonstrated by P6, or the embedding is not removed.
+- **M8** — discharged by A3 only in the sense the ruling settles: the capability is **relocated,
+  not the panel**. A3 removes the Combat embedding once appropriate Encounter-management access
+  exists, and invents no Inspector surface. If that access does not exist at dispatch time, A3's
+  removal of the `EncounterItemsPanel` embedding is deferred and P9 records it as an explicit
+  return, not a silent drop.
+- **M5** — discharged by routing the GM review fieldset's **fields** into the Action Selector
+  while the **command** stays in Current action. Demonstrated by P1 and P9, plus a negative
+  presentation check that **no second Save or commit control exists inside the Action Selector**
+  and that Current step results renders no declaration control.
+- **M6** — discharged by carrying audience selection, and the GM-authored player-safe text for
+  GM-adjudicated outcomes, as **inputs to the resolve command** in Current action. Demonstrated
+  by P4 and P5 on the API payload: the authored text and its audience reach only the entitled
+  viewers, and Current action renders no prior result.
+
+---
+
+### 12.16 Serialization, hotspots and merge order
+
+**A1, A2, M7 and A3 must not run concurrently.** This is a hard constraint, not a preference.
+
+- A1, M7 and A3 all write `apps/api/src/routes/scenarios/encounterRoutes.ts` — a reserved
+  hotspot, and coordination rule 1 in
+  [ownership](../architecture/ownership.md#coordination-rules) gives a hotspot to one active task
+  at a time.
+- A1 and A3 both touch
+  `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx` if A1 cannot prove
+  Current-action invocation from the player surface. That file is **also claimed by #180, which
+  is under an explicit STOP, and by #182**. All four contracts serialize against those lanes too.
+- A1 and A2 both touch package root exports.
+- A2's projection changes are **consumed by A3's parity proof**, so they cannot be in flight
+  together.
+
+**Merge order:** A1 (optionally A1a then A1b) → A2 → M7 → A3. A2 follows A1 so the publish list
+carries `task_resolved` from the start. M7 precedes A3 so P6 can pass.
+
+Each contract asserts positively in its evidence that **Prisma schema and migrations are not
+touched**.
+
+---
+
+### 12.17 M5 and M6 — settled, and the remaining blockers to A3
+
+**Both are settled by the Product Owner ruling of 2026-09-22 on Forgejo issue #287.** They are
+cross-referenced, not restated or reopened. **With them, all eight mismatches M1-M8 in
+[12.6](#126-returned-contract-mismatches--unresolved) are resolved or ruled, and #287 carries no
+remaining open Product Owner question.**
+
+#### M5 — GM declaration review ownership
+
+> **The Action Selector owns the declaration and review fields. Current action owns commands,
+> including any existing draft-save and the relevant commit/resolve action. No second
+> Save/commit control is added inside the Action Selector. Current step results remains
+> read-only and owns no declaration controls.**
+
+This adopts the split the control-plane decomposition offered as an option —
+[section 8](#8-action-button-area) owns the **command**,
+[section 4](#4-action-selector-and-shared-phase-panels) owns only the **fields** — and therefore
+does **not** trigger the panel-shape change [12.8](#128-exclusions) forbids.
+
+**Where A3 routes it.** The [12.4](#124-capability-mapping) row for GM review adjustments —
+duration, roll, Skill, Stat, Difficulty and reference — becomes fields in the Action Selector
+under GM permission, with its commit arriving through Current action's existing command control.
+
+#### M6 — result audience and player-safe narrative
+
+> **Audience and privacy selection belongs to the resolve command in Current action. Where a
+> GM-adjudicated outcome requires player-safe narrative text, that text is also an input to the
+> resolve command.**
+
+**This does not make Current action a history or results panel.** Its contract is **the command
+currently required by the Combat step, plus the inputs necessary to execute that command
+correctly and safely.** A player-safe string needed to execute a resolve safely is such an input;
+the panel carries command inputs, not narrative. After execution,
+[Current step results](#7-action-result-panel) displays the resolved outcome, the Combat Log
+records the authorized Combat outcome, and player Situation Activity receives only the
+appropriate player-safe projection.
+
+**Where A3 routes it.** The [12.4](#124-capability-mapping) row for player-safe result text and
+`Who receives this result?` becomes resolve-command input in Current action.
+
+#### How A2-Q1 bounds M6
+
+The settled A2-Q1 ruling is **preserved** and constrains M6 rather than competing with it.
+**Automatic** combat outcomes persist structured facts and derive viewer-appropriate summaries at
+projection time. **GM-adjudicated** outcomes, such as Perform Task, carry authored text as a
+resolve-command input under the **existing audience semantics**. **Neither path uses one stored
+rendered summary string as authority where different viewers may legitimately know different
+identities or facts**, and no new privacy mode is invented unless implementation proves the
+existing semantics insufficient. [A2](#1213-a2--player-safe-activity-projection) implements both
+paths.
+
+#### Remaining blockers to A3
+
+No Product Owner decision remains. What still stands between these contracts and A3's dispatch is
+sequencing and evidence:
+
+1. **A1, A2 and M7 integrated**, in that order — [12.16](#1216-serialization-hotspots-and-merge-order).
+2. **M8's access gate.** A3's removal of the Combat embedding of `EncounterItemsPanel` is gated
+   on **appropriate Encounter-management access existing**. The ruling relocates the capability
+   rather than the panel, and [12.8](#128-exclusions) still forbids designing an Inspector
+   surface for it. **A3 neither builds that access nor defines that surface.** If it does not
+   exist when A3 is dispatched, that one embedding removal is deferred and P9 records it as an
+   explicit return, not a silent drop. **This is the only substantive gate A3 does not control.**
+3. **The nine-check parity matrix ticked in full** by independent QA before the deletion commit —
+   [12.15](#1215-a3--ui-consolidation).
+4. **Control-plane approval of the final decomposition**, and a Forgejo issue body carrying each
+   contract to `Authorized`.
+
+**One acceptance A1 still needs, and it is not a blocker to A3.** The M1 behaviour loss —
+`look_around` can be declared mid-round today, but only at the declaration boundary once routed
+through declaration — must be explicitly accepted in A1's issue body before A1 reaches `Ready`.
