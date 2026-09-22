@@ -20,6 +20,12 @@ import {
   type TaskContainerInspection,
   type ValidatedCurrentWorktreeTaskDatabaseEnvironment,
 } from "../../packages/database/src/worktreeDatabaseOwnership";
+import {
+  assertNoTaskStackEnvironmentConflict,
+  assertTaskStackPortsAvailable,
+  deriveTaskStackAddresses,
+  taskStackEnvironment,
+} from "./taskStackEnvironment";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..", "..");
@@ -494,7 +500,13 @@ function integrationTest(): void {
   });
 }
 
-function execute(): void {
+// `db:task:exec` used to supply only the two database URLs. A stack launched that way kept the
+// shared 3000/4000 defaults, so its API raced another stack's API for the port and its frontend
+// resolved NEXT_PUBLIC_API_BASE_URL to whichever API won — the #276 cross-talk. The command now
+// also owns the stack's network identity: this worktree's own loopback host and ports, the
+// browser-facing API base URL, and the API's allowed origin, all derived from the same worktree
+// key that derives the database target so the two cannot drift apart.
+async function execute(): Promise<void> {
   const separator = process.argv.indexOf("--");
 
   if (separator < 0 || !process.argv[separator + 1]) {
@@ -503,9 +515,22 @@ function execute(): void {
 
   const { environment, validated } = loadValidatedEnvironment();
   verifyOwnedRunningContainer(validated);
+
+  const addresses = deriveTaskStackAddresses(validated.worktreeKey, process.env);
+  const stack = taskStackEnvironment(addresses);
+  assertNoTaskStackEnvironmentConflict(stack, process.env);
+  // Fail before a single stack process exists. Starting anyway is what let the #271 lane run a
+  // superficially healthy stack that was in fact serving and consuming another stack's traffic.
+  await assertTaskStackPortsAvailable(addresses);
+
   printPreflight("application", "application", validated);
   printPreflight("application-test", "test", validated);
-  run(process.argv[separator + 1]!, process.argv.slice(separator + 2), { env: environment });
+  console.log(
+    `Stack preflight: owner=${validated.owner} api=${addresses.apiBaseUrl} web=${addresses.webOrigin} bind=${addresses.host}`,
+  );
+  run(process.argv[separator + 1]!, process.argv.slice(separator + 2), {
+    env: { ...environment, ...stack },
+  });
 }
 
 function verify(): void {
@@ -544,7 +569,7 @@ function cleanup(): void {
 
 const command = process.argv[2];
 
-try {
+async function main(): Promise<void> {
   switch (command) {
     case "backup":
       backup();
@@ -553,7 +578,7 @@ try {
       cleanup();
       break;
     case "exec":
-      execute();
+      await execute();
       break;
     case "migrate":
       migrate();
@@ -576,8 +601,10 @@ try {
     default:
       fail("Expected one of: setup, verify, migrate, reset, seed, backup, test, exec, cleanup.");
   }
-} catch (error: unknown) {
+}
+
+main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
   console.error(`Task database command failed: ${message}`);
   process.exitCode = 1;
-}
+});

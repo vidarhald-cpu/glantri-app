@@ -58,14 +58,35 @@ concurrency proof.
 The browser smoke suite lives in `apps/web/e2e` and is wired into the CI
 `docker-test` job after the API and web containers have started.
 
-Run it locally against running web/API servers with:
+The suite is not read-only. `apps/web/e2e/global-setup.ts` seeds deterministic
+smoke users, a campaign/scenario, and a player character **through the API**,
+starting with `POST /auth/register`, before the first spec runs.
+`PLAYWRIGHT_API_URL` therefore selects the database those accounts are written
+into, and must always name the stack you actually started. Never copy a literal
+port from this document: a hardcoded `localhost:4000` drives whichever process
+holds that port, which on a developer machine is normally the primary
+checkout's API on the shared playtest database.
+
+**From a task-isolated worktree**, run the suite through `db:task:exec`, which
+supplies this worktree's own `PLAYWRIGHT_BASE_URL` and `PLAYWRIGHT_API_URL`
+derived from the same worktree key as its database target, so the browser proof
+and the disposable database cannot drift apart:
 
 ```bash
-PLAYWRIGHT_BASE_URL=http://localhost:3000 PLAYWRIGHT_API_URL=http://localhost:4000 pnpm --filter @glantri/web playwright
+pnpm db:task:exec -- pnpm --filter @glantri/web playwright
 ```
 
-The suite seeds deterministic smoke users, a campaign/scenario, and a player
-character through the API in `apps/web/e2e/global-setup.ts`.
+**From the primary checkout**, state the addresses of the web and API servers
+you started — the `Stack preflight:` line or your own `pnpm dev` output names
+them — rather than assuming the defaults:
+
+```bash
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:<web-port> PLAYWRIGHT_API_URL=http://127.0.0.1:<api-port> pnpm --filter @glantri/web playwright
+```
+
+Global setup prints a `Playwright smoke target:` line naming the resolved API
+and web URLs before its first write; check it against the stack you intended.
+See [task stack ports and addresses](./dev-database.md#task-stack-ports-and-addresses).
 
 ## Selecting independent-QA regression breadth
 

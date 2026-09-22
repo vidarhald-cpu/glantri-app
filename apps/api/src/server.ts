@@ -1,14 +1,20 @@
 import { buildApiServer } from "./app";
+import { describeListenFailure, resolveApiBinding } from "./lib/serverBinding";
 
 async function start() {
   const app = buildApiServer();
-  const host = process.env.API_HOST ?? "0.0.0.0";
-  const port = Number(process.env.API_PORT ?? "4000");
+  const binding = resolveApiBinding(process.env);
 
-  await app.listen({ host, port });
+  try {
+    await app.listen(binding);
+  } catch (error) {
+    throw new Error(describeListenFailure(binding, error), { cause: error });
+  }
 }
 
 start().catch((error) => {
-  process.stderr.write(JSON.stringify({ level: "fatal", msg: "Failed to start server", err: String(error) }) + "\n");
+  process.stderr.write(
+    JSON.stringify({ level: "fatal", msg: "Failed to start server", err: String(error) }) + "\n",
+  );
   process.exit(1);
 });
