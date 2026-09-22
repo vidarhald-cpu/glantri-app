@@ -247,13 +247,35 @@ rather than invented. The authoring is deliberately bounded to the Society Level
 recorded floor of 3 means "not at Society Level 1 or 2" and nothing more, and the build refuses a
 higher one.
 
-Two consequences are reported rather than absorbed. **Eight route gaps are flagged and not closed** —
-Camouflage, Leadership, Politics, Teaching, Trade, Trapmaking, Throwing and Weapon Maintenance
-plausibly belong low down, and every route to each happens to require more; adding routes to close
-them would be adding routes to reach a coverage target, which the ruling rules out. And the canonical
-access grid itself **admits scholarly, legal, fiscal and ship-command training at the Society Level 1
-Common Folk cell**, which the settled model would withhold; the grid is used for the shape of a
-restriction, never as per-group authority.
+**Eight route gaps are flagged and not closed** — Camouflage, Leadership, Politics, Teaching, Trade,
+Trapmaking, Throwing and Weapon Maintenance plausibly belong low down, and every route to each
+happens to require more; adding routes to close them would be adding routes to reach a coverage
+target, which the ruling rules out.
+
+**The older canonical access grid and this route model disagree in two places, and both are now
+settled.** The Product Owner ruling of 2026-09-22 makes the Content V2 route model authoritative
+where the two conflict: the grid may be used as evidence and for the general shape of a restriction,
+but never to override explicit approved route semantics. The two divergences are recorded as data in
+`competencyContentV2AccessGridDivergences` and reported in
+[society-level-availability-v2.md](society-level-availability-v2.md) as known, ruled-on differences
+rather than open questions.
+
+1. The grid **admits scholarly, legal, fiscal, mercantile and ship-command training at the Society
+   Level 1 Common Folk cell**, which this model withholds. That access is **not** restored merely
+   because the grid permits it.
+2. The canonical `literacy` Skill records `societyLevel: 3`, which read as a statement about
+   societies would mean nobody below Society Level 3 writes. **Latial Chiefdoms remains a
+   writing-capable Society Level 2 Civilization using Old Italic**, and its written competency is
+   reachable at Society Level 2. A generic Literacy Skill or training route may keep its own Society
+   Level restriction — G11, K16 and F15 keep theirs — but that restriction must not suppress a
+   Civilization's explicitly authored written-language competency. Each written competency's floor is
+   therefore the Society Level of the Civilization that writes it, derived from
+   `canonicalContent.json` rather than authored.
+
+Both divergences carry a **later-reconciliation note**: other implementation may still consume
+`societyBandSkillAccess` or `skills.literacy.societyLevel` directly, and where it does it will
+disagree with this model and has to be reconciled against it in a later pass. Nothing in this
+proposal rewrites the grid or the generic Skill's own floor.
 
 ### 9. Overlap economics
 
@@ -412,7 +434,7 @@ an unsatisfiable core fails rather than ships.
   a rollable written one unless the absence is authored, and no entry deferring to a further ruling).
   These join the existing group-shape bands, core-route satisfaction and the no-duplicate-payment and
   order-independence cost invariants. Failing any of them fails the build, not just a test.
-- 117 proposal checks inside 358 content-package tests, typecheck, ESLint, `git diff --check`, and the
+- 123 proposal checks inside 364 content-package tests, typecheck, ESLint, `git diff --check`, and the
   changed-file formatting gate. Twelve of those checks lock the Learning Group membership ruling in
   line by line: the four settled memberships with no choice slot, that exactly the four named members
   are removed and no others, that each removed competence is still reachable through the route the
@@ -435,6 +457,13 @@ an unsatisfiable core fails rather than ships.
   route at Society Level 1 is asserted**, each one either argued as deliberate or flagged as a route
   gap; and every flagged gap must still be true where it is raised and false above it, so a stale
   flag fails the build.
+- **Written-language competency availability**, under the 2026-09-22 ruling: each written competency
+  is reachable at exactly the Society Levels at or above the Civilization that writes it and nowhere
+  below, written availability never shrinks upward, **Latial Chiefdoms' written competency is
+  asserted reachable at Society Level 2 by name and at every band**, no Civilization's written
+  competency is reachable at no cell, and P65 Scribe's written-language choice is satisfied from the
+  set reachable **at the cell** rather than from the whole authored set, so a suppressed written
+  competency fails as a core-satisfiability failure instead of passing silently.
 
 - Quantitative effective-breadth and group-size analysis across all families and valid paths, with the
   approved catalogue measured by the same code path.

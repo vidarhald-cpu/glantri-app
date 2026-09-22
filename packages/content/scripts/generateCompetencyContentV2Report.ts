@@ -919,11 +919,30 @@ const availabilityLines: string[] = [
   "Level 2 society's ladder **stops at the trades tier**. Both reproduce below, from independently",
   "authored bounds rather than by construction.",
   "",
-  "The grid is also coarser than this catalogue, and in one respect plainly stale: it admits scholarly,",
-  "legal, fiscal and ship-command training at the Society Level 1 Common Folk cell, which the settled",
-  "model would withhold. It is therefore used as corroboration for the **shape** of a restriction, never",
-  "as per-group authority, and the divergence is reported rather than absorbed.",
+  ...wrap(
+    "The grid is also coarser than this catalogue, and it disagrees with the route model in two " +
+      "places. The **Product Owner ruling of 2026-09-22 on #266 settles which wins**: the Content V2 " +
+      "route model is authoritative, and the grid may be used as evidence and for the general shape " +
+      "of a restriction but must not override explicit approved route semantics. The grid is " +
+      "therefore used as corroboration for the **shape** of a restriction, never as per-group " +
+      "authority, and each disagreement is recorded below as a settled divergence rather than an " +
+      "open question.",
+  ),
   "",
+  "### Settled divergences from the older access grid",
+  "",
+  ...availability.accessGridDivergences.flatMap((row) => [
+    `#### ${row.subject}`,
+    "",
+    ...wrap(`**The older grid.** ${row.gridPosition}`),
+    "",
+    ...wrap(`**Content V2.** ${row.contentV2Position}`),
+    "",
+    ...wrap(`**Settled.** ${row.resolution}`),
+    "",
+    ...wrap(`**Later reconciliation.** ${row.reconciliation}`),
+    "",
+  ]),
   "## The grid",
   "",
   "Each cell counts what a learner in that society and that stratum can actually reach: Learning Groups",
@@ -1040,11 +1059,55 @@ const availabilityLines: string[] = [
         "over the written-language set rather than a named group. G11 is a records office, which does " +
         "not exist at Society Level 1 or 2, so the Scribe first exists at Society Level " +
         `${lowest?.societyLevel ?? "—"}, band ${lowest?.socialBand ?? "—"} — at ${scribeCells.length} ` +
-        `of the ${availability.cells.length} cells in all. The written-language choice is satisfiable ` +
-        "at every one of them, and the build checks that directly rather than letting it surface later " +
-        "as an unexplained core failure.",
+        `of the ${availability.cells.length} cells in all. The written-language choice is satisfied ` +
+        "from the written competencies reachable **at that cell**, and the build checks each one " +
+        `directly: the thinnest of them still offers ${Math.min(...scribeCells.map((row) => row.reachableWrittenCompetencyIds.length))} ` +
+        "written competencies against a core choice of one. Checking it at the cell matters, because " +
+        "a written competency suppressed by a literacy route's bound would surface here as an " +
+        "unexplained core failure rather than as an obvious routing one.",
     );
   })(),
+  "",
+  "## Written-language competency availability",
+  "",
+  ...wrap(
+    "A Civilization's own written language and a generic literacy training route are two different " +
+      "things, and the Product Owner ruling of 2026-09-22 on #266 keeps them apart: a generic " +
+      "Literacy Skill or training route may keep its own Society Level restriction, but that " +
+      "restriction must not suppress a Civilization's explicitly authored written-language " +
+      "competency. G11, K16 and F15 therefore keep their own floors, and none of them stands between " +
+      "a learner and the writing their own Civilization does.",
+  ),
+  "",
+  ...wrap(
+    "Each written competency's floor is consequently the Society Level of the Civilization that " +
+      "writes it, read back from `canonicalContent.json` rather than authored here. **Latial " +
+      "Chiefdoms writes Old Italic at Society Level 2**, so its written competency is reachable at " +
+      "Society Level 2, at every band — below the generic `literacy` Skill's own canonical Society " +
+      "Level 3, which is exactly the separation the ruling requires.",
+  ),
+  "",
+  "| Written competency | Society Level | Written by |",
+  "| --- | ---: | --- |",
+  ...availability.writtenCompetencyFloors.map(
+    (row) =>
+      `| ${row.competencyName} | ${row.minSocietyLevel} | ${row.civilizations
+        .map((civilization) => `${civilization.civilizationName} (${civilization.societyLevel})`)
+        .join(", ")} |`,
+  ),
+  "",
+  ...wrap(
+    `${availability.summary.writtenCompetencies} written competencies in all, none of them lost: ` +
+      "every one is reachable at the widest cell, and each is reachable at exactly the Society " +
+      "Levels at or above its own Civilization's. The counts per cell are " +
+      availability.societyLevels
+        .map(
+          (societyLevel) =>
+            `${societyLevel}: ${availability.cells.find((row) => row.societyLevel === societyLevel)!.reachableWrittenCompetencyIds.length}`,
+        )
+        .join(", ") +
+      ".",
+  ),
   "",
   "## Specializations whose parent is not reached under restriction",
   "",

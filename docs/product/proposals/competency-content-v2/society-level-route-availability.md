@@ -123,6 +123,22 @@ The practical shape of it: a Society Level 1 learner reaches 80 of the 131 base 
 Professions, a Society Level 2 trades-and-guilds learner 110 across 63, and the catalogue opens fully
 from Society Level 3.
 
+## Your own people's writing is not a school
+
+One thing a route restriction never touches is **the writing your own Civilization does**.
+
+A scholarly or documentary training — a records office, a documentary hand, the study of older texts
+— is a curriculum like any other, and a society with no such institution does not teach it. That
+restriction stands. But it is a statement about **that school**, not about whether anybody around you
+can read.
+
+If your Civilization writes, its written language is yours to reach, because you reach it **through
+your own people** and not through a school that may not be there. The Latial Chiefdoms are the case
+that makes the difference visible: a Society Level 2 society with no records office, no documentary
+hand practice and no standing corpus of older text to study — and it writes Old Italic, so its
+written competency is there at Society Level 2. The absent schools are still absent. The writing is
+still yours.
+
 ## What is still deliberately not decided here
 
 **Where a route's floor sits above Society Level 2 is not authored.** A restriction recorded at

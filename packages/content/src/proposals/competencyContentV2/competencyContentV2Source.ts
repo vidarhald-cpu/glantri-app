@@ -4174,8 +4174,12 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
  * its base set is evidently a flat legacy import rather than an authored statement about Society
  * Level 1 — it admits scholarly, legal, fiscal and ship-command training at the Society Level 1
  * Common Folk cell, which the settled model would plainly withhold. It is therefore used as
- * corroboration for the SHAPE of a restriction, never as per-group authority, and the divergence is
- * reported rather than absorbed.
+ * corroboration for the SHAPE of a restriction, never as per-group authority.
+ *
+ * The Product Owner ruling of 2026-09-22 on #266 settles which of the two wins where they disagree:
+ * the Content V2 route model is AUTHORITATIVE, and the grid must not override explicit approved
+ * route semantics. Each disagreement is therefore a settled divergence rather than an open question,
+ * and is recorded as one in `competencyContentV2AccessGridDivergences` below.
  */
 export const competencyContentV2CanonicalAccessTiers: readonly {
   id: string;
@@ -4192,6 +4196,84 @@ export const competencyContentV2CanonicalAccessTiers: readonly {
     minSocialBand: "L3",
   },
   { id: "court", name: "Court and Elite tier", minSocietyLevel: 4, minSocialBand: "L4" },
+];
+
+/**
+ * A place where the older canonical access grid and the settled Content V2 route model disagree.
+ *
+ * Recorded as data rather than prose because the ruling that settles it also anticipates a
+ * consumer: other implementation may still read the grid, and will need reconciling against these
+ * rows rather than rediscovering the difference.
+ */
+export interface V2AccessGridDivergence {
+  id: string;
+  /** What the disagreement is about, in one line. */
+  subject: string;
+  /** What the older grid admits, and where it is recorded. */
+  gridPosition: string;
+  /** What the settled Content V2 route model holds. */
+  contentV2Position: string;
+  /** The ruling that settles it, and which side wins. */
+  resolution: string;
+  /** What a later reconciliation pass has to do if other implementation still consumes the grid. */
+  reconciliation: string;
+}
+
+/**
+ * The settled divergences between the older canonical access grid and this route model.
+ *
+ * PRODUCT OWNER RULING, 2026-09-22 (#266): the settled Content V2 Society Level / Social Band route
+ * model is authoritative where it conflicts with the older canonical access grid. The grid may be
+ * used as evidence and for the general SHAPE of restrictions, but must not override explicit
+ * approved Content V2 route semantics.
+ *
+ * These rows are therefore KNOWN, RULED-ON differences. They are not open questions, and neither
+ * one is a defect in this pass to be repaired by moving a bound.
+ */
+export const competencyContentV2AccessGridDivergences: readonly V2AccessGridDivergence[] = [
+  {
+    id: "sl1-learned-access",
+    subject:
+      "Scholarly, legal, fiscal, mercantile and ship-command training at the Society Level 1 Common Folk cell",
+    gridPosition:
+      "`societyBandSkillAccess` in `canonicalContent.json` admits it there. Its base set is a flat " +
+      "legacy import applied to every society, not an authored statement about what a Society " +
+      "Level 1 society actually teaches.",
+    contentV2Position:
+      "Withheld. K01, K02, K07, K21, F12, F13, F11 and G12 carry their own minimums, each with an " +
+      "authored reason about the institution or technology the society does not have.",
+    resolution:
+      "The Product Owner ruling of 2026-09-22 on #266 gives the route model authority. Scholarly, " +
+      "legal, fiscal, mercantile and ship-command access is NOT restored at Society Level 1 merely " +
+      "because the grid permits it. The grid supplied the shape of the four tiers and nothing more.",
+    reconciliation:
+      "Other implementation may still consume `societyBandSkillAccess` directly. Where it does, the " +
+      "grid's Society Level 1 base set will disagree with this model and must be reconciled against " +
+      "it in a later pass; nothing in this proposal rewrites the grid.",
+  },
+  {
+    id: "writing-below-society-level-3",
+    subject: "Whether a society below Society Level 3 writes at all",
+    gridPosition:
+      "The canonical `literacy` Skill records `societyLevel: 3`, and read as a statement about " +
+      "societies rather than about that one generic training route it says no society below Society " +
+      "Level 3 reads or writes.",
+    contentV2Position:
+      "Latial Chiefdoms is a Society Level 2 Civilization whose canonical record carries the written " +
+      "language Old Italic, and whose written competency is authored here. It is reachable at " +
+      "Society Level 2.",
+    resolution:
+      "The Product Owner ruling of 2026-09-22 on #266 holds that Latial Chiefdoms remains a " +
+      "writing-capable Society Level 2 Civilization using Old Italic. A generic Literacy Skill or " +
+      "training route may keep its own Society Level restriction — G11, K16 and F15 keep theirs — " +
+      "but that restriction must not suppress a Civilization's explicitly authored written-language " +
+      "competency. The two are separate things and are modelled separately.",
+    reconciliation:
+      "Other implementation may still read `skills.literacy.societyLevel` as a universal gate on " +
+      "written competence. Where it does, it will disagree with the Civilization-owned written " +
+      "competencies and must be reconciled against them later; the generic Skill's own floor is not " +
+      "changed here.",
+  },
 ];
 
 /**
@@ -4401,7 +4483,11 @@ export const competencyContentV2GroupAvailability: Readonly<Record<string, V2Rou
   },
   F15: {
     minSocietyLevel: 3,
-    reason: "There is no older written record to investigate.",
+    reason:
+      "There is no standing corpus of older record, and no scholarly practice of investigating one. " +
+      "This is a bound on the study route, not a claim that nobody below writes: Latial Chiefdoms " +
+      "writes Old Italic at Society Level 2, and its written competency is reached through the " +
+      "Civilization, not through this route.",
   },
   K21: {
     minSocietyLevel: 3,

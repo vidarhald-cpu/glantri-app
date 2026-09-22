@@ -12278,7 +12278,7 @@
         "groupName": "Historical text investigation",
         "minSocietyLevel": 3,
         "minSocialBand": "L1",
-        "reason": "There is no older written record to investigate."
+        "reason": "There is no standing corpus of older record, and no scholarly practice of investigating one. This is a bound on the study route, not a claim that nobody below writes: Latial Chiefdoms writes Old Italic at Society Level 2, and its written competency is reached through the Civilization, not through this route."
       },
       {
         "groupId": "F23",
@@ -12877,6 +12877,173 @@
         "disposition": "route-gap"
       }
     ],
+    "writtenCompetencyFloors": [
+      {
+        "competencyId": "written:common",
+        "competencyName": "Written Common",
+        "minSocietyLevel": 4,
+        "civilizations": [
+          {
+            "civilizationId": "iest",
+            "civilizationName": "Iest",
+            "societyLevel": 6
+          },
+          {
+            "civilizationId": "thyatis",
+            "civilizationName": "Thyatis",
+            "societyLevel": 5
+          },
+          {
+            "civilizationId": "glantri",
+            "civilizationName": "Glantri",
+            "societyLevel": 4
+          }
+        ]
+      },
+      {
+        "competencyId": "written:imperial-aramaic",
+        "competencyName": "Written Imperial Aramaic",
+        "minSocietyLevel": 4,
+        "civilizations": [
+          {
+            "civilizationId": "achaemenid_persia",
+            "civilizationName": "Achaemenid Persia",
+            "societyLevel": 4
+          }
+        ]
+      },
+      {
+        "competencyId": "written:mogrebi:sacred-mogrebi",
+        "competencyName": "Written Mogrebi in Sacred Mogrebi",
+        "minSocietyLevel": 3,
+        "civilizations": [
+          {
+            "civilizationId": "mogreb",
+            "civilizationName": "Mogreb",
+            "societyLevel": 3
+          }
+        ]
+      },
+      {
+        "competencyId": "written:mycenaean-greek:linear-b",
+        "competencyName": "Written Mycenaean Greek in Linear B",
+        "minSocietyLevel": 3,
+        "civilizations": [
+          {
+            "civilizationId": "mycenaean_greece",
+            "civilizationName": "Mycenaean Greece",
+            "societyLevel": 3
+          }
+        ]
+      },
+      {
+        "competencyId": "written:nkolian:royal-nkolian",
+        "competencyName": "Written N'kolian in Royal N'kolian",
+        "minSocietyLevel": 4,
+        "civilizations": [
+          {
+            "civilizationId": "nkolo",
+            "civilizationName": "N'Kolo",
+            "societyLevel": 4
+          }
+        ]
+      },
+      {
+        "competencyId": "written:old-common",
+        "competencyName": "Written Old Common",
+        "minSocietyLevel": 5,
+        "civilizations": [
+          {
+            "civilizationId": "scyria",
+            "civilizationName": "Scyria",
+            "societyLevel": 5
+          },
+          {
+            "civilizationId": "byzantine_empire",
+            "civilizationName": "Byzantine Empire",
+            "societyLevel": 5
+          }
+        ]
+      },
+      {
+        "competencyId": "written:old-latin:old-italic",
+        "competencyName": "Written Old Latin in Old Italic",
+        "minSocietyLevel": 2,
+        "civilizations": [
+          {
+            "civilizationId": "latial_chiefdoms",
+            "civilizationName": "Latial Chiefdoms",
+            "societyLevel": 2
+          }
+        ]
+      },
+      {
+        "competencyId": "written:ologian:church-ologian",
+        "competencyName": "Written Ologian in Church Ologian",
+        "minSocietyLevel": 5,
+        "civilizations": [
+          {
+            "civilizationId": "olog",
+            "civilizationName": "Olog",
+            "societyLevel": 5
+          }
+        ]
+      },
+      {
+        "competencyId": "written:phoenician:phoenician",
+        "competencyName": "Written Phoenician in Phoenician script",
+        "minSocietyLevel": 5,
+        "civilizations": [
+          {
+            "civilizationId": "lankhmar",
+            "civilizationName": "Lankhmar",
+            "societyLevel": 5
+          }
+        ]
+      },
+      {
+        "competencyId": "written:scandian:runic-scandian",
+        "competencyName": "Written Scandian in Runic Scandian",
+        "minSocietyLevel": 4,
+        "civilizations": [
+          {
+            "civilizationId": "scandia",
+            "civilizationName": "Scandia",
+            "societyLevel": 4
+          }
+        ]
+      },
+      {
+        "competencyId": "written:sumerian:cuneiform",
+        "competencyName": "Written Sumerian in Cuneiform",
+        "minSocietyLevel": 3,
+        "civilizations": [
+          {
+            "civilizationId": "sumer",
+            "civilizationName": "Sumer",
+            "societyLevel": 3
+          }
+        ]
+      }
+    ],
+    "accessGridDivergences": [
+      {
+        "id": "sl1-learned-access",
+        "subject": "Scholarly, legal, fiscal, mercantile and ship-command training at the Society Level 1 Common Folk cell",
+        "gridPosition": "`societyBandSkillAccess` in `canonicalContent.json` admits it there. Its base set is a flat legacy import applied to every society, not an authored statement about what a Society Level 1 society actually teaches.",
+        "contentV2Position": "Withheld. K01, K02, K07, K21, F12, F13, F11 and G12 carry their own minimums, each with an authored reason about the institution or technology the society does not have.",
+        "resolution": "The Product Owner ruling of 2026-09-22 on #266 gives the route model authority. Scholarly, legal, fiscal, mercantile and ship-command access is NOT restored at Society Level 1 merely because the grid permits it. The grid supplied the shape of the four tiers and nothing more.",
+        "reconciliation": "Other implementation may still consume `societyBandSkillAccess` directly. Where it does, the grid's Society Level 1 base set will disagree with this model and must be reconciled against it in a later pass; nothing in this proposal rewrites the grid."
+      },
+      {
+        "id": "writing-below-society-level-3",
+        "subject": "Whether a society below Society Level 3 writes at all",
+        "gridPosition": "The canonical `literacy` Skill records `societyLevel: 3`, and read as a statement about societies rather than about that one generic training route it says no society below Society Level 3 reads or writes.",
+        "contentV2Position": "Latial Chiefdoms is a Society Level 2 Civilization whose canonical record carries the written language Old Italic, and whose written competency is authored here. It is reachable at Society Level 2.",
+        "resolution": "The Product Owner ruling of 2026-09-22 on #266 holds that Latial Chiefdoms remains a writing-capable Society Level 2 Civilization using Old Italic. A generic Literacy Skill or training route may keep its own Society Level restriction — G11, K16 and F15 keep theirs — but that restriction must not suppress a Civilization's explicitly authored written-language competency. The two are separate things and are modelled separately.",
+        "reconciliation": "Other implementation may still read `skills.literacy.societyLevel` as a universal gate on written competence. Where it does, it will disagree with the Civilization-owned written competencies and must be reconciled against them later; the generic Skill's own floor is not changed here."
+      }
+    ],
     "summary": {
       "groups": 95,
       "unrestrictedGroups": 44,
@@ -12884,7 +13051,9 @@
       "groupsAboveSocietyLevel2": 23,
       "professionRouteRestrictions": 4,
       "directRouteRestrictions": 7,
-      "routeGaps": 8
+      "routeGaps": 8,
+      "writtenCompetencies": 11,
+      "lowestWrittenCompetencySocietyLevel": 2
     }
   }
 }

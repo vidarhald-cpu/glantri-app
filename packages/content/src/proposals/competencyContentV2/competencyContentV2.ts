@@ -28,6 +28,7 @@ import {
   competencyContentV2RetiredProposedGroups,
   competencyContentV2WrittenLanguageCompetencyIds,
   COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING,
+  competencyContentV2AccessGridDivergences,
   competencyContentV2CanonicalAccessTiers,
   competencyContentV2DirectRouteAvailability,
   competencyContentV2GroupAvailability,
@@ -1187,6 +1188,13 @@ export interface SocietyLevelAvailabilityCell {
   unreachableBaseSkillIds: string[];
   reachableSpecializationIds: string[];
   /**
+   * Written-language competencies a learner in this cell can reach, which is what a core route's
+   * written-language choice is actually satisfied from here. A Civilization's authored written
+   * competency is reached through the Civilization itself, so its floor is that Civilization's own
+   * Society Level and NOT the generic literacy route's.
+   */
+  reachableWrittenCompetencyIds: string[];
+  /**
    * Specializations a valid path still offers here although that path no longer reaches the parent
    * Skill. Reported, never silently dropped: a direct route grants everything it lists as one route,
    * so the catalogue cannot always separate them.
@@ -1218,6 +1226,18 @@ export interface SocietyLevelAvailabilityAnalysis {
   directRouteBounds: typeof competencyContentV2DirectRouteAvailability;
   routeGaps: typeof competencyContentV2RouteGaps;
   societyLevel1Absences: typeof competencyContentV2SocietyLevel1Absences;
+  /**
+   * Where each authored written-language competency first exists, derived from the Society Level of
+   * the Civilization or Civilizations that write it. Derived, never authored: the floor is read back
+   * from `canonicalContent.json`, so no Society Level is invented for a written tradition here.
+   */
+  writtenCompetencyFloors: {
+    competencyId: string;
+    competencyName: string;
+    minSocietyLevel: V2SocietyLevel;
+    civilizations: { civilizationId: string; civilizationName: string; societyLevel: number }[];
+  }[];
+  accessGridDivergences: typeof competencyContentV2AccessGridDivergences;
   summary: {
     groups: number;
     unrestrictedGroups: number;
@@ -1226,6 +1246,8 @@ export interface SocietyLevelAvailabilityAnalysis {
     professionRouteRestrictions: number;
     directRouteRestrictions: number;
     routeGaps: number;
+    writtenCompetencies: number;
+    lowestWrittenCompetencySocietyLevel: V2SocietyLevel;
   };
 }
 
@@ -1308,9 +1330,63 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
         bound.professionCode === professionCode && (bound.trackId ?? undefined) === trackId,
     );
 
+  /* --- Where each written-language competency first exists ---------------------------------
+     PRODUCT OWNER RULING, 2026-09-22 (#266). A Civilization's own written language and a generic
+     literacy training route are two different things, and only the second may be gated by a
+     Society Level bound. G11, K16 and F15 keep their own floors; none of them stands between a
+     learner and the writing their own Civilization does.
+     The floor below is therefore the Society Level of the Civilization that writes the tradition,
+     read back from `canonicalContent.json` rather than authored here. Latial Chiefdoms writes Old
+     Italic at Society Level 2, so its written competency is reachable at Society Level 2. */
+  const canonicalCivilizationSocietyLevels = new Map(
+    (
+      canonicalContentJson.civilizations as readonly {
+        id: string;
+        linkedSocietyLevel?: number | null;
+      }[]
+    ).map((row) => [row.id, row.linkedSocietyLevel] as const),
+  );
+  const writtenCompetencyFloors = competencyContentV2WrittenLanguageCompetencyIds
+    .map((competencyId) => {
+      const rows = competencyContentV2CivilizationLanguages.filter(
+        (row) => row.writtenCompetencyId === competencyId,
+      );
+      if (!rows.length) fail(`written competency ${competencyId} belongs to no Civilization`);
+      const civilizations = rows.map((row) => {
+        const societyLevel = canonicalCivilizationSocietyLevels.get(row.civilizationId);
+        if (typeof societyLevel !== "number")
+          fail(
+            `Civilization ${row.civilizationId} has no canonical Society Level, so the Society Level its written competency is reachable at cannot be derived`,
+          );
+        return {
+          civilizationId: row.civilizationId,
+          civilizationName: row.civilizationName,
+          societyLevel,
+        };
+      });
+      /* A tradition several Civilizations write exists as soon as the lowest of them does. */
+      const minSocietyLevel = Math.min(...civilizations.map((row) => row.societyLevel));
+      if (!SOCIETY_LEVELS.includes(minSocietyLevel as V2SocietyLevel))
+        fail(
+          `written competency ${competencyId} derives a Society Level floor of ${minSocietyLevel}, which is not a Society Level`,
+        );
+      return {
+        competencyId,
+        competencyName: v2WrittenCompetencyName(rows[0])!,
+        minSocietyLevel: minSocietyLevel as V2SocietyLevel,
+        civilizations,
+      };
+    })
+    .sort((left, right) => left.competencyId.localeCompare(right.competencyId));
+  const writtenCompetencyIdsAt = (societyLevel: V2SocietyLevel): string[] =>
+    writtenCompetencyFloors
+      .filter((row) => row.minSocietyLevel <= societyLevel)
+      .map((row) => row.competencyId);
+
   const cells: SocietyLevelAvailabilityCell[] = [];
   for (const societyLevel of SOCIETY_LEVELS) {
     for (const { id: socialBand } of competencyContentV2SocialBands) {
+      const reachableWrittenCompetencyIds = writtenCompetencyIdsAt(societyLevel);
       const availableGroupIds = competencyContentV2LearningGroups
         .filter((group) =>
           availableAt(competencyContentV2GroupAvailability[group.id], societyLevel, socialBand),
@@ -1371,8 +1447,7 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
             (core) =>
               core.groupIds.every((groupId) => reachedGroupIds.includes(groupId)) &&
               (core.skillIds ?? []).every((skillId) => fixed.has(skillId)) &&
-              (core.writtenLanguageChoiceCount ?? 0) <=
-                competencyContentV2WrittenLanguageCompetencyIds.length,
+              (core.writtenLanguageChoiceCount ?? 0) <= reachableWrittenCompetencyIds.length,
           );
           if (!valid) continue;
 
@@ -1398,6 +1473,7 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
         reachableBaseSkillIds: baseSkillIds.filter((id) => reachableSkills.has(id)).sort(),
         unreachableBaseSkillIds: baseSkillIds.filter((id) => !reachableSkills.has(id)).sort(),
         reachableSpecializationIds: [...reachableSpecializations].sort(),
+        reachableWrittenCompetencyIds: [...reachableWrittenCompetencyIds].sort(),
         specializationsWithoutTheirParent,
       });
     }
@@ -1415,6 +1491,12 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
         if (!reachable.has(skillId))
           fail(
             `Skill ${skillId} is reachable at Society Level ${cell.societyLevel} band ${cell.socialBand} but not ${direction}; route availability must never shrink upward`,
+          );
+      const written = new Set(other.reachableWrittenCompetencyIds);
+      for (const competencyId of cell.reachableWrittenCompetencyIds)
+        if (!written.has(competencyId))
+          fail(
+            `written competency ${competencyId} is reachable at Society Level ${cell.societyLevel} band ${cell.socialBand} but not ${direction}; written-language availability must never shrink upward`,
           );
     };
     grows(
@@ -1455,13 +1537,58 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
           `path ${pathId} satisfies no core route at any Society Level and Social Band; the Profession would exist nowhere`,
         );
 
-  /* --- P65's core is a choice over the written-language set, so it needs an explicit check ---- */
+  /* --- A Civilization's written competency is never suppressed by a literacy route ----------
+     The 2026-09-22 ruling in full: every authored written competency must be reachable from its own
+     Civilization's Society Level upward, Latial Chiefdoms at Society Level 2 by name, and none may
+     be lost at the widest cell. */
+  {
+    for (const row of writtenCompetencyFloors) {
+      for (const societyLevel of SOCIETY_LEVELS)
+        for (const { id: socialBand } of competencyContentV2SocialBands) {
+          const reached = cellAt(societyLevel, socialBand).reachableWrittenCompetencyIds.includes(
+            row.competencyId,
+          );
+          if (societyLevel >= row.minSocietyLevel && !reached)
+            fail(
+              `written competency ${row.competencyId} is written by a Society Level ${row.minSocietyLevel} Civilization but is unreachable at Society Level ${societyLevel} band ${socialBand}; a literacy route's own bound must not suppress a Civilization's authored written language`,
+            );
+          if (societyLevel < row.minSocietyLevel && reached)
+            fail(
+              `written competency ${row.competencyId} is reachable at Society Level ${societyLevel}, below the Society Level ${row.minSocietyLevel} of every Civilization that writes it`,
+            );
+        }
+    }
+    const latial = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "latial_chiefdoms",
+    );
+    if (!latial) fail("Latial Chiefdoms is missing from the Civilization language table");
+    if (latial.writtenCompetencyId === null)
+      fail(
+        "Latial Chiefdoms is a writing-capable Society Level 2 Civilization by ruling, but carries no written competency",
+      );
+    for (const { id: socialBand } of competencyContentV2SocialBands)
+      if (!cellAt(2, socialBand).reachableWrittenCompetencyIds.includes(latial.writtenCompetencyId))
+        fail(
+          `Latial Chiefdoms' written competency ${latial.writtenCompetencyId} is unreachable at Society Level 2 band ${socialBand}; the 2026-09-22 ruling requires it to be reachable there`,
+        );
+    const widest = new Set(cellAt(6, "L4").reachableWrittenCompetencyIds);
+    for (const competencyId of competencyContentV2WrittenLanguageCompetencyIds)
+      if (!widest.has(competencyId))
+        fail(
+          `written competency ${competencyId} is reachable at no cell; a Civilization's written language has been lost`,
+        );
+  }
+
+  /* --- P65's core is a choice over the written-language set, so it needs an explicit check ----
+     The choice is satisfied from the set available AT THE CELL, so a suppressed written competency
+     surfaces here as a core-satisfiability failure rather than as an obvious routing one. */
   {
     const scribe =
       competencyContentV2Families.find((family) => family.code === "P65") ??
       fail("P65 Scribe and Copyist is missing");
     const core = (scribe.coreRoutes ?? [])[0] ?? fail("P65 declares no core route to check");
-    if (!(core.writtenLanguageChoiceCount ?? 0))
+    const choiceCount = core.writtenLanguageChoiceCount ?? 0;
+    if (!choiceCount)
       fail("P65's core no longer carries a written-language choice; this check must be revisited");
     const scribeCells = cells.filter((cell) => cell.validPathIds.includes(scribe.id));
     if (!scribeCells.length)
@@ -1470,6 +1597,11 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
       );
     if (!competencyContentV2WrittenLanguageCompetencyIds.length)
       fail("P65's written-language choice has nothing to choose from");
+    for (const cell of scribeCells)
+      if (cell.reachableWrittenCompetencyIds.length < choiceCount)
+        fail(
+          `P65 Scribe and Copyist has a valid path at Society Level ${cell.societyLevel} band ${cell.socialBand}, but only ${cell.reachableWrittenCompetencyIds.length} written-language competencies are reachable there against a core choice of ${choiceCount}`,
+        );
   }
 
   /* --- The Society Level 1 consequence is asserted exactly, gap by gap ----------------------- */
@@ -1541,6 +1673,8 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
     directRouteBounds: competencyContentV2DirectRouteAvailability,
     routeGaps: competencyContentV2RouteGaps,
     societyLevel1Absences: competencyContentV2SocietyLevel1Absences,
+    writtenCompetencyFloors,
+    accessGridDivergences: competencyContentV2AccessGridDivergences,
     summary: {
       groups: competencyContentV2LearningGroups.length,
       unrestrictedGroups:
@@ -1551,6 +1685,10 @@ export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevel
       professionRouteRestrictions: competencyContentV2ProfessionRouteAvailability.length,
       directRouteRestrictions: competencyContentV2DirectRouteAvailability.length,
       routeGaps: competencyContentV2RouteGaps.length,
+      writtenCompetencies: writtenCompetencyFloors.length,
+      lowestWrittenCompetencySocietyLevel: Math.min(
+        ...writtenCompetencyFloors.map((row) => row.minSocietyLevel),
+      ) as V2SocietyLevel,
     },
   };
 }

@@ -20,6 +20,7 @@ import {
   COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING,
   COMPETENCY_CONTENT_V2_RETIRED_CATEGORY_ID,
   COMPETENCY_CONTENT_V2_STATUS,
+  competencyContentV2AccessGridDivergences,
   competencyContentV2CanonicalAccessTiers,
   competencyContentV2DirectRouteAvailability,
   competencyContentV2GroupAvailability,
@@ -1192,7 +1193,14 @@ describe("Society Level and Social Band route availability", () => {
     expect(scribeCells.every((row) => row.societyLevel >= 3)).toBe(true);
     expect(competencyContentV2WrittenLanguageCompetencyIds.length).toBeGreaterThan(0);
     const scribe = competencyContentV2Families.find((family) => family.code === "P65")!;
-    expect(scribe.coreRoutes?.[0]?.writtenLanguageChoiceCount).toBe(1);
+    const choiceCount = scribe.coreRoutes?.[0]?.writtenLanguageChoiceCount;
+    expect(choiceCount).toBe(1);
+    /* The choice is satisfied from the set reachable AT THE CELL, so a written competency suppressed
+       by a literacy route's bound surfaces here as a core-satisfiability failure rather than as an
+       obvious routing one. */
+    for (const row of scribeCells)
+      expect(row.reachableWrittenCompetencyIds.length).toBeGreaterThanOrEqual(choiceCount!);
+    expect(cell(3, "L1").reachableWrittenCompetencyIds).toHaveLength(4);
   });
 
   it("offers no Specialization whose parent the same restricted path no longer reaches", () => {
@@ -1287,5 +1295,85 @@ describe("Society Level and Social Band route availability", () => {
     expect(cell(1, "L1").professionCodes).toHaveLength(42);
     expect(cell(2, "L2").professionCodes).toHaveLength(63);
     expect(cell(3, "L2").professionCodes).toHaveLength(84);
+  });
+});
+
+describe("fourth ruling set — SL1 authority and Latial Chiefdoms (settled 2026-09-22)", () => {
+  const availability = competencyContentV2SocietyLevelAvailability;
+  const cell = (societyLevel: number, socialBand: string) =>
+    availability.cells.find(
+      (row) => row.societyLevel === societyLevel && row.socialBand === socialBand,
+    )!;
+  const latialWritten = "written:old-latin:old-italic";
+
+  it("records the access-grid divergences as settled rulings rather than open questions", () => {
+    expect(competencyContentV2AccessGridDivergences.map((row) => row.id)).toEqual([
+      "sl1-learned-access",
+      "writing-below-society-level-3",
+    ]);
+    for (const row of competencyContentV2AccessGridDivergences) {
+      expect(row.resolution).toContain("2026-09-22");
+      /* The reconciliation note is the part the ruling asks for: other implementation may still
+         consume the grid, and has to be reconciled against the route model later. */
+      expect(row.reconciliation.trim().length).toBeGreaterThan(0);
+      expect(row.gridPosition.trim().length).toBeGreaterThan(0);
+      expect(row.contentV2Position.trim().length).toBeGreaterThan(0);
+    }
+    expect(availability.accessGridDivergences).toBe(competencyContentV2AccessGridDivergences);
+  });
+
+  it("does not restore the learned access the older grid admits at Society Level 1", () => {
+    /* Ruling 1 ratifies the authoring: the grid's Society Level 1 base set does not win. */
+    for (const groupId of ["K01", "K02", "K07", "K21", "F11", "F12", "F13", "G12"])
+      expect(cell(1, "L4").availableGroupIds).not.toContain(groupId);
+  });
+
+  it("keeps Latial Chiefdoms writing-capable at Society Level 2", () => {
+    const latial = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "latial_chiefdoms",
+    )!;
+    expect(latial.writtenCompetencyId).toBe(latialWritten);
+    expect(latial.writtenTraditionName).toBe("Old Italic");
+    for (const band of ["L1", "L2", "L3", "L4"])
+      expect(cell(2, band).reachableWrittenCompetencyIds).toContain(latialWritten);
+  });
+
+  it("derives every written competency's floor from its own Civilization, not from a literacy route", () => {
+    const floors = new Map(
+      availability.writtenCompetencyFloors.map((row) => [row.competencyId, row.minSocietyLevel]),
+    );
+    expect(floors.size).toBe(competencyContentV2WrittenLanguageCompetencyIds.length);
+    expect(floors.size).toBe(11);
+    expect(floors.get(latialWritten)).toBe(2);
+    expect(availability.summary.lowestWrittenCompetencySocietyLevel).toBe(2);
+    /* The generic `literacy` Skill keeps its own canonical Society Level 3, and that floor does not
+       reach the Civilization's own written language. That separation IS the ruling. */
+    const literacy = canonicalContent.skills.find((row) => row.id === "literacy")!;
+    expect(literacy.societyLevel).toBe(3);
+    expect(floors.get(latialWritten)).toBeLessThan(literacy.societyLevel);
+    for (const row of availability.writtenCompetencyFloors)
+      expect(row.minSocietyLevel).toBe(Math.min(...row.civilizations.map((c) => c.societyLevel)));
+  });
+
+  it("loses no other Civilization's written competency", () => {
+    expect(cell(6, "L4").reachableWrittenCompetencyIds.slice().sort()).toEqual(
+      [...competencyContentV2WrittenLanguageCompetencyIds].sort(),
+    );
+    expect(cell(1, "L4").reachableWrittenCompetencyIds).toEqual([]);
+    expect(cell(2, "L4").reachableWrittenCompetencyIds).toEqual([latialWritten]);
+    expect(cell(3, "L4").reachableWrittenCompetencyIds).toHaveLength(4);
+    expect(cell(5, "L4").reachableWrittenCompetencyIds).toHaveLength(11);
+  });
+
+  it("moves no group, Profession, path or Skill distribution", () => {
+    expect(availability.summary.groups).toBe(95);
+    expect(availability.summary.unrestrictedGroups).toBe(44);
+    expect(availability.summary.professionRouteRestrictions).toBe(4);
+    expect(availability.summary.directRouteRestrictions).toBe(7);
+    expect(availability.summary.routeGaps).toBe(8);
+    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(80);
+    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(110);
+    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(130);
+    expect(cell(3, "L2").validPathIds).toHaveLength(86);
   });
 });
