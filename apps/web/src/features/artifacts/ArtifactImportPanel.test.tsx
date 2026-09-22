@@ -105,8 +105,26 @@ async function approvedPanel() {
   const resource = await screen.findByLabelText("Resource: image");
   fireEvent.change(resource, { target: { files: [new File(["one"], "one.jpg")] } });
   fireEvent.click(screen.getByRole("button", { name: "Validate and preview package" }));
-  fireEvent.click(await screen.findByLabelText(/Approve updating Captain/));
-  expect(screen.getByRole("button", { name: "Accept selected Artifacts" })).toBeEnabled();
+  /**
+   * Validation mounts a fresh review whose own mount effect clears any
+   * approval. The approve control is already in the DOM at the commit that
+   * mounts the review, one render before that effect runs, so approving the
+   * moment it appears can queue the approval ahead of the effect that discards
+   * it, leaving "Accept selected Artifacts" disabled. Nothing the panel exposes
+   * marks the settling point: `setPreview`, `setHistory` and `setBusy(false)`
+   * are separated only by awaits, so they drain as microtasks into a single
+   * render — the validate control is enabled in that same commit, and waiting
+   * on it observes nothing. What lets the pending passive effect flush is the
+   * macrotask yield inside the `act()` that wraps `fireEvent`, and that is a
+   * fixed number of yields against unbounded scheduler starvation. Only a
+   * retrying assertion converges: re-approve until the approval survives the
+   * mount effect. The assertion is unchanged and no tolerance is added.
+   */
+  await screen.findByLabelText(/Approve updating Captain/);
+  await waitFor(() => {
+    fireEvent.click(screen.getByLabelText(/Approve updating Captain/));
+    expect(screen.getByRole("button", { name: "Accept selected Artifacts" })).toBeEnabled();
+  });
   return resource;
 }
 describe("Package input review binding", () => {
