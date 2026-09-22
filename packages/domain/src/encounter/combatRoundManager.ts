@@ -7102,12 +7102,19 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
  * The one canonical Perform Task holding this participant's Phase 1 primary-action opportunity in
  * the current round. Declaration-materialized Perform Task declarations only: the legacy parallel
  * generic-action channel keeps its own route until A1b converges it.
+ *
+ * A participant can hold more than one live task, because a declaration mints a round-keyed task
+ * whenever no live `taskId` carries forward. Selection is therefore explicit rather than by array
+ * position: a task the GM has already started outranks one that has not been reviewed, and
+ * otherwise the most recently declared task wins. Storage order decides only between two tasks
+ * declared at the very same instant. A task that is not selected is left untouched and becomes
+ * selectable again once the selected one reaches a terminal status.
  */
 export function getCombatRoundOpenPerformTaskForParticipant(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatGenericAction | undefined {
-  return input.state.genericActions.find(
+  const open = input.state.genericActions.filter(
     (action) =>
       action.declarationKind === "perform_task" &&
       action.ownerParticipantId === input.participantId &&
@@ -7116,6 +7123,18 @@ export function getCombatRoundOpenPerformTaskForParticipant(input: {
         roundNumber: input.state.roundNumber,
       }),
   );
+  if (open.length <= 1) return open[0];
+  const startedRank = (action: CombatGenericAction): number =>
+    action.status === "declared" ? 0 : 1;
+  return open.reduce((selected, candidate) => {
+    if (startedRank(candidate) !== startedRank(selected)) {
+      return startedRank(candidate) > startedRank(selected) ? candidate : selected;
+    }
+    if (candidate.createdAt !== selected.createdAt) {
+      return candidate.createdAt > selected.createdAt ? candidate : selected;
+    }
+    return candidate;
+  });
 }
 
 export function getNextCombatRoundPhaseActionParticipantId(input: {
@@ -29122,6 +29141,13 @@ export function resolveCombatTaskAtOpportunity(input: {
     if (!known.has(participantId)) {
       throw new RangeError("Choose active participants for the result audience.");
     }
+  }
+  // Evaluated before the advance, exactly as `advanceCombatTaskAtOpportunity` evaluates it.
+  // `isCombatGenericActionFinalOpportunity` is a pre-advance predicate
+  // (`completedRounds + 1 >= required`), so checking it on the already-advanced action would
+  // permit resolution one opportunity early for every duration of two advances or more.
+  if (!isCombatGenericActionFinalOpportunity(previousAction)) {
+    throw new RangeError("This Combat Task cannot resolve before its reviewed timing completes.");
   }
   const advancedActions = advanceCombatGenericActionAtOpportunity({
     actionId: input.actionId,

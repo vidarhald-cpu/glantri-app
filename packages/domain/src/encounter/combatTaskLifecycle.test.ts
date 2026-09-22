@@ -264,6 +264,143 @@ describe("canonical Perform Task lifecycle (A1a)", () => {
   });
 });
 
+describe("Perform Task resolve timing", () => {
+  function resolveAt(source: CombatRoundState) {
+    return resolveCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase: "phase1",
+      resultText: "The winch gives.",
+      state: source,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+  }
+
+  function advanceAt(source: CombatRoundState) {
+    return advanceCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-a" },
+      participantId: "a",
+      phase: "phase1",
+      state: source,
+      submittedBy: "player",
+      updatedAt: later,
+    });
+  }
+
+  it("refuses to resolve a two-round task at its first opportunity", () => {
+    const afterReview = reviewed({ duration: { kind: "rounds", rounds: 2 }, withRoll: false });
+    expect(afterReview.action.progress).toMatchObject({ completedRounds: 0, totalRounds: 2 });
+    expect(() => resolveAt(afterReview.state)).toThrow(
+      /cannot resolve before its reviewed timing completes/,
+    );
+  });
+
+  it("refuses to resolve a three-round task at its first and second opportunities", () => {
+    const afterReview = reviewed({ duration: { kind: "rounds", rounds: 3 }, withRoll: false });
+    expect(() => resolveAt(afterReview.state)).toThrow(
+      /cannot resolve before its reviewed timing completes/,
+    );
+
+    const advanced = advanceAt(afterReview.state);
+    expect(advanced.action.progress).toMatchObject({ completedRounds: 1, totalRounds: 3 });
+    expect(() => resolveAt(state({ action: advanced.action, roundNumber: 2 }))).toThrow(
+      /cannot resolve before its reviewed timing completes/,
+    );
+  });
+
+  it("leaves the refused state untouched", () => {
+    const afterReview = reviewed({ duration: { kind: "rounds", rounds: 2 }, withRoll: false });
+    const commandCount = afterReview.state.commands.length;
+    const eventCount = afterReview.state.events.length;
+    expect(() => resolveAt(afterReview.state)).toThrow();
+    expect(afterReview.state.commands).toHaveLength(commandCount);
+    expect(afterReview.state.events).toHaveLength(eventCount);
+    expect(afterReview.state.genericActions[0]).toMatchObject({
+      progress: { completedRounds: 0 },
+      status: "active",
+    });
+  });
+
+  it("still resolves a two-round task at its final opportunity", () => {
+    const afterReview = reviewed({ duration: { kind: "rounds", rounds: 2 }, withRoll: false });
+    const advanced = advanceAt(afterReview.state);
+    const resolved = resolveAt(state({ action: advanced.action, roundNumber: 2 }));
+    expect(resolved.action).toMatchObject({
+      progress: { completedRounds: 2, totalRounds: 2 },
+      status: "completed",
+    });
+  });
+
+  it("still resolves a gm_decided task at any opportunity", () => {
+    const afterReview = reviewed({ duration: { kind: "gm_decided" }, withRoll: false });
+    expect(resolveAt(afterReview.state).action.status).toBe("completed");
+  });
+});
+
+describe("open Perform Task selection with more than one live task", () => {
+  const roundOneTask = task();
+  const roundTwoTask = task({
+    createdAt: later,
+    id: "round:2:participant:a:declaration:perform_task",
+    intent: "Brace the winch handle.",
+    lastUpdatedAt: later,
+  });
+
+  function twoTaskState(actions: readonly CombatGenericAction[]): CombatRoundState {
+    return combatRoundStateSchema.parse({
+      ...state({ roundNumber: 2 }),
+      genericActions: actions,
+    });
+  }
+
+  function selected(actions: readonly CombatGenericAction[]) {
+    return getCombatRoundOpenPerformTaskForParticipant({
+      participantId: "a",
+      state: twoTaskState(actions),
+    });
+  }
+
+  it("selects the current round's declaration rather than the stale earlier one", () => {
+    expect(selected([roundOneTask, roundTwoTask])?.id).toBe(roundTwoTask.id);
+  });
+
+  it("selects the same task whichever order the two are stored in", () => {
+    expect(selected([roundTwoTask, roundOneTask])?.id).toBe(roundTwoTask.id);
+  });
+
+  it("keeps an in-progress task ahead of a newer untouched declaration", () => {
+    const inProgress = task({
+      progress: { completedRounds: 1, lastProgressedRoundNumber: 1, totalRounds: 3 },
+      status: "active",
+    });
+    expect(selected([inProgress, roundTwoTask])?.id).toBe(inProgress.id);
+    expect(selected([roundTwoTask, inProgress])?.id).toBe(inProgress.id);
+  });
+
+  it("returns the remaining task once the selected one reaches a terminal status", () => {
+    const cancelled = task({
+      createdAt: later,
+      id: roundTwoTask.id,
+      lastUpdatedAt: later,
+      status: "cancelled",
+    });
+    expect(selected([roundOneTask, cancelled])?.id).toBe(roundOneTask.id);
+  });
+
+  it("never selects another participant's task", () => {
+    const foreign = task({
+      createdAt: later,
+      id: "round:2:participant:b:declaration:perform_task",
+      lastUpdatedAt: later,
+      ownerParticipantId: "b",
+    });
+    expect(selected([roundOneTask, foreign])?.id).toBe(roundOneTask.id);
+  });
+});
+
 describe("Perform Task command authorization (M3)", () => {
   const source = state();
 
