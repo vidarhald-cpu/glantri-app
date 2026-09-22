@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import crypto from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
@@ -10,6 +12,14 @@ import { pathToFileURL } from "node:url";
 const CONTAINER_ID_PATTERN = /^[a-f0-9]{64}$/;
 const IMAGE_ID_PATTERN = /^sha256:[a-f0-9]{64}$/;
 const SERVICE_PATTERN = /^[a-z][a-z0-9-]*$/;
+const RESOURCE_SUFFIX_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const BROWSER_SERVICE_NAME_PATTERN = /^glantri-(?:api|web)-test-(.+)$/;
+const JOB_CONTAINER_NAME_PATTERN = /^FORGEJO-ACTIONS-TASK-\d+_WORKFLOW-[0-9a-f]+_JOB-.+$/;
+const OWNER_LABEL = "com.glantri.ci.owner";
+const OWNER_LABEL_VALUE = "glantri-browser-service";
+const RESOURCE_SUFFIX_LABEL = "com.glantri.ci.resource-suffix";
+const JOB_CONTAINER_LABEL = "com.glantri.ci.job-container";
+const OWNER_JOB_CONTAINER_FILE = "owner-job-container";
 const SENSITIVE_KEY_PATTERN =
   /authorization|cookie|password|passwd|token|secret|session|api[_-]?key/i;
 const COMPOUND_SECRET_KEY = String.raw`(?:authorization|proxy[_-]?authorization|cookie|set[_-]?cookie|password|passwd|token|secret|session(?:[_-]?id)?|access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|client[_-]?secret)`;
@@ -312,6 +322,209 @@ export async function assertPortsFree(host, ports) {
   }
 }
 
+function parseResourceSuffix(value, label) {
+  if (typeof value !== "string" || !RESOURCE_SUFFIX_PATTERN.test(value)) {
+    fail(`${label} must be a non-empty run resource suffix.`);
+  }
+  return value;
+}
+
+function serviceSuffix(container) {
+  const labelled = container.labels?.[RESOURCE_SUFFIX_LABEL];
+  if (typeof labelled === "string" && RESOURCE_SUFFIX_PATTERN.test(labelled)) return labelled;
+  const named = BROWSER_SERVICE_NAME_PATTERN.exec(container.name ?? "");
+  return named ? named[1] : undefined;
+}
+
+function serviceJobContainerId(container) {
+  const anchor = container.labels?.[JOB_CONTAINER_LABEL];
+  return CONTAINER_ID_PATTERN.test(anchor ?? "") ? anchor : undefined;
+}
+
+/**
+ * Decide, without guessing, which run-owned browser-service containers are stale.
+ *
+ * A container is reclaimable only when its owning run is provably finished:
+ * either its recorded owning runner job container no longer runs, or this job
+ * container is demonstrably the only runner job container on the daemon, in
+ * which case no other run can be executing. Anything else is retained.
+ */
+export function planStaleServiceReclamation({
+  serviceContainers = [],
+  runningJobContainers = [],
+  selfJobContainerId,
+  currentSuffix,
+}) {
+  parseResourceSuffix(currentSuffix, "The current resource suffix");
+  const runningJobIds = new Set(runningJobContainers.map((container) => container.id));
+  const selfIdentified =
+    CONTAINER_ID_PATTERN.test(selfJobContainerId ?? "") && runningJobIds.has(selfJobContainerId);
+  const soleRunningJob = selfIdentified && runningJobIds.size === 1;
+
+  const stale = [];
+  const retained = [];
+  const unresolved = [];
+
+  for (const container of serviceContainers) {
+    const suffix = serviceSuffix(container);
+    const owner = serviceJobContainerId(container);
+    const entry = { container, suffix, ownerJobContainerId: owner };
+    if (!suffix) {
+      unresolved.push({ ...entry, reason: "no run resource suffix could be attributed" });
+    } else if (suffix === currentSuffix) {
+      retained.push({ ...entry, reason: "it carries the current run resource suffix" });
+    } else if (owner && owner === selfJobContainerId) {
+      unresolved.push({
+        ...entry,
+        reason: "it claims this job container but a different run resource suffix",
+      });
+    } else if (owner && runningJobIds.has(owner)) {
+      retained.push({ ...entry, reason: `its owning job container ${owner} is still running` });
+    } else if (owner) {
+      stale.push({ ...entry, reason: `its owning job container ${owner} no longer runs` });
+    } else if (soleRunningJob) {
+      stale.push({
+        ...entry,
+        reason: "this job container is the only running job container, so no other run is live",
+      });
+    } else {
+      unresolved.push({
+        ...entry,
+        reason: "it carries no ownership anchor and a concurrent run cannot be ruled out",
+      });
+    }
+  }
+
+  return { stale, retained, unresolved, selfIdentified, soleRunningJob };
+}
+
+function listContainers({ all }) {
+  const result = runDocker([
+    "ps",
+    ...(all ? ["--all"] : []),
+    "--no-trunc",
+    "--format",
+    "{{.ID}}\t{{.Names}}",
+  ]);
+  return result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [id, name] = line.split("\t");
+      return { id, name };
+    })
+    .filter((container) => CONTAINER_ID_PATTERN.test(container.id ?? ""));
+}
+
+function listRunningJobContainers() {
+  return listContainers({ all: false }).filter((container) =>
+    JOB_CONTAINER_NAME_PATTERN.test(container.name ?? ""),
+  );
+}
+
+function listBrowserServiceContainers() {
+  return listContainers({ all: true })
+    .map((container) => {
+      const details = inspectContainer(container.id);
+      return { ...container, labels: details?.Config?.Labels ?? {} };
+    })
+    .filter(
+      (container) =>
+        container.labels[OWNER_LABEL] === OWNER_LABEL_VALUE ||
+        BROWSER_SERVICE_NAME_PATTERN.test(container.name ?? ""),
+    );
+}
+
+/**
+ * Identify the runner job container this process runs inside, by proving
+ * possession of a freshly generated token through the Docker daemon itself.
+ * Returns undefined when no candidate proves it, which callers must treat as
+ * "liveness cannot be established" rather than as "no other run is live".
+ */
+export function identifySelfJobContainer({
+  candidates = listRunningJobContainers(),
+  exec = (containerId, filePath) =>
+    runDocker(["exec", containerId, "cat", filePath], { allowFailure: true }),
+  writeToken = (filePath, token) => fs.writeFileSync(filePath, token, { mode: 0o600 }),
+  removeToken = (filePath) => fs.rmSync(filePath, { force: true }),
+} = {}) {
+  if (candidates.length === 0) return undefined;
+  const token = crypto.randomBytes(24).toString("hex");
+  const filePath = path.join(os.tmpdir(), `glantri-ci-self-${token}.token`);
+  try {
+    writeToken(filePath, token);
+  } catch {
+    return undefined;
+  }
+  try {
+    for (const candidate of candidates) {
+      const result = exec(candidate.id, filePath);
+      if (result.status === 0 && String(result.stdout ?? "").trim() === token) return candidate.id;
+    }
+  } finally {
+    try {
+      removeToken(filePath);
+    } catch {
+      /* the disposable token file is best-effort */
+    }
+  }
+  return undefined;
+}
+
+function removeStaleService(entry) {
+  const { container } = entry;
+  runDocker(["rm", "--force", container.id], { allowFailure: true });
+  if (inspectContainer(container.id)) {
+    console.log(
+      `Could not reclaim stale service container ${container.name}; leaving it in place.`,
+    );
+    return false;
+  }
+  if (BROWSER_SERVICE_NAME_PATTERN.test(container.name ?? "")) {
+    runDocker(["image", "rm", container.name], { allowFailure: true });
+  }
+  console.log(`Reclaimed stale service container ${container.name} because ${entry.reason}.`);
+  return true;
+}
+
+function reclaimStaleServices(stateDirectory, currentSuffix) {
+  parseResourceSuffix(currentSuffix, "The current resource suffix");
+  const selfJobContainerId = identifySelfJobContainer();
+  fs.mkdirSync(stateDirectory, { recursive: true });
+  fs.writeFileSync(
+    path.join(stateDirectory, OWNER_JOB_CONTAINER_FILE),
+    `${selfJobContainerId ?? ""}\n`,
+  );
+  if (selfJobContainerId) {
+    console.log(`This job runs in runner job container ${selfJobContainerId}.`);
+  } else {
+    console.log(
+      "This process could not prove which runner job container it runs in; only containers with a dead ownership anchor can be reclaimed.",
+    );
+  }
+
+  const plan = planStaleServiceReclamation({
+    serviceContainers: listBrowserServiceContainers(),
+    runningJobContainers: listRunningJobContainers(),
+    selfJobContainerId,
+    currentSuffix,
+  });
+
+  for (const entry of plan.retained) {
+    console.log(`Retaining service container ${entry.container.name} because ${entry.reason}.`);
+  }
+  for (const entry of plan.unresolved) {
+    console.log(
+      `Refusing to reclaim service container ${entry.container.name} because ${entry.reason}.`,
+    );
+  }
+  for (const entry of plan.stale) removeStaleService(entry);
+  console.log(
+    `Stale run-owned service reclamation finished: ${plan.stale.length} reclaimed, ${plan.retained.length} retained, ${plan.unresolved.length} left for the port assertion to judge.`,
+  );
+}
+
 function recordService([
   stateDirectory,
   service,
@@ -349,6 +562,13 @@ function verifyService(stateDirectory, service) {
   }
   if (container.HostConfig?.NetworkMode === "host") {
     fail(`Current ${service} container unexpectedly shares the Docker host network.`);
+  }
+  const labelledSuffix = container.Config?.Labels?.[RESOURCE_SUFFIX_LABEL];
+  const expectedSuffix = process.env.CI_RESOURCE_SUFFIX;
+  if (labelledSuffix && expectedSuffix && labelledSuffix !== expectedSuffix) {
+    fail(
+      `Current ${service} container is owned by run ${labelledSuffix}, not the current run ${expectedSuffix}.`,
+    );
   }
   const bindings = container.NetworkSettings?.Ports?.[`${metadata.containerPort}/tcp`];
   if (
@@ -451,6 +671,10 @@ async function main() {
       if (args.length < 2) fail("Usage: assert-ports-free <host> <port...>");
       await assertPortsFree(args[0], args.slice(1));
       console.log(`Required current-run service ports are free on ${args[0]}.`);
+      break;
+    case "reclaim-stale":
+      if (args.length !== 2) fail("Usage: reclaim-stale <state-dir> <current-suffix>");
+      reclaimStaleServices(args[0], args[1]);
       break;
     case "record":
       if (args.length !== 7) {

@@ -12,6 +12,15 @@ stale_id=""
 current_id=""
 failure_id=""
 host_port=""
+orphan_name="glantri-ci-isolation-orphan-${CI_RESOURCE_SUFFIX}"
+active_name="glantri-ci-isolation-active-${CI_RESOURCE_SUFFIX}"
+legacy_name="glantri-web-test-legacy-${CI_RESOURCE_SUFFIX}"
+job_name="FORGEJO-ACTIONS-TASK-999999_WORKFLOW-$(printf 'f%.0s' $(seq 1 64))_JOB-glantri-synthetic"
+dead_job_container="$(printf 'a%.0s' $(seq 1 64))"
+orphan_id=""
+active_id=""
+legacy_id=""
+job_id=""
 
 cleanup() {
   cleanup_status=0
@@ -28,6 +37,12 @@ cleanup() {
   if [ -n "$stale_id" ]; then
     docker rm -f "$stale_id" >/dev/null 2>&1 || true
   fi
+  for lifecycle_id in "$orphan_id" "$active_id" "$legacy_id" "$job_id"; do
+    if [ -n "$lifecycle_id" ]; then
+      docker rm -f "$lifecycle_id" >/dev/null 2>&1 || true
+    fi
+  done
+  docker image rm "$legacy_name" >/dev/null 2>&1 || true
   docker image rm "$synthetic_tag" >/dev/null 2>&1 || true
 
   if [ -n "$current_id" ] && docker inspect "$current_id" >/dev/null 2>&1; then
@@ -46,6 +61,12 @@ cleanup() {
     echo "Synthetic image tag remains after cleanup."
     cleanup_status=1
   fi
+  for lifecycle_id in "$orphan_id" "$active_id" "$legacy_id" "$job_id"; do
+    if [ -n "$lifecycle_id" ] && docker inspect "$lifecycle_id" >/dev/null 2>&1; then
+      echo "Synthetic service-lifecycle container remains after cleanup."
+      cleanup_status=1
+    fi
+  done
   find "$state_directory" -maxdepth 1 -type f -delete
   rmdir "$state_directory"
   return "$cleanup_status"
@@ -168,3 +189,69 @@ for diagnostic in "Starting API" "status=503" "Readiness failed" "[REDACTED]"; d
   fi
 done
 echo "Readiness-failure collector failed closed for incomplete sensitive structures and preserved safe diagnostics."
+
+# Cancelled-run orphan recovery, active-run protection, and indeterminate-liveness refusal.
+serve_synthetic() {
+  docker run -d "$@" "$synthetic_tag" \
+    node -e 'require("node:http").createServer((_request,response)=>response.end(process.env.SYNTHETIC_BODY)).listen(8080,"0.0.0.0")'
+}
+
+job_id="$(docker run -d --name "$job_name" "$synthetic_tag" sleep 900)"
+job_container_id="$(docker inspect --format '{{.Id}}' "$job_id")"
+
+orphan_id="$(
+  serve_synthetic --name "$orphan_name" -p 0:8080 -e SYNTHETIC_BODY=orphan-service \
+    --label com.glantri.ci.owner=glantri-browser-service \
+    --label "com.glantri.ci.resource-suffix=orphan-${CI_RESOURCE_SUFFIX}" \
+    --label "com.glantri.ci.job-container=$dead_job_container"
+)"
+active_id="$(
+  serve_synthetic --name "$active_name" -p 0:8080 -e SYNTHETIC_BODY=active-service \
+    --label com.glantri.ci.owner=glantri-browser-service \
+    --label "com.glantri.ci.resource-suffix=active-${CI_RESOURCE_SUFFIX}" \
+    --label "com.glantri.ci.job-container=$job_container_id"
+)"
+legacy_id="$(serve_synthetic --name "$legacy_name" -p 0:8080 -e SYNTHETIC_BODY=legacy-service)"
+
+orphan_port="$(docker port "$orphan_id" 8080/tcp | sed -n '1s/.*://p')"
+active_port="$(docker port "$active_id" 8080/tcp | sed -n '1s/.*://p')"
+test -n "$orphan_port"
+test -n "$active_port"
+for endpoint in "$orphan_port:orphan-service" "$active_port:active-service"; do
+  endpoint_port="${endpoint%%:*}"
+  endpoint_body="${endpoint##*:}"
+  for attempt in $(seq 1 20); do
+    if [ "$(curl -fsS "http://${CI_DIND_HOST}:${endpoint_port}" 2>/dev/null)" = "$endpoint_body" ]; then
+      break
+    fi
+    if [ "$attempt" -eq 20 ]; then
+      echo "Synthetic lifecycle service $endpoint_body did not become healthy."
+      exit 1
+    fi
+    sleep 0.1
+  done
+done
+
+if node "$helper" assert-ports-free "$CI_DIND_HOST" "$orphan_port"; then
+  echo "A cancelled run's orphaned service incorrectly passed the later-run port gate."
+  exit 1
+fi
+echo "Cancelled-run orphan reproduced the later-run port blockage."
+
+node "$helper" reclaim-stale "$state_directory" "$CI_RESOURCE_SUFFIX"
+
+if docker inspect "$orphan_id" >/dev/null 2>&1; then
+  echo "Cancelled-run orphan survived stale service reclamation."
+  exit 1
+fi
+orphan_id=""
+node "$helper" assert-ports-free "$CI_DIND_HOST" "$orphan_port"
+echo "Cancelled-run orphan was reclaimed and its port became available again."
+
+test "$(docker inspect --format '{{.State.Running}}' "$active_id")" = true
+test "$(curl -fsS "http://${CI_DIND_HOST}:${active_port}")" = "active-service"
+test "$(docker inspect --format '{{.State.Running}}' "$job_id")" = true
+echo "An actually active run's service and its owning job container were left untouched."
+
+test "$(docker inspect --format '{{.State.Running}}' "$legacy_id")" = true
+echo "Unanchored debris was refused while a concurrent job container could not be ruled out."
