@@ -29,7 +29,7 @@ authorize a live command.
 | `combat_experience`                           | Fully descriptor-bound | Difficulty setup, CE roll, and initiative-choice commands require the exact projected task identity.                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `modifier_review`                             | Fully descriptor-bound | M1/M2 review uses the projected participant task, phase, group, and revision.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | `roll_initiative`                             | Fully descriptor-bound | GM proxy and player rolls use descriptor participant/phase identity; submitted calculation inputs remain server-validated.                                                                                                                                                                                                                                                                                                                                                                                        |
-| `complete_remaining_step`                     | Fully descriptor-bound | GM-only workflow command consumes the exact current modifier-review or initiative task and revision, advances only the contiguous bulk-eligible participants in one mutation, and returns the final projected task. Modifier contexts are accepted unchanged. Initiative uses explicit `bulk_skipped` facts with no die for GM-owned passive work or a sole ordinary phase action whose order is not consequential; it stops before player-owned, invalid, ordered-maneuver, or competing timing-sensitive work. |
+| `complete_remaining_step`                     | Fully descriptor-bound | GM-only workflow command consumes the exact current modifier-review or initiative task and revision, advances only the contiguous bulk-eligible participants in one mutation, and returns the final projected task. Modifier contexts are accepted unchanged. Initiative uses explicit `bulk_skipped` facts with no die for GM-owned passive work or a sole ordinary phase action whose order is not consequential; it stops before player-owned, invalid, ordered-maneuver, or competing timing-sensitive work.  |
 | `commit_initiative`                           | Fully descriptor-bound | GM commit requires the projected GM task, execution group, phase, and revision.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `attack`                                      | Fully descriptor-bound | Invocation and persistence require the exact declaration/opportunity/index/source/template/instance/mode plus participant pair, task, execution group, initiative group, phase, revision, effect cutoff, and canonical modifier fingerprints. Viewer ownership is applied while selecting the validation task, so tied/parallel sibling ordering cannot suppress a player's tuple. GM and Player use the same projected facts.                                                                                    |
 | `parry`                                       | Fully descriptor-bound | GM/player handlers and API retain the upstream opportunity and exact attack result through the parry task. The validation tuple additionally binds the purpose, source, process/stage, effect cutoff, attack-result modifier, combined DB/Parry plus combat-wide General value, and contribution fingerprint. Offensive Parry reuses this task with maneuver declaration, selected opponent, and deterministic attempt identity; one resolved attempt is terminal and cannot be replayed from a stale descriptor. |
@@ -49,10 +49,16 @@ authorize a live command.
 | `effect_review`                               | Fully descriptor-bound | The GM participant/effect commit requires the exact projected participant task and revision.                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `round_end_prepare`                           | Fully descriptor-bound | The guarded preparation effect invokes only its exact projected GM descriptor and is keyed by task plus revision.                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `gm_advance_boundary`                         | Fully descriptor-bound | Requires command type, revision, exact task/group, current boundary, and target boundary for every top-level transition.                                                                                                                                                                                                                                                                                                                                                                                          |
+| Perform Task lifecycle                        | Fully descriptor-bound | `combat_task_review`, `combat_task_roll`, `combat_task_advance` and `combat_task_resolve` project one executable task at the owner's Phase 1 primary-action opportunity. Every lifecycle command requires the exact projected task, execution group, boundary, revision and `actionId`. Rule inputs reach the task through the GM review command; audience and GM-authored player-safe result text are resolve-command inputs.                                                                                    |
 
-There are no remaining task-integration gaps. Editable rule inputs (declarations, choices, roll
-sources, and GM review values) remain local form state by design, but no handler derives combat
-identity or command eligibility from those forms, the inspector, cursors, or latest-result chains.
+One task-integration gap remains, and it is scheduled: the parallel
+`POST /encounters/:encounterId/combat-round/generic-actions` channel still authorizes from a
+client-supplied action id. Closing that second creation path is A1b's deliverable, and A1a lands
+with that route deliberately open so `GenericCombatActionPanel` survives as the temporary invoker
+under introduce-then-retire. No other gap remains. Editable rule inputs (declarations, choices,
+roll sources, and GM review values) remain local form state by design, but no handler derives
+combat identity or command eligibility from those forms, the inspector, cursors, or
+latest-result chains.
 
 Read-source separation (2026-07-26): task authority and mutation projection
 continue to load the full authoritative write model. Read-only revision and
@@ -157,3 +163,29 @@ projection keyed by encounter, revision, and optional GM perspective. Interval a
 poll only compact revision metadata; unchanged polls project no task and fetch no encounter or
 history. A newer revision invalidates action controls until the exact player-safe encounter and
 matching progression/history projection arrive.
+
+Perform Task lifecycle (2026-09-22, A1a): a declared Perform Task is a first-class combat task for
+its whole life. Perform Task is a normal primary action, with the same initiative ordering and the
+same action opportunity as any other primary action and no parallel generic-action clock. The
+reviewed `combatGenericActionDurationSchema` maps onto the actor's own primary-action opportunity:
+one advance per round at that opportunity, completing after exactly N advances, with `gm_decided`
+leaving the count to GM adjudication. `COMBAT_ROUND_STEPS` reasoning in
+`canCompleteCombatGenericAction` remains the legacy parallel channel's concern and is not a second
+timing authority. GM adjudication may interrupt or cancel the task at that same opportunity.
+Exactly one lifecycle task is projected at a time, so one authorized command advances the task.
+
+The canonical GM review command carries every rule input: duration, roll basis, Skill, Stat,
+Difficulty, reference, and the `look_around` preset with its Perception basis and retained
+`awarenessContext: { kind: "survey" }`. `combatDeclarationPrimaryIntentSchema` is unchanged and no
+new declaration action id exists. The resolve command carries the result audience and the
+GM-authored player-safe result text as command inputs, under the existing audience semantics: the
+emitted `task_resolved` event scopes its authored text to that audience, and Combat Log entries
+carrying an explicit audience are never delivered to a viewer outside it.
+
+Persistence: new `CombatRoundCommandType` and `CombatStepEventType` values and new compact
+versioned inverse facts are written into `EncounterActiveCombatState.stateJson` and archived round
+rows. Each lifecycle command stores a strict versioned `taskUndo` record of only the fields it
+touched, namely the task's status, duration, preset, awareness context, progress, reference, roll
+request, roll result and resolution, plus the participant's phase-resolution status and action-step
+status. Undo restores that exact prior state and removes the emitted event. Full `CombatRoundState`
+snapshots remain forbidden for new commits, and no Prisma migration is involved.

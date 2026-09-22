@@ -199,6 +199,7 @@ import {
   rollCombatInitiativeOnServer,
   rollCombatParryOnServer,
   rollCombatObservationOnServer,
+  sendCombatTaskLifecycleCommandOnServer,
   rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
   rollCombatFeintOnServer,
@@ -3391,6 +3392,52 @@ export default function ScenarioPlayerCombatPageContent({
     }
   }
 
+  /**
+   * The player's own Perform Task opportunity. Every authorization field comes from the immutable
+   * Current action descriptor, so this never reconstructs command context from component state.
+   */
+  async function invokeCombatTaskLifecycle(
+    descriptor: CurrentActionCommandDescriptor,
+    operation: "advance" | "roll",
+  ) {
+    if (
+      readOnlyInspection ||
+      !selectedParticipant ||
+      !encounterId ||
+      !descriptor.actionId ||
+      !descriptor.executionGroupId ||
+      !descriptor.participantId ||
+      !descriptor.processId ||
+      !descriptor.stageId
+    ) {
+      return;
+    }
+    setSavingCombatContext(true);
+    try {
+      const { encounter } = await sendCombatTaskLifecycleCommandOnServer({
+        actionId: descriptor.actionId,
+        currentEncounter: encounterSession,
+        encounterId,
+        executionGroupId: descriptor.executionGroupId,
+        expectedRevision: descriptor.expectedRevision,
+        operation,
+        processId: descriptor.processId,
+        scenarioParticipantId: descriptor.participantId,
+        stageId: descriptor.stageId,
+        taskId: descriptor.taskId,
+      });
+      acceptEncounterSession(encounter);
+      setError(undefined);
+      setCombatActionError(undefined);
+    } catch (caughtError) {
+      setCombatActionError(
+        caughtError instanceof Error ? caughtError.message : "Unable to update the Combat Task.",
+      );
+    } finally {
+      setSavingCombatContext(false);
+    }
+  }
+
   async function rollContinuedContactMaintenance(descriptor: CurrentActionCommandDescriptor) {
     if (
       readOnlyInspection ||
@@ -4748,6 +4795,16 @@ export default function ScenarioPlayerCombatPageContent({
         return;
       case "roll_observation":
         void invokeResultProducingProxyCommand(descriptor, () => rollObservation(descriptor));
+        return;
+      case "roll_combat_task":
+        void invokeResultProducingProxyCommand(descriptor, () =>
+          invokeCombatTaskLifecycle(descriptor, "roll"),
+        );
+        return;
+      case "advance_combat_task":
+        void invokeResultProducingProxyCommand(descriptor, () =>
+          invokeCombatTaskLifecycle(descriptor, "advance"),
+        );
         return;
       case "roll_continued_contact_maintenance":
         void invokeResultProducingProxyCommand(descriptor, () =>

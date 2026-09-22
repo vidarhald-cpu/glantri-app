@@ -105,12 +105,23 @@ export type CombatLogSummaryFacts =
       readonly kind: "bleed_treatment";
       readonly nextState: string;
       readonly previousState: string;
+    }
+  | {
+      readonly kind: "task_resolved";
+      readonly rollOutcome?: "failed" | "succeeded";
+      readonly taskId: string;
     };
 
 export interface CombatLogEventPresentation {
   readonly actionKind?: string;
   readonly actor?: CombatLogSubjectPresentation;
   readonly attackResultId?: string;
+  /**
+   * Explicit result audience. When present, only a viewer controlling one of these participants
+   * may receive the event at all. Absent means the entry carries no audience restriction and the
+   * existing subject-level sanitization alone governs it.
+   */
+  readonly audienceParticipantIds?: readonly string[];
   readonly category: CombatLogEventCategory;
   /** @deprecated Use presentationTargetId for Action Outcome selection. */
   readonly detailResultId?: string;
@@ -218,6 +229,14 @@ export function projectCombatLogForViewer(input: {
             viewer.controlledParticipantIds.has(event.actor.participantId),
           ),
       )
+      // An explicit result audience is authoritative: a viewer outside it never receives the entry.
+      .filter(
+        (event) =>
+          event.audienceParticipantIds === undefined ||
+          event.audienceParticipantIds.some((participantId) =>
+            viewer.controlledParticipantIds.has(participantId),
+          ),
+      )
       .map((event) => {
         const actor = projectSubjectForViewer({ subject: event.actor, viewer });
         const target = projectSubjectForViewer({ subject: event.target, viewer });
@@ -232,6 +251,13 @@ export function projectCombatLogForViewer(input: {
         const mayInspect = actor.involved || target.involved;
         return {
           ...event,
+          ...(event.audienceParticipantIds
+            ? {
+                audienceParticipantIds: event.audienceParticipantIds.filter((participantId) =>
+                  viewer.controlledParticipantIds.has(participantId),
+                ),
+              }
+            : {}),
           actor: actor.subject,
           target: target.subject,
           summary: targetSummary,
@@ -364,6 +390,7 @@ function sourceEventsForRound(state: CombatRoundState, encounterId: string): Com
 
 function baseCandidate(input: {
   actor?: CombatLogSubjectPresentation;
+  audienceParticipantIds?: readonly string[];
   category: CombatLogEventCategory;
   detailResultId?: string;
   encounterId: string;
@@ -386,6 +413,9 @@ function baseCandidate(input: {
 }): Candidate {
   return {
     actor: input.actor,
+    ...(input.audienceParticipantIds
+      ? { audienceParticipantIds: input.audienceParticipantIds }
+      : {}),
     category: input.category,
     detailResultId: input.detailResultId,
     encounterId: input.encounterId,
@@ -1009,6 +1039,46 @@ function maneuverAttempts(input: {
   return attempts;
 }
 
+/**
+ * Projects one resolved Perform Task. The GM-authored player-safe text is the authorized Combat
+ * outcome for its explicit audience; the entry carries that audience so no other viewer receives it.
+ */
+function projectTaskResolved(input: {
+  encounterId: string;
+  event: CombatStepEvent;
+  labels: ReadonlyMap<string, string>;
+  sourceRevision: string;
+}): Candidate | undefined {
+  const taskId = stringFact(input.event.facts.involvedOutcome, "taskId");
+  const resultText = stringFact(input.event.facts.involvedOutcome, "resultText");
+  if (!taskId || !resultText) return undefined;
+  const actor = subject(
+    input.event.actorParticipantId ?? input.event.ownerParticipantId,
+    input.labels,
+  );
+  const rollOutcomeFact = stringFact(input.event.facts.involvedOutcome, "rollOutcome");
+  const rollOutcome =
+    rollOutcomeFact === "succeeded" || rollOutcomeFact === "failed" ? rollOutcomeFact : undefined;
+  const audience = input.event.visibility.involvedParticipantIds;
+  return baseCandidate({
+    actor,
+    audienceParticipantIds: audience.length > 0 ? audience : undefined,
+    category: "state_change",
+    encounterId: input.encounterId,
+    eventId: `task:${taskId}:resolved`,
+    occurredAt: input.event.occurredAt,
+    phase: phaseForEvent(input.event),
+    roundNumber: input.event.roundNumber,
+    sourceEventIds: [input.event.id],
+    sourceRevision: input.sourceRevision,
+    sourceSequence: input.event.sequence,
+    summary: actor
+      ? `${possessive(actor.displayName)} task resolved: ${resultText}`
+      : `Task resolved: ${resultText}`,
+    summaryFacts: { kind: "task_resolved", rollOutcome, taskId },
+  });
+}
+
 function compareCandidates(left: Candidate, right: Candidate): number {
   if (left.roundNumber !== right.roundNumber) return left.roundNumber - right.roundNumber;
   if (left.category === "round" && right.category !== "round") return -1;
@@ -1130,6 +1200,14 @@ export function buildCombatLogProjection(input: {
             sourceRevision: input.sourceRevision,
           }),
         );
+      } else if (event.type === "task_resolved") {
+        const resolved = projectTaskResolved({
+          encounterId: input.encounterId,
+          event,
+          labels,
+          sourceRevision: input.sourceRevision,
+        });
+        if (resolved) candidates.push(resolved);
       } else if (event.type === "distance_control_applied") {
         const distance = projectDistanceApplied({
           encounterId: input.encounterId,

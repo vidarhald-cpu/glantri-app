@@ -26515,4 +26515,287 @@ describe("scenarios route contract", () => {
 
     await app.close();
   });
+
+  function makePerformTaskFixture(input: { playerControlled?: boolean } = {}) {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = encounterSessionSchema.parse(
+      makeCombatEncounter({ participants: encounterParticipants }),
+    );
+    const initial = initializeCombatRoundState({ encounter: baseEncounter });
+    const taskId = "round:1:participant:encounter-participant-1:declaration:perform_task";
+    const state = combatRoundStateSchema.parse({
+      ...initial,
+      commands: [
+        {
+          afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-i1",
+          participantId: "encounter-participant-1",
+          roundNumber: 1,
+          step: "i1",
+          type: "roll_initiative_phase1",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      genericActions: [
+        {
+          createdAt: "2026-01-01T00:01:00.000Z",
+          createdByUserId: "player-1",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: taskId,
+          intent: "Force the portcullis winch.",
+          lastUpdatedAt: "2026-01-01T00:01:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          status: "declared",
+        },
+      ],
+      participants: initial.participants.map((participant, index) => ({
+        ...participant,
+        declaration: {
+          actionId: index === 0 ? "perform_task" : "parry",
+          intent:
+            index === 0
+              ? {
+                  primaryAction: {
+                    actionId: "perform_task",
+                    description: "Force the portcullis winch.",
+                    taskId,
+                  },
+                  relativePositions: [],
+                }
+              : undefined,
+          roundNumber: 1,
+          submittedAt: "2026-01-01T00:01:00.000Z",
+          submittedBy: "player",
+        },
+      })),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        substep: "perform_task",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-1": {
+          phase1: { substep: "perform_task", updatedAt: "2026-01-01T00:01:00.000Z" },
+        },
+      },
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "phase_1_actions",
+    });
+    const encounter = encounterSessionSchema.parse({
+      ...baseEncounter,
+      combatRoundState: state,
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const participants = [
+      makeCombatScenarioParticipant({
+        controlledByUserId: input.playerControlled ? mocks.playerUser.id : "gm-1",
+        id: "participant-1",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+          displayName: "The Gladiator",
+          sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "gm-1",
+        id: "participant-2",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-2", "City guard"),
+          displayName: "City guard",
+          sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    ] as unknown as ScenarioParticipant[];
+    return { encounter, participants, taskId };
+  }
+
+  function performTaskDescriptor(encounter: EncounterSession) {
+    const state = combatRoundStateSchema.parse(encounter.combatRoundState);
+    const task = getCurrentExecutableCombatTasks(buildCombatProgressionProjection(state))[0]!;
+    return {
+      actionId: task.identity.actionId,
+      executionGroupId: task.executionGroupId,
+      expectedRevision: encounter.updatedAt,
+      processId: task.processId,
+      scenarioParticipantId: "participant-1",
+      stageId: task.stageId,
+      taskId: task.id,
+      visibleToParticipantIds: [],
+    };
+  }
+
+  it("drives the canonical Perform Task lifecycle from the projected Current action descriptor", async () => {
+    const prepared = makePerformTaskFixture();
+    const mutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const staleTask = await app.inject({
+      method: "POST",
+      payload: { ...performTaskDescriptor(mutable.encounter), taskId: "not-a-projected-task" },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(staleTask.statusCode, staleTask.body).toBe(409);
+    expect(staleTask.json().code).toBe("task_mismatch");
+
+    const staleRevision = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        expectedRevision: "2020-01-01T00:00:00.000Z",
+      },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(staleRevision.statusCode, staleRevision.body).toBe(409);
+    expect(staleRevision.json().code).toBe("stale_revision");
+
+    const wrongAction = await app.inject({
+      method: "POST",
+      payload: { ...performTaskDescriptor(mutable.encounter), actionId: "another-task" },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(wrongAction.statusCode, wrongAction.body).toBe(409);
+
+    const review = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        difficulty: 26,
+        duration: { kind: "round" },
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    expect(review.json().command).toMatchObject({ type: "review_combat_task" });
+    const reviewedState = combatRoundStateSchema.parse(mutable.encounter.combatRoundState);
+    expect(reviewedState.genericActions[0]).toMatchObject({
+      duration: { kind: "round" },
+      status: "active",
+    });
+
+    const resolve = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        resultText: "The winch groans and the portcullis lifts.",
+        visibleToParticipantIds: ["encounter-participant-2"],
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-combat-task",
+    });
+    expect(resolve.statusCode, resolve.body).toBe(200);
+    const resolvedState = combatRoundStateSchema.parse(mutable.encounter.combatRoundState);
+    expect(resolvedState.genericActions[0]).toMatchObject({
+      progress: { completedRounds: 1, totalRounds: 1 },
+      resolution: {
+        text: "The winch groans and the portcullis lifts.",
+        visibleToParticipantIds: ["encounter-participant-1", "encounter-participant-2"],
+      },
+      status: "completed",
+    });
+    expect(resolvedState.events.filter((event) => event.type === "task_resolved")).toHaveLength(1);
+
+    const undone = undoLatestCombatRoundCommand({ state: resolvedState });
+    expect(undone?.events.filter((event) => event.type === "task_resolved")).toHaveLength(0);
+    expect(undone?.genericActions[0]).toMatchObject({
+      progress: { completedRounds: 0 },
+      status: "active",
+    });
+    expect(undone?.genericActions[0]?.resolution).toBeUndefined();
+    expect(undone).toEqual(reviewedState);
+
+    await app.close();
+  });
+
+  it("keeps GM-only Perform Task commands closed to the owning player", async () => {
+    const prepared = makePerformTaskFixture({ playerControlled: true });
+    const mutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    for (const path of ["review-combat-task", "resolve-combat-task", "finish-combat-task"]) {
+      const response = await app.inject({
+        method: "POST",
+        payload: { ...performTaskDescriptor(mutable.encounter), resultText: "Player authored." },
+        url: `/encounters/encounter-1/combat-round/${path}`,
+      });
+      expect(response.statusCode, response.body).toBe(403);
+    }
+    expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+
+  it("lets the owning player advance a multi-round Perform Task at their own opportunity", async () => {
+    const prepared = makePerformTaskFixture({ playerControlled: true });
+    const gmMutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const gmApp = await buildScenarioTestApp();
+    const review = await gmApp.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(gmMutable.encounter),
+        duration: { kind: "rounds", rounds: 2 },
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    const reviewedEncounter = gmMutable.encounter;
+    await gmApp.close();
+
+    vi.clearAllMocks();
+    const playerMutable = setupMutableCombatRouteState({
+      encounter: reviewedEncounter,
+      participants: prepared.participants,
+      user: mocks.playerUser,
+    });
+    const playerApp = await buildScenarioTestApp();
+    const advanceDescriptor = performTaskDescriptor(playerMutable.encounter);
+    const advance = await playerApp.inject({
+      method: "POST",
+      payload: advanceDescriptor,
+      url: "/encounters/encounter-1/combat-round/advance-combat-task",
+    });
+    expect(advance.statusCode, advance.body).toBe(200);
+    const advancedState = combatRoundStateSchema.parse(playerMutable.encounter.combatRoundState);
+    expect(advancedState.genericActions[0]).toMatchObject({
+      progress: { completedRounds: 1, lastProgressedRoundNumber: 1, totalRounds: 2 },
+      status: "active",
+    });
+    expect(advancedState.phaseResolutionStatuses["encounter-participant-1"]?.phase1?.substep).toBe(
+      "done",
+    );
+
+    // The opportunity is consumed for the round: no lifecycle task remains projected, and the
+    // descriptor that authorized the first advance can never authorize a second.
+    expect(
+      getCurrentExecutableCombatTasks(buildCombatProgressionProjection(advancedState)).filter(
+        (task) => task.processId.includes("process:perform_task"),
+      ),
+    ).toHaveLength(0);
+    const second = await playerApp.inject({
+      method: "POST",
+      payload: { ...advanceDescriptor, expectedRevision: playerMutable.encounter.updatedAt },
+      url: "/encounters/encounter-1/combat-round/advance-combat-task",
+    });
+    expect(second.statusCode, second.body).toBe(409);
+
+    await playerApp.close();
+  });
 });
