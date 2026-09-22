@@ -99,13 +99,30 @@ function chooseManifest(text: string | Promise<string>) {
   Object.defineProperty(file, "text", { value: () => Promise.resolve(text) });
   fireEvent.change(screen.getByLabelText("Package manifest"), { target: { files: [file] } });
 }
+/**
+ * Validation mounts a fresh review, and that review's own mount effect clears
+ * any approval. The approve control reaches the DOM one commit before that
+ * effect runs, so approving the moment it appears is approving a review that is
+ * still settling — the effect then discards the approval and the accept control
+ * stays disabled. The panel clears `busy` only once the whole validate chain
+ * has finished, which is exactly the point at which the mounted review has
+ * settled, so wait for the validate control to become operable again before
+ * touching the review a real GM could not have reached any sooner.
+ */
+async function settledReview() {
+  const approve = await screen.findByLabelText(/Approve updating Captain/);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Validate and preview package" })).toBeEnabled(),
+  );
+  return approve;
+}
 async function approvedPanel() {
   render(<ArtifactImportPanel campaignId="campaign" onAccepted={vi.fn()} />);
   chooseManifest(JSON.stringify(manifest));
   const resource = await screen.findByLabelText("Resource: image");
   fireEvent.change(resource, { target: { files: [new File(["one"], "one.jpg")] } });
   fireEvent.click(screen.getByRole("button", { name: "Validate and preview package" }));
-  fireEvent.click(await screen.findByLabelText(/Approve updating Captain/));
+  fireEvent.click(await settledReview());
   expect(screen.getByRole("button", { name: "Accept selected Artifacts" })).toBeEnabled();
   return resource;
 }
@@ -116,7 +133,9 @@ describe("Package input review binding", () => {
     fireEvent.change(resource, { target: { files: [replacement] } });
     expect(screen.queryByRole("button", { name: "Accept selected Artifacts" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Validate and preview package" }));
-    expect(await screen.findByLabelText(/Approve updating Captain/)).not.toBeChecked();
+    // Settled, so this proves the replacement review really carries no approval
+    // rather than merely being observed before one could have been applied.
+    expect(await settledReview()).not.toBeChecked();
     expect(mocks.stage).toHaveBeenLastCalledWith("campaign", expect.anything(), {
       image: replacement,
     });
