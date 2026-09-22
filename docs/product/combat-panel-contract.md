@@ -462,8 +462,10 @@ settled_ — the ruling _M5 and M6 settled_, the ruling _A1/M1 behaviour change 
 remaining event types classified_, and the control-plane decomposition analysis that precedes
 them. **Those rulings are authoritative and are cross-referenced, not re-decided.**
 
-**All eight mismatches M1-M8 are now resolved or ruled, and issue #287 carries no remaining open
-Product Owner question.** These contracts therefore hold no open-decision section.
+**All eight mismatches M1-M8 are now resolved or ruled.** These contracts otherwise hold no
+open-decision section, with one exception surfaced during A1a implementation and recorded, not
+answered, in [12.18](#1218-open-decision--phase-2-perform-task-recurrence-versus-expiry): whether
+an unresolved `phase2` Perform Task should recur or expire.
 
 **These are task contracts, not authorization.** Nothing here is dispatched. Each contract
 becomes executable only after a Forgejo issue body carries it through the canonical
@@ -1147,3 +1149,34 @@ classification of A2's six remaining event types. **No separate mid-round generi
 declaration path is preserved solely for `look_around`.** Neither item is a pre-`Ready` gate any
 longer, and **no open item remains in [A1](#1212-a1--combat-task-lifecycle-convergence) or
 [A2](#1213-a2--player-safe-activity-projection) that must be settled before `Ready`.**
+
+---
+
+### 12.18 Open decision — Phase 2 Perform Task recurrence versus expiry
+
+**Status:** Open. **Raised by:** A1a implementation, QA finding F1 (2026-09-22). **Affects:**
+[A1](#1212-a1--combat-task-lifecycle-convergence)'s Perform Task lifecycle, in future rounds.
+
+The Product Owner's 2026-09-22 ruling that a Perform Task must "never resolve a Phase 2 task at
+Phase 1 or vice versa" settles _where_ a `phase`-duration task's opportunity opens. It does not
+say what happens to a `{kind: "phase", phase: "phase2"}` task the GM leaves unresolved when its
+round ends. A1a implements **recurrence**: an unresolved `phase2` task is projected again at
+Phase 2 in round N+1, the same as any other outstanding task carries forward. It does **not**
+implement expiry.
+
+**Recurrence is the current implemented default, not a Product Owner ruling.** It follows from
+two reasons, neither of which is itself authority to choose it permanently:
+
+- Silent expiry would discard a GM-declared task with no `task_resolved` event, no command, and
+  no undo record — the task would simply vanish, which is itself unaudited combat behaviour.
+- An expiry rule (at round end, after N rounds, or otherwise) is a new Combat rule. Authoring one
+  is out of scope for A1a's convergence-only contract and is excluded by
+  [12.8](#128-exclusions).
+
+**This question is not settled here, and no option is chosen.** Whether a `phase2` Perform Task
+should instead expire unresolved, and under what condition, requires its own Product Owner
+ruling. Until one is made, recurrence is the implemented behaviour: no expiry mechanism exists in
+the codebase, and a `phase2` task stays open — neither resolved, cancelled nor interrupted — until
+one of those three lifecycle commands closes it, exactly as
+`packages/domain/src/encounter/combatTaskLifecycle.test.ts`'s `"phase duration schedules the named
+primary-action opportunity"` suite protects.
