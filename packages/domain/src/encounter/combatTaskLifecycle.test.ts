@@ -818,3 +818,177 @@ describe("one primary action per round with two live Perform Tasks", () => {
     expect(open(undone!)?.id).toBe(secondTask.id);
   });
 });
+
+describe("the spent-opportunity gate does not depend on the executability source", () => {
+  const firstTask = task();
+  const secondTask = task({
+    createdAt: later,
+    id: "round:1:participant:a:declaration:perform_task:second",
+    intent: "Brace the winch handle.",
+    lastUpdatedAt: later,
+  });
+
+  /**
+   * `observe_opponent` is a Phase 1 executability source with no substep of its own, so the cursor
+   * machinery clears the participant's `done` status and re-derives it as `perform_task`. The
+   * substep gate alone is bypassed by exactly that; completion evidence is not, because it reads
+   * the immutable command log.
+   */
+  function twoLiveTaskState(input: { declarationActionId: string; roundNumber?: number }) {
+    const roundNumber = input.roundNumber ?? 1;
+    return combatRoundStateSchema.parse({
+      currentCursor: { participantId: "a", roundNumber, step: "A1" },
+      currentStep: "phase_1_actions",
+      encounterId: "encounter-1",
+      genericActions: [firstTask, secondTask],
+      participants: [
+        {
+          declaration: {
+            actionId: input.declarationActionId,
+            roundNumber,
+            submittedBy: "player",
+          },
+          label: "Aline",
+          participantId: "a",
+        },
+        { label: "Brand", participantId: "b" },
+      ],
+      phaseResolutionCursor: { participantId: "a", phase: "phase1", substep: "perform_task" },
+      phaseResolutionStatuses: { a: { phase1: { substep: "perform_task", updatedAt: at } } },
+      roundNumber,
+      selectedParticipantId: "a",
+      selectedStep: "phase_1_actions",
+    });
+  }
+
+  function open(source: CombatRoundState) {
+    return getCombatRoundOpenPerformTaskForParticipant({ participantId: "a", state: source });
+  }
+
+  function review(input: { actionId: string; source: CombatRoundState }) {
+    return reviewCombatTaskAtOpportunity({
+      actionId: input.actionId,
+      command: { createdAt: at, createdByUserId: "user-gm" },
+      duration: { kind: "round" },
+      participantId: "a",
+      phase: "phase1",
+      state: input.source,
+      updatedAt: at,
+    });
+  }
+
+  function reviewAndResolve(input: { actionId: string; source: CombatRoundState }) {
+    return resolveCombatTaskAtOpportunity({
+      actionId: input.actionId,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase: "phase1",
+      resultText: "The winch groans.",
+      state: review(input).state,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+  }
+
+  it("holds the opportunity closed when the participant stays executable through observe_opponent", () => {
+    const resolved = reviewAndResolve({
+      actionId: secondTask.id,
+      source: twoLiveTaskState({ declarationActionId: "observe_opponent" }),
+    });
+
+    // The cursor machinery genuinely re-derives the mutable substep here — that is the bypass the
+    // substep gate alone could not survive.
+    expect(resolved.state.phaseResolutionStatuses.a?.phase1?.substep).toBe("perform_task");
+    // Completion evidence is immutable, so the opportunity stays spent anyway.
+    expect(open(resolved.state)).toBeUndefined();
+
+    expect(() =>
+      reviewCombatTaskAtOpportunity({
+        actionId: firstTask.id,
+        command: { createdAt: later, createdByUserId: "user-gm" },
+        duration: { kind: "round" },
+        participantId: "a",
+        phase: "phase1",
+        state: resolved.state,
+        updatedAt: later,
+      }),
+    ).toThrow(/no longer holds the actor's action opportunity/);
+
+    expect(() =>
+      resolveCombatTaskAtOpportunity({
+        actionId: firstTask.id,
+        command: { createdAt: later, createdByUserId: "user-gm" },
+        participantId: "a",
+        phase: "phase1",
+        resultText: "And the other one too.",
+        state: resolved.state,
+        updatedAt: later,
+        visibleToParticipantIds: [],
+      }),
+    ).toThrow(/no longer holds the actor's action opportunity/);
+
+    expect(
+      resolved.state.events.filter(
+        (event) => event.type === "task_resolved" && event.roundNumber === 1,
+      ),
+    ).toHaveLength(1);
+    expect(
+      resolved.state.genericActions.filter((action) => action.status === "completed"),
+    ).toHaveLength(1);
+    // The unselected task is untouched.
+    expect(resolved.state.genericActions.find((action) => action.id === firstTask.id)).toEqual(
+      firstTask,
+    );
+  });
+
+  it("still keeps the substep gate, which completion evidence does not subsume", () => {
+    // A committed feint, break-off, adjust-distance or disarm spends the Phase 1 primary action by
+    // setting `done` with an action step status of `complete`. None of them leaves a command the
+    // completion-evidence helper recognises, so evidence alone would hand the task back.
+    const spentByAnotherPrimaryAction = combatRoundStateSchema.parse({
+      ...twoLiveTaskState({ declarationActionId: "perform_task" }),
+      participants: [
+        {
+          declaration: { actionId: "perform_task", roundNumber: 1, submittedBy: "player" },
+          label: "Aline",
+          participantId: "a",
+          stepStatuses: { phase_1_actions: "complete" },
+        },
+        { label: "Brand", participantId: "b" },
+      ],
+      phaseResolutionStatuses: { a: { phase1: { substep: "done", updatedAt: later } } },
+    });
+
+    // No completion evidence exists in this state at all.
+    expect(spentByAnotherPrimaryAction.commands).toHaveLength(0);
+    expect(open(spentByAnotherPrimaryAction)).toBeUndefined();
+  });
+
+  it("reopens on undo and does not lose the unselected task, through the observe_opponent source", () => {
+    const source = twoLiveTaskState({ declarationActionId: "observe_opponent" });
+    const afterReview = review({ actionId: secondTask.id, source });
+    const resolved = resolveCombatTaskAtOpportunity({
+      actionId: secondTask.id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase: "phase1",
+      resultText: "The winch groans.",
+      state: afterReview.state,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+    expect(open(resolved.state)).toBeUndefined();
+
+    const undone = undoLatestCombatRoundCommand({ state: resolved.state });
+    expect(undone).toEqual(combatRoundStateSchema.parse(afterReview.state));
+    expect(open(undone!)?.id).toBe(secondTask.id);
+
+    // Next round: `phaseResolutionStatuses` clears and the round-scoped evidence falls away, so
+    // the task that was never selected is still there and becomes executable again.
+    const nextRound = combatRoundStateSchema.parse({
+      ...twoLiveTaskState({ declarationActionId: "observe_opponent", roundNumber: 2 }),
+      genericActions: resolved.state.genericActions,
+    });
+    expect(open(nextRound)?.id).toBe(firstTask.id);
+  });
+});

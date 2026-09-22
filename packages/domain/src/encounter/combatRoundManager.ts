@@ -7111,18 +7111,33 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
  * selectable again once the selected one reaches a terminal status.
  *
  * Perform Task is a normal primary action, so the opportunity belongs to the **participant**, not
- * to the individual task: once a consuming task command has closed this participant's Phase 1
- * resolution for the round, no task of theirs is executable again until the next round clears
- * `phaseResolutionStatuses`. Without that gate a second, never-progressed task would still look
- * open on its own progress alone and would grant a second primary action in one round.
+ * to the individual task: once this participant's Phase 1 primary action has been spent for the
+ * round, no task of theirs is executable again until the next round. Without that gate a second,
+ * never-progressed task would still look open on its own progress alone and would grant a second
+ * primary action in one round.
+ *
+ * The opportunity is spent when **either** of two independent witnesses says so, because neither
+ * one covers the other:
+ *
+ * - `phaseResolutionStatuses[participantId].phase1.substep === "done"` covers every primary action
+ *   that closes Phase 1 without leaving a command the completion-evidence helper recognises — a
+ *   committed feint, break-off, adjust-distance or disarm, and operational-action cancellation.
+ *   All of those set `done` with an action step status of `complete`, not `skipped`.
+ * - `combatRoundParticipantPhaseActionHasCompletionEvidence` is derived from the immutable command
+ *   log rather than from a status the cursor machinery rewrites, and it recognises all four
+ *   consuming task command types. It covers the case the `done` substep does not: a participant
+ *   who is executable through another Phase 1 source — `observe_opponent`, which has no substep of
+ *   its own — has their `done` status cleared and re-derived as `perform_task`, which on its own
+ *   would reopen the already-spent opportunity.
+ *
+ * Keeping both makes the invariant independent of every executability source while staying at
+ * least as strict as the substep gate alone. Undo stays exact either way: undo restores
+ * `previousPhaseResolutionStatus` and removes the command, so it removes the evidence with it.
  */
 export function getCombatRoundOpenPerformTaskForParticipant(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatGenericAction | undefined {
-  if (input.state.phaseResolutionStatuses[input.participantId]?.phase1?.substep === "done") {
-    return undefined;
-  }
   const open = input.state.genericActions.filter(
     (action) =>
       action.declarationKind === "perform_task" &&
@@ -7132,7 +7147,18 @@ export function getCombatRoundOpenPerformTaskForParticipant(input: {
         roundNumber: input.state.roundNumber,
       }),
   );
-  if (open.length <= 1) return open[0];
+  if (open.length === 0) return undefined;
+  if (
+    input.state.phaseResolutionStatuses[input.participantId]?.phase1?.substep === "done" ||
+    combatRoundParticipantPhaseActionHasCompletionEvidence({
+      participantId: input.participantId,
+      phase: "phase1",
+      state: input.state,
+    })
+  ) {
+    return undefined;
+  }
+  if (open.length === 1) return open[0];
   const startedRank = (action: CombatGenericAction): number =>
     action.status === "declared" ? 0 : 1;
   return open.reduce((selected, candidate) => {
