@@ -458,7 +458,8 @@ matching publication of meaningful outcomes.
 Recorded 2026-09-22 against `dev` at `c7ec1800df48a5f375088322b0feec122cab8a87`, under the two
 Product Owner rulings on Forgejo issue #287 — _M3/M4 domain change authorized in principle;
 A1/A2/A3 decomposition required_ and _A1 QA class, Perform Task timing, A2-Q1, M7 and M8
-settled_ — the ruling _M5 and M6 settled_, and the control-plane decomposition analysis that precedes
+settled_ — the ruling _M5 and M6 settled_, the ruling _A1/M1 behaviour change accepted; the six
+remaining event types classified_, and the control-plane decomposition analysis that precedes
 them. **Those rulings are authoritative and are cross-referenced, not re-decided.**
 
 **All eight mismatches M1-M8 are now resolved or ruled, and issue #287 carries no remaining open
@@ -617,9 +618,15 @@ Mismatches discharged, and how each is demonstrated:
 - **M1** — `look_around` becomes a **preset of the Perform Task declaration**, not a new action
   id: `rollRequest.basis` set to Perception and the existing
   `awarenessContext: { kind: "survey" }` retained. No id is added and `observe_opponent` is
-  untouched. **A behaviour loss requires explicit Product Owner acceptance inside this
-  contract's issue body before `Ready`: today `look_around` can be declared mid-round; routed
-  through declaration it can only be declared at the declaration boundary.**
+  untouched. **The behaviour change is accepted and settled** by the Product Owner ruling of
+  2026-09-22 on Forgejo issue #287: `look_around` **follows the normal Combat declaration
+  lifecycle and is declared at the declaration boundary**, and **no separate mid-round
+  generic-action declaration path is preserved solely for `look_around`**. This is no longer an
+  open item and is **not** a pre-`Ready` gate. It is consistent with the settled position that
+  Perform Task is a **normal primary action** with **no parallel generic-action clock**. A
+  Builder must **not** reinstate the mid-round generic-action route for `look_around` as a fix:
+  the absence of that path is the accepted outcome, and any pressure to restore it is returned
+  to the control plane rather than implemented.
 - **M2** — rule inputs reach the task through the canonical GM review command.
   `combatDeclarationPrimaryIntentSchema` is unchanged; demonstrated by a test asserting the
   declaration intent schema's members are identical to baseline.
@@ -703,18 +710,38 @@ Recorded from the control-plane analysis, confirmed by the control plane:
   example is _"Sergeant attacks Test Hunter — PARRIED"_.
 - **Suppress:** `declaration`, `modifier_review`, `initiative`, `combat_experience`,
   `action_skipped`, `missile_readiness`, `damage_proposed`, `participant_su_review`,
-  `effect_review`, `round_boundary`, and the `*_roll` / `*_response` / `*_review` /
-  `*_feasibility` intermediates.
+  `effect_review`, `round_boundary`, the `*_roll` / `*_response` / `*_review` /
+  `*_feasibility` intermediates, and — **settled by the Product Owner ruling of 2026-09-22 on
+  Forgejo issue #287** — `offensive_parry_brawling`, `continued_contact_maintenance`,
+  `feint_impossible`, `adjust_distance_adjustment`, `distance_control_applied` and
+  `disarm_opened`. Those six are suppressed because they are **intermediate or mechanical Combat
+  states rather than terminal narrative outcomes** suitable for the shared session record.
 - **`round_boundary` is safe to suppress** because `ScenarioEventLog.roundNumber` already exists
   and is populated. Temporal structure survives as a row attribute without publishing the event.
   Confirmed by the control plane.
 
-**Residual itemization, to be completed before this contract is `Ready`.** Six members of
-`combatStepEventTypeSchema` fall under neither recorded set and must be assigned explicitly
-rather than by pattern: `offensive_parry_brawling`, `continued_contact_maintenance`,
-`feint_impossible`, `adjust_distance_adjustment`, `distance_control_applied` and `disarm_opened`.
-The positive-list test must enumerate **every** member of the enum, so no member can be left
+**The itemization is discharged; every current member of the enum is classified.** The six
+members that previously fell under neither recorded set are suppressed above under the ruling of
+2026-09-22, so **no pre-`Ready` itemization step remains**. The positive-list test must still
+enumerate **every** member of `combatStepEventTypeSchema`, so a member added later cannot be left
 unclassified.
+
+**Binding rule — the terminal-outcome guard.** This is a rule with an acceptance check below, not
+advice:
+
+> **Where a suppressed intermediate event leads to a meaningful result, publish the appropriate
+> terminal outcome instead.**
+>
+> **Do not make internal mechanics recap-visible merely because no better event exists. If a
+> meaningful terminal event is missing, return that as an implementation gap.**
+
+The reasoning is load-bearing. Because
+[§11.2 of the People / Artifact / GM-authoring model](./people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source)
+makes the player-safe Situation Activity projection the **exclusive** AI session-summary source,
+an intermediate event suppressed with **no terminal counterpart is a silent hole in the session
+record**, not a tidy-up. A2 **returns such a case to the control plane** rather than either
+publishing the mechanic or quietly dropping the outcome. Suppression never converts this contract
+into a deny list: **A2 remains a positive publish list asserted by test.**
 
 #### Dependencies and gates
 
@@ -786,6 +813,16 @@ looks correct and every gate passes.
   unchanged, re-verified by `canViewCurrentItemOutcome` at projection time.
 - **Recap sufficiency:** a resolved Perform Task and a resolved Item interaction both appear in
   the player-safe Activity projection for their entitled audience.
+- **Terminal-outcome coverage for suppressed intermediates**, verifying the binding rule above.
+  For each suppressed intermediate that can lead to a meaningful result — at minimum the six
+  settled members and the `*_roll` / `*_response` / `*_review` / `*_feasibility` intermediates —
+  the evidence shows **either** that the corresponding terminal published event exists and is
+  asserted present in the player-safe Activity payload for its entitled audience, **or** that the
+  missing terminal event is named and explicitly returned to the control plane as an
+  implementation gap. A suppressed intermediate with **neither** an asserted terminal counterpart
+  **nor** a recorded return is a **fail**; publishing the intermediate itself to close the hole is
+  equally a fail. The check is satisfied by a positive assertion or a recorded return, never by
+  adding a deny-list entry.
 
 **M1-M8 discharged: none directly.** A2 discharges
 [12.7](#127-logging-and-the-activity-projection)'s binding rule and carries
@@ -1102,6 +1139,11 @@ sequencing and evidence:
 4. **Control-plane approval of the final decomposition**, and a Forgejo issue body carrying each
    contract to `Authorized`.
 
-**One acceptance A1 still needs, and it is not a blocker to A3.** The M1 behaviour loss —
-`look_around` can be declared mid-round today, but only at the declaration boundary once routed
-through declaration — must be explicitly accepted in A1's issue body before A1 reaches `Ready`.
+**The one acceptance A1 still needed has since been given.** The M1 behaviour change —
+`look_around` can be declared mid-round today, but once routed through declaration it follows the
+normal Combat declaration lifecycle and is declared at the declaration boundary — is **accepted
+and settled** by the Product Owner ruling of 2026-09-22 on Forgejo issue #287, together with the
+classification of A2's six remaining event types. **No separate mid-round generic-action
+declaration path is preserved solely for `look_around`.** Neither item is a pre-`Ready` gate any
+longer, and **no open item remains in [A1](#1212-a1--combat-task-lifecycle-convergence) or
+[A2](#1213-a2--player-safe-activity-projection) that must be settled before `Ready`.**
