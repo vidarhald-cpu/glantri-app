@@ -187,9 +187,11 @@ duration into the other phase spends the current phase's opportunity
 review is refused, and re-reviewing back into the original phase is refused once the first review
 has activated the task. Cancel and interrupt at Phase 2 emit zero `task_resolved` events, leave
 the task open at neither phase, and undo to byte-equal prior state. A `phase2` task left
-unresolved in round N is projected again at Phase 2 in round N+1; whether that recurrence should
-instead be expiry is an open question the Product Owner has not ruled on — see
-[the #287 contract's open decision](../product/combat-panel-contract.md#1218-open-decision--phase-2-perform-task-recurrence-versus-expiry).
+unresolved in round N is projected again, unchanged, at Phase 2 in round N+1 until resolved or
+explicitly cancelled; it never silently expires or resolves in another phase, and recurrence never
+grants an additional primary action, settled by the Product Owner ruling of 2026-09-22 recorded in
+[the #287 contract's §12.18](../product/combat-panel-contract.md#1218-phase-2-perform-task-recurrence-versus-expiry--settled)
+and [rule decision 0007](../decisions/rules/0007-perform-task-phase-scheduling-and-single-live-task.md).
 
 One live Perform Task per participant (2026-09-22, Product Owner ruling on Forgejo issue #287):
 `materializeCombatDeclarationTasks` refuses a `perform_task` declaration while the declaring
