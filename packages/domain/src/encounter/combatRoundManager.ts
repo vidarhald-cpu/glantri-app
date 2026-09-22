@@ -7086,21 +7086,43 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
     if (participant?.declaration?.actionId === "observe_opponent") {
       return true;
     }
-    if (
-      getCombatRoundOpenPerformTaskForParticipant({
-        participantId: input.participantId,
-        state: input.state,
-      })
-    ) {
-      return true;
-    }
+  }
+  // Perform Task is scheduled into the phase its reviewed duration names, so this question is asked
+  // of both phases. `getCombatRoundOpenPerformTaskForParticipant` only ever returns a task
+  // scheduled for the phase asked about, so a Phase 2 task never makes Phase 1 executable, nor the
+  // other way round.
+  if (
+    getCombatRoundOpenPerformTaskForParticipant({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: input.state,
+    })
+  ) {
+    return true;
   }
   return combatRoundParticipantHasExecutablePhaseAttack(input);
 }
 
 /**
- * The one canonical Perform Task holding this participant's Phase 1 primary-action opportunity in
- * the current round. Declaration-materialized Perform Task declarations only: the legacy parallel
+ * The primary-action opportunity a Perform Task is scheduled for, under the Product Owner ruling of
+ * 2026-09-22 on Forgejo issue #287.
+ *
+ * `{ kind: "phase", phase }` is a one-opportunity task scheduled for the actor's primary-action
+ * opportunity **in the named phase**, and it resolves at that opportunity only. Every other
+ * duration — `round`, `rounds: N` and the unreviewed `gm_decided` — uses the actor's normal
+ * primary-action opportunity, which is Phase 1. Phase duration is therefore **not** equivalent to
+ * `round` or `rounds: N`: a `phase2` task is refused at Phase 1, and a `round` task is refused at
+ * Phase 2.
+ */
+export function getCombatTaskScheduledPhase(
+  duration: CombatGenericActionDuration,
+): CombatRoundPhase {
+  return duration.kind === "phase" ? duration.phase : "phase1";
+}
+
+/**
+ * The one canonical Perform Task holding this participant's primary-action opportunity **in the
+ * given phase** in the current round. Declaration-materialized Perform Task declarations only: the legacy parallel
  * generic-action channel keeps its own route until A1b converges it.
  *
  * A participant can hold more than one live task, because a declaration mints a round-keyed task
@@ -7110,17 +7132,21 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
  * declared at the very same instant. A task that is not selected is left untouched and becomes
  * selectable again once the selected one reaches a terminal status.
  *
+ * A task is only a candidate for the phase its reviewed duration schedules it into, per
+ * `getCombatTaskScheduledPhase`. That is what makes the named phase part of scheduling rather than
+ * collapsing into "the actor's opportunity".
+ *
  * Perform Task is a normal primary action, so the opportunity belongs to the **participant**, not
- * to the individual task: once this participant's Phase 1 primary action has been spent for the
- * round, no task of theirs is executable again until the next round. Without that gate a second,
- * never-progressed task would still look open on its own progress alone and would grant a second
- * primary action in one round.
+ * to the individual task: once this participant's primary action for this phase has been spent for
+ * the round, no task of theirs is executable in that phase again until the next round. Without that
+ * gate a second, never-progressed task would still look open on its own progress alone and would
+ * grant a second primary action in one round.
  *
  * The opportunity is spent when **either** of two independent witnesses says so, because neither
  * one covers the other:
  *
- * - `phaseResolutionStatuses[participantId].phase1.substep === "done"` covers every primary action
- *   that closes Phase 1 without leaving a command the completion-evidence helper recognises — a
+ * - `phaseResolutionStatuses[participantId][phase].substep === "done"` covers every primary action
+ *   that closes the phase without leaving a command the completion-evidence helper recognises — a
  *   committed feint, break-off, adjust-distance or disarm, and operational-action cancellation.
  *   All of those set `done` with an action step status of `complete`, not `skipped`.
  * - `combatRoundParticipantPhaseActionHasCompletionEvidence` is derived from the immutable command
@@ -7136,12 +7162,14 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
  */
 export function getCombatRoundOpenPerformTaskForParticipant(input: {
   participantId: string;
+  phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatGenericAction | undefined {
   const open = input.state.genericActions.filter(
     (action) =>
       action.declarationKind === "perform_task" &&
       action.ownerParticipantId === input.participantId &&
+      getCombatTaskScheduledPhase(action.duration) === input.phase &&
       isCombatGenericActionOpportunityOpen({
         action,
         roundNumber: input.state.roundNumber,
@@ -7149,10 +7177,10 @@ export function getCombatRoundOpenPerformTaskForParticipant(input: {
   );
   if (open.length === 0) return undefined;
   if (
-    input.state.phaseResolutionStatuses[input.participantId]?.phase1?.substep === "done" ||
+    input.state.phaseResolutionStatuses[input.participantId]?.[input.phase]?.substep === "done" ||
     combatRoundParticipantPhaseActionHasCompletionEvidence({
       participantId: input.participantId,
-      phase: "phase1",
+      phase: input.phase,
       state: input.state,
     })
   ) {
@@ -7448,10 +7476,10 @@ function getCombatRoundInitialPhaseResolutionSubstep(input: {
     }
   }
   if (
-    input.phase === "phase1" &&
     !combatRoundParticipantHasExecutablePhaseAttack(input) &&
     getCombatRoundOpenPerformTaskForParticipant({
       participantId: input.participantId,
+      phase: input.phase,
       state: input.state,
     })
   ) {
@@ -28864,11 +28892,21 @@ function requireCombatRoundOpenPerformTask(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatGenericAction {
-  if (input.phase !== "phase1") {
-    throw new RangeError("Perform Task uses the actor's Phase 1 primary-action opportunity.");
+  // The named phase is part of scheduling. A task scheduled for the other phase is refused here
+  // rather than silently resolved at whichever opportunity the command happens to arrive at.
+  const scheduled = input.state.genericActions.find(
+    (candidate) => candidate.id === input.actionId && candidate.declarationKind === "perform_task",
+  );
+  if (scheduled && getCombatTaskScheduledPhase(scheduled.duration) !== input.phase) {
+    throw new RangeError(
+      getCombatTaskScheduledPhase(scheduled.duration) === "phase1"
+        ? "This Combat Task is scheduled for the actor's Phase 1 primary-action opportunity."
+        : "This Combat Task is scheduled for the actor's Phase 2 primary-action opportunity.",
+    );
   }
   const action = getCombatRoundOpenPerformTaskForParticipant({
     participantId: input.participantId,
+    phase: input.phase,
     state: input.state,
   });
   if (!action || action.id !== input.actionId) {
@@ -29042,13 +29080,21 @@ export function reviewCombatTaskAtOpportunity(input: {
     step: normalized.currentStep,
   });
 
+  // A review that schedules the task into the other phase does not spend a primary action — it
+  // moves the opportunity. This phase is closed for the participant so the resolution cursor moves
+  // on, and the task becomes executable at its named phase instead. The gate is per phase, so
+  // closing this one cannot grant a second primary action in the other.
+  const scheduledPhase = getCombatTaskScheduledPhase(input.duration);
+  const deferredToOtherPhase = scheduledPhase !== input.phase;
+
   return applyCombatTaskCommand({
     command: input.command,
-    consumesOpportunity: false,
+    consumesOpportunity: deferredToOtherPhase,
     extraFacts: {
       duration: input.duration,
       preset: input.preset,
       requiredAdvances: getCombatGenericActionOpportunityAdvances(input.duration) ?? null,
+      scheduledPhase,
     },
     kind: "review",
     nextActions: activated,

@@ -34,6 +34,7 @@ import {
   advanceCombatTaskAtOpportunity,
   finishCombatTaskAtOpportunity,
   getCombatRoundOpenPerformTaskForParticipant,
+  getCombatTaskScheduledPhase,
   resolveCombatTaskAtOpportunity,
   reviewCombatTaskAtOpportunity,
   rollCombatTaskAtOpportunity,
@@ -7466,6 +7467,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   : body.finishKind === "cancel"
                     ? ("cancel_combat_task" as const)
                     : ("interrupt_combat_task" as const);
+        // The named phase is part of scheduling under the Product Owner ruling of 2026-09-22 on
+        // Forgejo issue #287: a `{ kind: "phase", phase: "phase2" }` task holds the actor's Phase 2
+        // primary-action opportunity, and every other duration holds Phase 1. The route therefore
+        // derives the phase from the task it is addressing instead of assuming Phase 1. The domain
+        // re-validates it against the live resolution cursor and refuses a mismatch.
+        const addressedTask = roundState.genericActions.find(
+          (action) =>
+            action.id === body.ruleInputs.actionId && action.declarationKind === "perform_task",
+        );
+        const taskPhase = addressedTask
+          ? getCombatTaskScheduledPhase(addressedTask.duration)
+          : (roundState.phaseResolutionCursor?.phase ?? "phase1");
         const authorization = authorizeCombatTaskCommand({
           authorization: {
             actionId: body.ruleInputs.actionId,
@@ -7474,7 +7487,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : { kind: "combatant", participantId: ownerEncounterParticipant.id },
             commandType,
             participantId: ownerEncounterParticipant.id,
-            phase: "phase1",
+            phase: taskPhase,
             processId: body.processId,
             stageId: body.stageId,
           },
@@ -7488,6 +7501,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         const existingAction = getCombatRoundOpenPerformTaskForParticipant({
           participantId: ownerEncounterParticipant.id,
+          phase: taskPhase,
           state: roundState,
         });
         if (!existingAction || existingAction.id !== body.ruleInputs.actionId) {
@@ -7513,7 +7527,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 command,
                 duration: body.ruleInputs.duration ?? existingAction.duration,
                 participantId: ownerEncounterParticipant.id,
-                phase: "phase1",
+                phase: taskPhase,
                 preset: body.ruleInputs.preset,
                 reference:
                   body.ruleInputs.referenceKind !== undefined
@@ -7542,7 +7556,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   actionId: existingAction.id,
                   command,
                   participantId: ownerEncounterParticipant.id,
-                  phase: "phase1",
+                  phase: taskPhase,
                   result: resolveGenericCombatActionRoll({
                     request: (() => {
                       if (!existingAction.rollRequest) {
@@ -7561,7 +7575,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     actionId: existingAction.id,
                     command,
                     participantId: ownerEncounterParticipant.id,
-                    phase: "phase1",
+                    phase: taskPhase,
                     state: roundState,
                     submittedBy: gmAuthorizedOperation ? "gm" : "player",
                     updatedAt: submittedAt,
@@ -7571,7 +7585,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                       actionId: existingAction.id,
                       command,
                       participantId: ownerEncounterParticipant.id,
-                      phase: "phase1",
+                      phase: taskPhase,
                       resultText: (() => {
                         const text = body.ruleInputs.resultText?.trim();
                         if (!text) {
@@ -7590,7 +7604,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                       command,
                       kind: body.finishKind,
                       participantId: ownerEncounterParticipant.id,
-                      phase: "phase1",
+                      phase: taskPhase,
                       state: roundState,
                       updatedAt: submittedAt,
                     });

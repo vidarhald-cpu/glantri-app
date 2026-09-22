@@ -165,7 +165,11 @@ describe("canonical Perform Task lifecycle (A1a)", () => {
     });
     expect(resolved.state.events.filter((event) => event.type === "task_resolved")).toHaveLength(1);
     expect(
-      getCombatRoundOpenPerformTaskForParticipant({ participantId: "a", state: resolved.state }),
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "a",
+        phase: "phase1",
+        state: resolved.state,
+      }),
     ).toBeUndefined();
   });
 
@@ -191,7 +195,11 @@ describe("canonical Perform Task lifecycle (A1a)", () => {
       });
       // The consumed opportunity is closed for the rest of this round.
       expect(
-        getCombatRoundOpenPerformTaskForParticipant({ participantId: "a", state: advanced.state }),
+        getCombatRoundOpenPerformTaskForParticipant({
+          participantId: "a",
+          phase: "phase1",
+          state: advanced.state,
+        }),
       ).toBeUndefined();
       current = state({ action: advanced.action, roundNumber: roundNumber + 1 });
     }
@@ -358,6 +366,7 @@ describe("open Perform Task selection with more than one live task", () => {
 
   function selected(actions: readonly CombatGenericAction[]) {
     return getCombatRoundOpenPerformTaskForParticipant({
+      phase: "phase1",
       participantId: "a",
       state: twoTaskState(actions),
     });
@@ -424,6 +433,7 @@ describe("Perform Task command authorization (M3)", () => {
         actor: { kind: "gm" },
         commandType: "review_combat_task",
         executionGroupId: projected.executionGroupId,
+        phase: "phase1",
         projection,
         taskId: "some-other-task",
       }),
@@ -434,6 +444,7 @@ describe("Perform Task command authorization (M3)", () => {
         actor: { kind: "gm" },
         commandType: "review_combat_task",
         executionGroupId: "some-other-group",
+        phase: "phase1",
         projection,
         taskId: projected.id,
       }),
@@ -444,6 +455,7 @@ describe("Perform Task command authorization (M3)", () => {
         actionId: "some-other-action",
         actor: { kind: "gm" },
         commandType: "review_combat_task",
+        phase: "phase1",
         projection,
       }),
     ).toMatchObject({ code: "identity_mismatch", ok: false });
@@ -452,6 +464,7 @@ describe("Perform Task command authorization (M3)", () => {
       authorizeCombatProgressionTask({
         actor: { kind: "combatant", participantId: "a" },
         commandType: "review_combat_task",
+        phase: "phase1",
         projection,
         taskId: projected.id,
       }),
@@ -701,7 +714,11 @@ describe("one primary action per round with two live Perform Tasks", () => {
   }
 
   function open(source: CombatRoundState) {
-    return getCombatRoundOpenPerformTaskForParticipant({ participantId: "a", state: source });
+    return getCombatRoundOpenPerformTaskForParticipant({
+      participantId: "a",
+      phase: "phase1",
+      state: source,
+    });
   }
 
   function reviewAndResolve(input: { actionId: string; source: CombatRoundState }) {
@@ -862,7 +879,11 @@ describe("the spent-opportunity gate does not depend on the executability source
   }
 
   function open(source: CombatRoundState) {
-    return getCombatRoundOpenPerformTaskForParticipant({ participantId: "a", state: source });
+    return getCombatRoundOpenPerformTaskForParticipant({
+      participantId: "a",
+      phase: "phase1",
+      state: source,
+    });
   }
 
   function review(input: { actionId: string; source: CombatRoundState }) {
@@ -990,5 +1011,247 @@ describe("the spent-opportunity gate does not depend on the executability source
       genericActions: resolved.state.genericActions,
     });
     expect(open(nextRound)?.id).toBe(firstTask.id);
+  });
+});
+
+/**
+ * Product Owner ruling of 2026-09-22 on Forgejo issue #287: `{ kind: "phase", phase }` is a
+ * one-opportunity Perform Task scheduled for the actor's primary-action opportunity in the named
+ * phase. `phase1` resolves only at Phase 1, `phase2` only at Phase 2, never the other way, and
+ * phase duration is not equivalent to `round` or `rounds: N`.
+ */
+describe("phase duration schedules the named primary-action opportunity", () => {
+  function phase2State(
+    input: { action?: CombatGenericAction; roundNumber?: number } = {},
+  ): CombatRoundState {
+    const roundNumber = input.roundNumber ?? 1;
+    return combatRoundStateSchema.parse({
+      ...state({ action: input.action, roundNumber }),
+      currentCursor: { participantId: "a", roundNumber, step: "A2" },
+      currentStep: "phase_2_actions",
+      phaseResolutionCursor: { participantId: "a", phase: "phase2", substep: "perform_task" },
+      phaseResolutionStatuses: {
+        a: {
+          phase1: { substep: "done", updatedAt: at },
+          phase2: { substep: "perform_task", updatedAt: at },
+        },
+      },
+      selectedStep: "phase_2_actions",
+    });
+  }
+
+  function openAt(phase: "phase1" | "phase2", source: CombatRoundState) {
+    return getCombatRoundOpenPerformTaskForParticipant({
+      participantId: "a",
+      phase,
+      state: source,
+    });
+  }
+
+  function resolveAt(phase: "phase1" | "phase2", source: CombatRoundState) {
+    return resolveCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase,
+      resultText: "The winch gives.",
+      state: source,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+  }
+
+  function scheduled(duration: CombatGenericActionDuration): CombatGenericAction {
+    return task({ duration, progress: { completedRounds: 0, totalRounds: 1 }, status: "active" });
+  }
+
+  it("resolves a phase1 task only at the Phase 1 opportunity", () => {
+    const action = scheduled({ kind: "phase", phase: "phase1" });
+    expect(openAt("phase1", state({ action }))?.id).toBe(action.id);
+    expect(openAt("phase2", phase2State({ action }))).toBeUndefined();
+
+    const resolved = resolveAt("phase1", state({ action }));
+    expect(resolved.action.status).toBe("completed");
+    expect(resolved.command.phase).toBe("phase1");
+  });
+
+  it("refuses a phase1 task at the Phase 2 opportunity", () => {
+    expect(() =>
+      resolveAt("phase2", phase2State({ action: scheduled({ kind: "phase", phase: "phase1" }) })),
+    ).toThrow(/scheduled for the actor's Phase 1 primary-action opportunity/);
+  });
+
+  it("resolves a phase2 task only at the Phase 2 opportunity", () => {
+    const action = scheduled({ kind: "phase", phase: "phase2" });
+    expect(openAt("phase1", state({ action }))).toBeUndefined();
+    expect(openAt("phase2", phase2State({ action }))?.id).toBe(action.id);
+
+    const resolved = resolveAt("phase2", phase2State({ action }));
+    expect(resolved.action.status).toBe("completed");
+    expect(resolved.command.phase).toBe("phase2");
+    const event = resolved.state.events.find((entry) => entry.type === "task_resolved");
+    expect(event).toMatchObject({ phase: "phase2", step: "phase_2_actions" });
+  });
+
+  it("refuses a phase2 task at the Phase 1 opportunity", () => {
+    expect(() =>
+      resolveAt("phase1", state({ action: scheduled({ kind: "phase", phase: "phase2" }) })),
+    ).toThrow(/scheduled for the actor's Phase 2 primary-action opportunity/);
+  });
+
+  it("makes phase observably different from round and from rounds: N", () => {
+    // `round` and `rounds: N` use the actor's normal primary-action opportunity — Phase 1 — and are
+    // refused at Phase 2. Only a `phase` duration can name Phase 2 at all.
+    for (const duration of [
+      { kind: "round" } as const,
+      { kind: "rounds", rounds: 2 } as const,
+      { kind: "gm_decided" } as const,
+    ]) {
+      const action = task({ duration, status: "active" });
+      expect(openAt("phase1", state({ action }))?.id).toBe(action.id);
+      expect(openAt("phase2", phase2State({ action }))).toBeUndefined();
+    }
+
+    const phase2Task = scheduled({ kind: "phase", phase: "phase2" });
+    expect(openAt("phase1", state({ action: phase2Task }))).toBeUndefined();
+    expect(openAt("phase2", phase2State({ action: phase2Task }))?.id).toBe(phase2Task.id);
+  });
+
+  it("defers the Phase 1 opportunity when review schedules the task into Phase 2", () => {
+    const afterReview = reviewCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: at, createdByUserId: "user-gm" },
+      duration: { kind: "phase", phase: "phase2" },
+      participantId: "a",
+      phase: "phase1",
+      state: state(),
+      updatedAt: at,
+    });
+    expect(afterReview.action.duration).toEqual({ kind: "phase", phase: "phase2" });
+    expect(afterReview.command.facts.scheduledPhase).toBe("phase2");
+    // Phase 1 is closed for this participant so the resolution cursor moves on, and the task is
+    // not resolvable there.
+    expect(afterReview.state.phaseResolutionStatuses.a?.phase1?.substep).toBe("done");
+    expect(openAt("phase1", afterReview.state)).toBeUndefined();
+    expect(() => resolveAt("phase1", afterReview.state)).toThrow(
+      /scheduled for the actor's Phase 2 primary-action opportunity/,
+    );
+
+    // The same task is executable at its named Phase 2 opportunity in the same round.
+    const atPhase2 = phase2State({ action: afterReview.action });
+    expect(openAt("phase2", atPhase2)?.id).toBe(task().id);
+    const resolved = resolveAt("phase2", atPhase2);
+    expect(resolved.action.status).toBe("completed");
+    // One primary action, not two: Phase 2 is now spent as well.
+    expect(openAt("phase2", resolved.state)).toBeUndefined();
+    expect(resolved.state.events.filter((event) => event.type === "task_resolved")).toHaveLength(1);
+  });
+
+  it("undoes the deferring review exactly", () => {
+    const source = state();
+    const afterReview = reviewCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: at, createdByUserId: "user-gm" },
+      duration: { kind: "phase", phase: "phase2" },
+      participantId: "a",
+      phase: "phase1",
+      state: source,
+      updatedAt: at,
+    });
+    expect(undoLatestCombatRoundCommand({ state: afterReview.state })).toEqual(
+      combatRoundStateSchema.parse(source),
+    );
+  });
+
+  it("undoes a Phase 2 resolution exactly", () => {
+    const atPhase2 = phase2State({ action: scheduled({ kind: "phase", phase: "phase2" }) });
+    const resolved = resolveAt("phase2", atPhase2);
+    expect(undoLatestCombatRoundCommand({ state: resolved.state })).toEqual(
+      combatRoundStateSchema.parse(atPhase2),
+    );
+  });
+
+  it("uses existing GM adjudication when the named opportunity cannot be completed", () => {
+    const atPhase2 = phase2State({ action: scheduled({ kind: "phase", phase: "phase2" }) });
+    const cancelled = finishCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      kind: "cancel",
+      participantId: "a",
+      phase: "phase2",
+      state: atPhase2,
+      updatedAt: later,
+    });
+    expect(cancelled.action.status).toBe("cancelled");
+    expect(cancelled.command.type).toBe("cancel_combat_task");
+    expect(cancelled.command.phase).toBe("phase2");
+    // No silent resolution at the other phase: nothing resolved, and the task is gone from both.
+    expect(cancelled.state.events.filter((event) => event.type === "task_resolved")).toHaveLength(
+      0,
+    );
+    expect(openAt("phase1", cancelled.state)).toBeUndefined();
+    expect(openAt("phase2", cancelled.state)).toBeUndefined();
+
+    const interrupted = finishCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      kind: "interrupt",
+      participantId: "a",
+      phase: "phase2",
+      state: atPhase2,
+      updatedAt: later,
+    });
+    expect(interrupted.action.status).toBe("interrupted");
+    expect(interrupted.command.phase).toBe("phase2");
+  });
+
+  it("never grants two primary actions across the two phases", () => {
+    // A Phase 2 task does not make Phase 1 executable, and a spent Phase 2 opportunity is not
+    // reopened by the untouched Phase 1 status.
+    const action = scheduled({ kind: "phase", phase: "phase2" });
+    const atPhase2 = phase2State({ action });
+    const resolved = resolveAt("phase2", atPhase2);
+    expect(resolved.state.phaseResolutionStatuses.a?.phase2?.substep).toBe("done");
+    expect(openAt("phase1", resolved.state)).toBeUndefined();
+    expect(openAt("phase2", resolved.state)).toBeUndefined();
+    expect(() => resolveAt("phase2", resolved.state)).toThrow(
+      /no longer holds the actor's action opportunity/,
+    );
+  });
+
+  it("projects the task at the Phase 2 boundary and authorizes it there", () => {
+    const action = scheduled({ kind: "phase", phase: "phase2" });
+    const { projection, task: projected } = currentTask(phase2State({ action }));
+    expect(projection.boundary.kind).toBe("phase2_resolution");
+    expect(projected).toMatchObject({
+      expectedCommand: "resolve_combat_task",
+      kind: "combat_task_resolve",
+      state: "executable",
+    });
+    expect(
+      authorizeCombatProgressionTask({
+        actionId: projected.identity.actionId,
+        actor: { kind: "gm" },
+        commandType: "resolve_combat_task",
+        executionGroupId: projected.executionGroupId,
+        participantId: "a",
+        phase: "phase2",
+        projection,
+        taskId: projected.id,
+      }),
+    ).toMatchObject({ ok: true });
+    // The Phase 1 boundary does not authorize it.
+    expect(
+      authorizeCombatProgressionTask({
+        actionId: projected.identity.actionId,
+        actor: { kind: "gm" },
+        commandType: "resolve_combat_task",
+        executionGroupId: projected.executionGroupId,
+        participantId: "a",
+        phase: "phase1",
+        projection,
+        taskId: projected.id,
+      }),
+    ).toMatchObject({ ok: false });
   });
 });

@@ -1416,9 +1416,13 @@ export function buildResolutionProcesses(
   if (phase === "phase1" && substep === "break_off" && participantId) {
     return [buildBreakOffProcess(context, participantId)];
   }
-  if (phase === "phase1" && substep === "perform_task" && participantId) {
+  // Perform Task is projected at whichever phase its reviewed duration schedules it into. The
+  // getter only returns a task scheduled for the phase asked about, so a Phase 2 task is never
+  // projected at Phase 1 nor the other way round.
+  if (substep === "perform_task" && participantId) {
     const performTask = getCombatRoundOpenPerformTaskForParticipant({
       participantId,
+      phase,
       state: context.state,
     });
     if (performTask) {
