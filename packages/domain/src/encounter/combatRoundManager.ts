@@ -7109,11 +7109,20 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
  * otherwise the most recently declared task wins. Storage order decides only between two tasks
  * declared at the very same instant. A task that is not selected is left untouched and becomes
  * selectable again once the selected one reaches a terminal status.
+ *
+ * Perform Task is a normal primary action, so the opportunity belongs to the **participant**, not
+ * to the individual task: once a consuming task command has closed this participant's Phase 1
+ * resolution for the round, no task of theirs is executable again until the next round clears
+ * `phaseResolutionStatuses`. Without that gate a second, never-progressed task would still look
+ * open on its own progress alone and would grant a second primary action in one round.
  */
 export function getCombatRoundOpenPerformTaskForParticipant(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatGenericAction | undefined {
+  if (input.state.phaseResolutionStatuses[input.participantId]?.phase1?.substep === "done") {
+    return undefined;
+  }
   const open = input.state.genericActions.filter(
     (action) =>
       action.declarationKind === "perform_task" &&

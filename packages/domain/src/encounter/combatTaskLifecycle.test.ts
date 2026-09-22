@@ -678,3 +678,143 @@ describe("Perform Task declaration contract (M1, M2)", () => {
     ).toThrow(/canonical Perception skill/);
   });
 });
+
+describe("one primary action per round with two live Perform Tasks", () => {
+  const firstTask = task();
+  const secondTask = task({
+    createdAt: later,
+    id: "round:1:participant:a:declaration:perform_task:second",
+    intent: "Brace the winch handle.",
+    lastUpdatedAt: later,
+  });
+
+  function twoLiveTaskState(
+    input: {
+      actions?: readonly CombatGenericAction[];
+      roundNumber?: number;
+    } = {},
+  ): CombatRoundState {
+    return combatRoundStateSchema.parse({
+      ...state({ roundNumber: input.roundNumber ?? 1 }),
+      genericActions: input.actions ?? [firstTask, secondTask],
+    });
+  }
+
+  function open(source: CombatRoundState) {
+    return getCombatRoundOpenPerformTaskForParticipant({ participantId: "a", state: source });
+  }
+
+  function reviewAndResolve(input: { actionId: string; source: CombatRoundState }) {
+    const afterReview = reviewCombatTaskAtOpportunity({
+      actionId: input.actionId,
+      command: { createdAt: at, createdByUserId: "user-gm" },
+      duration: { kind: "round" },
+      participantId: "a",
+      phase: "phase1",
+      state: input.source,
+      updatedAt: at,
+    });
+    return resolveCombatTaskAtOpportunity({
+      actionId: input.actionId,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase: "phase1",
+      resultText: "The winch groans.",
+      state: afterReview.state,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+  }
+
+  it("closes the participant's opportunity for the whole round, not merely for the resolved task", () => {
+    const source = twoLiveTaskState();
+    const selected = open(source);
+    expect(selected?.id).toBe(secondTask.id);
+
+    const resolved = reviewAndResolve({ actionId: selected!.id, source });
+
+    // The other task has never progressed, so its own progress still looks open — but the
+    // participant's Phase 1 primary-action opportunity is spent for this round.
+    expect(resolved.state.genericActions.find((action) => action.id === firstTask.id)).toEqual(
+      firstTask,
+    );
+    expect(resolved.state.phaseResolutionStatuses.a?.phase1?.substep).toBe("done");
+    expect(open(resolved.state)).toBeUndefined();
+  });
+
+  it("refuses a second Perform Task command in the same round", () => {
+    const resolved = reviewAndResolve({ actionId: secondTask.id, source: twoLiveTaskState() });
+
+    expect(() =>
+      reviewCombatTaskAtOpportunity({
+        actionId: firstTask.id,
+        command: { createdAt: later, createdByUserId: "user-gm" },
+        duration: { kind: "round" },
+        participantId: "a",
+        phase: "phase1",
+        state: resolved.state,
+        updatedAt: later,
+      }),
+    ).toThrow(/no longer holds the actor's action opportunity/);
+
+    expect(() =>
+      resolveCombatTaskAtOpportunity({
+        actionId: firstTask.id,
+        command: { createdAt: later, createdByUserId: "user-gm" },
+        participantId: "a",
+        phase: "phase1",
+        resultText: "And the other one too.",
+        state: resolved.state,
+        updatedAt: later,
+        visibleToParticipantIds: [],
+      }),
+    ).toThrow(/no longer holds the actor's action opportunity/);
+
+    expect(
+      resolved.state.events.filter(
+        (event) => event.type === "task_resolved" && event.roundNumber === 1,
+      ),
+    ).toHaveLength(1);
+    expect(
+      resolved.state.genericActions.filter((action) => action.status === "completed"),
+    ).toHaveLength(1);
+  });
+
+  it("does not lose the unselected task — it is executable again next round", () => {
+    const resolved = reviewAndResolve({ actionId: secondTask.id, source: twoLiveTaskState() });
+    // A new round clears phaseResolutionStatuses, which reopens the participant's opportunity.
+    const nextRound = twoLiveTaskState({
+      actions: resolved.state.genericActions,
+      roundNumber: 2,
+    });
+    expect(open(nextRound)?.id).toBe(firstTask.id);
+  });
+
+  it("reopens the opportunity exactly when the consuming command is undone", () => {
+    const source = twoLiveTaskState();
+    const afterReview = reviewCombatTaskAtOpportunity({
+      actionId: secondTask.id,
+      command: { createdAt: at, createdByUserId: "user-gm" },
+      duration: { kind: "round" },
+      participantId: "a",
+      phase: "phase1",
+      state: source,
+      updatedAt: at,
+    });
+    const resolved = resolveCombatTaskAtOpportunity({
+      actionId: secondTask.id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase: "phase1",
+      resultText: "The winch groans.",
+      state: afterReview.state,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+    expect(open(resolved.state)).toBeUndefined();
+
+    const undone = undoLatestCombatRoundCommand({ state: resolved.state });
+    expect(undone).toEqual(combatRoundStateSchema.parse(afterReview.state));
+    expect(open(undone!)?.id).toBe(secondTask.id);
+  });
+});
