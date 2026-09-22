@@ -5,6 +5,7 @@
  * into `CanonicalContent`, or exported from the package entry point.
  */
 
+import canonicalContentJson from "../../data/canonicalContent.json";
 import { canonicalJsonSha256 } from "../../integrity/canonicalSha256";
 import { fullSkillCatalogueProposal } from "../../skillContentPlatform/fullSkillCatalogueProposal";
 import { targetLearningGroupCatalogue } from "../../skillContentPlatform/targetLearningGroups";
@@ -25,6 +26,9 @@ import {
   competencyContentV2LearningGroups,
   competencyContentV2RemovedGroups,
   competencyContentV2RetiredProposedGroups,
+  competencyContentV2WrittenLanguageCompetencyIds,
+  v2SpokenCompetencyName,
+  v2WrittenCompetencyName,
   type V2Family,
   type V2LearningGroup,
   type V2PathBody,
@@ -320,6 +324,8 @@ export interface CompetencyContentV2Catalogue {
     label: string;
     groupIds: string[];
     skillIds: string[];
+    /** Written-language competencies the learner must additionally choose. 0 for most cores. */
+    writtenLanguageChoiceCount: number;
     satisfied: boolean;
     blockedBy?: string;
   }[];
@@ -564,6 +570,7 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
     label: string;
     groupIds: string[];
     skillIds: string[];
+    writtenLanguageChoiceCount: number;
     satisfied: boolean;
     blockedBy?: string;
   }[] = [];
@@ -660,18 +667,31 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
         if (coreIds.has(core.id)) fail(`${id} repeats core route ${core.id}`);
         coreIds.add(core.id);
         if (!core.label.trim()) fail(`core route ${core.id} has no player-facing label`);
-        if (!core.groupIds.length && !(core.skillIds?.length ?? 0))
+        const writtenChoiceCount = core.writtenLanguageChoiceCount ?? 0;
+        if (writtenChoiceCount < 0 || !Number.isInteger(writtenChoiceCount))
+          fail(`core route ${core.id} declares a non-integer written-language choice count`);
+        if (!core.groupIds.length && !(core.skillIds?.length ?? 0) && !writtenChoiceCount)
           fail(`core route ${core.id} requires nothing`);
-        if (core.groupIds.length + (core.skillIds?.length ?? 0) > CORE_ROUTE_MAXIMUM_REQUIREMENTS)
+        /* The written-language choice counts as exactly one requirement however large the count is:
+           it is one choice the learner makes, not a list the Profession dictates. */
+        if (
+          core.groupIds.length + (core.skillIds?.length ?? 0) + (writtenChoiceCount ? 1 : 0) >
+          CORE_ROUTE_MAXIMUM_REQUIREMENTS
+        )
           fail(
             `core route ${core.id} requires more than ${CORE_ROUTE_MAXIMUM_REQUIREMENTS} things; a core must be minimal, not a rigid class build`,
+          );
+        if (writtenChoiceCount > competencyContentV2WrittenLanguageCompetencyIds.length)
+          fail(
+            `core route ${core.id} requires ${writtenChoiceCount} written-language competencies, but the proposal authors only ${competencyContentV2WrittenLanguageCompetencyIds.length}; the core would be unsatisfiable`,
           );
         for (const groupId of core.groupIds)
           if (!groupsById.has(groupId))
             fail(`core route ${core.id} names unknown group ${groupId}`);
         const met =
           core.groupIds.every((groupId) => groupIds.includes(groupId)) &&
-          (core.skillIds ?? []).every((skillId) => fixed.has(skillId));
+          (core.skillIds ?? []).every((skillId) => fixed.has(skillId)) &&
+          writtenChoiceCount <= competencyContentV2WrittenLanguageCompetencyIds.length;
         if (met) satisfiedCore = true;
         coreRoutes.push({
           professionCode: family.code,
@@ -680,6 +700,7 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
           label: core.label,
           groupIds: [...core.groupIds],
           skillIds: [...(core.skillIds ?? [])],
+          writtenLanguageChoiceCount: writtenChoiceCount,
           satisfied: met,
           blockedBy: core.blockedBy,
         });
@@ -804,27 +825,173 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
 
   {
     /* Languages: the blocker is removed, so every Civilization carries a rollable spoken competency
-       and a rollable written one unless the absence is explicitly authored. */
+       and a rollable written one unless the absence is explicitly authored.
+
+       The strongest check here is the name-provenance one. The ruling's sharpest constraint is that
+       no language, script or register name may be invented to fill the table, and a promise in prose
+       cannot enforce that. Every language atom used below must appear verbatim in the canonical
+       Glantri language roster, so an invented but plausible-sounding name fails the build instead of
+       reading as authored content. */
+    const canonicalCivilizations = canonicalContentJson.civilizations as readonly {
+      id: string;
+      name: string;
+      spokenLanguageName?: string | null;
+      writtenLanguageName?: string | null;
+    }[];
+    const canonicalLanguageNames = new Set(
+      (canonicalContentJson.languages as readonly { name: string }[]).map((row) => row.name),
+    );
+    const canonicalById = new Map(canonicalCivilizations.map((row) => [row.id, row]));
+
     const civilizationIds = new Set<string>();
+    /* One name must mean one identity and one identity one name, or "the Common written competency"
+       would silently be two different rollable things. */
+    const idByName = new Map<string, string>();
+    const nameById = new Map<string, string>();
+    const assertStableIdentity = (id: string, name: string, where: string): void => {
+      const seenId = idByName.get(name);
+      if (seenId !== undefined && seenId !== id)
+        fail(`${where}: competency name "${name}" is used for both ${seenId} and ${id}`);
+      const seenName = nameById.get(id);
+      if (seenName !== undefined && seenName !== name)
+        fail(`${where}: competency ${id} is named both "${seenName}" and "${name}"`);
+      idByName.set(name, id);
+      nameById.set(id, name);
+    };
+    /* A competency id that already exists in the approved catalogue must reuse it exactly, with the
+       approved name and the approved competency type. The proposal may add identities; it may not
+       quietly redefine approved ones. */
+    const assertApprovedAgreement = (
+      id: string,
+      name: string,
+      expectedType: "spoken-language" | "written-tradition",
+    ): boolean => {
+      const approved = entries.get(id);
+      if (!approved) return false;
+      if (approved.competencyType !== expectedType)
+        fail(
+          `${id} is a ${approved.competencyType} in the approved catalogue but is used here as a ${expectedType}`,
+        );
+      if (approved.name !== name)
+        fail(
+          `${id} is named "${approved.name}" in the approved catalogue but "${name}" here; reuse the approved name or propose a new id`,
+        );
+      return true;
+    };
+
     for (const language of competencyContentV2CivilizationLanguages) {
+      const where = language.civilizationId;
       if (civilizationIds.has(language.civilizationId))
-        fail(`duplicate Civilization language entry ${language.civilizationId}`);
+        fail(`duplicate Civilization language entry ${where}`);
       civilizationIds.add(language.civilizationId);
-      if (!language.spokenName.trim())
-        fail(`${language.civilizationId} has no rollable spoken competency`);
-      if (language.writtenName === null) {
+
+      const canonical =
+        canonicalById.get(language.civilizationId) ??
+        fail(`${where} is not a canonical Civilization`);
+      if (canonical.name !== language.civilizationName)
+        fail(
+          `${where} is named "${canonical.name}" canonically but "${language.civilizationName}" here`,
+        );
+
+      /* Spoken: mandatory for every Civilization, with no exception. */
+      if (!language.spokenCompetencyId.trim() || !language.spokenLanguageName.trim())
+        fail(`${where} has no rollable spoken competency`);
+      if (!canonicalLanguageNames.has(language.spokenLanguageName))
+        fail(
+          `${where} names the spoken language "${language.spokenLanguageName}", which is not in the canonical Glantri language roster; established or historical names only, and nothing invented`,
+        );
+      if (
+        canonical.spokenLanguageName &&
+        canonical.spokenLanguageName !== language.spokenLanguageName
+      )
+        fail(
+          `${where} speaks "${canonical.spokenLanguageName}" canonically but "${language.spokenLanguageName}" here`,
+        );
+      if (!language.spokenRoute.trim())
+        fail(
+          `${where} has a spoken competency with no route; an unowned competency is unreachable`,
+        );
+      const spokenName = v2SpokenCompetencyName(language);
+      assertStableIdentity(language.spokenCompetencyId, spokenName, where);
+      assertApprovedAgreement(language.spokenCompetencyId, spokenName, "spoken-language");
+
+      /* Written: mandatory unless the absence is explicitly authored. */
+      if (language.writtenCompetencyId === null) {
+        if (language.writtenLanguageName !== null || language.writtenTraditionName !== null)
+          fail(`${where} has no written competency id but still names a written language`);
         if (!language.writtenAbsenceReason?.trim())
+          fail(`${where} has no written competency and no authored reason for the absence`);
+        if (canonical.writtenLanguageName)
           fail(
-            `${language.civilizationId} has no written competency and no authored reason for the absence`,
+            `${where} is authored as having no writing, but the canonical Civilization records the written language "${canonical.writtenLanguageName}"`,
           );
-      } else if (!language.writtenName.trim()) {
-        fail(`${language.civilizationId} has an empty written competency name`);
+      } else {
+        if (language.writtenAbsenceReason)
+          fail(`${where} has both a written competency and an absence reason`);
+        const writtenName =
+          v2WrittenCompetencyName(language) ??
+          fail(`${where} has an unnameable written competency`);
+        if (!writtenName.trim()) fail(`${where} has an empty written competency name`);
+        for (const atom of [language.writtenLanguageName, language.writtenTraditionName])
+          if (atom !== null && !canonicalLanguageNames.has(atom))
+            fail(
+              `${where} names the written language or tradition "${atom}", which is not in the canonical Glantri language roster; established or historical names only, and nothing invented`,
+            );
+        if (!language.writtenRoute?.trim())
+          fail(
+            `${where} has a written competency with no route; an unowned competency is unreachable`,
+          );
+        /* The canonical Civilization record names one written language. The competency binds it to
+           the language it writes, so either atom may carry that name, but one of them must. */
+        const canonicalWritten = canonical.writtenLanguageName;
+        if (
+          canonicalWritten &&
+          canonicalWritten !== language.writtenTraditionName &&
+          canonicalWritten !== language.writtenLanguageName
+        )
+          fail(
+            `${where} writes "${canonicalWritten}" canonically, which appears in neither the written language nor the tradition authored here`,
+          );
+        const reusedApproved = assertApprovedAgreement(
+          language.writtenCompetencyId,
+          writtenName,
+          "written-tradition",
+        );
+        if (language.writtenNameOverride && !reusedApproved)
+          fail(
+            `${where} overrides the derived written name without reusing an approved catalogue entry`,
+          );
+        assertStableIdentity(language.writtenCompetencyId, writtenName, where);
       }
+
       if (language.requiresProductOwnerNamingRuling)
         fail(
-          `${language.civilizationId} still defers to a naming ruling; the ruling is given, so the name must be settled here`,
+          `${where} still defers to a naming ruling; the ruling is given, so the name must be settled here`,
         );
+      if (!language.note.trim()) fail(`${where} has no authored note`);
     }
+
+    /* Completeness: the ruling is "every Civilization", so a Civilization that is simply missing
+       from the table must fail rather than pass unnoticed. */
+    for (const canonical of canonicalCivilizations)
+      if (!civilizationIds.has(canonical.id))
+        fail(
+          `canonical Civilization ${canonical.id} has no language entry; every Civilization needs a rollable spoken competency`,
+        );
+
+    /* Reachability: every written-language competency a core route can be satisfied from must be a
+       real authored identity with an owner. */
+    const authoredWritten = new Set(competencyContentV2WrittenLanguageCompetencyIds);
+    for (const language of competencyContentV2CivilizationLanguages)
+      if (
+        language.writtenCompetencyId !== null &&
+        !authoredWritten.has(language.writtenCompetencyId)
+      )
+        fail(`${language.civilizationId} writes an id missing from the written-language set`);
+    if (!authoredWritten.size)
+      fail(
+        "no written-language competency is authored, so no written-language core can be satisfied",
+      );
   }
 
   for (const decision of competencyContentV2DirectGrantDecisions) {

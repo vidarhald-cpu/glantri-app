@@ -13,13 +13,15 @@ without. A path is valid only when it satisfies one of its applicable core route
 routes refine or replace its parent's. This is an annotation over Learning Groups and directly taught
 Skills that already exist, not a separate mechanism, and it needs no GM override.
 
-Every valid path satisfies an applicable core route. 90 path/core-route pairs are declared and 90 are satisfied by the authored content; 1 core route is recorded as partially blocked on an external question.
+Every valid path satisfies an applicable core route. 90 path/core-route pairs are declared and 90 are satisfied by the authored content. No core route is blocked on an external question any more: P65 Scribe was the last one, and the 2026-09-22 language ruling settles it.
 
 ## Core minimality
 
 A core states what a Profession is not that Profession without — enough for identity, never a rigid
 class build. Every declared core route is audited against that, and the build now refuses any core that
-requires more than two things in total. Largest core in the catalogue: 2 requirement(s). 89 of 90 path/core pairs require exactly one thing — 86 a single Learning Group and 3 a single direct competency route.
+requires more than two things in total. A written-language choice counts as exactly one requirement however many competencies it may be satisfied from, because it is one choice the learner makes rather than a list the Profession dictates. Largest core in the catalogue: 2 requirement(s). 88 of 90 path/core pairs require exactly one thing — 85 a single Learning Group and 3 a single direct competency route.
+
+**The written-language core route (#113).** 1 path/core pair(s) additionally require the learner to hold at least one written-language competency, chosen freely rather than named: P65 (1). This is the narrow representation extension the 2026-09-22 ruling authorizes, and it is the whole of it: a `writtenLanguageChoiceCount` on the core route. Written languages are **not** turned into base Skills, no core route is enumerated per Civilization, and no new path-body concept is added. The choice is satisfied from the 11 written competencies the Civilization language table authors, so it is satisfiable wherever a literate Civilization is reachable.
 
 **A core is a necessary defining training route, not a unique classification key.** The
 "PRODUCT OWNER RULING — Profession cores (settled)" comment recorded on
@@ -944,7 +946,7 @@ Mutually exclusive tracks:
 
 ### P65 — Scribe and Copyist
 
-- **Core route** — _Ordinary records-office service, plus the written tradition the scribe actually writes_: G11 — **blocked:** #113 — the ruled core shape is G11 plus at least one written-language competency route. G11 is authored here; the second requirement is not, because the written-language competencies are not base Skills and the catalogue carries only 3 written traditions against this proposal's 12 Civilizations. Which tradition a scribe writes is the contextual written-tradition availability question #113 owns.
+- **Core route** — _Ordinary records-office service, plus at least one written language the scribe actually writes_: G11
 - **G11** — _Ordinary records-office service_
 - **F15** — _Reading and copying older hands_
 - **K01** — _Learned study behind the copying_
@@ -954,7 +956,7 @@ Mutually exclusive tracks:
 | ------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
 | Scribe and Copyist |                              6 |                        0 |                                        6 |
 
-> PARTIALLY BLOCKED DEPENDENCY. The 2026-09-21 Profession-cores ruling settles the core SHAPE: G11 plus at least one written-language competency route. The first requirement is authored here. The second is not, and the dependency on #113 is real rather than residual, for two reasons the ruling does not resolve. (1) Representation: a core route requires Learning Groups or base Skills, and a written-language competency is neither — it is a `written-tradition` competency, which no path body can currently carry, and 'at least one of any written tradition' is not expressible as a fixed requirement or as alternative core routes. (2) Content: the approved catalogue holds only 3 written traditions (Sacred Mogrebi, Church Ologian, Phoenician) against the 12 Civilizations this proposal gives written competencies to, and which tradition a given scribe writes is precisely the contextual written-tradition availability question #113 owns. Inventing either the representation or the tradition would distort the content, which the ruling forbids. This package must not be presented as universal literacy.
+> SETTLED (#113). The Profession-cores ruling fixes the core shape — G11 Records-office practice plus at least one applicable written-language competency — and the 2026-09-22 language ruling supplies what the previous revision was waiting for. Both halves of the dependency are now discharged. Representation: the core carries `writtenLanguageChoiceCount: 1`, which states the choice without naming a tradition, without turning written languages into base Skills, and without one core route per Civilization. Content: the proposal now authors 11 distinct written competencies across the 14 literate Civilizations, so the choice has something to choose from wherever a scribe is trained. G11 plus the one choice is exactly two requirements, which is the core maximum, so the minimality rule needs no adjustment and the core cannot quietly grow. Which tradition a given scribe writes remains the contextual availability question #113 owns; this package is still not universal literacy, and grants no written competency by itself.
 
 ### P66 — Translator and Interpreter
 
