@@ -6,8 +6,11 @@
 // stack's database. Nothing failed. So every assertion here is about a *loud* failure, or about
 // traffic provably reaching the right stack -- never merely about a process starting.
 
+import { readdirSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createServer as createSocketServer, type Server as SocketServer } from "node:net";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -183,7 +186,8 @@ describe("task-isolated dev stacks", () => {
       expect(apiPort).toBeLessThan(49152);
     }
 
-    // The documented escape hatch for the rare derived-port collision.
+    // The documented escape hatch for a derived-port collision, which is a routine event on a
+    // machine running dozens of lanes rather than a 1-in-400 curiosity.
     expect(
       deriveTaskStackPorts(BUILDER_KEY, {
         GLANTRI_TASK_API_PORT: "4777",
@@ -193,5 +197,109 @@ describe("task-isolated dev stacks", () => {
     expect(() => deriveTaskStackPorts(BUILDER_KEY, { GLANTRI_TASK_API_PORT: "0" })).toThrow(
       /must be an integer between 1 and 65535/,
     );
+  });
+});
+
+// The browser proof suite is a second, equally live hop into a database. `global-setup.ts` seeds
+// accounts with POST /auth/register before a single spec runs, and it learns where to send them
+// only from PLAYWRIGHT_API_URL, whose fallback is the shared `http://localhost:4000` default.
+// While a task stack sat on the shared defaults that fallback happened to be right. Once the
+// stack moved to its derived ports, an unpropagated Playwright URL stopped being "unconfigured"
+// and became a deterministic misroute into whatever holds the shared port -- normally the primary
+// checkout's API on the shared playtest database. So these URLs are stack identity, not test
+// configuration, and they are asserted to equal the stack's own addresses.
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const E2E_DIRECTORY = join(repositoryRoot, "apps", "web", "e2e");
+const PLAYWRIGHT_CONFIG = join(repositoryRoot, "apps", "web", "playwright.config.ts");
+
+/** Every `process.env.X ?? "http://localhost:<port>"` in the browser suite -- the defect shape. */
+function browserSuiteVariablesWithSharedDefaultFallback(): Map<string, Set<string>> {
+  const sources = [
+    PLAYWRIGHT_CONFIG,
+    ...readdirSync(E2E_DIRECTORY)
+      .filter((entry) => entry.endsWith(".ts"))
+      .map((entry) => join(E2E_DIRECTORY, entry)),
+  ];
+  const found = new Map<string, Set<string>>();
+
+  for (const source of sources) {
+    const pattern = /process\.env\.([A-Z0-9_]+)\s*\?\?\s*"(http:\/\/localhost:\d+)"/g;
+    for (const match of readFileSync(source, "utf8").matchAll(pattern)) {
+      const [, name, fallback] = match as unknown as [string, string, string];
+      found.set(name, (found.get(name) ?? new Set<string>()).add(fallback));
+    }
+  }
+
+  return found;
+}
+
+describe("task stack Playwright propagation", () => {
+  it("propagates Playwright URLs that are exactly the stack's own Web and API addresses", () => {
+    const { addresses, environment } = stackEnvironmentFor(BUILDER_KEY);
+
+    // Equality with the stack's own addresses, not merely "set": a value that is present but
+    // points somewhere else is the whole failure mode.
+    expect(environment.PLAYWRIGHT_BASE_URL).toBe(
+      `http://${TASK_STACK_LOOPBACK_HOST}:${addresses.webPort}`,
+    );
+    expect(environment.PLAYWRIGHT_API_URL).toBe(
+      `http://${TASK_STACK_LOOPBACK_HOST}:${addresses.apiPort}`,
+    );
+    expect(environment.PLAYWRIGHT_BROWSER_API_URL).toBe(
+      `http://${TASK_STACK_LOOPBACK_HOST}:${addresses.apiPort}`,
+    );
+
+    // Derived from the same addresses, so they cannot drift from what the stack actually binds
+    // or from what the frontend is told.
+    expect(environment.PLAYWRIGHT_BASE_URL).toBe(environment.WEB_ORIGIN);
+    expect(environment.PLAYWRIGHT_API_URL).toBe(environment.NEXT_PUBLIC_API_BASE_URL);
+    expect(environment.PLAYWRIGHT_BROWSER_API_URL).toBe(environment.NEXT_PUBLIC_API_BASE_URL);
+
+    // Never the shared defaults, and never the `localhost` name, which can resolve to ::1 and
+    // reach a foreign listener even when the numeric port is this stack's own.
+    for (const name of [
+      "PLAYWRIGHT_API_URL",
+      "PLAYWRIGHT_BASE_URL",
+      "PLAYWRIGHT_BROWSER_API_URL",
+    ]) {
+      expect(environment[name]).not.toContain("localhost");
+      expect(environment[name]).not.toBe("http://localhost:4000");
+      expect(environment[name]).not.toBe("http://localhost:3000");
+    }
+  });
+
+  it("gives two simultaneous lanes disjoint Playwright targets", () => {
+    const builder = stackEnvironmentFor(BUILDER_KEY).environment;
+    const qa = stackEnvironmentFor(QA_KEY).environment;
+
+    expect(builder.PLAYWRIGHT_API_URL).not.toBe(qa.PLAYWRIGHT_API_URL);
+    expect(builder.PLAYWRIGHT_BASE_URL).not.toBe(qa.PLAYWRIGHT_BASE_URL);
+
+    // A Playwright URL inherited from another lane is ambiguous in the same way an inherited
+    // DATABASE_URL is, so it is refused rather than silently preferred.
+    expect(() =>
+      assertNoTaskStackEnvironmentConflict(builder, {
+        PLAYWRIGHT_API_URL: qa.PLAYWRIGHT_API_URL,
+      }),
+    ).toThrow(/conflicts with this worktree's task stack value/);
+  });
+
+  it("propagates every browser-suite variable that falls back to a shared default port", () => {
+    const observed = browserSuiteVariablesWithSharedDefaultFallback();
+    const propagated = stackEnvironmentFor(BUILDER_KEY).environment;
+
+    // Guards the guard: if this ever finds nothing the assertion below would pass vacuously.
+    expect(observed.size).toBeGreaterThanOrEqual(3);
+    expect([...observed.keys()].sort()).toEqual([
+      "PLAYWRIGHT_API_URL",
+      "PLAYWRIGHT_BASE_URL",
+      "PLAYWRIGHT_BROWSER_API_URL",
+    ]);
+
+    // Any browser-suite entry point whose fallback is a shared default port must be steered by
+    // db:task:exec. A new one added without propagation fails here rather than in production.
+    for (const name of observed.keys()) {
+      expect(Object.keys(propagated)).toContain(name);
+    }
   });
 });

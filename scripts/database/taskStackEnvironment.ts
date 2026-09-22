@@ -46,9 +46,19 @@ function parseExplicitPort(name: string, value: string | undefined): number | un
 
 /**
  * Derives this worktree's stack ports. Deterministic, so the same worktree always reaches the
- * same URLs, and distinct for distinct worktree keys except for a 1-in-400 window collision,
- * which `assertTaskStackPortsAvailable` turns into a loud startup failure rather than a silent
- * redirection. `GLANTRI_TASK_API_PORT` / `GLANTRI_TASK_WEB_PORT` are the supported escape hatch.
+ * same URLs.
+ *
+ * Collisions are not rare on a machine running many lanes. One offset is shared by both ports,
+ * so the governing figure is the birthday rate over a 400-slot window, not the 1-in-400 chance
+ * that one named pair collides: with n worktrees the expected number of colliding pairs is about
+ * n(n-1)/800, which passes 1 at n≈29. Measured on this repository's own machine, 82 real
+ * worktrees produced 10 colliding offsets — for example `/private/tmp/glantri-271-privacy-repair`
+ * and `/private/tmp/glantri-po-decisions-docs` both derive api 4358 / web 3358.
+ *
+ * This is availability, not correctness. A collision only bites when both worktrees run a stack
+ * at the same time, and `assertTaskStackPortsAvailable` then turns it into a loud startup failure
+ * rather than a silent redirection. `GLANTRI_TASK_API_PORT` / `GLANTRI_TASK_WEB_PORT` are the
+ * supported escape hatch.
  */
 export function deriveTaskStackPorts(
   worktreeKey: string,
@@ -99,8 +109,17 @@ export function deriveTaskStackAddresses(
 
 /**
  * The variables `db:task:exec` must place in the child environment so the whole stack — the API
- * bind, the Web bind, the browser's API base URL, and the API's allowed origin — agrees on one
- * set of task-owned loopback addresses.
+ * bind, the Web bind, the browser's API base URL, the API's allowed origin, and the browser
+ * proof suite's two entry points — agrees on one set of task-owned loopback addresses.
+ *
+ * The Playwright URLs belong here for the same reason as `NEXT_PUBLIC_API_BASE_URL`, and they are
+ * derived from the same addresses so they cannot drift from the stack they are supposed to drive.
+ * `apps/web/e2e/global-setup.ts` seeds users through `POST /auth/register` against
+ * `PLAYWRIGHT_API_URL`, whose own fallback is the shared `http://localhost:4000` default. Leaving
+ * it unpropagated while the stack moved to its derived ports would not leave the smoke suite
+ * merely unconfigured — it would point the suite's account creation deterministically at whatever
+ * process holds the shared default port, which on a developer machine is normally the primary
+ * checkout's API on the shared playtest database. That is the exact #276 incident class.
  */
 export function taskStackEnvironment(addresses: TaskStackAddresses): Record<string, string> {
   return {
@@ -109,6 +128,9 @@ export function taskStackEnvironment(addresses: TaskStackAddresses): Record<stri
     GLANTRI_TASK_API_PORT: String(addresses.apiPort),
     GLANTRI_TASK_WEB_PORT: String(addresses.webPort),
     NEXT_PUBLIC_API_BASE_URL: addresses.apiBaseUrl,
+    PLAYWRIGHT_API_URL: addresses.apiBaseUrl,
+    PLAYWRIGHT_BASE_URL: addresses.webOrigin,
+    PLAYWRIGHT_BROWSER_API_URL: addresses.apiBaseUrl,
     WEB_HOST: addresses.host,
     WEB_ORIGIN: addresses.webOrigin,
     WEB_PORT: String(addresses.webPort),

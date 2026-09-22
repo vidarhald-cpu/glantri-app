@@ -63,8 +63,13 @@ test("the canonical local startup chain still runs through the guarded database 
 
 // `next dev` picks the next free port when its own is taken and says so only in a log line, so a
 // stack whose Web port is unspecified can end up on another stack's neighbourhood of ports while
-// still looking healthy. The dev script therefore always states the bind address and port; the
-// default keeps the pre-#276 behaviour for the primary checkout.
+// still looking healthy. The dev script therefore always states the bind address and port.
+//
+// The defaults are the addresses Next already used, but stating the port on the command line is
+// not behaviour-neutral for the primary checkout: it makes Next's `portSource` `cli`, and Next
+// only retries the next free port when `portSource` is `default`. The primary checkout's
+// `pnpm dev` therefore now fails on a busy 3000 instead of starting on 3001. That is the intended
+// outcome and is documented in `docs/dev-database.md`, not a side effect confined to task mode.
 test("the web dev server binds an explicitly stated host and port", () => {
   const { scripts } = readJson("apps/web/package.json");
 
