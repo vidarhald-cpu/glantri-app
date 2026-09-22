@@ -33,6 +33,10 @@ each still requires its own authorization through the canonical lifecycle.
 This contract **introduces no new domain primitive**. Section 10 records the
 existing domain evidence for that claim.
 
+The [Player Play V1](player-play-v1.md) contract layers player-facing
+composition and navigation on top of this one. It decides no domain question,
+and it does not reopen, narrow, or supersede any ruling recorded here.
+
 ### Out of scope
 
 - AI-friendly Artifact intake, tracked separately as
