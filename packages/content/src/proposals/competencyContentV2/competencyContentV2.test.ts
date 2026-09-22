@@ -8,15 +8,26 @@ import {
   analyseCompetencyContentV2,
   BREADTH_REVIEW_FLOOR,
   buildCompetencyContentV2Catalogue,
+  buildCompetencyContentV2SocietyLevelAvailability,
   competencyContentV2Catalogue,
+  competencyContentV2SocietyLevelAvailability,
   EFFECTIVE_BREADTH_SIGNAL,
   GROUP_SIZE_PREFERRED_CENTRE,
   GROUP_SIZE_REVIEW_BAND,
   measureApprovedBaseline,
 } from "./competencyContentV2";
 import {
+  COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING,
   COMPETENCY_CONTENT_V2_RETIRED_CATEGORY_ID,
   COMPETENCY_CONTENT_V2_STATUS,
+  competencyContentV2AccessGridDivergences,
+  competencyContentV2CanonicalAccessTiers,
+  competencyContentV2DirectRouteAvailability,
+  competencyContentV2GroupAvailability,
+  competencyContentV2ProfessionRouteAvailability,
+  competencyContentV2RouteGaps,
+  competencyContentV2SocialBands,
+  competencyContentV2SocietyLevel1Absences,
   competencyContentV2CivilizationLanguages,
   competencyContentV2WrittenLanguageCompetencyIds,
   v2SpokenCompetencyName,
@@ -1072,5 +1083,297 @@ describe("third ruling set — Learning Group membership (settled)", () => {
     expect(() => buildCompetencyContentV2Catalogue()).not.toThrow();
     const k01 = competencyContentV2LearningGroups.find((group) => group.id === "K01")!;
     expect(k01.note).toContain("membership ruling");
+  });
+});
+
+describe("Society Level and Social Band route availability", () => {
+  const availability = competencyContentV2SocietyLevelAvailability;
+  const cell = (societyLevel: number, socialBand: string) =>
+    availability.cells.find(
+      (row) => row.societyLevel === societyLevel && row.socialBand === socialBand,
+    )!;
+
+  it("builds deterministically and fails the build rather than a test", () => {
+    expect(() => buildCompetencyContentV2SocietyLevelAvailability()).not.toThrow();
+    expect(availability.cells).toHaveLength(24);
+  });
+
+  it("authors only the Society Level 1-2 boundary", () => {
+    expect(COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING).toBe(3);
+    const bounds = [
+      ...Object.values(competencyContentV2GroupAvailability),
+      ...competencyContentV2ProfessionRouteAvailability,
+      ...competencyContentV2DirectRouteAvailability,
+    ];
+    for (const bound of bounds) {
+      expect(bound.reason.trim().length).toBeGreaterThan(0);
+      expect(bound.minSocietyLevel ?? 2).toBeGreaterThanOrEqual(2);
+      expect(bound.minSocietyLevel ?? 2).toBeLessThanOrEqual(
+        COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING,
+      );
+      /* A Social Band bound above the boundary would be a claim this pass does not author. */
+      if (bound.minSocialBand) expect(bound.minSocietyLevel ?? 1).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("uses the canonical Social Band names and access tiers rather than invented ones", () => {
+    expect(competencyContentV2SocialBands.map((band) => band.name)).toEqual([
+      "Common Folk",
+      "Trades and Guilds",
+      "Established Households",
+      "Court and Elite",
+    ]);
+    const societyLevelRows = canonicalContent.societyLevels as readonly {
+      socialClass: string;
+      societyLevel: number;
+    }[];
+    for (const band of competencyContentV2SocialBands)
+      expect(
+        societyLevelRows.some(
+          (row) =>
+            row.socialClass === band.name && row.societyLevel === Number(band.id.replace("L", "")),
+        ),
+      ).toBe(true);
+    expect(
+      competencyContentV2CanonicalAccessTiers.map(
+        (tier) => `${tier.minSocietyLevel}/${tier.minSocialBand}`,
+      ),
+    ).toEqual(["1/L1", "2/L2", "3/L3", "4/L4"]);
+  });
+
+  it("reproduces the canonical shape: Society Level 1 offers the same routes at every band", () => {
+    /* The canonical grid gives the Society Level 1 society one set across all four bands. It is not
+       constructed that way here: it follows from bounds authored one group at a time. */
+    const base = cell(1, "L1").availableGroupIds;
+    for (const band of ["L2", "L3", "L4"]) expect(cell(1, band).availableGroupIds).toEqual(base);
+    expect(cell(1, "L4").reachableBaseSkillIds).toEqual(cell(1, "L1").reachableBaseSkillIds);
+  });
+
+  it("reproduces the canonical shape: a Society Level 2 ladder stops at the trades tier", () => {
+    const trades = cell(2, "L2").availableGroupIds;
+    for (const band of ["L3", "L4"]) expect(cell(2, band).availableGroupIds).toEqual(trades);
+    expect(cell(2, "L1").availableGroupIds.length).toBeLessThan(trades.length);
+  });
+
+  it("never shrinks availability upward", () => {
+    for (const row of availability.cells) {
+      const higherLevel = availability.cells.find(
+        (other) =>
+          other.societyLevel === row.societyLevel + 1 && other.socialBand === row.socialBand,
+      );
+      for (const target of [higherLevel].filter(Boolean))
+        for (const skillId of row.reachableBaseSkillIds)
+          expect(target!.reachableBaseSkillIds).toContain(skillId);
+    }
+  });
+
+  it("makes no Skill globally unreachable as a side effect", () => {
+    /* Poisons is the one deliberately routeless Skill, exactly as before this pass. */
+    const widest = new Set(cell(6, "L4").reachableBaseSkillIds);
+    const withRoutes = catalogue.coverage.baseSkills - widest.size;
+    expect(withRoutes).toBe(1);
+    expect(cell(6, "L4").unreachableBaseSkillIds).toEqual(["skill:poisons"]);
+  });
+
+  it("keeps every Profession core and every valid path satisfiable somewhere", () => {
+    expect(catalogue.manifest.validPaths).toBe(86);
+    expect(catalogue.coreRoutes.filter((row) => row.satisfied).length).toBeGreaterThan(0);
+    for (const path of catalogue.paths)
+      expect(availability.cells.some((row) => row.validPathIds.includes(path.pathId))).toBe(true);
+    expect(cell(3, "L2").validPathIds).toHaveLength(86);
+  });
+
+  it("keeps P65 Scribe's written-language core satisfiable wherever the Scribe exists", () => {
+    const scribeCells = availability.cells.filter((row) =>
+      row.validPathIds.includes("profession:scribe"),
+    );
+    /* G11 is a records office, so the Scribe first exists at Society Level 3 — at every band, because
+       this pass authors no band bound above the Society Level 1-2 boundary. */
+    expect(scribeCells).toHaveLength(16);
+    expect(scribeCells.every((row) => row.societyLevel >= 3)).toBe(true);
+    expect(competencyContentV2WrittenLanguageCompetencyIds.length).toBeGreaterThan(0);
+    const scribe = competencyContentV2Families.find((family) => family.code === "P65")!;
+    const choiceCount = scribe.coreRoutes?.[0]?.writtenLanguageChoiceCount;
+    expect(choiceCount).toBe(1);
+    /* The choice is satisfied from the set reachable AT THE CELL, so a written competency suppressed
+       by a literacy route's bound surfaces here as a core-satisfiability failure rather than as an
+       obvious routing one. */
+    for (const row of scribeCells)
+      expect(row.reachableWrittenCompetencyIds.length).toBeGreaterThanOrEqual(choiceCount!);
+    expect(cell(3, "L1").reachableWrittenCompetencyIds).toHaveLength(4);
+  });
+
+  it("offers no Specialization whose parent the same restricted path no longer reaches", () => {
+    for (const row of availability.cells) expect(row.specializationsWithoutTheirParent).toEqual([]);
+  });
+
+  it("records the three restriction shapes the settled model allows, and no fourth", () => {
+    expect(Object.keys(competencyContentV2GroupAvailability)).toHaveLength(51);
+    expect(competencyContentV2ProfessionRouteAvailability).toHaveLength(4);
+    expect(competencyContentV2DirectRouteAvailability).toHaveLength(7);
+    expect(availability.summary.unrestrictedGroups).toBe(44);
+    expect(availability.summary.groupsFromSocietyLevel2).toBe(28);
+    expect(availability.summary.groupsAboveSocietyLevel2).toBe(23);
+  });
+
+  it("keeps each Profession route restriction genuinely narrower than the group's own bound", () => {
+    for (const bound of competencyContentV2ProfessionRouteAvailability) {
+      const group = competencyContentV2GroupAvailability[bound.groupId];
+      const groupLevel = group?.minSocietyLevel ?? 1;
+      const groupBand = group?.minSocialBand ?? "L1";
+      const narrower =
+        (bound.minSocietyLevel ?? 1) > groupLevel || (bound.minSocialBand ?? "L1") > groupBand;
+      expect(narrower).toBe(true);
+    }
+  });
+
+  it("withdraws nothing from a direct route without accounting for it", () => {
+    const accountedFor = new Set(
+      competencyContentV2SocietyLevel1Absences.map((row) => row.skillId),
+    );
+    for (const bound of competencyContentV2DirectRouteAvailability) {
+      const family = competencyContentV2Families.find(
+        (candidate) => candidate.code === bound.professionCode,
+      )!;
+      const below = (bound.minSocietyLevel ?? 1) - 1;
+      const stillValid = availability.cells.some(
+        (row) => row.societyLevel === below && row.professionCodes.includes(bound.professionCode),
+      );
+      if (!stillValid) continue;
+      const reachable = new Set(cell(below, "L4").reachableBaseSkillIds);
+      /* Where the Profession does still exist below the bound, every Skill the bound withdraws is
+         either still reached by another route at that level, or is itself an absence this pass has
+         recorded and argued. Nothing disappears unaccounted for. */
+      for (const skillId of family.skillIds ?? [])
+        expect(reachable.has(skillId) || accountedFor.has(skillId)).toBe(true);
+    }
+  });
+
+  it("accounts for every Skill absent at Society Level 1, exactly", () => {
+    expect(competencyContentV2SocietyLevel1Absences).toHaveLength(51);
+    expect(
+      competencyContentV2SocietyLevel1Absences.filter((row) => row.disposition === "route-gap"),
+    ).toHaveLength(8);
+    expect(
+      competencyContentV2SocietyLevel1Absences.filter((row) => row.disposition === "deliberate"),
+    ).toHaveLength(43);
+    expect([...cell(1, "L1").unreachableBaseSkillIds].sort()).toEqual(
+      competencyContentV2SocietyLevel1Absences.map((row) => row.skillId).sort(),
+    );
+  });
+
+  it("flags the route gaps rather than closing them with new routes", () => {
+    expect(competencyContentV2RouteGaps.map((gap) => gap.skillId).sort()).toEqual([
+      "camouflage",
+      "skill:leadership",
+      "skill:politics",
+      "skill:teaching",
+      "skill:trade",
+      "skill:trapmaking",
+      "throwing",
+      "weapon_maintenance",
+    ]);
+    for (const gap of competencyContentV2RouteGaps) {
+      expect(gap.closedRoutes.length).toBeGreaterThan(0);
+      expect(gap.plausibility.trim().length).toBeGreaterThan(0);
+      /* A flag must be true where it is raised, and false somewhere above it, or it is not a gap. */
+      expect(cell(gap.unreachableAtSocietyLevel, "L4").reachableBaseSkillIds).not.toContain(
+        gap.skillId,
+      );
+      expect(cell(6, "L4").reachableBaseSkillIds).toContain(gap.skillId);
+    }
+    /* No group gained a member and no Profession gained a route to close a gap. */
+    expect(catalogue.manifest.groups).toBe(95);
+    expect(catalogue.manifest.directSkillOpportunities).toBe(106);
+  });
+
+  it("records the distribution the pass produces", () => {
+    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(80);
+    expect(cell(2, "L1").reachableBaseSkillIds).toHaveLength(94);
+    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(110);
+    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(130);
+    expect(cell(1, "L1").professionCodes).toHaveLength(42);
+    expect(cell(2, "L2").professionCodes).toHaveLength(63);
+    expect(cell(3, "L2").professionCodes).toHaveLength(84);
+  });
+});
+
+describe("fourth ruling set — SL1 authority and Latial Chiefdoms (settled 2026-09-22)", () => {
+  const availability = competencyContentV2SocietyLevelAvailability;
+  const cell = (societyLevel: number, socialBand: string) =>
+    availability.cells.find(
+      (row) => row.societyLevel === societyLevel && row.socialBand === socialBand,
+    )!;
+  const latialWritten = "written:old-latin:old-italic";
+
+  it("records the access-grid divergences as settled rulings rather than open questions", () => {
+    expect(competencyContentV2AccessGridDivergences.map((row) => row.id)).toEqual([
+      "sl1-learned-access",
+      "writing-below-society-level-3",
+    ]);
+    for (const row of competencyContentV2AccessGridDivergences) {
+      expect(row.resolution).toContain("2026-09-22");
+      /* The reconciliation note is the part the ruling asks for: other implementation may still
+         consume the grid, and has to be reconciled against the route model later. */
+      expect(row.reconciliation.trim().length).toBeGreaterThan(0);
+      expect(row.gridPosition.trim().length).toBeGreaterThan(0);
+      expect(row.contentV2Position.trim().length).toBeGreaterThan(0);
+    }
+    expect(availability.accessGridDivergences).toBe(competencyContentV2AccessGridDivergences);
+  });
+
+  it("does not restore the learned access the older grid admits at Society Level 1", () => {
+    /* Ruling 1 ratifies the authoring: the grid's Society Level 1 base set does not win. */
+    for (const groupId of ["K01", "K02", "K07", "K21", "F11", "F12", "F13", "G12"])
+      expect(cell(1, "L4").availableGroupIds).not.toContain(groupId);
+  });
+
+  it("keeps Latial Chiefdoms writing-capable at Society Level 2", () => {
+    const latial = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "latial_chiefdoms",
+    )!;
+    expect(latial.writtenCompetencyId).toBe(latialWritten);
+    expect(latial.writtenTraditionName).toBe("Old Italic");
+    for (const band of ["L1", "L2", "L3", "L4"])
+      expect(cell(2, band).reachableWrittenCompetencyIds).toContain(latialWritten);
+  });
+
+  it("derives every written competency's floor from its own Civilization, not from a literacy route", () => {
+    const floors = new Map(
+      availability.writtenCompetencyFloors.map((row) => [row.competencyId, row.minSocietyLevel]),
+    );
+    expect(floors.size).toBe(competencyContentV2WrittenLanguageCompetencyIds.length);
+    expect(floors.size).toBe(11);
+    expect(floors.get(latialWritten)).toBe(2);
+    expect(availability.summary.lowestWrittenCompetencySocietyLevel).toBe(2);
+    /* The generic `literacy` Skill keeps its own canonical Society Level 3, and that floor does not
+       reach the Civilization's own written language. That separation IS the ruling. */
+    const literacy = canonicalContent.skills.find((row) => row.id === "literacy")!;
+    expect(literacy.societyLevel).toBe(3);
+    expect(floors.get(latialWritten)).toBeLessThan(literacy.societyLevel);
+    for (const row of availability.writtenCompetencyFloors)
+      expect(row.minSocietyLevel).toBe(Math.min(...row.civilizations.map((c) => c.societyLevel)));
+  });
+
+  it("loses no other Civilization's written competency", () => {
+    expect(cell(6, "L4").reachableWrittenCompetencyIds.slice().sort()).toEqual(
+      [...competencyContentV2WrittenLanguageCompetencyIds].sort(),
+    );
+    expect(cell(1, "L4").reachableWrittenCompetencyIds).toEqual([]);
+    expect(cell(2, "L4").reachableWrittenCompetencyIds).toEqual([latialWritten]);
+    expect(cell(3, "L4").reachableWrittenCompetencyIds).toHaveLength(4);
+    expect(cell(5, "L4").reachableWrittenCompetencyIds).toHaveLength(11);
+  });
+
+  it("moves no group, Profession, path or Skill distribution", () => {
+    expect(availability.summary.groups).toBe(95);
+    expect(availability.summary.unrestrictedGroups).toBe(44);
+    expect(availability.summary.professionRouteRestrictions).toBe(4);
+    expect(availability.summary.directRouteRestrictions).toBe(7);
+    expect(availability.summary.routeGaps).toBe(8);
+    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(80);
+    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(110);
+    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(130);
+    expect(cell(3, "L2").validPathIds).toHaveLength(86);
   });
 });

@@ -92,6 +92,90 @@ export interface V2Route {
   route: string;
 }
 
+/* ------------------------------------------------------------------------------------------ */
+/* Society Level and Social Band route availability                                             */
+/* ------------------------------------------------------------------------------------------ */
+
+export type V2SocietyLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export type V2SocialBand = "L1" | "L2" | "L3" | "L4";
+
+/**
+ * The canonical Social Bands, named exactly as `canonicalContent.json` names them in its
+ * `societyLevels` rows. The names are what makes a band bound read as a statement about a stratum
+ * rather than an opaque number.
+ */
+export const competencyContentV2SocialBands: readonly { id: V2SocialBand; name: string }[] = [
+  { id: "L1", name: "Common Folk" },
+  { id: "L2", name: "Trades and Guilds" },
+  { id: "L3", name: "Established Households" },
+  { id: "L4", name: "Court and Elite" },
+];
+
+/**
+ * THE SCOPE OF THIS AUTHORING PASS.
+ *
+ * The settled model deliberately left "which individual routes a given Society Level withholds" as
+ * bounded content authoring. This pass authors the **Society Level 1-2 boundary, and the Social Band
+ * bounds that bite inside it** — nothing above it.
+ *
+ * So a `minSocietyLevel` of 3 means exactly "this route does not exist at Society Level 1 or 2". It
+ * does NOT assert that the true floor is 3 rather than 4, 5 or 6; that refinement belongs to a later
+ * pass. The build refuses a `minSocietyLevel` above this ceiling, so a wider claim cannot be
+ * smuggled in under this pass's banner.
+ */
+export const COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING = 3 as const;
+
+/**
+ * A bound on where a route exists. An absent bound means "everywhere": Society Level 1, Social Band
+ * L1.
+ *
+ * A bound restricts a ROUTE. It never restricts the Skill that route teaches: a Skill is available
+ * wherever ANY valid route reaches it, and the availability analysis takes that union explicitly.
+ */
+export interface V2RouteAvailability {
+  /** Lowest Society Level at which this route exists at all. */
+  minSocietyLevel?: V2SocietyLevel;
+  /**
+   * Lowest Social Band at which this route exists. Authored only on routes that do still exist at
+   * Society Level 1 or 2, because a band bound above that boundary is outside this pass's scope.
+   */
+  minSocialBand?: V2SocialBand;
+  /** Why the training genuinely requires it. Never optional: an unexplained bound is an assertion. */
+  reason: string;
+}
+
+/** A Profession's own route into a Learning Group, restricted in that occupational context only. */
+export interface V2ProfessionRouteAvailability extends V2RouteAvailability {
+  professionCode: string;
+  /** Track id, when the restricted route belongs to a track rather than the family body. */
+  trackId?: string;
+  groupId: string;
+}
+
+/** A Profession's direct Skill and Specialization route, restricted as a whole. */
+export interface V2DirectRouteAvailability extends V2RouteAvailability {
+  professionCode: string;
+  trackId?: string;
+}
+
+/**
+ * A Skill that plausibly belongs at a low Society Level but whose every authored route requires a
+ * higher one.
+ *
+ * The settled model is explicit that this is to be FLAGGED, not quietly accepted as a statement
+ * about the Skill. Recording it as data and checking it against the computed availability is what
+ * stops the flag decaying into prose nobody rechecks.
+ */
+export interface V2RouteGap {
+  skillId: string;
+  /** The Society Level at which no route reaches the Skill. */
+  unreachableAtSocietyLevel: V2SocietyLevel;
+  /** Why the Skill plausibly belongs there regardless. */
+  plausibility: string;
+  /** The routes that would teach it, and the bound that closes each. */
+  closedRoutes: readonly string[];
+}
+
 /**
  * A defining core route: the training a Profession is not that Profession without.
  *
@@ -4063,5 +4147,701 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
     rationale:
       "Restored to the historian as a direct route after the group-size review retired F16, whose only " +
       "base Skill was Research.",
+  },
+];
+
+/* ------------------------------------------------------------------------------------------ */
+/* Authored Society Level 1-2 and Social Band route availability                                */
+/* ------------------------------------------------------------------------------------------ */
+
+/**
+ * The canonical access grid this pass authors against.
+ *
+ * `canonicalContent.json` already records, per Civilization society and per Social Band, which
+ * bodies of training that cell reaches. Reading it back gives four tiers and nothing else:
+ *
+ * - every society, every band reaches a base set;
+ * - a further tier appears only from Society Level 2 and only at band L2 (Trades and Guilds);
+ * - a further tier only from Society Level 3 and band L3 (Established Households);
+ * - a further tier only from Society Level 4 and band L4 (Court and Elite).
+ *
+ * The Society Level 1 society reaches the base set at EVERY band — it has no trade, household or
+ * court stratum whose training differs — and a Society Level 2 society's ladder stops at the trades
+ * tier. That shape, not a number invented here, is what the bounds below use: a route withheld below
+ * the trades tier carries `minSocietyLevel: 2, minSocialBand: "L2"`.
+ *
+ * The grid is coarser than this catalogue: it holds 66 legacy groups against 95 proposed ones, and
+ * its base set is evidently a flat legacy import rather than an authored statement about Society
+ * Level 1 — it admits scholarly, legal, fiscal and ship-command training at the Society Level 1
+ * Common Folk cell, which the settled model would plainly withhold. It is therefore used as
+ * corroboration for the SHAPE of a restriction, never as per-group authority.
+ *
+ * The Product Owner ruling of 2026-09-22 on #266 settles which of the two wins where they disagree:
+ * the Content V2 route model is AUTHORITATIVE, and the grid must not override explicit approved
+ * route semantics. Each disagreement is therefore a settled divergence rather than an open question,
+ * and is recorded as one in `competencyContentV2AccessGridDivergences` below.
+ */
+export const competencyContentV2CanonicalAccessTiers: readonly {
+  id: string;
+  name: string;
+  minSocietyLevel: V2SocietyLevel;
+  minSocialBand: V2SocialBand;
+}[] = [
+  { id: "base", name: "Available everywhere", minSocietyLevel: 1, minSocialBand: "L1" },
+  { id: "trades", name: "Trades and Guilds tier", minSocietyLevel: 2, minSocialBand: "L2" },
+  {
+    id: "households",
+    name: "Established Households tier",
+    minSocietyLevel: 3,
+    minSocialBand: "L3",
+  },
+  { id: "court", name: "Court and Elite tier", minSocietyLevel: 4, minSocialBand: "L4" },
+];
+
+/**
+ * A place where the older canonical access grid and the settled Content V2 route model disagree.
+ *
+ * Recorded as data rather than prose because the ruling that settles it also anticipates a
+ * consumer: other implementation may still read the grid, and will need reconciling against these
+ * rows rather than rediscovering the difference.
+ */
+export interface V2AccessGridDivergence {
+  id: string;
+  /** What the disagreement is about, in one line. */
+  subject: string;
+  /** What the older grid admits, and where it is recorded. */
+  gridPosition: string;
+  /** What the settled Content V2 route model holds. */
+  contentV2Position: string;
+  /** The ruling that settles it, and which side wins. */
+  resolution: string;
+  /** What a later reconciliation pass has to do if other implementation still consumes the grid. */
+  reconciliation: string;
+}
+
+/**
+ * The settled divergences between the older canonical access grid and this route model.
+ *
+ * PRODUCT OWNER RULING, 2026-09-22 (#266): the settled Content V2 Society Level / Social Band route
+ * model is authoritative where it conflicts with the older canonical access grid. The grid may be
+ * used as evidence and for the general SHAPE of restrictions, but must not override explicit
+ * approved Content V2 route semantics.
+ *
+ * These rows are therefore KNOWN, RULED-ON differences. They are not open questions, and neither
+ * one is a defect in this pass to be repaired by moving a bound.
+ */
+export const competencyContentV2AccessGridDivergences: readonly V2AccessGridDivergence[] = [
+  {
+    id: "sl1-learned-access",
+    subject:
+      "Scholarly, legal, fiscal, mercantile and ship-command training at the Society Level 1 Common Folk cell",
+    gridPosition:
+      "`societyBandSkillAccess` in `canonicalContent.json` admits it there. Its base set is a flat " +
+      "legacy import applied to every society, not an authored statement about what a Society " +
+      "Level 1 society actually teaches.",
+    contentV2Position:
+      "Withheld. K01, K02, K07, K21, F12, F13, F11 and G12 carry their own minimums, each with an " +
+      "authored reason about the institution or technology the society does not have.",
+    resolution:
+      "The Product Owner ruling of 2026-09-22 on #266 gives the route model authority. Scholarly, " +
+      "legal, fiscal, mercantile and ship-command access is NOT restored at Society Level 1 merely " +
+      "because the grid permits it. The grid supplied the shape of the four tiers and nothing more.",
+    reconciliation:
+      "Other implementation may still consume `societyBandSkillAccess` directly. Where it does, the " +
+      "grid's Society Level 1 base set will disagree with this model and must be reconciled against " +
+      "it in a later pass; nothing in this proposal rewrites the grid.",
+  },
+  {
+    id: "writing-below-society-level-3",
+    subject: "Whether a society below Society Level 3 writes at all",
+    gridPosition:
+      "The canonical `literacy` Skill records `societyLevel: 3`, and read as a statement about " +
+      "societies rather than about that one generic training route it says no society below Society " +
+      "Level 3 reads or writes.",
+    contentV2Position:
+      "Latial Chiefdoms is a Society Level 2 Civilization whose canonical record carries the written " +
+      "language Old Italic, and whose written competency is authored here. It is reachable at " +
+      "Society Level 2.",
+    resolution:
+      "The Product Owner ruling of 2026-09-22 on #266 holds that Latial Chiefdoms remains a " +
+      "writing-capable Society Level 2 Civilization using Old Italic. A generic Literacy Skill or " +
+      "training route may keep its own Society Level restriction — G11, K16 and F15 keep theirs — " +
+      "but that restriction must not suppress a Civilization's explicitly authored written-language " +
+      "competency. The two are separate things and are modelled separately.",
+    reconciliation:
+      "Other implementation may still read `skills.literacy.societyLevel` as a universal gate on " +
+      "written competence. Where it does, it will disagree with the Civilization-owned written " +
+      "competencies and must be reconciled against them later; the generic Skill's own floor is not " +
+      "changed here.",
+  },
+];
+
+/**
+ * INHERENT Learning Group minimums: the curriculum itself does not exist below this point, wherever
+ * the training would be.
+ *
+ * Authored only where the training genuinely requires it — a technology, an institution, or a scale
+ * of organisation the society does not have. A group absent from this table is available at Society
+ * Level 1, Social Band L1, which is the ordinary case: 44 of the 95 proposed groups are.
+ *
+ * Two bound shapes are used, and the difference is deliberate:
+ *
+ * - `minSocietyLevel` alone — the society must have the thing, but once it does the training is
+ *   ordinary work at any band. A pastoral clan's common folk ride.
+ * - `minSocietyLevel` with `minSocialBand` — the training also belongs to a stratum, matching the
+ *   canonical trades tier above.
+ */
+export const competencyContentV2GroupAvailability: Readonly<Record<string, V2RouteAvailability>> = {
+  /* --- The society must have the thing; once it does, the training is ordinary ------------- */
+  G05: {
+    minSocietyLevel: 2,
+    reason:
+      "Riding is taught on kept riding stock. The Society Level 1 forager and ritual-tribal society " +
+      "keeps none, so the practice has nothing to be taught on. From Society Level 2 it is ordinary " +
+      "work at every band: a pastoral clan's common folk ride.",
+  },
+  F06: {
+    minSocietyLevel: 2,
+    reason:
+      "A draught team and a wheeled vehicle are a settled society's equipment. Below Society Level 2 " +
+      "there is neither the kept team nor the vehicle the practice is about.",
+  },
+  F09: {
+    minSocietyLevel: 2,
+    reason:
+      "A rigged vessel is a built ship with standing and running rigging. Below Society Level 2 there " +
+      "is nothing rigged to serve aboard. Open-boat working is a separate route and is not restricted.",
+  },
+  G07: {
+    minSocietyLevel: 2,
+    reason:
+      "Entrusted passage work presupposes regular voyages somebody is answerable for. Below Society " +
+      "Level 2 there is no such traffic to be entrusted with.",
+  },
+  F27: {
+    minSocietyLevel: 2,
+    reason:
+      "Timber mechanism work is the making and keeping of machines — mill gear, windlass, lifting " +
+      "frame — and needs a society that builds them. Ordinary woodwork is not this practice.",
+  },
+  C14: {
+    minSocietyLevel: 2,
+    reason:
+      "A constructed trap-and-device practice is mechanism work, under the same requirement as the " +
+      "timber mechanism trade beside it. Setting a snare on a trapline is a different route and is " +
+      "not restricted.",
+  },
+  F29: {
+    minSocietyLevel: 2,
+    reason:
+      "A field surgical apprenticeship is learned where an organised force carries its wounded back " +
+      "to an operator. Society Level 1 fighting is not organised that way. Ordinary operative care is " +
+      "a separate route and is not restricted.",
+  },
+  M03: {
+    minSocietyLevel: 2,
+    reason:
+      "Close-order drill exists only where there is a close-order force to drill. This is the settled " +
+      "model's own worked example of a curriculum that simply is not there.",
+  },
+  M04: {
+    minSocietyLevel: 2,
+    reason:
+      "Issued missile arms drilled in formation require the same formed force as close-order drill.",
+  },
+  M06: {
+    minSocietyLevel: 2,
+    reason:
+      "Campaign service is repeated exposure with a force in the field over a campaign. Below Society " +
+      "Level 2 there is raiding, not campaigning. Coercive service remains the other authored route " +
+      "to Combat Experience and is not restricted, so the competence itself is not withdrawn.",
+  },
+  M11: {
+    minSocietyLevel: 2,
+    reason: "Fighting from the saddle requires kept riding stock, exactly as mounted travel does.",
+  },
+
+  /* --- The training also belongs to the trades stratum (canonical trades tier) ------------- */
+  C01: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "The general artisan apprenticeship is market craft: it charges Appraisal and Bargaining " +
+      "because the apprentice is being placed in a trade. That is the canonical Trades and Guilds " +
+      "stratum, and it exists from Society Level 2.",
+  },
+  C02: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason: "A master's shop taking apprentices is the guild tier of the same trade.",
+  },
+  C07: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Worked mine and quarry workings are an organised extraction trade with a face to keep open. " +
+      "Prospecting is not this practice.",
+  },
+  C09: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason: "A sail and canvas loft exists only where there are rigged vessels to canvas.",
+  },
+  C11: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason: "A vineyard is a standing planted holding worked as a trade over years.",
+  },
+  C13: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Locks and their working parts are metal trade work, and presuppose fixed premises with " +
+      "something worth locking.",
+  },
+  F03: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason: "A yard laying down vessels is a timber trade with the yard behind it.",
+  },
+  F24: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Ore furnace and forge work is a metal trade. The Society Level 1 forager and ritual-tribal " +
+      "society runs no furnaces.",
+  },
+  F25: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason: "Weapon forging and servicing is the same metal trade, specialised.",
+  },
+  F26: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Forged defences are the same metal trade, specialised. Hide and strap defences are reached " +
+      "through the leather workshop, which is not restricted.",
+  },
+  F28: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Designed building, and the setting out that goes with it, is a building trade. Stone working " +
+      "itself is deliberately NOT restricted: the Society Level 1 society's own canonical reference " +
+      "is a megalithic monument.",
+  },
+  F33: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Reconnaissance reported for military decisions requires a force that makes them and a " +
+      "scouting arm it keeps.",
+  },
+  G09: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Command over an organised unit requires both the unit and the standing to be given it.",
+  },
+  G12: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Trading practice is a merchant's apprenticeship in a market. Petty carrying and exchange are " +
+      "not this training.",
+  },
+  G15: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Covert entry is taught against locks and fastenings, and follows the lock trade that makes " +
+      "them.",
+  },
+  M10: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason:
+      "Formal arms instruction charged together with weapon upkeep belongs to the same metal-arms " +
+      "trade.",
+  },
+  M12: {
+    minSocietyLevel: 2,
+    minSocialBand: "L2",
+    reason: "Lance and troop drill requires kept mounts and a formed troop together.",
+  },
+
+  /* --- Not present at Society Level 1 or 2 at all ------------------------------------------ */
+  G11: {
+    minSocietyLevel: 3,
+    reason: "A records office is a standing bureaucracy keeping written record.",
+  },
+  K16: {
+    minSocietyLevel: 3,
+    reason:
+      "Documentary hands, credentials and older writing presuppose a documentary culture to imitate.",
+  },
+  F15: {
+    minSocietyLevel: 3,
+    reason:
+      "There is no standing corpus of older record, and no scholarly practice of investigating one. " +
+      "This is a bound on the study route, not a claim that nobody below writes: Latial Chiefdoms " +
+      "writes Old Italic at Society Level 2, and its written competency is reached through the " +
+      "Civilization, not through this route.",
+  },
+  K21: {
+    minSocietyLevel: 3,
+    reason: "Applied calculation is kept accounts and measured ground reduced to figures.",
+  },
+  F12: {
+    minSocietyLevel: 3,
+    reason: "A credit house lends against written obligation that outlives the handshake.",
+  },
+  F13: {
+    minSocietyLevel: 3,
+    reason:
+      "Pleading presupposes a standing forum and a stated legal system. Customary settlement is " +
+      "reached through council and mediation practice, which is not restricted.",
+  },
+  K11: {
+    minSocietyLevel: 3,
+    reason: "There is no court to serve inside.",
+  },
+  K10: {
+    minSocietyLevel: 3,
+    reason: "There is no heraldic office, and no armorial system for one to keep.",
+  },
+  K07: {
+    minSocietyLevel: 3,
+    reason:
+      "Schooling as an establishment somebody is apprenticed into. Instruction inside a trade or a " +
+      "household is not this practice.",
+  },
+  K01: {
+    minSocietyLevel: 3,
+    reason: "Scholarly study as a standing practice with a body of record behind it.",
+  },
+  K02: {
+    minSocietyLevel: 3,
+    reason: "A philosophical school with a tradition to argue within.",
+  },
+  K03: {
+    minSocietyLevel: 3,
+    reason:
+      "Observation reduced by learned mathematical method. Watching the sky is not this practice.",
+  },
+  K04: {
+    minSocietyLevel: 3,
+    reason: "A learned astrological tradition with a doctrine to read against.",
+  },
+  K09: {
+    minSocietyLevel: 3,
+    reason: "Chorography assembled and drawn as maps.",
+  },
+  F01: {
+    minSocietyLevel: 3,
+    reason: "Map production from measured ground.",
+  },
+  F11: {
+    minSocietyLevel: 3,
+    reason: "Charted passage work requires charts and the conventions they are read by.",
+  },
+  F23: {
+    minSocietyLevel: 3,
+    reason: "The still is equipment a society has to be able to make and keep.",
+  },
+  C15: {
+    minSocietyLevel: 3,
+    reason: "An alchemical tradition and the furnished workshop it is practised in.",
+  },
+  M07: {
+    minSocietyLevel: 3,
+    reason: "Campaign staff work is written logistics and administration behind a force.",
+  },
+  M08: {
+    minSocietyLevel: 3,
+    reason: "Siege works are built against fortified places, which have to exist first.",
+  },
+  M09: {
+    minSocietyLevel: 3,
+    reason: "Siege engines have to be built and kept before a crew can be trained on them.",
+  },
+  K12: {
+    minSocietyLevel: 3,
+    reason:
+      "Naturalist field study is a standing comparative practice against a collection and a record. " +
+      "Knowing plants and animals is reached through ordinary field routes, which are not restricted.",
+  },
+  F30: {
+    minSocietyLevel: 3,
+    reason: "Swashbuckling fencing is a named school of a specific urban fencing tradition.",
+  },
+};
+
+/**
+ * PROFESSION -> LEARNING GROUP route restrictions: the group exists here, but this occupation cannot
+ * reach it through this route.
+ *
+ * The settled model prefers this narrower tool wherever the restriction is specific to the
+ * occupational context, so each entry below is one the group's own bound does not already cover.
+ */
+export const competencyContentV2ProfessionRouteAvailability: readonly V2ProfessionRouteAvailability[] =
+  [
+    {
+      professionCode: "P03",
+      groupId: "F06",
+      minSocietyLevel: 2,
+      minSocialBand: "L2",
+      reason:
+        "Caravan service is the trading stratum's carrying, not simply driving a team. The " +
+        "team-and-vehicle practice itself stays available to common folk from Society Level 2.",
+    },
+    {
+      professionCode: "P06",
+      groupId: "F02",
+      minSocietyLevel: 2,
+      reason:
+        "The herd keeper works the clip off her own stock, and there is no kept clip below Society " +
+        "Level 2. The fibre-to-cloth trade itself is not restricted, so the competence is not " +
+        "withdrawn — only this way into it.",
+    },
+    {
+      professionCode: "P14",
+      groupId: "G04",
+      minSocietyLevel: 2,
+      reason:
+        "Escort duty away from the town needs the town and the traffic between towns. The guard's " +
+        "own watch and guard instruction is not restricted, so a Society Level 1 village guard is " +
+        "still a Guard.",
+    },
+    {
+      professionCode: "P22",
+      groupId: "G04",
+      minSocietyLevel: 2,
+      reason:
+        "Marching and camping with the force requires the force. A Society Level 1 soldier keeps her " +
+        "contingent fighting core and learns field living by another road.",
+    },
+  ];
+
+/**
+ * DIRECT route restrictions: a Profession's own direct teaching, restricted in its own right.
+ *
+ * A direct route is one route granting everything it lists, so restricting it withdraws the whole
+ * grant. Each entry below is therefore authored only where the WHOLE grant belongs above the
+ * boundary, and every Skill it withdraws remains reachable elsewhere at that level.
+ */
+export const competencyContentV2DirectRouteAvailability: readonly V2DirectRouteAvailability[] = [
+  {
+    professionCode: "P10",
+    minSocietyLevel: 3,
+    reason:
+      "The pilot's direct teaching is chartwork and calculation, which belong to a charted, " +
+      "reckoning tradition. Entrusted passage work itself remains the Navigator's route from " +
+      "Society Level 2.",
+  },
+  {
+    professionCode: "P13",
+    minSocietyLevel: 3,
+    reason:
+      "The counting house's direct teaching is calculation kept in figures. Below that the trader " +
+      "still learns her trade; she learns it without the arithmetic.",
+  },
+  {
+    professionCode: "P25",
+    minSocietyLevel: 3,
+    reason:
+      "The commander's direct teaching is set-piece speech and siege operations, which belong with " +
+      "the siege practice it names. Command itself remains the Military Commander's core route.",
+  },
+  {
+    professionCode: "P48",
+    minSocietyLevel: 3,
+    reason:
+      "Calculation and measured setting out, neither of which the mill trade itself requires.",
+  },
+  {
+    professionCode: "P49",
+    minSocietyLevel: 3,
+    reason:
+      "Calculation, office administration and fortification, none of which the design apprenticeship " +
+      "itself supplies.",
+  },
+  {
+    professionCode: "P60",
+    minSocietyLevel: 3,
+    reason:
+      "Courtly protocol and a stated legal system require the court and the code. Ordinary " +
+      "negotiation practice remains the Envoy's core route, so an envoy exists without either.",
+  },
+  {
+    professionCode: "P83",
+    minSocietyLevel: 3,
+    reason:
+      "Calculation at the tables is learned method, not the play itself. The gaming-house practice " +
+      "is not restricted.",
+  },
+];
+
+/**
+ * Every base Skill no valid path reaches at Society Level 1, asserted exactly so the authored
+ * consequence of this pass cannot drift silently.
+ *
+ * `deliberate` — the absence is the statement. A Society Level 1 forager and ritual-tribal society
+ * has no furnaces, no charts, no records office, and the model is meant to say so.
+ *
+ * `route-gap` — the Skill plausibly belongs at Society Level 1, and every route that reaches it
+ * happens to require more. The settled model requires this to be FLAGGED rather than treated as a
+ * statement about the Skill, so each one also appears in `competencyContentV2RouteGaps` with the
+ * routes that close it.
+ */
+export const competencyContentV2SocietyLevel1Absences: readonly {
+  skillId: string;
+  disposition: "deliberate" | "route-gap";
+}[] = [
+  { skillId: "alchemy", disposition: "deliberate" },
+  { skillId: "astrology", disposition: "deliberate" },
+  { skillId: "astronomy", disposition: "deliberate" },
+  { skillId: "banking", disposition: "deliberate" },
+  { skillId: "battlefield_awareness", disposition: "deliberate" },
+  { skillId: "camouflage", disposition: "route-gap" },
+  { skillId: "captaincy", disposition: "deliberate" },
+  { skillId: "crossbow", disposition: "deliberate" },
+  { skillId: "formation_fighting", disposition: "deliberate" },
+  { skillId: "heraldry", disposition: "deliberate" },
+  { skillId: "lance", disposition: "deliberate" },
+  { skillId: "mathematics", disposition: "deliberate" },
+  { skillId: "mechanics", disposition: "deliberate" },
+  { skillId: "mounted_combat", disposition: "deliberate" },
+  { skillId: "philosophy", disposition: "deliberate" },
+  { skillId: "skill:administration", disposition: "deliberate" },
+  { skillId: "skill:architecture", disposition: "deliberate" },
+  { skillId: "skill:bookkeeping", disposition: "deliberate" },
+  { skillId: "skill:campaign-strategy", disposition: "deliberate" },
+  { skillId: "skill:cart-driving", disposition: "deliberate" },
+  { skillId: "skill:cartography", disposition: "deliberate" },
+  { skillId: "skill:celestial-navigation", disposition: "deliberate" },
+  { skillId: "skill:chart-navigation", disposition: "deliberate" },
+  { skillId: "skill:dead-reckoning", disposition: "deliberate" },
+  { skillId: "skill:distilling", disposition: "deliberate" },
+  { skillId: "skill:document-forgery", disposition: "deliberate" },
+  { skillId: "skill:firearms", disposition: "deliberate" },
+  { skillId: "skill:leadership", disposition: "route-gap" },
+  { skillId: "skill:lockpicking", disposition: "deliberate" },
+  { skillId: "skill:locksmithing", disposition: "deliberate" },
+  { skillId: "skill:military-logistics", disposition: "deliberate" },
+  { skillId: "skill:military-reconnaissance", disposition: "deliberate" },
+  { skillId: "skill:mining", disposition: "deliberate" },
+  { skillId: "skill:palaeography-decipherment", disposition: "deliberate" },
+  { skillId: "skill:pilotage", disposition: "deliberate" },
+  { skillId: "skill:poisons", disposition: "deliberate" },
+  { skillId: "skill:politics", disposition: "route-gap" },
+  { skillId: "skill:riding", disposition: "deliberate" },
+  { skillId: "skill:sailmaking", disposition: "deliberate" },
+  { skillId: "skill:shipbuilding", disposition: "deliberate" },
+  { skillId: "skill:siege-engine-operation", disposition: "deliberate" },
+  { skillId: "skill:siege-engineering", disposition: "deliberate" },
+  { skillId: "skill:smelting", disposition: "deliberate" },
+  { skillId: "skill:smithing", disposition: "deliberate" },
+  { skillId: "skill:teaching", disposition: "route-gap" },
+  { skillId: "skill:trade", disposition: "route-gap" },
+  { skillId: "skill:trapmaking", disposition: "route-gap" },
+  { skillId: "skill:winemaking", disposition: "deliberate" },
+  { skillId: "tactics", disposition: "deliberate" },
+  { skillId: "throwing", disposition: "route-gap" },
+  { skillId: "weapon_maintenance", disposition: "route-gap" },
+];
+
+/**
+ * Flagged route gaps. Each corresponds to a `route-gap` absence above, and the build refuses a flag
+ * that has gone stale — if a route later reaches the Skill at the stated level, the flag fails.
+ *
+ * A gap is NOT a defect and NOT a licence to add a route to close it. The settled model forbids
+ * adding routes to hit a breadth target, and each of these would be exactly that. It is a statement
+ * that the catalogue's route coverage, not the Society Level model, is what withholds the Skill.
+ */
+export const competencyContentV2RouteGaps: readonly V2RouteGap[] = [
+  {
+    skillId: "camouflage",
+    unreachableAtSocietyLevel: 1,
+    plausibility:
+      "Concealing oneself against the ground is a hunter's competence, and hunting is the Society " +
+      "Level 1 society's own work.",
+    closedRoutes: [
+      "F33 Concealed field reconnaissance practice — the catalogue's only route to Camouflage, and it is military reconnaissance, closed below the trades tier",
+    ],
+  },
+  {
+    skillId: "skill:leadership",
+    unreachableAtSocietyLevel: 1,
+    plausibility: "A band has a leader, and a Society Level 1 society is made of bands.",
+    closedRoutes: [
+      "G09 Unit coordination and command practice — closed below the trades tier, because military command needs the unit",
+      "P11 Shipmaster's direct teaching — the Shipmaster's own core route needs a rigged vessel, so the Profession does not exist here to teach it",
+    ],
+  },
+  {
+    skillId: "skill:politics",
+    unreachableAtSocietyLevel: 2,
+    plausibility:
+      "An early agrarian chiefdom has factions, standing and collective decisions, which is what the " +
+      "competence is about. The flag is raised at Society Level 2 rather than 1 because that is where " +
+      "the institutions the competence describes first exist.",
+    closedRoutes: [
+      "K11 Court service practice — the catalogue's only route to Politics, and it needs a court",
+    ],
+  },
+  {
+    skillId: "skill:teaching",
+    unreachableAtSocietyLevel: 1,
+    plausibility:
+      "Explaining, demonstrating and correcting is how every competence in an oral society is passed " +
+      "on at all.",
+    closedRoutes: [
+      "K07 Instruction and schooling practice — schooling as an establishment",
+      "C02 Master artisan practice — the guild tier of a trade",
+      "M10 Arms instruction practice — the metal-arms trade",
+    ],
+  },
+  {
+    skillId: "skill:trade",
+    unreachableAtSocietyLevel: 1,
+    plausibility:
+      "Bands exchange, and the canonical Society Level 1 occupation roster carries a Peddler. The " +
+      "competence is the organisation of exchange, not the merchant's establishment.",
+    closedRoutes: [
+      "G12 Trading practice — the catalogue's only route to Trade, and it is a merchant's apprenticeship in a market",
+    ],
+  },
+  {
+    skillId: "skill:trapmaking",
+    unreachableAtSocietyLevel: 1,
+    plausibility:
+      "A deadfall and a snare are constructed traps, and building them is forager work. The Trapping " +
+      "competence beside it IS reachable here, through the trapline route, which makes the split " +
+      "look accidental rather than authored.",
+    closedRoutes: [
+      "C14 Trap and device workshop — the catalogue's only route to Trapmaking, and it is closed because the same group teaches Mechanics, which is genuinely absent here",
+    ],
+  },
+  {
+    skillId: "throwing",
+    unreachableAtSocietyLevel: 1,
+    plausibility: "The thrown spear is the oldest weapon the catalogue carries.",
+    closedRoutes: [
+      "M02 Advanced close-combat weapon practice and M05 Advanced missile practice — both reachable only through the Weapon Instructor, whose core arms-instruction route is closed below the trades tier",
+      "M03 Formation arms drill — needs a formed force",
+    ],
+  },
+  {
+    skillId: "weapon_maintenance",
+    unreachableAtSocietyLevel: 1,
+    plausibility:
+      "Keeping one's own weapons serviceable is not a trade, and a Society Level 1 fighter has " +
+      "weapons.",
+    closedRoutes: [
+      "F25 Weapon-forge and servicing apprenticeship and M10 Arms instruction practice — the metal-arms trade",
+      "M04 Military missile and formation practice and M09 Siege engine crew practice — need a formed force and siege engines respectively",
+    ],
   },
 ];
