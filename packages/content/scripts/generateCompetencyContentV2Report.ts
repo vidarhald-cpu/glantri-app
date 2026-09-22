@@ -16,6 +16,9 @@ import {
 } from "../src/proposals/competencyContentV2/competencyContentV2";
 import {
   competencyContentV2CivilizationLanguages,
+  competencyContentV2WrittenLanguageCompetencyIds,
+  v2SpokenCompetencyName,
+  v2WrittenCompetencyName,
   competencyContentV2DirectGrantDecisions,
   competencyContentV2DirectGrantPolicy,
   competencyContentV2RemovedGroups,
@@ -23,6 +26,24 @@ import {
 } from "../src/proposals/competencyContentV2/competencyContentV2Source";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const approvedCompetencyIds = new Set(fullSkillCatalogueProposal.entries.map((entry) => entry.id));
+const writtenCompetencyIds = competencyContentV2WrittenLanguageCompetencyIds;
+const spokenCompetencyIds = [
+  ...new Set(competencyContentV2CivilizationLanguages.map((row) => row.spokenCompetencyId)),
+];
+const noWritingCount = competencyContentV2CivilizationLanguages.filter(
+  (row) => row.writtenCompetencyId === null,
+).length;
+const literateCount = competencyContentV2CivilizationLanguages.length - noWritingCount;
+
+function coreRequirementCount(row: {
+  groupIds: string[];
+  skillIds: string[];
+  writtenLanguageChoiceCount: number;
+}): number {
+  return row.groupIds.length + row.skillIds.length + (row.writtenLanguageChoiceCount ? 1 : 0);
+}
+
 const outDir = join(__dirname, "../../../docs/product/proposals/competency-content-v2");
 mkdirSync(outDir, { recursive: true });
 
@@ -294,21 +315,41 @@ familyLines.push(
   "",
   `Every valid path satisfies an applicable core route. ${catalogue.manifest.coreRoutes} path/core-route ` +
     `pairs are declared and ${catalogue.coreRoutes.filter((row) => row.satisfied).length} are satisfied by ` +
-    `the authored content; ${catalogue.manifest.coreRoutesBlocked} core route is recorded as partially ` +
-    `blocked on an external question.`,
+    `the authored content. ${
+      catalogue.manifest.coreRoutesBlocked === 0
+        ? "No core route is blocked on an external question any more: P65 Scribe was the last one, and the 2026-09-22 language ruling settles it."
+        : `${catalogue.manifest.coreRoutesBlocked} core route(s) are recorded as partially blocked on an external question.`
+    }`,
   "",
   "## Core minimality",
   "",
   "A core states what a Profession is not that Profession without — enough for identity, never a rigid",
   "class build. Every declared core route is audited against that, and the build now refuses any core that",
-  `requires more than two things in total. Largest core in the catalogue: ` +
-    `${Math.max(...catalogue.coreRoutes.map((row) => row.groupIds.length + row.skillIds.length))} requirement(s). ` +
-    `${catalogue.coreRoutes.filter((row) => row.groupIds.length + row.skillIds.length === 1).length} of ` +
+  `requires more than two things in total. A written-language choice counts as exactly one requirement ` +
+    `however many competencies it may be satisfied from, because it is one choice the learner makes rather ` +
+    `than a list the Profession dictates. Largest core in the catalogue: ` +
+    `${Math.max(...catalogue.coreRoutes.map(coreRequirementCount))} requirement(s). ` +
+    `${catalogue.coreRoutes.filter((row) => coreRequirementCount(row) === 1).length} of ` +
     `${catalogue.coreRoutes.length} path/core pairs require exactly one thing — ` +
-    `${catalogue.coreRoutes.filter((row) => row.groupIds.length === 1 && !row.skillIds.length).length} a single ` +
+    `${catalogue.coreRoutes.filter((row) => row.groupIds.length === 1 && !row.skillIds.length && !row.writtenLanguageChoiceCount).length} a single ` +
     `Learning Group and ` +
-    `${catalogue.coreRoutes.filter((row) => !row.groupIds.length && row.skillIds.length === 1).length} a single ` +
+    `${catalogue.coreRoutes.filter((row) => !row.groupIds.length && row.skillIds.length === 1 && !row.writtenLanguageChoiceCount).length} a single ` +
     `direct competency route.`,
+  "",
+  `**The written-language core route (#113).** ${
+    catalogue.coreRoutes.filter((row) => row.writtenLanguageChoiceCount > 0).length
+  } path/core pair(s) additionally require the learner to hold at least one written-language competency, ` +
+    `chosen freely rather than named: ` +
+    `${
+      catalogue.coreRoutes
+        .filter((row) => row.writtenLanguageChoiceCount > 0)
+        .map((row) => `${row.professionCode} (${row.writtenLanguageChoiceCount})`)
+        .join(", ") || "none"
+    }. This is the narrow representation extension the 2026-09-22 ruling authorizes, and it is the whole ` +
+    `of it: a \`writtenLanguageChoiceCount\` on the core route. Written languages are **not** turned into ` +
+    `base Skills, no core route is enumerated per Civilization, and no new path-body concept is added. ` +
+    `The choice is satisfied from the ${writtenCompetencyIds.length} written competencies the Civilization ` +
+    `language table authors, so it is satisfiable wherever a literate Civilization is reachable.`,
   "",
   "**A core is a necessary defining training route, not a unique classification key.** The",
   '"PRODUCT OWNER RULING — Profession cores (settled)" comment recorded on',
@@ -635,29 +676,100 @@ const categoryLines = [
   "",
   "Every canonical Civilization receives a **rollable spoken competency**, and a **rollable written**",
   "competency unless it is explicitly authored as having no written tradition. Written competence is what a",
-  "reading roll is made against.",
+  "reading roll is made against. Only the minimum canonical data is authored: identity, spoken or written",
+  "type, Civilization association, route and ownership. Script histories, registers and conventions are",
+  "later enrichment and deliberately wait.",
   "",
-  "Naming follows the Product Owner ruling: the canonical Glantri name where one is established, and the",
-  "appropriate **historical** name where none is. No Glantri name is invented and no linguistic descent is",
-  "asserted. The previous revision's invented names are withdrawn — **Kethran, Old Latian, Palace Scyrian,",
-  "Kaldan and Aspardic**, and the **Harbour, Hill, Palace, Wedge and Chancery** scripts. Where a written",
-  "tradition has an established Glantri language name but no established script name, the competency is named",
-  "for the language alone rather than given an invented script.",
+  "Naming follows the Product Owner ruling: the established Glantri name where one exists, and the",
+  "appropriate **historical** name where none does. In practice this required almost no judgement, because",
+  "the established names already exist — `canonicalContent.json` carries a spoken and a written language",
+  "name for all sixteen Civilizations and a roster of 21 named language records. **Every name in the table",
+  "below is taken verbatim from that roster, and the build fails if any name used is absent from it.** That",
+  "check, not this paragraph, is what guarantees nothing here is invented.",
+  "",
+  "Naming shape follows the approved catalogue's own convention, set by its three existing written",
+  "traditions: `Written <language> in <tradition>` where a separate tradition name is established, and",
+  "`Written <language>` where none is.",
+  "",
+  "Two corrections to the previous revision follow from the provenance check, in opposite directions.",
+  "**Lankhmaran** was introduced by the previous revision and appears nowhere else in the repository; it was",
+  "derived from the Civilization's name, which is exactly the invention the ruling forbids, and it is",
+  "withdrawn in favour of the established Phoenician names the approved catalogue already carries.",
+  "**Royal N'kolian** and **Runic Scandian** were withdrawn by the previous revision as inventions, but both",
+  "are established Glantri language records in the canonical content and are listed by name in the approved",
+  "gap report; both are restored. The previous revision's genuine inventions stay withdrawn — **Kethran, Old",
+  "Latian, Palace Scyrian, Kaldan and Aspardic**, and the **Harbour, Hill, Palace, Wedge and Chancery**",
+  "scripts.",
   "",
   "**Olog is flagged for later correction and deliberately not corrected here:** it appears modelled from a",
   "historical stage somewhat later and more advanced than the intended Glantri Olog society. That is a",
-  "separate follow-up, not part of this reconciliation.",
+  "separate low-priority follow-up, not part of this reconciliation.",
   "",
-  "| Civilization | Spoken | Written | Replaces | Needs a Product Owner naming ruling |",
-  "| --- | --- | --- | --- | --- |",
-  ...competencyContentV2CivilizationLanguages.map(
-    (row) =>
-      `| ${row.civilizationName} | ${row.spokenName} | ${row.writtenName ?? "*authored as having no writing*"} | ${
-        [row.replacesAnalogueSpokenName, row.replacesAnalogueWrittenName]
-          .filter(Boolean)
-          .join("; ") || "—"
-      } | ${row.requiresProductOwnerNamingRuling ? "Yes" : "No"} |`,
-  ),
+  `**${writtenCompetencyIds.length} distinct written competencies** serve the ${literateCount} literate Civilizations; ${noWritingCount} are authored as having no writing. ${spokenCompetencyIds.length} distinct spoken competencies serve all 16.`,
+  "",
+  "| Civilization | Spoken | Written | Status | Withdrawn here | Needs a Product Owner naming ruling |",
+  "| --- | --- | --- | --- | --- | --- |",
+  ...competencyContentV2CivilizationLanguages.map((row) => {
+    const writtenName = v2WrittenCompetencyName(row);
+    const spoken = `${v2SpokenCompetencyName(row)}<br>\`${row.spokenCompetencyId}\``;
+    const written =
+      writtenName === null || row.writtenCompetencyId === null
+        ? "_authored as having no writing_"
+        : `${writtenName}<br>\`${row.writtenCompetencyId}\``;
+    const newIds = [row.spokenCompetencyId, row.writtenCompetencyId].filter(
+      (id): id is string => id !== null && !approvedCompetencyIds.has(id),
+    );
+    const status = newIds.length === 0 ? "In the approved catalogue" : "Newly proposed";
+    const withdrawn =
+      [row.replacesProposedSpokenName, row.replacesProposedWrittenName]
+        .filter(Boolean)
+        .join("; ") || "—";
+    return `| ${row.civilizationName} | ${spoken} | ${written} | ${status} | ${withdrawn} | ${
+      row.requiresProductOwnerNamingRuling ? "Yes" : "No"
+    } |`;
+  }),
+  "",
+  "### Routes and ownership",
+  "",
+  "A language competency is owned by its Civilization. Neither route below is a grant: the competency is",
+  "still acquired, and holding a spoken competency confers nothing written, nor the reverse. Which",
+  "Civilizations a given character may reach remains the contextual availability question, unchanged here.",
+  "",
+  "| Route | Applies to |",
+  "| --- | --- |",
+  ...[
+    ...new Map(
+      competencyContentV2CivilizationLanguages.flatMap((row) =>
+        [
+          [`Spoken — ${row.spokenRoute}`, row.civilizationName] as const,
+          ...(row.writtenRoute
+            ? ([[`Written — ${row.writtenRoute}`, row.civilizationName]] as const)
+            : []),
+        ].map(([route, civ]) => [route, civ] as const),
+      ),
+    ).keys(),
+  ].map((route) => {
+    const civilizations = competencyContentV2CivilizationLanguages.filter((row) =>
+      route.startsWith("Spoken — ")
+        ? `Spoken — ${row.spokenRoute}` === route
+        : row.writtenRoute !== undefined && `Written — ${row.writtenRoute}` === route,
+    );
+    const applies =
+      civilizations.length === competencyContentV2CivilizationLanguages.length
+        ? "Every Civilization"
+        : civilizations.map((row) => row.civilizationName).join(", ");
+    return `| ${route} | ${applies} |`;
+  }),
+  "",
+  "### Civilizations authored as having no writing",
+  "",
+  "An absence is authored, never merely missing data. The build rejects a Civilization with no written",
+  "competency and no reason, and equally rejects one authored as having no writing whose canonical record",
+  "does name a written language.",
+  "",
+  ...competencyContentV2CivilizationLanguages
+    .filter((row) => row.writtenCompetencyId === null)
+    .flatMap((row) => [`- **${row.civilizationName}.** ${row.writtenAbsenceReason}`]),
   "",
   "### Notes",
   "",

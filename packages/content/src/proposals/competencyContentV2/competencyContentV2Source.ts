@@ -108,6 +108,25 @@ export interface V2CoreRoute {
   groupIds: readonly string[];
   /** Directly taught Skills the core route requires, when the core is not entirely a group. */
   skillIds?: readonly string[];
+  /**
+   * NARROW EXTENSION (#113). Some Professions are not that Profession without a written language,
+   * but without any particular one: a scribe must write something, and which tradition is the
+   * contextual question the Civilization determines, not the Profession.
+   *
+   * `groupIds` and `skillIds` cannot express that. A written-language competency is neither a
+   * Learning Group nor a base Skill, and "at least one of any written tradition" is a choice rather
+   * than a fixed list, so alternative core routes cannot express it either without enumerating one
+   * core per tradition and thereby asserting that the Profession differs by Civilization.
+   *
+   * This field is the smallest thing that does express it: the count of written-language
+   * competencies the learner must additionally hold, chosen freely from
+   * `competencyContentV2WrittenLanguageCompetencyIds`. It deliberately does NOT enumerate which,
+   * does not turn written languages into base Skills, and adds no new path-body concept.
+   *
+   * It counts as exactly ONE requirement against `CORE_ROUTE_MAXIMUM_REQUIREMENTS` however large
+   * the count is, because it is one choice the learner makes, not a list the Profession dictates.
+   */
+  writtenLanguageChoiceCount?: number;
   /** Set when the core route cannot be finally authored yet, with the blocking reference. */
   blockedBy?: string;
 }
@@ -2609,10 +2628,9 @@ export const competencyContentV2Families: readonly V2Family[] = [
       {
         id: "profession:scribe:core",
         label:
-          "Ordinary records-office service, plus the written tradition the scribe actually writes",
+          "Ordinary records-office service, plus at least one written language the scribe actually writes",
         groupIds: ["G11"],
-        blockedBy:
-          "#113 — the ruled core shape is G11 plus at least one written-language competency route. G11 is authored here; the second requirement is not, because the written-language competencies are not base Skills and the catalogue carries only 3 written traditions against this proposal's 12 Civilizations. Which tradition a scribe writes is the contextual written-tradition availability question #113 owns.",
+        writtenLanguageChoiceCount: 1,
       },
     ],
     groups: [
@@ -2623,18 +2641,17 @@ export const competencyContentV2Families: readonly V2Family[] = [
     directRoute: "Taught directly in the writing room",
     skillIds: ["skill:visual-art"],
     note:
-      "PARTIALLY BLOCKED DEPENDENCY. The 2026-09-21 Profession-cores ruling settles the core SHAPE: G11 " +
-      "plus at least one written-language competency route. The first requirement is authored here. The " +
-      "second is not, and the dependency on #113 is real rather than residual, for two reasons the ruling " +
-      "does not resolve. (1) Representation: a core route requires Learning Groups or base Skills, and a " +
-      "written-language competency is neither — it is a `written-tradition` competency, which no path body " +
-      "can currently carry, and 'at least one of any written tradition' is not expressible as a fixed " +
-      "requirement or as alternative core routes. (2) Content: the approved catalogue holds only 3 written " +
-      "traditions (Sacred Mogrebi, Church Ologian, Phoenician) against the 12 Civilizations this proposal " +
-      "gives written competencies to, and which tradition a given scribe writes is precisely the " +
-      "contextual written-tradition availability question #113 owns. Inventing either the representation " +
-      "or the tradition would distort the content, which the ruling forbids. This package must not be " +
-      "presented as universal literacy.",
+      "SETTLED (#113). The Profession-cores ruling fixes the core shape — G11 Records-office practice " +
+      "plus at least one applicable written-language competency — and the 2026-09-22 language ruling " +
+      "supplies what the previous revision was waiting for. Both halves of the dependency are now " +
+      "discharged. Representation: the core carries `writtenLanguageChoiceCount: 1`, which states the " +
+      "choice without naming a tradition, without turning written languages into base Skills, and " +
+      "without one core route per Civilization. Content: the proposal now authors 11 distinct written " +
+      "competencies across the 14 literate Civilizations, so the choice has something to choose from " +
+      "wherever a scribe is trained. G11 plus the one choice is exactly two requirements, which is the " +
+      "core maximum, so the minimality rule needs no adjustment and the core cannot quietly grow. " +
+      "Which tradition a given scribe writes remains the contextual availability question #113 owns; " +
+      "this package is still not universal literacy, and grants no written competency by itself.",
   },
   {
     code: "P66",
@@ -3139,25 +3156,69 @@ export const competencyContentV2CategoryOverrides: Readonly<
 export interface V2CivilizationLanguage {
   civilizationId: string;
   civilizationName: string;
-  /** Proposed Glantri spoken-language competency name. */
-  spokenName: string;
-  /** Current approved competency id, when one already exists. */
-  existingSpokenCompetencyId?: string;
-  /** Proposed Glantri written-tradition competency name, or null when authored as having no writing. */
-  writtenName: string | null;
+
+  /* --- Spoken ----------------------------------------------------------------------------- */
+  /** Stable competency identity. Reuses the approved catalogue id where one already exists. */
+  spokenCompetencyId: string;
   /**
-   * Required whenever `writtenName` is null: the ruling gives every Civilization a rollable written
-   * competency unless it is explicitly authored as having no writing, so an absence must be authored,
-   * never merely left blank.
+   * The bare language name, which must appear verbatim in the canonical Glantri language roster.
+   * Keeping the atom separate from the competency's display name is what makes the "no invented
+   * name" rule a deterministic build check rather than a promise in prose.
+   */
+  spokenLanguageName: string;
+  /** Who is taught this competency and where. Ownership, not a grant. */
+  spokenRoute: string;
+
+  /* --- Written ---------------------------------------------------------------------------- */
+  /** Null only when the Civilization is explicitly authored as having no writing. */
+  writtenCompetencyId: string | null;
+  /** Canonical-roster name of the language that is written. Null when there is no writing. */
+  writtenLanguageName: string | null;
+  /**
+   * Canonical-roster name of the named written tradition, when the Civilization has one whose name
+   * differs from the spoken language's. Null where the written name is simply the language name and
+   * no separate tradition name is established; none is invented to fill the slot.
+   */
+  writtenTraditionName: string | null;
+  /**
+   * Verbatim approved-catalogue name, supplied only where this competency already exists there and
+   * its approved wording differs from the derived form. The build asserts the two agree.
+   */
+  writtenNameOverride?: string;
+  /** Who is taught this competency and where. Required whenever a written competency exists. */
+  writtenRoute?: string;
+  /**
+   * Required whenever `writtenCompetencyId` is null: the ruling gives every Civilization a rollable
+   * written competency unless it is explicitly authored as having no writing, so an absence must be
+   * authored, never merely left blank.
    */
   writtenAbsenceReason?: string;
-  existingWrittenCompetencyId?: string;
-  /** Real-world analogue name this proposal replaces, if any. */
-  replacesAnalogueSpokenName?: string;
-  replacesAnalogueWrittenName?: string;
+
+  /* --- Provenance ------------------------------------------------------------------------- */
+  /** Name this revision withdraws, if any, with the reason recorded in `note`. */
+  replacesProposedSpokenName?: string;
+  replacesProposedWrittenName?: string;
   /** True when the proposed name cannot be settled without a Product Owner ruling. */
   requiresProductOwnerNamingRuling: boolean;
   note: string;
+}
+
+/** Derived player-facing competency name for the spoken competency. */
+export function v2SpokenCompetencyName(row: V2CivilizationLanguage): string {
+  return `Spoken ${row.spokenLanguageName}`;
+}
+
+/**
+ * Derived player-facing competency name for the written competency, following the approved
+ * catalogue's own convention: `Written <language> in <tradition>` where a separate tradition name is
+ * established, and `Written <language>` where none is.
+ */
+export function v2WrittenCompetencyName(row: V2CivilizationLanguage): string | null {
+  if (row.writtenLanguageName === null) return null;
+  if (row.writtenNameOverride) return row.writtenNameOverride;
+  return row.writtenTraditionName === null
+    ? `Written ${row.writtenLanguageName}`
+    : `Written ${row.writtenLanguageName} in ${row.writtenTraditionName}`;
 }
 
 /**
@@ -3165,207 +3226,339 @@ export interface V2CivilizationLanguage {
  * it is explicitly authored as having no writing; written competence is what a reading roll is made
  * against.
  *
- * Product Owner naming ruling: use the canonical Glantri name where one is established, and the
- * appropriate historical language or writing-tradition name where none is. Do not invent Glantri
- * names, linguistic descent, scripts, registers or relationships between Civilizations. The previous
- * revision's invented names — Kethran, Old Latian, Palace Scyrian, Kaldan, Aspardic, and the Harbour,
- * Hill, Palace, Wedge and Chancery scripts — stay withdrawn.
+ * Product Owner naming ruling: use the established Glantri name where one exists, and the
+ * appropriate historical language or writing name where none does. Do not invent Glantri names,
+ * linguistic descent, registers, script histories or relationships between Civilizations.
+ *
+ * Applying that ruling turns out to require almost no judgement, because the established names
+ * already exist. `packages/content/src/data/canonicalContent.json` carries a `spokenLanguageName`
+ * and a `writtenLanguageName` for all sixteen canonical Civilizations, and a roster of 21 named
+ * language records. Every name below is taken verbatim from that roster, and a deterministic build
+ * check fails if any name used here is absent from it. That check is the proof that nothing is
+ * invented; it is not possible to slip a plausible-sounding name past it.
+ *
+ * Two corrections to the previous revision follow from the same check, in opposite directions:
+ *
+ * - `Lankhmaran` was introduced by the previous revision and appears nowhere else in the
+ *   repository. It was derived from the Civilization's name, which is exactly the kind of invention
+ *   the ruling forbids. Lankhmar's established spoken and written language is Phoenician, and the
+ *   approved catalogue already carries both competencies. Withdrawn.
+ * - `Royal N'kolian` and `Runic Scandian` were withdrawn by the previous revision as inventions.
+ *   They are not inventions: both are established Glantri language records in the canonical content
+ *   and in the approved gap report. Restored.
+ *
+ * Naming follows the approved catalogue's own convention, set by its three existing written
+ * traditions: `Written <language> in <tradition>` where a separate tradition name is established,
+ * and `Written <language>` where none is. Where the approved catalogue already holds the competency,
+ * its id and its exact approved name are reused rather than restated.
+ *
+ * Scope is the minimum canonical data — identity, spoken/written type, Civilization association,
+ * discoverability, route/ownership and rolling. Script histories, registers and conventions are
+ * later enrichment and are deliberately not authored here.
  *
  * The indefinite blocker around usable written competencies is REMOVED by ruling. Every written
- * competency below is rollable now, named for its language, and is what a reading roll is made
- * against. Script, register and conventions are later enrichment and no longer hold anything up, so
- * no entry requires a further naming ruling: the list below is complete, and a deterministic check
- * fails the build if any entry reopens one.
+ * competency below is rollable now and is what a reading roll is made against, so no entry requires
+ * a further naming ruling: the list is complete, and a deterministic check fails the build if any
+ * entry reopens one.
  */
 export const competencyContentV2CivilizationLanguages: readonly V2CivilizationLanguage[] = [
   {
     civilizationId: "scandia",
     civilizationName: "Scandia",
-    spokenName: "Spoken Scandian",
-    existingSpokenCompetencyId: "spoken:scandian",
-    writtenName: "Written Scandian in runes",
+    spokenCompetencyId: "spoken:scandian",
+    spokenLanguageName: "Scandian",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:scandian:runic-scandian",
+    writtenLanguageName: "Scandian",
+    writtenTraditionName: "Runic Scandian",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
+    replacesProposedWrittenName: "Written Scandian in runes",
     requiresProductOwnerNamingRuling: false,
-    note: "Both names are already Glantri names. Only the missing written competency is added.",
+    note:
+      "Both names are established Glantri names: Scandian is the spoken language and Runic Scandian the " +
+      "written one, exactly as the canonical Civilization record states. The previous revision's lowercase " +
+      "'in runes' descriptor is withdrawn in favour of the established name. The approved gap report's " +
+      "open question — which script supports the tradition, and how the compound name decomposes — is " +
+      "untouched here; binding the competency to the language it writes does not answer it and does not " +
+      "need to.",
   },
   {
     civilizationId: "iest",
     civilizationName: "Iest",
-    spokenName: "Spoken Common",
-    existingSpokenCompetencyId: "spoken:common",
-    writtenName: "Written Common",
+    spokenCompetencyId: "spoken:common",
+    spokenLanguageName: "Common",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:common",
+    writtenLanguageName: "Common",
+    writtenTraditionName: null,
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Common is an established Glantri name, so the written competency takes it directly and no script " +
-      "name is invented. The competency is rollable as it stands, and a reading roll is made against it. " +
-      "Script, register and conventions are later enrichment, not a blocker: the Product Owner has ruled " +
-      "that written competence must exist now and that detailed prose may follow.",
+      "Common is an established Glantri name and the canonical record gives the same name to the written " +
+      "language, so the written competency takes it directly and no script name is invented. The " +
+      "competency is rollable as it stands, and a reading roll is made against it. Script, register and " +
+      "conventions are later enrichment, not a blocker.",
   },
   {
     civilizationId: "thyatis",
     civilizationName: "Thyatis",
-    spokenName: "Spoken Common",
-    existingSpokenCompetencyId: "spoken:common",
-    writtenName: "Written Common",
+    spokenCompetencyId: "spoken:common",
+    spokenLanguageName: "Common",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:common",
+    writtenLanguageName: "Common",
+    writtenTraditionName: null,
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
-    note: "Shares the rollable Common written competency; enrichment of the tradition follows later.",
+    note:
+      "Shares the rollable Common written competency. Sharing an identity is a consequence of the " +
+      "canonical records naming the same language, not an asserted relationship between the two " +
+      "Civilizations.",
   },
   {
     civilizationId: "glantri",
     civilizationName: "Glantri",
-    spokenName: "Spoken Common",
-    existingSpokenCompetencyId: "spoken:common",
-    writtenName: "Written Common",
+    spokenCompetencyId: "spoken:common",
+    spokenLanguageName: "Common",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:common",
+    writtenLanguageName: "Common",
+    writtenTraditionName: null,
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Shares the rollable Common written competency. Old Common remains an authored optional second " +
-      "tongue; no descent between the two is asserted.",
+      "Shares the rollable Common written competency. Old Common remains the authored optional second " +
+      "tongue recorded in the canonical Civilization; no descent between the two is asserted.",
   },
   {
     civilizationId: "scyria",
     civilizationName: "Scyria",
-    spokenName: "Spoken Old Common",
-    existingSpokenCompetencyId: "spoken:old-common",
-    writtenName: "Written Old Common",
+    spokenCompetencyId: "spoken:old-common",
+    spokenLanguageName: "Old Common",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:old-common",
+    writtenLanguageName: "Old Common",
+    writtenTraditionName: null,
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Old Common is an established Glantri name and no script name is invented. The written competency is " +
-      "rollable in its own right and is what an Old Common reading roll is made against. No equivalence " +
-      "with Common, and no descent from it, is asserted; the earlier suggestion of Mycenaean descent from " +
-      "Scyria stays withdrawn.",
+      "Old Common is an established Glantri name and the canonical record gives the same name to the " +
+      "written language, so no script name is invented. The written competency is rollable in its own " +
+      "right and is what an Old Common reading roll is made against. The approved gap report's refusal to " +
+      "infer equivalence with Common is respected: the two are separate competencies here and no descent " +
+      "is asserted in either direction.",
   },
   {
     civilizationId: "byzantine_empire",
     civilizationName: "Byzantine Empire",
-    spokenName: "Spoken Old Common",
-    existingSpokenCompetencyId: "spoken:old-common",
-    writtenName: "Written Old Common",
+    spokenCompetencyId: "spoken:old-common",
+    spokenLanguageName: "Old Common",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:old-common",
+    writtenLanguageName: "Old Common",
+    writtenTraditionName: null,
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Shares the rollable Old Common written competency. The Civilization name itself is a real-world " +
-      "analogue; renaming it is outside this task's scope.",
+      "Shares the rollable Old Common written competency, as the canonical record states. The " +
+      "Civilization name itself is a real-world analogue; renaming it is outside this task's scope.",
   },
   {
     civilizationId: "lankhmar",
     civilizationName: "Lankhmar",
-    spokenName: "Spoken Lankhmaran",
-    existingSpokenCompetencyId: "spoken:phoenician",
-    writtenName: "Written Lankhmaran in the Phoenician script",
-    existingWrittenCompetencyId: "written:phoenician:phoenician",
-    replacesAnalogueSpokenName: "Spoken Phoenician",
+    spokenCompetencyId: "spoken:phoenician",
+    spokenLanguageName: "Phoenician",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:phoenician:phoenician",
+    writtenLanguageName: "Phoenician",
+    writtenTraditionName: "Phoenician",
+    writtenNameOverride: "Written Phoenician in Phoenician script",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
+    replacesProposedSpokenName: "Spoken Lankhmaran",
+    replacesProposedWrittenName: "Written Lankhmaran in the Phoenician script",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Lankhmar is an established Glantri name, so the spoken language takes it directly. The script has " +
-      "no established Glantri name, so it keeps its historical one; the invented Harbour Hand is withdrawn.",
+      "CORRECTION. The previous revision renamed both competencies to Lankhmaran, reasoning that Lankhmar " +
+      "is an established Glantri name so its language may take the name directly. That reasoning derives " +
+      "a language name from a Civilization name, which is invention; Lankhmaran appears nowhere in the " +
+      "canonical language roster, the approved catalogue or any ruling. The canonical Civilization record " +
+      "names Lankhmar's spoken and written language Phoenician, and the approved catalogue already carries " +
+      "both competencies. Both are restored unchanged, including the approved catalogue's exact wording " +
+      "for the written one.",
   },
   {
     civilizationId: "olog",
     civilizationName: "Olog",
-    spokenName: "Spoken Ologian",
-    existingSpokenCompetencyId: "spoken:ologian",
-    writtenName: "Written Ologian in Church Ologian",
-    existingWrittenCompetencyId: "written:ologian:church-ologian",
+    spokenCompetencyId: "spoken:ologian",
+    spokenLanguageName: "Ologian",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:ologian:church-ologian",
+    writtenLanguageName: "Ologian",
+    writtenTraditionName: "Church Ologian",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Names already complete in the approved catalogue and carried forward unchanged. FLAGGED FOR LATER " +
+      "Already complete in the approved catalogue and carried forward unchanged. FLAGGED FOR LATER " +
       "CORRECTION, deliberately not corrected here: Olog appears modelled from a historical stage somewhat " +
-      "later and more advanced than the intended Glantri Olog society. That is a separate follow-up.",
+      "later and more advanced than the intended Glantri Olog society. That chronology question is a " +
+      "separate low-priority follow-up and is out of scope for this pass.",
   },
   {
     civilizationId: "mogreb",
     civilizationName: "Mogreb",
-    spokenName: "Spoken Mogrebi",
-    existingSpokenCompetencyId: "spoken:mogrebi",
-    writtenName: "Written Mogrebi in Sacred Mogrebi",
-    existingWrittenCompetencyId: "written:mogrebi:sacred-mogrebi",
+    spokenCompetencyId: "spoken:mogrebi",
+    spokenLanguageName: "Mogrebi",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:mogrebi:sacred-mogrebi",
+    writtenLanguageName: "Mogrebi",
+    writtenTraditionName: "Sacred Mogrebi",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note: "Already complete in the approved catalogue; carried forward unchanged.",
   },
   {
     civilizationId: "nkolo",
     civilizationName: "N'Kolo",
-    spokenName: "Spoken N'kolian",
-    existingSpokenCompetencyId: "spoken:nkolian",
-    writtenName: "Written N'kolian",
+    spokenCompetencyId: "spoken:nkolian",
+    spokenLanguageName: "N'kolian",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:nkolian:royal-nkolian",
+    writtenLanguageName: "N'kolian",
+    writtenTraditionName: "Royal N'kolian",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
+    replacesProposedWrittenName: "Written N'kolian",
     requiresProductOwnerNamingRuling: false,
     note:
-      "N'kolian is an established Glantri name, so the written competency takes it directly and the " +
-      "invented Royal N'kolian register stays withdrawn. The competency is rollable as it stands; no " +
-      "register or script is invented for it.",
+      "CORRECTION. The previous revision withdrew Royal N'kolian as an invented register. It is not " +
+      "invented: it is an established Glantri language record in the canonical content and is listed by " +
+      "name in the approved gap report. It is restored, bound to the language it writes in the same shape " +
+      "as Sacred Mogrebi and Church Ologian. What the gap report leaves open — the register's relationship " +
+      "to the spoken language, and its script support — stays open and is not answered here.",
   },
   {
     civilizationId: "san_forager_bands",
     civilizationName: "San Forager Bands",
-    spokenName: "Spoken Tuu",
-    writtenName: null,
+    spokenCompetencyId: "spoken:tuu",
+    spokenLanguageName: "Tuu",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: null,
+    writtenLanguageName: null,
+    writtenTraditionName: null,
     writtenAbsenceReason:
-      "Authored as having no written tradition: the San forager bands are a non-literate society, so no " +
-      "reading roll is made for them and no written competency is invented to carry one.",
+      "Authored as having no written tradition. The canonical Civilization record carries no written " +
+      "language for the San forager bands, and the Civilization is described as a non-literate forager " +
+      "society. No reading roll is made for it and no written competency is invented to carry one.",
     requiresProductOwnerNamingRuling: false,
     note:
-      "No spoken competency exists for this Civilization today; one is added. No approved Glantri name " +
-      "exists, so the appropriate historical name stands: Tuu is the established scholarly name for the " +
-      "language family the San forager bands speak. Nothing is invented — no descent, no sub-language and " +
-      "no fictional relationship to another Civilization — and the earlier request for a further Tuu " +
-      "identity is answered by the naming ruling rather than left open.",
+      "The one spoken competency the approved catalogue does not yet carry; it is added here. Tuu is an " +
+      "established Glantri language record, so the name is not invented. RETURNED AMBIGUITY, not resolved " +
+      "here: the approved gap report asks for a sufficiently precise language identity before a " +
+      "player-acquirable Tuu record is counted, because Tuu is a language family rather than one language. " +
+      "This pass gives the Civilization the rollable spoken competency the ruling requires and declines to " +
+      "invent a narrower name to close the gap report's question.",
   },
   {
     civilizationId: "scythians",
     civilizationName: "Scythians",
-    spokenName: "Spoken Scythian",
-    existingSpokenCompetencyId: "spoken:scythian",
-    writtenName: null,
+    spokenCompetencyId: "spoken:scythian",
+    spokenLanguageName: "Scythian",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: null,
+    writtenLanguageName: null,
+    writtenTraditionName: null,
     writtenAbsenceReason:
-      "Authored as having no written tradition: the Scythian steppe societies are non-literate, so no " +
-      "reading roll is made for them.",
+      "Authored as having no written tradition. The canonical Civilization record carries no written " +
+      "language for the Scythians, and the Civilization is described as a mobile steppe society without " +
+      "one. No reading roll is made for it.",
     requiresProductOwnerNamingRuling: false,
-    note: "No established Glantri name exists, so the historical name stands. The invented Kethran is withdrawn.",
+    note:
+      "Scythian is an established Glantri language record and the approved catalogue already carries the " +
+      "spoken competency. The previous revision's invented Kethran stays withdrawn.",
   },
   {
     civilizationId: "latial_chiefdoms",
     civilizationName: "Latial Chiefdoms",
-    spokenName: "Spoken Old Latin",
-    existingSpokenCompetencyId: "spoken:old-latin",
-    writtenName: "Written Old Latin in the Old Italic script",
+    spokenCompetencyId: "spoken:old-latin",
+    spokenLanguageName: "Old Latin",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:old-latin:old-italic",
+    writtenLanguageName: "Old Latin",
+    writtenTraditionName: "Old Italic",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
+    replacesProposedWrittenName: "Written Old Latin in the Old Italic script",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Historical names stand; the invented Old Latian and Hill Script are withdrawn. The written " +
-      "competency is newly added so that a reading roll has something to roll against.",
+      "Both names are established Glantri language records; the previous revision's invented Old Latian " +
+      "and Hill Script stay withdrawn. The written competency is newly added so that a reading roll has " +
+      "something to roll against. Binding it to Old Latin specifically is deliberate: the approved gap " +
+      "report asks that Old Italic's contextual breadth be resolved rather than assumed, and a competency " +
+      "tied to one language claims no competence in the others the script also served.",
   },
   {
     civilizationId: "mycenaean_greece",
     civilizationName: "Mycenaean Greece",
-    spokenName: "Spoken Mycenaean Greek",
-    existingSpokenCompetencyId: "spoken:mycenaean-greek",
-    writtenName: "Written Mycenaean Greek in Linear B",
+    spokenCompetencyId: "spoken:mycenaean-greek",
+    spokenLanguageName: "Mycenaean Greek",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:mycenaean-greek:linear-b",
+    writtenLanguageName: "Mycenaean Greek",
+    writtenTraditionName: "Linear B",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Historical names stand. The invented Palace Scyrian is withdrawn, and with it the implied descent " +
-      "from Scyria, which was never an established Glantri fact.",
+      "Both names are established Glantri language records. The previous revision's invented Palace " +
+      "Scyrian stays withdrawn, and with it the implied descent from Scyria, which was never an " +
+      "established Glantri fact. The language/tradition pairing the gap report asks to confirm is exactly " +
+      "the pairing the canonical Civilization record already states.",
   },
   {
     civilizationId: "sumer",
     civilizationName: "Sumer",
-    spokenName: "Spoken Sumerian",
-    existingSpokenCompetencyId: "spoken:sumerian",
-    writtenName: "Written Sumerian in Cuneiform",
+    spokenCompetencyId: "spoken:sumerian",
+    spokenLanguageName: "Sumerian",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:sumerian:cuneiform",
+    writtenLanguageName: "Sumerian",
+    writtenTraditionName: "Cuneiform",
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Historical names stand; the invented Kaldan and Wedge Script are withdrawn. The written competency " +
-      "is Sumerian written in Cuneiform specifically — the approved gap report's refusal of a universal " +
-      "Cuneiform competence is respected, because the competency is tied to one language.",
+      "Both names are established Glantri language records; the previous revision's invented Kaldan and " +
+      "Wedge Script stay withdrawn. The competency is Sumerian written in Cuneiform specifically, which is " +
+      "what lets the approved gap report's refusal of a universal Cuneiform competence stand: it is tied " +
+      "to one language and grants nothing in the other languages the script served.",
   },
   {
     civilizationId: "achaemenid_persia",
     civilizationName: "Achaemenid Persia",
-    spokenName: "Spoken Old Persian",
-    existingSpokenCompetencyId: "spoken:old-persian",
-    writtenName: "Written Imperial Aramaic",
+    spokenCompetencyId: "spoken:old-persian",
+    spokenLanguageName: "Old Persian",
+    spokenRoute: "Grown up within the Civilization, or learned in long dealings with it",
+    writtenCompetencyId: "written:imperial-aramaic",
+    writtenLanguageName: "Imperial Aramaic",
+    writtenTraditionName: null,
+    writtenRoute: "Taught wherever the Civilization's own records and letters are written",
     requiresProductOwnerNamingRuling: false,
     note:
-      "Historical names stand; the invented Aspardic and Chancery Script are withdrawn. The spoken tongue " +
-      "and the chancery written tradition are deliberately different languages here, which is what the " +
-      "approved gap report asks for: the written competency is not a way of writing the spoken one.",
+      "Both names are established Glantri language records; the previous revision's invented Aspardic and " +
+      "Chancery Script stay withdrawn. The spoken tongue and the written language are deliberately " +
+      "different languages here, which is what the canonical Civilization record states and what the " +
+      "approved gap report asks for: the written competency is not a way of writing the spoken one, and " +
+      "holding one grants nothing of the other. No separate tradition name is established for it, so none " +
+      "is invented.",
   },
+];
+
+/**
+ * Every distinct written-language competency the proposal authors, in table order. This is the set a
+ * core route's written-language choice is satisfied from, and the set P65 Scribe draws on.
+ */
+export const competencyContentV2WrittenLanguageCompetencyIds: readonly string[] = [
+  ...new Set(
+    competencyContentV2CivilizationLanguages
+      .map((row) => row.writtenCompetencyId)
+      .filter((id): id is string => id !== null),
+  ),
 ];
 
 /* ------------------------------------------------------------------------------------------ */

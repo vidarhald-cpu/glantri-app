@@ -70,28 +70,28 @@ drift apart.
 
 ## What the proposal changes
 
-|                                                      | Approved | #250 revision | First reconciliation | Tracks and cores | This revision (membership)                                      |
-| ---------------------------------------------------- | -------: | ------------: | -------------------: | ---------------: | --------------------------------------------------------------- |
-| Base Skills / Specializations                        | 131 / 26 |      131 / 26 |             131 / 26 |         131 / 26 | 131 / 26 (unchanged)                                            |
-| Learning Groups                                      |       59 |            92 |                   96 |               96 | 95 — 44 retained, 2 revised, 49 new                             |
-| Groups in the 3–4 preferred centre                   |       15 |            53 |                   57 |               57 | 52                                                              |
-| Groups at two                                        |       36 |            35 |                   36 |               36 | 40                                                              |
-| Groups at one                                        |        4 |             0 |                    0 |                0 | 0                                                               |
-| Groups at five or more                               |        4 |             4 |                    3 |                3 | 3 (all combat, under the exception)                             |
-| Largest fixed purchase burden of one group           |        7 |             6 |                    4 |                4 | 4                                                               |
-| Profession families                                  |       84 |            84 |                   84 |               84 | 84 (all preserved)                                              |
-| Professions carrying tracks                          |        — |             8 |                    8 |                2 | 2 (unchanged)                                                   |
-| Tracks                                               |        — |            21 |                   21 |                4 | 4 (unchanged)                                                   |
-| Valid Profession paths                               |       99 |            96 |                   96 |               86 | 86 (unchanged)                                                  |
-| Direct Profession Skill grants                       |     88\* |           119 |                  101 |              104 | 106                                                             |
-| Player-facing browse categories                      |        — |            16 |                   16 |               14 | 14                                                              |
-| Civilization languages awaiting a naming ruling      |        — |             — |                    7 |                0 | 0                                                               |
-| Declared core routes                                 |        — |             — |                   96 |               90 | 90 across 86 paths, all satisfied (1 partially blocked on #113) |
-| Median effective distinct base Skills per valid path |        3 |             8 |                    8 |                8 | 8                                                               |
-| Quartiles                                            |    1 / 7 |        7 / 10 |               7 / 10 |           7 / 10 | 7 / 9                                                           |
-| Narrowest path                                       |        0 |             6 |                    6 |                7 | 5                                                               |
-| Broadest path                                        |       17 |            15 |                   15 |               16 | 16                                                              |
-| Paths flagged for coherence review (below 7)         |        — |             — |                    — |                0 | 6                                                               |
+|                                                      | Approved | #250 revision | First reconciliation | Tracks and cores | This revision (membership)                    |
+| ---------------------------------------------------- | -------: | ------------: | -------------------: | ---------------: | --------------------------------------------- |
+| Base Skills / Specializations                        | 131 / 26 |      131 / 26 |             131 / 26 |         131 / 26 | 131 / 26 (unchanged)                          |
+| Learning Groups                                      |       59 |            92 |                   96 |               96 | 95 — 44 retained, 2 revised, 49 new           |
+| Groups in the 3–4 preferred centre                   |       15 |            53 |                   57 |               57 | 52                                            |
+| Groups at two                                        |       36 |            35 |                   36 |               36 | 40                                            |
+| Groups at one                                        |        4 |             0 |                    0 |                0 | 0                                             |
+| Groups at five or more                               |        4 |             4 |                    3 |                3 | 3 (all combat, under the exception)           |
+| Largest fixed purchase burden of one group           |        7 |             6 |                    4 |                4 | 4                                             |
+| Profession families                                  |       84 |            84 |                   84 |               84 | 84 (all preserved)                            |
+| Professions carrying tracks                          |        — |             8 |                    8 |                2 | 2 (unchanged)                                 |
+| Tracks                                               |        — |            21 |                   21 |                4 | 4 (unchanged)                                 |
+| Valid Profession paths                               |       99 |            96 |                   96 |               86 | 86 (unchanged)                                |
+| Direct Profession Skill grants                       |     88\* |           119 |                  101 |              104 | 106                                           |
+| Player-facing browse categories                      |        — |            16 |                   16 |               14 | 14                                            |
+| Civilization languages awaiting a naming ruling      |        — |             — |                    7 |                0 | 0                                             |
+| Declared core routes                                 |        — |             — |                   96 |               90 | 90 across 86 paths, all satisfied (0 blocked) |
+| Median effective distinct base Skills per valid path |        3 |             8 |                    8 |                8 | 8                                             |
+| Quartiles                                            |    1 / 7 |        7 / 10 |               7 / 10 |           7 / 10 | 7 / 9                                         |
+| Narrowest path                                       |        0 |             6 |                    6 |                7 | 5                                             |
+| Broadest path                                        |       17 |            15 |                   15 |               16 | 16                                            |
+| Paths flagged for coherence review (below 7)         |        — |             — |                    — |                0 | 6                                             |
 
 \* The approved figure counts direct Skill and Specialization opportunities together across 84
 families.
@@ -173,8 +173,8 @@ The ruling also settles that a core may name **an existing direct competency rou
 - **P39 Carpenter** — the direct **Carpentry** route is core; F27 remains optional and stays the
   **Millwright's** core.
 - **P65 Scribe and Copyist** — the ruled shape is G11 **plus at least one written-language competency
-  route**. G11 is authored; the second requirement is not, and the dependency on #113 is real. See
-  [the blocked dependency](#flagged-for-separate-follow-up-not-fixed-here) below.
+  route**, and it is now authored in full. See
+  [the Scribe core](#the-scribe-core-and-the-written-language-choice) below.
 
 Two Professions gain **alternative core routes** rather than tracks, as the ruling requires explicitly:
 
@@ -298,7 +298,8 @@ trades. C03 was the core of none of its six users.
 Breadth as a signal rather than a quota; F32 retired for M11 and M12; focused M01/M04 beside broad
 M02/M03/M05 with cross-category pools; Combat Experience out of every instruction group; direct
 grants reduced from 283 to 106; F16 and F22 retired with the Genealogy and Food Preservation routes
-preserved through P67/P76 and C10; invented language names withdrawn and kept out by test; core routes
+preserved through P67/P76 and C10; invented language names withdrawn and kept out by a name-provenance check against the canonical
+language roster; core routes
 introduced as a data annotation; and the machine-readable companion regenerated from the source so
 the prose and the numbers cannot drift.
 
@@ -308,8 +309,13 @@ the prose and the numbers cannot drift.
   and reader prose are untouched. Prior authoring is reused, not rewritten.
 - **No new conceptual layer or entity type.** Every ruling above is expressed with primitives the
   proposal already had.
-- **Scribe and Copyist's written-language core requirement remains blocked on #113.** The core
-  _shape_ is settled; the second requirement is not authored, and no representation for it is invented.
+- **It does not turn written languages into base Skills.** The Scribe core needed one written
+  language, and the temptation was to file the written competencies among the base Skills so the
+  existing core-route shape would swallow them. That would have been a content distortion to fit a
+  data shape. A one-field extension to the core route was the smaller change.
+- **It does not author language or script history.** Only the minimum canonical data — identity,
+  spoken or written type, Civilization association, route and rolling — is authored. Registers,
+  script histories and conventions deliberately wait.
 - **Poisons and Warded-Lock Entry keep their approved absence of a generic occupational route.**
 - **Olog is not corrected**, only flagged for a separate follow-up.
 - **No runtime, UI or Chargen change**, no importer outside this directory, and no entry in
@@ -340,17 +346,39 @@ proposal awaiting review, and nothing in this folder is approved Glantri content
 
 - **Olog** appears modelled from a historical stage later and more advanced than the intended Glantri
   Olog society. Recorded in the language data, deliberately uncorrected.
-- **Scribe and Copyist's written-language core requirement** is blocked on **#113** rather than
-  invented. The 2026-09-21 cores ruling settles the shape — G11 plus at least one written-language
-  competency route — and G11 is authored. The second requirement is not, for two reasons the ruling
-  does not resolve and this proposal must not resolve for it. **Representation:** a core route requires
-  Learning Groups or base Skills, and a written-language competency is neither — it is a
-  `written-tradition` competency, which no path body can carry, and "at least one of any written
-  tradition" is not expressible as a fixed requirement nor as alternative core routes. **Content:** the
-  approved catalogue holds three written traditions against the twelve Civilizations this proposal gives
-  written competencies to, and which tradition a given scribe writes is exactly the contextual
-  written-tradition availability question #113 owns. The core route therefore records `blockedBy` with
-  that limitation stated in full, and the package is still not presented as universal literacy.
+- **Tuu's precise language identity.** The approved gap report asks for a sufficiently precise named
+  language before a player-acquirable Tuu record is counted, because Tuu is a language family rather
+  than one language. The San Forager Bands now have the rollable spoken competency the ruling
+  requires, under the established Glantri name; **no narrower name was invented to close the gap
+  report's question**, so that question stays open.
+- **Script support for the restored written traditions.** Runic Scandian, Royal N'kolian, Old Italic,
+  Linear B, Cuneiform and Imperial Aramaic are bound to the language each writes, which is the minimum
+  the ruling needs. How each compound name decomposes into language, register and support script is
+  the gap report's own open question and is **not** answered here.
+- **Common and Old Common have no established script name.** Each written competency is therefore named
+  for its language alone. No script was invented to fill the slot, and no equivalence or descent
+  between Common and Old Common is asserted in either direction.
+
+## The Scribe core and the written-language choice
+
+**P65 Scribe and Copyist's core is settled and no longer blocked:** G11 Records-office practice **plus
+at least one written-language competency**, chosen freely rather than named.
+
+Expressing that needed one new field, `writtenLanguageChoiceCount`, on the core route. It states how
+many written-language competencies the learner must additionally hold, without saying which. Two
+alternatives were rejected as distortions rather than representations:
+
+- **Filing written languages among the base Skills** so `skillIds` could carry them. That would make a
+  contextual Civilization competency into a base Skill purely to fit an existing shape.
+- **One alternative core route per written tradition.** That would assert the Scribe is a different
+  Profession in each Civilization, which it is not.
+
+The extension is deliberately narrow: one optional number, no new path-body concept, and no
+enumeration. The choice counts as **exactly one requirement** against the two-requirement core
+maximum, because it is one choice the learner makes rather than a list the Profession dictates. G11
+plus the choice is exactly two, so **the minimality rule needed no adjustment** and the core cannot
+quietly grow. The build refuses a choice larger than the number of written competencies authored, so
+an unsatisfiable core fails rather than ships.
 
 ## Verification performed
 

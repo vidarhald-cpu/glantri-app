@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import canonicalContent from "../../data/canonicalContent.json";
 import { fullSkillCatalogueProposal } from "../../skillContentPlatform/fullSkillCatalogueProposal";
 import { targetLearningGroupCatalogue } from "../../skillContentPlatform/targetLearningGroups";
 import { targetProfessionCatalogue } from "../../targetProfessions";
@@ -17,6 +18,9 @@ import {
   COMPETENCY_CONTENT_V2_RETIRED_CATEGORY_ID,
   COMPETENCY_CONTENT_V2_STATUS,
   competencyContentV2CivilizationLanguages,
+  competencyContentV2WrittenLanguageCompetencyIds,
+  v2SpokenCompetencyName,
+  v2WrittenCompetencyName,
   competencyContentV2DirectGrantDecisions,
   competencyContentV2Families,
   competencyContentV2LearningGroups,
@@ -182,6 +186,9 @@ describe("deterministic catalogue checks", () => {
     ]);
     const scribe = competencyContentV2Families.find((family) => family.code === "P65")!;
     expect(scribe.note).toContain("#113");
+    /* P65 is no longer partially blocked: the note records the settlement, not a dependency. */
+    expect(scribe.note).toContain("SETTLED");
+    expect(scribe.note).not.toContain("PARTIALLY BLOCKED");
   });
 
   it("requires a stated route for every opportunity", () => {
@@ -211,29 +218,82 @@ describe("player-facing Skill categories", () => {
 });
 
 describe("Civilization language competencies", () => {
-  it("covers every canonical Civilization with a spoken competency", () => {
+  it("covers every canonical Civilization with a rollable spoken competency", () => {
     expect(competencyContentV2CivilizationLanguages).toHaveLength(16);
-    for (const row of competencyContentV2CivilizationLanguages)
-      expect(row.spokenName.startsWith("Spoken ")).toBe(true);
+    for (const row of competencyContentV2CivilizationLanguages) {
+      expect(v2SpokenCompetencyName(row).startsWith("Spoken ")).toBe(true);
+      expect(row.spokenCompetencyId.startsWith("spoken:")).toBe(true);
+      expect(row.spokenRoute.trim().length).toBeGreaterThan(0);
+    }
   });
 
-  it("proposes a written tradition unless the Civilization is authored as having no writing", () => {
+  it("proposes a written competency unless the Civilization is authored as having no writing", () => {
     const withoutWriting = competencyContentV2CivilizationLanguages.filter(
-      (row) => row.writtenName === null,
+      (row) => row.writtenCompetencyId === null,
     );
     expect(withoutWriting.map((row) => row.civilizationId).sort()).toEqual([
       "san_forager_bands",
       "scythians",
     ]);
+    for (const row of competencyContentV2CivilizationLanguages)
+      if (row.writtenCompetencyId !== null) {
+        expect(v2WrittenCompetencyName(row)!.startsWith("Written ")).toBe(true);
+        expect(row.writtenCompetencyId.startsWith("written:")).toBe(true);
+        expect((row.writtenRoute ?? "").trim().length).toBeGreaterThan(0);
+      }
   });
 
-  it("replaces the real-world analogue names it can settle and flags the rest", () => {
+  /**
+   * The ruling's sharpest constraint. Every language atom must come from the canonical Glantri
+   * language roster, so an invented but plausible-sounding name cannot pass as authored content.
+   */
+  it("uses only names attested in the canonical Glantri language roster", () => {
+    const roster = new Set(canonicalContent.languages.map((language) => language.name));
+    for (const row of competencyContentV2CivilizationLanguages) {
+      expect(roster.has(row.spokenLanguageName)).toBe(true);
+      for (const atom of [row.writtenLanguageName, row.writtenTraditionName])
+        if (atom !== null) expect(roster.has(atom)).toBe(true);
+    }
+  });
+
+  it("agrees with the canonical Civilization records on which language is spoken and written", () => {
+    for (const canonical of canonicalContent.civilizations) {
+      const row = competencyContentV2CivilizationLanguages.find(
+        (candidate) => candidate.civilizationId === canonical.id,
+      )!;
+      expect(row).toBeDefined();
+      expect(row.spokenLanguageName).toBe(canonical.spokenLanguageName);
+      if (canonical.writtenLanguageName === null) {
+        expect(row.writtenCompetencyId).toBeNull();
+      } else {
+        expect([row.writtenLanguageName, row.writtenTraditionName]).toContain(
+          canonical.writtenLanguageName,
+        );
+      }
+    }
+  });
+
+  it("withdraws the invented Lankhmaran and restores the established Phoenician names", () => {
     const lankhmar = competencyContentV2CivilizationLanguages.find(
       (row) => row.civilizationId === "lankhmar",
     )!;
-    expect(lankhmar.replacesAnalogueSpokenName).toBe("Spoken Phoenician");
-    expect(lankhmar.spokenName).toBe("Spoken Lankhmaran");
+    expect(lankhmar.replacesProposedSpokenName).toBe("Spoken Lankhmaran");
+    expect(v2SpokenCompetencyName(lankhmar)).toBe("Spoken Phoenician");
+    expect(lankhmar.spokenCompetencyId).toBe("spoken:phoenician");
+    expect(lankhmar.writtenCompetencyId).toBe("written:phoenician:phoenician");
     expect(lankhmar.requiresProductOwnerNamingRuling).toBe(false);
+  });
+
+  it("restores Royal N'kolian and Runic Scandian, which are established rather than invented", () => {
+    const nkolo = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "nkolo",
+    )!;
+    expect(nkolo.writtenTraditionName).toBe("Royal N'kolian");
+    expect(v2WrittenCompetencyName(nkolo)).toBe("Written N'kolian in Royal N'kolian");
+    const scandia = competencyContentV2CivilizationLanguages.find(
+      (row) => row.civilizationId === "scandia",
+    )!;
+    expect(scandia.writtenTraditionName).toBe("Runic Scandian");
   });
 
   it("carries no invented Glantri language or script name", () => {
@@ -249,25 +309,63 @@ describe("Civilization language competencies", () => {
       "Wedge Script",
       "Chancery Script",
       "Common Hand",
-      "Royal N'kolian",
+      "Lankhmaran",
     ];
     for (const row of competencyContentV2CivilizationLanguages)
       for (const invented of withdrawn) {
-        expect(row.spokenName).not.toContain(invented);
-        expect(row.writtenName ?? "").not.toContain(invented);
+        expect(v2SpokenCompetencyName(row)).not.toContain(invented);
+        expect(v2WrittenCompetencyName(row) ?? "").not.toContain(invented);
       }
   });
 
-  it("gives every Civilization a rollable written competency unless it has no writing", () => {
-    for (const row of competencyContentV2CivilizationLanguages)
-      if (row.writtenName !== null) expect(row.writtenName.startsWith("Written ")).toBe(true);
+  it("keeps one identity per name and one name per identity", () => {
+    const byId = new Map<string, string>();
+    for (const row of competencyContentV2CivilizationLanguages) {
+      const pairs: [string, string][] = [[row.spokenCompetencyId, v2SpokenCompetencyName(row)]];
+      if (row.writtenCompetencyId !== null)
+        pairs.push([row.writtenCompetencyId, v2WrittenCompetencyName(row)!]);
+      for (const [id, name] of pairs) {
+        if (byId.has(id)) expect(byId.get(id)).toBe(name);
+        byId.set(id, name);
+      }
+    }
+    /* 13 spoken (12 approved plus Tuu) and 11 written across the 14 literate Civilizations. */
+    expect([...byId.keys()].filter((id) => id.startsWith("spoken:"))).toHaveLength(13);
+    expect(competencyContentV2WrittenLanguageCompetencyIds).toHaveLength(11);
+  });
+
+  it("reuses approved catalogue identities exactly rather than redefining them", () => {
+    const approved = new Map(
+      fullSkillCatalogueProposal.entries.map((entry) => [entry.id, entry] as const),
+    );
+    for (const row of competencyContentV2CivilizationLanguages) {
+      const spoken = approved.get(row.spokenCompetencyId);
+      if (spoken) {
+        expect(spoken.competencyType).toBe("spoken-language");
+        expect(spoken.name).toBe(v2SpokenCompetencyName(row));
+      }
+      const written =
+        row.writtenCompetencyId === null ? undefined : approved.get(row.writtenCompetencyId);
+      if (written) {
+        expect(written.competencyType).toBe("written-tradition");
+        expect(written.name).toBe(v2WrittenCompetencyName(row));
+      }
+    }
+    /* Exactly the three written traditions the approved catalogue already holds are reused. */
+    expect(
+      competencyContentV2WrittenLanguageCompetencyIds.filter((id) => approved.has(id)).sort(),
+    ).toEqual([
+      "written:mogrebi:sacred-mogrebi",
+      "written:ologian:church-ologian",
+      "written:phoenician:phoenician",
+    ]);
   });
 
   it("flags Olog for later correction without correcting it here", () => {
     const olog = competencyContentV2CivilizationLanguages.find(
       (row) => row.civilizationId === "olog",
     )!;
-    expect(olog.spokenName).toBe("Spoken Ologian");
+    expect(v2SpokenCompetencyName(olog)).toBe("Spoken Ologian");
     expect(olog.note).toContain("FLAGGED FOR LATER CORRECTION");
   });
 });
@@ -454,10 +552,48 @@ describe("core routes and cost invariants", () => {
     }
   });
 
-  it("records the blocked Scribe written-tradition core without inventing it", () => {
-    const blocked = catalogue.coreRoutes.filter((row) => row.blockedBy);
-    expect(blocked.length).toBeGreaterThan(0);
-    for (const row of blocked) expect(row.blockedBy).toContain("#113");
+  it("records no blocked core route, because the last one is settled", () => {
+    expect(catalogue.coreRoutes.filter((row) => row.blockedBy)).toHaveLength(0);
+    expect(catalogue.manifest.coreRoutesBlocked).toBe(0);
+  });
+
+  it("expresses the Scribe core as a written-language choice, not as base Skills", () => {
+    const scribe = catalogue.coreRoutes.filter((row) => row.professionCode === "P65");
+    expect(scribe).toHaveLength(1);
+    expect(scribe[0]!.groupIds).toEqual(["G11"]);
+    expect(scribe[0]!.skillIds).toEqual([]);
+    expect(scribe[0]!.writtenLanguageChoiceCount).toBe(1);
+    expect(scribe[0]!.satisfied).toBe(true);
+    expect(scribe[0]!.blockedBy).toBeUndefined();
+    /* G11 plus the one choice is exactly two requirements — the core maximum, unchanged. */
+    expect(scribe[0]!.groupIds.length + scribe[0]!.skillIds.length + 1).toBe(2);
+    /* No written-language competency was smuggled in as a base Skill to fit the old shape. */
+    const writtenIds = new Set(competencyContentV2WrittenLanguageCompetencyIds);
+    for (const row of catalogue.coreRoutes)
+      for (const skillId of row.skillIds) {
+        expect(writtenIds.has(skillId)).toBe(false);
+        expect(
+          fullSkillCatalogueProposal.entries.find((entry) => entry.id === skillId)!.competencyType,
+        ).toBe("base-skill");
+      }
+  });
+
+  it("keeps the written-language choice satisfiable and reachable", () => {
+    for (const row of catalogue.coreRoutes)
+      if (row.writtenLanguageChoiceCount > 0)
+        expect(competencyContentV2WrittenLanguageCompetencyIds.length).toBeGreaterThanOrEqual(
+          row.writtenLanguageChoiceCount,
+        );
+    /* Every written competency a choice may be satisfied from is owned by a Civilization and has a
+       stated route; none is an orphan identity. */
+    for (const id of competencyContentV2WrittenLanguageCompetencyIds) {
+      const owners = competencyContentV2CivilizationLanguages.filter(
+        (row) => row.writtenCompetencyId === id,
+      );
+      expect(owners.length).toBeGreaterThan(0);
+      for (const owner of owners)
+        expect((owner.writtenRoute ?? "").trim().length).toBeGreaterThan(0);
+    }
   });
 
   it("never charges twice for the same competency on one path", () => {
@@ -657,25 +793,25 @@ describe("Profession cores ruling — 2026-09-21", () => {
     expect(surgeonCores.map((row) => row.groupIds.join("+")).sort()).toEqual(["F29", "G18"]);
   });
 
-  it("records the Scribe core as G11 plus a written-language route that stays blocked on #113", () => {
+  it("settles the Scribe core as G11 plus one freely chosen written language", () => {
     const scribe = catalogue.coreRoutes.filter((row) => row.professionCode === "P65");
     expect(scribe).toHaveLength(1);
     expect(scribe[0]!.groupIds).toEqual(["G11"]);
-    expect(scribe[0]!.blockedBy).toContain("#113");
-    expect(scribe[0]!.blockedBy).toContain("written-language");
-    /* The blocker is real: no path body can carry a written-tradition competency, and the approved
-       catalogue holds fewer written traditions than this proposal gives Civilizations. */
-    const writtenTraditions = fullSkillCatalogueProposal.entries.filter(
+    expect(scribe[0]!.writtenLanguageChoiceCount).toBe(1);
+    expect(scribe[0]!.blockedBy).toBeUndefined();
+    expect(scribe[0]!.label).toContain("written language");
+    /* The content half of the old blocker is discharged too: the proposal now authors more written
+       competencies than the approved catalogue's three, covering every literate Civilization. */
+    const approvedWritten = fullSkillCatalogueProposal.entries.filter(
       (entry) => entry.competencyType === "written-tradition",
     );
-    expect(writtenTraditions.length).toBeLessThan(
-      competencyContentV2CivilizationLanguages.filter((row) => row.writtenName !== null).length,
+    expect(approvedWritten).toHaveLength(3);
+    expect(competencyContentV2WrittenLanguageCompetencyIds.length).toBeGreaterThan(
+      approvedWritten.length,
     );
-    for (const row of catalogue.coreRoutes)
-      for (const skillId of row.skillIds)
-        expect(
-          fullSkillCatalogueProposal.entries.find((entry) => entry.id === skillId)!.competencyType,
-        ).toBe("base-skill");
+    expect(
+      competencyContentV2CivilizationLanguages.filter((row) => row.writtenCompetencyId !== null),
+    ).toHaveLength(14);
   });
 
   it("does not invent a Learning Group to manufacture a unique core", () => {
@@ -791,7 +927,7 @@ describe("second ruling set — the language blocker is removed", () => {
 
   it("authors the absence of writing rather than leaving it blank", () => {
     for (const row of competencyContentV2CivilizationLanguages)
-      if (row.writtenName === null)
+      if (row.writtenCompetencyId === null)
         expect((row.writtenAbsenceReason ?? "").trim().length).toBeGreaterThan(0);
   });
 
@@ -799,8 +935,9 @@ describe("second ruling set — the language blocker is removed", () => {
     const san = competencyContentV2CivilizationLanguages.find(
       (row) => row.civilizationId === "san_forager_bands",
     )!;
-    expect(san.spokenName).toBe("Spoken Tuu");
-    expect(san.writtenName).toBeNull();
+    expect(v2SpokenCompetencyName(san)).toBe("Spoken Tuu");
+    expect(san.spokenCompetencyId).toBe("spoken:tuu");
+    expect(san.writtenCompetencyId).toBeNull();
   });
 
   it("gives the Common and Old Common written traditions rollable competencies now", () => {
@@ -808,7 +945,7 @@ describe("second ruling set — the language blocker is removed", () => {
       const row = competencyContentV2CivilizationLanguages.find(
         (candidate) => candidate.civilizationId === civilizationId,
       )!;
-      expect(row.writtenName).toMatch(/^Written /);
+      expect(v2WrittenCompetencyName(row)).toMatch(/^Written /);
       expect(row.requiresProductOwnerNamingRuling).toBe(false);
     }
   });
