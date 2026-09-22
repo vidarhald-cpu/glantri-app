@@ -14,7 +14,9 @@ authorized or dispatched**\
 **Recorded against:** `dev@c2c0f2a96f86d12686a325d173ef57d12704d781`\
 **Source of authority:**
 [#284 Cross-cutting People / Artifact / GM-authoring product model](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284),
-sections 1 to 11
+sections 1 to 11, plus the Product Owner ruling of 2026-09-22 on the same issue
+recorded in
+[section 11.2](#112-the-session-summary-source-rule--activity-is-the-only-source)
 
 This note records one connected set of settled Product Owner decisions spanning
 Player Play, NPC authoring, Artifact use, AI authoring and GM Campaign material,
@@ -306,6 +308,10 @@ Recording #284 §5.
   same GM review boundary; AI parity in [section 3](#3-ai-parity-principle) and
   the intake invariant in
   [AI-assisted intake](ai-assisted-artifact-intake.md#the-invariant) both apply.
+  Any such summary is additionally bound by the source rule in
+  [section 11.2](#112-the-session-summary-source-rule--activity-is-the-only-source):
+  it may be drafted only from the player-visible Activity projection, so a
+  proposed note can never carry dossier text back out.
 - They **survive changes in revealed identity**. Notes accumulated about _"the
   middle-aged wealthy man"_ remain attached to the same person once he is known
   to be Captain Varro.
@@ -423,6 +429,14 @@ intake creates begins GM-private whatever the context suggested.
 is not settled.** See
 [OPEN-PPL-8](#open-ppl-8--whether-the-review-tiers-are-new-modes-or-configurations).
 
+> **This section governs what AI brings _in_, not what AI generates _from_ the
+> Campaign.** The separate, settled restriction on what a session-summary AI may
+> be given is
+> [section 11.2](#112-the-session-summary-source-rule--activity-is-the-only-source),
+> and it is stated there once rather than repeated here. The two meet at the
+> review boundary: a drafted summary is GM-reviewed and explicitly published,
+> exactly as staged intake creates nothing before the GM confirms.
+
 ---
 
 ## 10. GM Campaign Material
@@ -453,6 +467,8 @@ is **not** the player in-play experience and is not a substitute for it.
 ---
 
 ## 11. Scenario authoring and history
+
+### 11.1 What a Scenario carries
 
 Recording #284 §10.
 
@@ -496,6 +512,150 @@ Three of these are already governed elsewhere and are linked, not re-decided:
 
 **Where the post-play summary lives is not settled.** See
 [OPEN-PPL-11](#open-ppl-11--where-the-post-play-summary-lives).
+
+### 11.2 The session-summary source rule — Activity is the only source
+
+Recording the Product Owner ruling of 2026-09-22 on
+[#284](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284).
+**Settled.** It reopens nothing in
+[section 15](#15-open-decisions--none-chosen) and changes no lane's structure.
+This is the single full statement of the rule; every other section that needs it
+links here.
+
+> **The player-visible Situation Activity stream is the complete player-safe
+> narrative record from which an AI session summary may be produced. A
+> session-summary AI must receive only that player-safe Activity projection, not
+> richer Campaign or game state.**
+
+A session-summary AI **must not receive, and must not be in a position to infer
+from**:
+
+- **GM-only PC/NPC dossiers** — [section 6.1](#61-the-gm-only-dossier);
+- **private GM planning notes** — [section 11.1](#111-what-a-scenario-carries);
+- **private Artifact/Item notes** — `CampaignAsset.gmNotes` and the canonical
+  Item GM-private column added by #271, both recorded in
+  [section 13](#13-existing-model-orientation);
+- **unrevealed NPC identity or facts** —
+  [section 4](#4-person-representation-and-identity);
+- **private chat and messages**;
+- **detailed Skill or Combat calculations** — already excluded from Activity by
+  [PPV1 §9.2](../architecture/player-play-v1.md#92-the-visibility-rule), which
+  keeps them in their canonical entitled views;
+- **GM-only or player-private mechanical records** — including
+  `roleplayState.actionLog` and its `calculationText`, which
+  [PPV1 §9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)
+  records as the detailed-roll home distinct from Activity;
+- **technical or lifecycle bookkeeping suppressed from Situation**;
+- **prepared but unpublished announcements** —
+  [PPV1 §9.3](../architecture/player-play-v1.md#93-gm-announcements-versus-scene-text)
+  and [§14](../architecture/player-play-v1.md#14-deferred-capabilities);
+- **scene / framing text, merely because it exists outside Activity** —
+  [PPV1 §9.3](../architecture/player-play-v1.md#93-gm-announcements-versus-scene-text)
+  and
+  [OPEN-PPV1-1](../architecture/player-play-v1.md#open-ppv1-1--settled-scenario-and-encounter-each-may-carry-replaceable-scene-text).
+
+> **The governing consequence.** **If information should be eligible for the
+> shared session recap, it must first have an appropriate player-visible
+> Activity event or summary.** Eligibility is earned by being published to the
+> table, not by being reachable in the database.
+
+#### This is a privacy constraint, not a UI preference
+
+The rule is satisfied by **what the AI is given**, not by what is filtered out
+afterwards.
+
+> **An implementer cannot satisfy this rule by assembling richer Campaign or
+> game state and then filtering, redacting, truncating or instructing the model
+> at the prompt-assembly layer.** The summary capability must be **handed the
+> player-safe Activity projection and nothing else**, so that the excluded
+> material is not present in the context to be filtered. A prompt that could in
+> principle have carried GM-private text has already failed this rule, whether
+> or not the produced draft happens to contain any.
+
+This is the same standard, and the same reasoning, as
+[section 6.1](#61-the-gm-only-dossier):
+
+- [Product & Presentation Principles §4.5](product-presentation-principles.md#45-respect-perspective-knowledge-ownership-privacy-and-visibility)
+  already states the governing principle — **client-side hiding is not an
+  adequate privacy boundary**, and protected facts are excluded or sanitized
+  **before** reaching an unauthorized consumer. A summary AI is such a consumer,
+  and its output is destined for a player-visible surface.
+- [Authority and Information Projection §Projection rules](../architecture/information-authority-and-projection.md#projection-rules)
+  remains the server-side authority for what any consumer receives.
+- **The #271 QA failure turned on exactly this class of defect.** GM-private
+  text reached a player-visible surface while every gate stayed green, because
+  the private value travelled inside a value object that projections carried.
+  The accepted repair kept the private column **out of** the object that
+  travels, so it _could not_ travel.
+  [#277](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/277) records
+  that the weaker "carry it and redact later" model was **explicitly rejected by
+  the Product Owner.** Prompt-layer filtering is that rejected model, applied to
+  a context window instead of a payload.
+
+Any summary-drafting capability therefore inherits the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) on privacy grounds, and
+its proof is [section 17](#17-verification-expectations-for-lanes-authorized-from-here)
+item 2.
+
+#### The Scenario-summary workflow
+
+1. **Generate a private draft solely from Scenario Activity.** The draft is
+   GM-private on creation, consistent with the intake
+   [visibility rule](ai-assisted-artifact-intake.md#visibility).
+2. **The GM reviews and edits it.** Draft, not publication — the GM review
+   boundary of [section 3](#3-ai-parity-principle) and the intake
+   [invariant](ai-assisted-artifact-intake.md#the-invariant) both apply, and the
+   parity obligation means the GM must be able to author the same summary
+   without AI.
+3. **The GM explicitly publishes it** as the Scenario's player-visible
+   summary/history. Publication is a **separate human act**; no drafting tier
+   may make a summary player-visible on its own.
+4. **The published summary is straightforward to copy manually**, so the GM can
+   paste it into email or other external communication without an export
+   feature.
+
+> **This workflow decides no storage.** Whether the published summary is a
+> Scenario field, a generated projection, a `CampaignNote` or a stored
+> Activity-derived text remains
+> [OPEN-PPL-11](#open-ppl-11--where-the-post-play-summary-lives), whose options
+> are unchanged and **none chosen**. Step 3's publication act constrains the
+> **visibility transition**, not the record that carries it.
+
+#### The four-way distinction to preserve
+
+| Artifact             | What it is                                             |
+| -------------------- | ------------------------------------------------------ |
+| **GM plan**          | private preparation — _what may happen_                |
+| **Scene text**       | replaceable current framing                            |
+| **Activity**         | player-safe record of _what did happen_                |
+| **Scenario summary** | GM-approved narrative derived **solely** from Activity |
+
+These four are not degrees of the same thing. Collapsing any pair — drafting
+from the plan, recapping the scene text, or editing the plan into the history —
+breaks the rule. **Plan and actual summary remain distinct** is #284 §10's own
+statement of the same boundary, recorded in
+[section 11.1](#111-what-a-scenario-carries).
+
+#### What this rule builds on, and does not replace
+
+[PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules)
+remains the authority for what Activity contains and what it excludes, and
+[§9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)
+remains the authority for the model: `ScenarioEventLog` projected by
+`projectScenarioObjectiveHistory` **is** the player-safe shared Activity, it
+already performs the player filtering, and **no new player log is created**.
+This rule adds only that this existing projection is the **exclusive** source
+for a session summary. It narrows nothing in PPV1 §9 and adds no event.
+
+One consequence follows directly and is recorded here as a consequence, not as a
+new decision: because **there is no GM announcement event type today** —
+[PPV1 §9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)
+— narration the GM currently delivers as scene text is **not recap-eligible**
+until an announcement becomes a durable Activity event. PPV1 §9.4 already
+records that adding that event type is a persisted-semantics change on a
+privacy-projected surface carrying the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor), and this note neither
+schedules nor authorizes it.
 
 ---
 
@@ -571,7 +731,7 @@ Nothing in either contract is narrowed, contradicted or moved by this note.
 | Player-created collaboration Artifacts are a later bounded capability                        | [#268](../architecture/scenario-play-workspace.md#later-bounded-capability--player-created-collaboration-artifacts)                                                                                                                  | [lane C](#lane-c--artifact-association-pc-self-service-and-the-generic-visual-library)                                                                           |
 | The Inspector exists, is generic, and dominates the Situation screen                         | [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector)                                                                                                                                                                          | [§5](#5-person-inspector)                                                                                                                                        |
 | Selector rails are projections; the Artifacts rail is not narrowed in the first pass         | [PPV1 §8.1](../architecture/player-play-v1.md#81-left-selectors), [OPEN-PPV1-2](../architecture/player-play-v1.md#open-ppv1-2--settled-the-first-composition-pass-preserves-the-existing-artifact-visibility-projection)             | [§2](#2-people-model), [lane B](#lane-b--person-representation-identity-reveal-inspector-and-notesdossier)                                                       |
-| Activity visibility, one event model, no second player log                                   | [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules), [§9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)                                                              | [§11](#11-scenario-authoring-and-history)                                                                                                                        |
+| Activity visibility, one event model, no second player log                                   | [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules), [§9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)                                                              | [§11.1](#111-what-a-scenario-carries), [§11.2](#112-the-session-summary-source-rule--activity-is-the-only-source)                                                |
 | Scene text versus GM announcement                                                            | [PPV1 §9.3](../architecture/player-play-v1.md#93-gm-announcements-versus-scene-text), [OPEN-PPV1-1](../architecture/player-play-v1.md#open-ppv1-1--settled-scenario-and-encounter-each-may-carry-replaceable-scene-text)             | [§11](#11-scenario-authoring-and-history)                                                                                                                        |
 | Click through to the canonical place where full information lives                            | [PPV1 §13](../architecture/player-play-v1.md#13-canonical-detail-and-click-through-rule)                                                                                                                                             | [§5](#5-person-inspector)                                                                                                                                        |
 | Prepared announcements are deferred and bounded                                              | [PPV1 §14](../architecture/player-play-v1.md#14-deferred-capabilities)                                                                                                                                                               | [§11](#11-scenario-authoring-and-history)                                                                                                                        |
@@ -920,15 +1080,15 @@ library).
 **Covers:** #284 §9 (GM Campaign Material), §10 (Scenario authoring and
 history), §11 (Encounter).
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Dependencies**                | **[#239](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/239) is the existing index lane** — extend it, do not open a parallel one. #227 is its parent and #236 is adjacent. **Lane A** for people to index, **lane C** for representations to preview. [OPEN-PPL-11](#open-ppl-11--where-the-post-play-summary-lives) before the history half is Ready; the index half is not gated on it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **Extends, does not duplicate** | [Campaign Management V2 §6.1 Notes](../architecture/campaign-management-v2.md#61-notes) and [§6.2 index behavior and canonical homes](../architecture/campaign-management-v2.md#62-index-behavior-and-canonical-homes); [§7 creation and retrieval are separate user jobs](../architecture/campaign-management-v2.md#7-creation-and-retrieval-are-separate-user-jobs); [Campaign, Scenario and Encounter workflows](campaign-scenario-encounter-workflows.md#scenario-workspace); **the existing `CampaignNote` / `CampaignNoteAssociation` substrate**, which already indexes associations in both directions across campaign / scenario / encounter / character / npc / artifact / tag. [PPV1 §16](../architecture/player-play-v1.md#16-relationship-to-the-later-gm-surface) bounds how far a GM surface may go.                                                                        |
-| **Data hotspots**               | Prisma schema and migrations (reserved): `Scenario` (which today has one `description` and no GM-private, player-framing or summary fields), `CampaignNote`, `CampaignNoteAssociation`. `packages/database/src/services/campaignManagementService.ts`; `packages/domain/src/campaign/campaignManagement.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **API/UI hotspots**             | `apps/api/src/routes/scenarios/scenarioRoutes.ts`, `campaignManagementRoutes.ts`. `apps/web/app/(app)/campaigns/[campaignId]/CampaignNoteEditor.tsx`, `CampaignNoteAssociations.tsx`, `CampaignDetailPageContent.tsx`, `CampaignHomeOverview.tsx`, `scenarios/[scenarioId]/ScenarioDetailPageContent.tsx`, and `CampaignWorkspaceShell.tsx` (reserved).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| **Settled**                     | **No general-purpose knowledge-management system**; a lightweight unified material index across People/NPCs, Items, Artifacts, Maps and Notes; organization primarily through semantic associations, navigable in both directions where useful; Scenario is the principal preparation and history container; **plan and actual summary remain distinct**; AI may later _draft_ the summary for GM review; **Encounter stays lightweight** and must not become a second rich authoring document; the GM Encounter workspace is retained as transitional tooling and receives no new player-facing capability ([PO-SPW-3](../architecture/scenario-play-workspace.md#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling)); scene text and prepared announcements are already settled/deferred by PPV1 and are **not** re-scoped here. |
-| **Still open**                  | [OPEN-PPL-11](#open-ppl-11--where-the-post-play-summary-lives). Splitting Scenario's single `description` into GM-private planning text and player framing also inherits [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives)'s structural-exclusion standard even though it is a different field.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) once GM-private Scenario planning text exists — same class as the #271 defect. The index half, if it only routes to canonical homes with existing permissions, is ordinary independent QA with perspective-sensitive checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dependencies**                | **[#239](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/239) is the existing index lane** — extend it, do not open a parallel one. #227 is its parent and #236 is adjacent. **Lane A** for people to index, **lane C** for representations to preview. [OPEN-PPL-11](#open-ppl-11--where-the-post-play-summary-lives) before the history half is Ready; the index half is not gated on it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Extends, does not duplicate** | [Campaign Management V2 §6.1 Notes](../architecture/campaign-management-v2.md#61-notes) and [§6.2 index behavior and canonical homes](../architecture/campaign-management-v2.md#62-index-behavior-and-canonical-homes); [§7 creation and retrieval are separate user jobs](../architecture/campaign-management-v2.md#7-creation-and-retrieval-are-separate-user-jobs); [Campaign, Scenario and Encounter workflows](campaign-scenario-encounter-workflows.md#scenario-workspace); **the existing `CampaignNote` / `CampaignNoteAssociation` substrate**, which already indexes associations in both directions across campaign / scenario / encounter / character / npc / artifact / tag. [PPV1 §16](../architecture/player-play-v1.md#16-relationship-to-the-later-gm-surface) bounds how far a GM surface may go.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Data hotspots**               | Prisma schema and migrations (reserved): `Scenario` (which today has one `description` and no GM-private, player-framing or summary fields), `CampaignNote`, `CampaignNoteAssociation`. `packages/database/src/services/campaignManagementService.ts`; `packages/domain/src/campaign/campaignManagement.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **API/UI hotspots**             | `apps/api/src/routes/scenarios/scenarioRoutes.ts`, `campaignManagementRoutes.ts`. `apps/web/app/(app)/campaigns/[campaignId]/CampaignNoteEditor.tsx`, `CampaignNoteAssociations.tsx`, `CampaignDetailPageContent.tsx`, `CampaignHomeOverview.tsx`, `scenarios/[scenarioId]/ScenarioDetailPageContent.tsx`, and `CampaignWorkspaceShell.tsx` (reserved).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **Settled**                     | **No general-purpose knowledge-management system**; a lightweight unified material index across People/NPCs, Items, Artifacts, Maps and Notes; organization primarily through semantic associations, navigable in both directions where useful; Scenario is the principal preparation and history container; **plan and actual summary remain distinct**; **an AI session summary may be produced only from the player-visible Activity projection, which is the complete player-safe narrative record** — the summary capability is _given_ that projection and nothing else, never richer Campaign or game state filtered afterwards ([section 11.2](#112-the-session-summary-source-rule--activity-is-the-only-source)); consequently **information is recap-eligible only once it has an appropriate player-visible Activity event or summary**, so GM planning text, unrevealed facts, private notes and chat, detailed mechanical calculations, suppressed bookkeeping, unpublished prepared announcements and **scene/framing text** are all out of source scope; AI may later _draft_ the summary, which the GM reviews and edits and then **explicitly publishes** as the Scenario's player-visible summary/history, the published text being **straightforward to copy manually** for email or other external communication; the four-way **GM plan / scene text / Activity / Scenario summary** distinction is preserved; **Encounter stays lightweight** and must not become a second rich authoring document; the GM Encounter workspace is retained as transitional tooling and receives no new player-facing capability ([PO-SPW-3](../architecture/scenario-play-workspace.md#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling)); scene text and prepared announcements are already settled/deferred by PPV1 and are **not** re-scoped here. |
+| **Still open**                  | [OPEN-PPL-11](#open-ppl-11--where-the-post-play-summary-lives) — **unchanged and still unchosen**; the draft/review/publish workflow in [section 11.2](#112-the-session-summary-source-rule--activity-is-the-only-source) constrains the visibility transition, **not** the record that carries the summary, so this lane still stops and returns to the Product Owner on storage. Splitting Scenario's single `description` into GM-private planning text and player framing also inherits [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives)'s structural-exclusion standard even though it is a different field.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) once GM-private Scenario planning text exists — same class as the #271 defect — and equally for any AI summary-drafting capability, because the source restriction is a privacy projection and its proof is [section 17](#17-verification-expectations-for-lanes-authorized-from-here) item 2. The index half, if it only routes to canonical homes with existing permissions, is ordinary independent QA with perspective-sensitive checks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### 16.6 Lane dependency summary
 
@@ -986,34 +1146,44 @@ implementation here.**
    context assembled for AI. Prove it against the network payload, not the UI,
    and prove it against a record whose private text was written by a path that
    bypasses the normal mapper — the exact attack that found the #271 defect.
-2. **Identity revelation reveals only what was revealed.** Before revelation, a
+2. **A session-summary AI was given only Activity.** Prove the restriction in
+   [section 11.2](#112-the-session-summary-source-rule--activity-is-the-only-source)
+   at the point the context is **assembled**, not at the point the draft is
+   read: capture the complete input handed to the model and show it contains
+   nothing but the player-safe Activity projection. A test that only inspects
+   the produced draft does not discharge this item. Prove additionally that a
+   Scenario carrying GM planning text, an unrevealed NPC, an unpublished
+   prepared announcement and scene text yields an input identical to the same
+   Scenario without them, and that the drafted summary reaches no player before
+   an explicit GM publication act.
+3. **Identity revelation reveals only what was revealed.** Before revelation, a
    player receives neither the canonical name, the specific portrait, nor the
    detailed description — again in payload. After revelation, prior notes and
    history are intact and still attached to the same person.
-3. **Notes survive identification.** Prove the round trip: accumulate notes
+4. **Notes survive identification.** Prove the round trip: accumulate notes
    against a generic presentation, reveal the identity, and show the notes are
    the same records.
-4. **Disassociation destroys nothing.** Removing a representation leaves the
+5. **Disassociation destroys nothing.** Removing a representation leaves the
    Artifact, its revisions and its provenance intact and re-attachable.
    [#268 proofs 11 to 14](../architecture/scenario-play-workspace.md#14-verification-expectations-for-authorized-slices)
    apply unchanged to person representations.
-5. **Parity is demonstrated, not asserted.** For every canonical field a lane
+6. **Parity is demonstrated, not asserted.** For every canonical field a lane
    lets AI write, show the ordinary in-app path that writes the same field, and
    show that AI reaches no canonical semantics the human path cannot.
-6. **No tier changes meaning.** A batch or bulk tier produces objects
+7. **No tier changes meaning.** A batch or bulk tier produces objects
    indistinguishable, in canonical state, from the same objects created through
    detailed review. Prove it against persisted state.
-7. **Intake still creates nothing before confirmation.** The
+8. **Intake still creates nothing before confirmation.** The
    [invariant](ai-assisted-artifact-intake.md#the-invariant) holds at every
    tier: abandoning a staged proposal leaves no partial object, no orphan
    Artifact and no retained bytes.
-8. **Encounter stayed lightweight.** No lane added a rich authoring document to
+9. **Encounter stayed lightweight.** No lane added a rich authoring document to
    Encounter, and no new player-facing play capability entered the retained GM
    Encounter workspace.
-9. **Vocabulary separation holds.** Identity revelation uses Reveal vocabulary;
-   `share`, `place` and `placement` remain Blackboard vocabulary and name no
-   visibility operation, per
-   [#268 §4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations).
-10. **Nothing settled elsewhere moved.** No lane narrowed or contradicted a
+10. **Vocabulary separation holds.** Identity revelation uses Reveal vocabulary;
+    `share`, `place` and `placement` remain Blackboard vocabulary and name no
+    visibility operation, per
+    [#268 §4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations).
+11. **Nothing settled elsewhere moved.** No lane narrowed or contradicted a
     #268 or Player Play V1 decision; where one appears to need to, it stops and
     returns to the Product Owner.
