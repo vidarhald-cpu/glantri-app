@@ -29,14 +29,14 @@ Both sides of the comparison are measured by the same code path, so the before/a
 | Measure              | Approved catalogue | Proposal (nominal) | Proposal (worst case) |
 | -------------------- | -----------------: | -----------------: | --------------------: |
 | Valid paths          |                 99 |                 86 |                    86 |
-| Minimum              |                  0 |                  7 |                     5 |
+| Minimum              |                  0 |                  5 |                     5 |
 | Lower quartile       |                  1 |                  7 |                     7 |
 | Median               |                  3 |                  8 |                     8 |
-| Upper quartile       |                  7 |                 10 |                     9 |
+| Upper quartile       |                  7 |                  9 |                     9 |
 | Maximum              |                 17 |                 16 |                    14 |
-| Mean                 |               4.39 |               8.84 |                  8.28 |
-| Paths at or above 10 |                 10 |                 25 |                    22 |
-| Paths below 10       |                 89 |                 61 |                    64 |
+| Mean                 |               4.39 |               8.59 |                  8.16 |
+| Paths at or above 10 |                 10 |                 22 |                    19 |
+| Paths below 10       |                 89 |                 64 |                    67 |
 
 The worst-case column assumes every single slot selection duplicates a Skill the path already teaches.
 That never happens by design — no slot offers a Skill its own group already fixes — but it bounds the figure honestly.
@@ -61,20 +61,39 @@ That never happens by design — no slot offers a Skill its own group already fi
 | Approved  |                             13 |           1 |
 | Approved  |                             14 |           1 |
 | Approved  |                             17 |           1 |
-| Proposal  |                              7 |          27 |
-| Proposal  |                              8 |          21 |
-| Proposal  |                              9 |          13 |
-| Proposal  |                             10 |          11 |
-| Proposal  |                             11 |           6 |
+| Proposal  |                              5 |           2 |
+| Proposal  |                              6 |           4 |
+| Proposal  |                              7 |          28 |
+| Proposal  |                              8 |          13 |
+| Proposal  |                              9 |          17 |
+| Proposal  |                             10 |          10 |
+| Proposal  |                             11 |           5 |
 | Proposal  |                             12 |           3 |
-| Proposal  |                             13 |           1 |
 | Proposal  |                             14 |           1 |
 | Proposal  |                             15 |           1 |
 | Proposal  |                             16 |           2 |
 
 ## Paths flagged for coherence review (below 7)
 
-None. Every valid path is at or above the coherence-review floor of seven.
+A flag here is a prompt to look at the content, never a defect and never a licence to pad. The
+2026-09-21 Learning-Group membership ruling deliberately narrowed five groups and retired one, and it
+did so knowing breadth would fall: coherent training is authored first and breadth is read afterwards.
+The paths below are the ones that fell under the coherence floor as a result, and each is left as the
+ruling leaves it rather than topped up. Three are scholarly paths that lost Mathematics with K01 —
+Mathematics was never part of what those occupations study, and the numerate scholarly Professions keep
+it through K21 and K03. Three are construction paths that lost C03 — the building designer and the
+shipbuilder reach every competence their occupation genuinely teaches, and the ruling forbids charging
+either a craft apprenticeship for coordinating trades it does not practise. **Every one of these paths
+still satisfies its defining core route.**
+
+| Profession | Path                      | Effective breadth |
+| ---------- | ------------------------- | ----------------: |
+| P39        | Carpenter                 |                 6 |
+| P40        | Shipbuilder               |                 5 |
+| P49        | Building Designer         |                 5 |
+| P64        | Teacher                   |                 6 |
+| P65        | Scribe and Copyist        |                 6 |
+| P67        | Historian and Genealogist |                 6 |
 
 ## Group-size distribution, before and after
 
@@ -84,15 +103,15 @@ measured as fixed members plus slot selections.
 | Effective size | Approved groups | Proposed groups |
 | -------------: | --------------: | --------------: |
 |              1 |               4 |               0 |
-|              2 |              36 |              36 |
-|              3 |              10 |              45 |
+|              2 |              36 |              40 |
+|              3 |              10 |              40 |
 |              4 |               5 |              12 |
 |              5 |               1 |               3 |
 |              6 |               1 |               0 |
 |              7 |               2 |               0 |
 
-Approved: 59 groups. Proposal: 96 groups — 57 in the 3-4 preferred centre, 36 at two, 0 at one, 3 at five or more. Largest fixed purchase burden of any one group: 4.
+Approved: 59 groups. Proposal: 95 groups — 52 in the 3-4 preferred centre, 40 at two, 0 at one, 3 at five or more. Largest fixed purchase burden of any one group: 4.
 
 ## Direct-grant review
 
-The first draft carried 283 direct Profession Skill grants; 104 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
+The first draft carried 283 direct Profession Skill grants; 106 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
