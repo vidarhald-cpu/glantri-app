@@ -477,10 +477,11 @@ describe("Perform Task command authorization (M3)", () => {
       authorizeCombatProgressionTask({
         actor: { kind: "gm" },
         commandType: "resolve_combat_task",
+        phase: "phase1",
         projection,
         taskId: projected.id,
       }),
-    ).toMatchObject({ ok: false });
+    ).toMatchObject({ code: "task_not_found", ok: false });
   });
 
   it("refuses a lifecycle command outside the Phase 1 resolution boundary", () => {
@@ -494,6 +495,7 @@ describe("Perform Task command authorization (M3)", () => {
       authorizeCombatProgressionTask({
         actor: { kind: "gm" },
         commandType: "review_combat_task",
+        phase: "phase1",
         projection: buildCombatProgressionProjection(declarationState),
       }),
     ).toMatchObject({ code: "boundary_closed", ok: false });
