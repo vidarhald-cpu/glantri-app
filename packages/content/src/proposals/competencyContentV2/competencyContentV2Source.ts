@@ -61,6 +61,30 @@ export interface V2RemovedGroup {
   replacedBy: readonly string[];
 }
 
+/**
+ * A group this proposal itself had authored and a later ruling retired.
+ *
+ * `V2RemovedGroup` records approved 59-catalogue groups the proposal removes. A group the proposal
+ * introduced and then retired is a different fact and needs its own record, because the reader has to
+ * be able to see what happened to every Profession that had a route to it. The list is the same style
+ * of accounting as the removed-group table, one line per former user.
+ */
+export interface V2RetiredProposedGroup {
+  id: string;
+  name: string;
+  /** Former membership, so the record stands without the retired definition. */
+  formerMembership: string;
+  reason: string;
+  /** Every Profession that held a route to the retired group, and what now carries that route. */
+  rehousing: readonly {
+    professionCode: string;
+    /** The route label the Profession used to reach the retired group. */
+    formerRoute: string;
+    /** What the Profession does instead, stated in full. */
+    disposition: string;
+  }[];
+}
+
 export interface V2Route {
   /** Proposed Learning Group id. */
   groupId: string;
@@ -507,10 +531,13 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     name: "Arms instruction practice",
     shortDescription: "Teaching others to fight, and keeping the weapons the school uses.",
     disposition: "new",
-    fixedSkillIds: ["skill:teaching", "weapon_maintenance", "skill:athletics"],
+    fixedSkillIds: ["skill:teaching", "weapon_maintenance"],
     note:
-      "Collects what had been the Weapon Instructor's three direct Skill grants into the coherent taught " +
-      "practice they always were. It contains no Combat Experience: instructing is not exposure.",
+      "Collects what had been the Weapon Instructor's direct Skill grants into the coherent taught practice " +
+      "they always were. It contains no Combat Experience: instructing is not exposure. Membership settled " +
+      "by the 2026-09-21 Learning-Group membership ruling: Teaching and Weapon Maintenance only. Athletics " +
+      "is removed, because conditioning is not part of teaching arms; it remains available through F04 " +
+      "Running and athletic field practice, the physical-training route that genuinely teaches it.",
   },
   {
     id: "F33",
@@ -645,25 +672,6 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
       "deterministic check, so it cannot drift.",
   },
   {
-    id: "C03",
-    name: "Construction site practice",
-    shortDescription:
-      "Setting out and running a building site with the trades it actually employs.",
-    disposition: "new",
-    fixedSkillIds: ["surveying"],
-    selectionSlots: [
-      {
-        id: "construction-specialties",
-        label: "Choose two taught construction trades",
-        chooseCount: 2,
-        chooseCountStatus: "approved",
-        candidateSkillIds: ["skill:masonry", "carpentry", "skill:smithing", "mechanics"],
-        required: true,
-      },
-    ],
-    note: "Restores the historical Construction Specialty choose-two slot.",
-  },
-  {
     id: "F02",
     name: "Fibre-to-cloth workshop practice",
     shortDescription: "Turning raw fibre into finished cloth.",
@@ -715,16 +723,26 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
   {
     id: "C06",
     name: "Stone workshop and quarry practice",
-    shortDescription: "Winning stone and working it to a finished face.",
+    shortDescription: "Working stone from rough block to finished face.",
     disposition: "new",
-    fixedSkillIds: ["skill:masonry", "skill:mining", "skill:sculpture"],
+    fixedSkillIds: ["skill:masonry", "skill:sculpture"],
+    note:
+      "Membership settled by the 2026-09-21 Learning-Group membership ruling: Masonry and Sculpture only. " +
+      "Mining is removed, because extraction is a different practice from working the stone; it belongs in " +
+      "C07 Mine and quarry apprenticeship, which stays available to the Mason where the occupation " +
+      "genuinely wins its own stone.",
   },
   {
     id: "C07",
     name: "Mine and quarry apprenticeship",
     shortDescription: "Working an extraction face and getting in and out of it.",
     disposition: "new",
-    fixedSkillIds: ["skill:mining", "climb", "skill:survival"],
+    fixedSkillIds: ["skill:mining", "climb"],
+    note:
+      "Membership settled by the 2026-09-21 Learning-Group membership ruling: Mining and Climbing only. " +
+      "Survival is removed, because living away from settlement is not taught at the face; remote-work " +
+      "wilderness competence comes from G04 Field travel and camp practice, which the remote-worked mine " +
+      "reaches as an ordinary route.",
   },
   {
     id: "F24",
@@ -958,7 +976,13 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     name: "Scholarly study practice",
     shortDescription: "Finding, holding and checking what is already known.",
     disposition: "new",
-    fixedSkillIds: ["skill:research", "skill:mnemonics", "mathematics"],
+    fixedSkillIds: ["skill:research", "skill:mnemonics"],
+    note:
+      "Membership settled by the 2026-09-21 Learning-Group membership ruling: Research and Mnemonics only. " +
+      "Mathematics is removed, because a scholar's study practice is finding, holding and checking what is " +
+      "already known, and reckoning is a separate competence that a numerate scholarly route teaches in its " +
+      "own right. Numerate routes use K21 Applied calculation practice or K03 Celestial observation " +
+      "practice, which are the cores of the two Professions that genuinely need it.",
   },
   {
     id: "K02",
@@ -1166,6 +1190,78 @@ export const competencyContentV2RemovedGroups: readonly V2RemovedGroup[] = [
       "elsewhere, so it was a Specialization-access wrapper rather than a taught practice. Genealogy " +
       "becomes a direct Specialization route, and its immediate parent History is supplied by K10.",
     replacedBy: [],
+  },
+];
+
+/**
+ * Groups this proposal authored and a later ruling retired. C03 is the only one so far.
+ */
+export const competencyContentV2RetiredProposedGroups: readonly V2RetiredProposedGroup[] = [
+  {
+    id: "C03",
+    name: "Construction site practice",
+    formerMembership:
+      "Surveying, plus a choose-two slot over Masonry, Carpentry, Smithing and Mechanics.",
+    reason:
+      "Retired by the 2026-09-21 Learning-Group membership ruling. Its only fixed base Skill was Surveying, " +
+      "and the choice slot charged a second and third craft apprenticeship for what is really site " +
+      "coordination. A one-Skill group is deliberately not preserved in its place: where setting-out is " +
+      "genuinely learned through the occupation, Surveying comes from an existing group or a direct " +
+      "Profession route, and the existing craft groups continue to supply Masonry, Carpentry, Smithing and " +
+      "Mechanics without charging two apprenticeships for coordinating trades one does not practise.",
+    rehousing: [
+      {
+        professionCode: "P28",
+        formerRoute: "Running the trades on the works",
+        disposition:
+          "No replacement route needed. The siege engineer already reaches Surveying through F28 Building " +
+          "design and site surveying, and the timber and mechanism trades through F27 Timber millwright " +
+          "apprenticeship. C03 added only a second craft apprenticeship for directing works.",
+      },
+      {
+        professionCode: "P39",
+        formerRoute: "Working on building sites",
+        disposition:
+          "Surveying becomes a direct Profession route: the site carpenter is genuinely taught to set the " +
+          "work out on its ground by the carpenter he is set to. Carpentry is his core direct route and is " +
+          "also taught by F27; the workshop trades stay with C01 General artisan apprenticeship, which he " +
+          "already has.",
+      },
+      {
+        professionCode: "P40",
+        formerRoute: "Setting out and running the yard",
+        disposition:
+          "No replacement route. Laying off a hull in the mould loft is not the ground measurement " +
+          "Surveying describes — the Skill is explicit that ordinary route finding and non-systematic " +
+          "measurement do not provide it — so no Surveying route is invented for the yard. The timber " +
+          "trades remain with F03 Timber vessel construction and F27.",
+      },
+      {
+        professionCode: "P46",
+        formerRoute: "Running the trades on site",
+        disposition:
+          "Surveying is retained through F28, which the mason already has. C07 Mine and quarry " +
+          "apprenticeship is added as an ordinary route, which the same ruling permits the Mason " +
+          "explicitly, so the mason who wins his own stone still reaches Mining after it left C06.",
+      },
+      {
+        professionCode: "P48",
+        formerRoute: "Installing on site",
+        disposition:
+          "Surveying becomes a direct Profession route: levelling and setting out a mill, its wheelpit and " +
+          "its race is ground measurement and is genuinely taught on installation. C01 General artisan " +
+          "apprenticeship is added for the millwright's own forge work — one existing craft apprenticeship " +
+          "with a single chosen craft, not the two C03 charged.",
+      },
+      {
+        professionCode: "P49",
+        formerRoute: "Running the trades on site",
+        disposition:
+          "No replacement route. The building designer's core F28 already teaches Architecture and " +
+          "Surveying, and F01 Field surveying and map production remains available. Directing the trades " +
+          "is not a craft apprenticeship, and the ruling forbids charging one for it.",
+      },
+    ],
   },
 ];
 
@@ -1791,7 +1887,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "M08", route: "Ordinary siege-works apprenticeship" },
       { groupId: "F28", route: "Design and setting out" },
       { groupId: "F27", route: "Timber mechanism construction" },
-      { groupId: "C03", route: "Running the trades on the works" },
       { groupId: "M06", route: "Repeated service with a besieging force" },
     ],
     directRoute: "Taught directly on the works",
@@ -2022,11 +2117,11 @@ export const competencyContentV2Families: readonly V2Family[] = [
     ],
     groups: [
       { groupId: "F27", route: "Ordinary timber apprenticeship" },
-      { groupId: "C03", route: "Working on building sites" },
       { groupId: "C01", route: "Workshop apprenticeship" },
     ],
-    directRoute: "Taught directly at the bench by the carpenter one is set to",
-    skillIds: ["carpentry"],
+    directRoute:
+      "Taught directly at the bench by the carpenter one is set to, and set out on site with him",
+    skillIds: ["carpentry", "surveying"],
     note:
       "Core settled by the 2026-09-21 Profession-cores ruling: the carpenter is defined by working timber " +
       "itself, not by the millwright's mechanism curriculum. F27 remains an ordinary optional route for a " +
@@ -2046,7 +2141,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
     groups: [
       { groupId: "F03", route: "Ordinary yard apprenticeship" },
       { groupId: "F27", route: "Timber mechanism work in the yard" },
-      { groupId: "C03", route: "Setting out and running the yard" },
     ],
     directRoute: "Taught directly in the yard",
     skillIds: ["ropework", "skill:appraisal"],
@@ -2156,8 +2250,8 @@ export const competencyContentV2Families: readonly V2Family[] = [
     ],
     groups: [
       { groupId: "C06", route: "Ordinary stone apprenticeship" },
-      { groupId: "C03", route: "Running the trades on site" },
       { groupId: "F28", route: "Setting out a building" },
+      { groupId: "C07", route: "Winning the stone one works" },
     ],
     directRoute: "Taught directly on the site and at the banker",
     skillIds: ["skill:appraisal"],
@@ -2176,6 +2270,7 @@ export const competencyContentV2Families: readonly V2Family[] = [
     groups: [
       { groupId: "C07", route: "Ordinary extraction apprenticeship" },
       { groupId: "F24", route: "Feeding the furnace" },
+      { groupId: "G04", route: "Working a mine far from settlement" },
     ],
     directRoute: "Taught directly at the face",
     skillIds: ["ropework", "skill:appraisal"],
@@ -2193,10 +2288,10 @@ export const competencyContentV2Families: readonly V2Family[] = [
     ],
     groups: [
       { groupId: "F27", route: "Ordinary millwright apprenticeship" },
-      { groupId: "C03", route: "Installing on site" },
+      { groupId: "C01", route: "Workshop apprenticeship in the trade one also works" },
     ],
     directRoute: "Taught directly at the mill and on installation",
-    skillIds: ["mathematics", "ropework"],
+    skillIds: ["mathematics", "ropework", "surveying"],
   },
   {
     code: "P49",
@@ -2211,7 +2306,6 @@ export const competencyContentV2Families: readonly V2Family[] = [
     ],
     groups: [
       { groupId: "F28", route: "Ordinary design apprenticeship" },
-      { groupId: "C03", route: "Running the trades on site" },
       { groupId: "F01", route: "Measuring and drawing the site oneself" },
     ],
     directRoute: "Taught directly in the design office and on site",
@@ -3677,7 +3771,21 @@ export const competencyContentV2DirectGrantDecisions: readonly V2DirectGrantDeci
     retainedIn: ["P78", "P84"],
     rationale:
       "R6/R7. Marching is already what G04 and M06 describe. Stage movement and the diver's breath work are " +
-      "genuinely taught; the instructor's salle conditioning moved into M10 with the rest of that cluster.",
+      "genuinely taught. The instructor's salle conditioning is not restored as a direct grant: the " +
+      "2026-09-21 membership ruling removed Athletics from M10 as well, and it remains available through " +
+      "F04, the physical-training route that genuinely teaches it.",
+  },
+  {
+    skillId: "surveying",
+    removedFrom: [],
+    retainedIn: ["P39", "P48"],
+    rationale:
+      "R2. Added by the 2026-09-21 membership ruling, which retires C03 and directs that Surveying be " +
+      "supplied through an existing group or a direct Profession route where setting-out is genuinely " +
+      "learned through the occupation. The site carpenter and the millwright are the two former C03 users " +
+      "with no other route to it and a genuine claim on it; the shipbuilder and the building designer are " +
+      "handled without a direct grant. Every other Profession that needs it reaches it through F01, F28 or " +
+      "K21.",
   },
   {
     skillId: "tailoring",

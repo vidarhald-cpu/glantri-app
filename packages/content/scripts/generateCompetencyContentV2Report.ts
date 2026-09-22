@@ -19,6 +19,7 @@ import {
   competencyContentV2DirectGrantDecisions,
   competencyContentV2DirectGrantPolicy,
   competencyContentV2RemovedGroups,
+  competencyContentV2RetiredProposedGroups,
 } from "../src/proposals/competencyContentV2/competencyContentV2Source";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -51,7 +52,9 @@ const groupLines: string[] = [
   "",
   `${catalogue.manifest.groups} proposed groups: ${catalogue.manifest.retainedGroups} retained, ` +
     `${catalogue.manifest.revisedGroups} revised, ${catalogue.manifest.newGroups} new. ` +
-    `${catalogue.manifest.removedGroups} approved groups are removed and explicitly rehoused. ` +
+    `${catalogue.manifest.removedGroups} approved groups are removed and explicitly rehoused, and ` +
+    `${catalogue.manifest.retiredProposedGroups} group this proposal had itself authored is retired by ` +
+    "the 2026-09-21 Learning-Group membership ruling. " +
     `${catalogue.manifest.groupsWithSelectionSlots} groups carry a total of ` +
     `${catalogue.manifest.selectionSlots} \`pick N\` choice slots.`,
   "",
@@ -89,7 +92,42 @@ for (const removed of competencyContentV2RemovedGroups)
   groupLines.push(
     `| ${removed.id} | ${approvedGroupName.get(removed.id) ?? removed.name} | ${removed.reason} | ${removed.replacedBy.join(", ")} |`,
   );
+groupLines.push("", "## Retired proposed groups", "");
+for (const retired of competencyContentV2RetiredProposedGroups)
+  groupLines.push(
+    `### ${retired.id} ${retired.name} — retired`,
+    "",
+    `**Former membership.** ${retired.formerMembership}`,
+    "",
+    retired.reason,
+    "",
+    "| Profession | Route it had | What carries that route now |",
+    "| --- | --- | --- |",
+    ...retired.rehousing.map(
+      (row) =>
+        `| ${row.professionCode} ${
+          catalogue.families.find((family) => family.code === row.professionCode)?.name ?? ""
+        } | *${row.formerRoute}* | ${row.disposition} |`,
+    ),
+    "",
+  );
 groupLines.push(
+  "## Membership settled by the 2026-09-21 ruling",
+  "",
+  "Four groups are settled at an exact fixed membership and one is retired. The build asserts each",
+  "membership rather than describing it, so a later breadth argument cannot quietly add a member back,",
+  "and it refuses the retired group outright.",
+  "",
+  "| Group | Settled membership | Removed | Where the removed competence is learned instead |",
+  "| --- | --- | --- | --- |",
+  "| K01 Scholarly study practice | Research, Mnemonics | Mathematics | K21 Applied calculation practice, or K03 Celestial observation practice — the cores of the two Professions that are genuinely numerate. |",
+  "| M10 Arms instruction practice | Teaching, Weapon Maintenance | Athletics | F04 Running and athletic field practice, the physical-training route that genuinely teaches conditioning. |",
+  "| C06 Stone workshop and quarry practice | Masonry, Sculpture | Mining | C07 Mine and quarry apprenticeship, which stays available to the Mason where the occupation wins its own stone. |",
+  "| C07 Mine and quarry apprenticeship | Mining, Climbing | Survival | G04 Field travel and camp practice, reached as an ordinary route by the remote-worked mine. |",
+  "| C03 Construction site practice | *retired* | Surveying, and a choose-two craft slot | An existing group or a direct Profession route per Profession — see the retired-group table above. |",
+  "",
+  "**No replacement Learning Group was created.** The ruling retires C03 without preserving a one-Skill",
+  "group in its place, and the four retained groups lose a member without gaining one.",
   "",
   "## Group size review",
   "",
@@ -131,7 +169,12 @@ groupLines.push(
   "investigation apprenticeship** and **F22 Seasonal kitchen and preservation practice** were both a single",
   "base Skill wrapped around Specialization access. Their Specialization routes are preserved — Genealogy",
   "through P67 and P76, whose parent History comes from K10, and Food Preservation through C10, whose",
-  "parent Cooking is taught in the same group. No group is forced into the 3-4 centre.",
+  "parent Cooking is taught in the same group. **C03 Construction site practice** is retired on the same",
+  "reasoning by the membership ruling: one fixed base Skill wrapped around a choice slot that charged a",
+  "second and third craft apprenticeship for coordinating trades. It too is retired without a one-Skill",
+  "survivor. The shape moves toward two as a result — four groups lose a member by ruling — and that is the",
+  "intended outcome, not drift: coherence takes precedence over size, and two is explicitly valid where the",
+  "competencies are genuinely learned together. No group is forced into the 3-4 centre.",
   "",
   "## Combat group structure",
   "",
@@ -491,6 +534,17 @@ const breadthLines = [
   "",
   "## Paths flagged for coherence review (below 7)",
   "",
+  "A flag here is a prompt to look at the content, never a defect and never a licence to pad. The",
+  "2026-09-21 Learning-Group membership ruling deliberately narrowed five groups and retired one, and it",
+  "did so knowing breadth would fall: coherent training is authored first and breadth is read afterwards.",
+  "The paths below are the ones that fell under the coherence floor as a result, and each is left as the",
+  "ruling leaves it rather than topped up. Three are scholarly paths that lost Mathematics with K01 —",
+  "Mathematics was never part of what those occupations study, and the numerate scholarly Professions keep",
+  "it through K21 and K03. Three are construction paths that lost C03 — the building designer and the",
+  "shipbuilder reach every competence their occupation genuinely teaches, and the ruling forbids charging",
+  "either a craft apprenticeship for coordinating trades it does not practise. **Every one of these paths",
+  "still satisfies its defining core route.**",
+  "",
   analysis.reviewPrompts.length
     ? [
         "| Profession | Path | Effective breadth |",
@@ -631,6 +685,15 @@ const grantLines = [
   "Religious Practitioner's contemplative discipline into **K22**, and the Weapon Instructor's salle into",
   "**M10**.",
   "",
+  "The 2026-09-21 Learning-Group membership ruling then moved two grants the other way, and only two. It",
+  "retires C03 Construction site practice and directs that **Surveying** be supplied through an existing",
+  "group or a **direct Profession route** where setting-out is genuinely learned through the occupation.",
+  "The site carpenter (**P39**) and the millwright (**P48**) are the two former C03 users with no other",
+  "route to Surveying and a genuine claim on it, so each gains it as a direct route. The shipbuilder and",
+  "the building designer gain nothing: the yard's lofting is not the ground measurement Surveying",
+  "describes, and the building designer already reaches it through F28 and F01. **Athletics is not",
+  "restored** to the Weapon Instructor, because the same ruling removed it from M10 as well.",
+  "",
   (() => {
     const counts = catalogue.families.map((family) => ({
       code: family.code,
@@ -701,6 +764,7 @@ writeFileSync(
       directGrantDecisions: competencyContentV2DirectGrantDecisions,
       groups: catalogue.groups,
       removedGroups: competencyContentV2RemovedGroups,
+      retiredProposedGroups: competencyContentV2RetiredProposedGroups,
       families: catalogue.families,
       paths: catalogue.paths,
       categories: catalogue.categories,

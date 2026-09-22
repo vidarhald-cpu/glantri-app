@@ -21,6 +21,7 @@ import {
   competencyContentV2Families,
   competencyContentV2LearningGroups,
   competencyContentV2RemovedGroups,
+  competencyContentV2RetiredProposedGroups,
 } from "./competencyContentV2Source";
 
 const catalogue = competencyContentV2Catalogue;
@@ -83,7 +84,7 @@ describe("deterministic catalogue checks", () => {
       }
   });
 
-  it("restores the seven historical choice-slot structures", () => {
+  it("restores the historical choice-slot structures that survive the membership ruling", () => {
     const slotCounts = Object.fromEntries(
       competencyContentV2LearningGroups
         .filter((group) => group.selectionSlots?.length)
@@ -95,7 +96,8 @@ describe("deterministic catalogue checks", () => {
     expect(slotCounts.M05).toEqual([3]); // Advanced Missile Training
     expect(slotCounts.C01).toEqual([1]); // Craft Specialty
     expect(slotCounts.C02).toEqual([1]); // Advanced Craft Specialty — settled at exactly one
-    expect(slotCounts.C03).toEqual([2]); // Construction Specialty
+    /* Construction Specialty is gone with C03, which the 2026-09-21 membership ruling retires. */
+    expect(slotCounts.C03).toBeUndefined();
   });
 
   it("holds C02 to the settled shape: Appraisal, Bargaining, Teaching and exactly one craft", () => {
@@ -285,9 +287,30 @@ describe("quantitative effective-breadth analysis", () => {
     expect(analysis.proposed.median).toBeLessThanOrEqual(EFFECTIVE_BREADTH_SIGNAL);
   });
 
-  it("leaves no path below the coherence-review floor, and needs no narrow-by-design exemption", () => {
-    expect(analysis.reviewPrompts).toEqual([]);
-    expect(analysis.proposed.minimum).toBeGreaterThanOrEqual(BREADTH_REVIEW_FLOOR);
+  it("flags the paths the membership ruling took below the coherence floor, and no others", () => {
+    /* The 2026-09-21 Learning-Group membership ruling deliberately narrowed K01, M10, C06 and C07 and
+       retired C03, knowing breadth would fall. A flag is a prompt to look, never a defect and never a
+       licence to pad, so the flagged set is asserted exactly rather than allowed to drift. Three are
+       scholarly paths that lost Mathematics with K01; three are construction paths that lost C03. */
+    expect(analysis.reviewPrompts.map((row) => row.professionCode).sort()).toEqual([
+      "P39",
+      "P40",
+      "P49",
+      "P64",
+      "P65",
+      "P67",
+    ]);
+    for (const prompt of analysis.reviewPrompts)
+      expect(prompt.effectiveBreadthNominal).toBeLessThan(BREADTH_REVIEW_FLOOR);
+    /* Being flagged is not being broken: every flagged path still satisfies its defining core. */
+    for (const prompt of analysis.reviewPrompts) {
+      const cores = catalogue.coreRoutes.filter(
+        (row) => row.professionCode === prompt.professionCode,
+      );
+      expect(cores.some((row) => row.satisfied)).toBe(true);
+    }
+    /* No path is rescued by a narrow-by-design exemption; there is still no such mechanism. */
+    expect(analysis.proposed.median).toBeGreaterThanOrEqual(BREADTH_REVIEW_FLOOR);
   });
 
   it("counts only chooseCount per slot, never the whole candidate pool", () => {
@@ -659,8 +682,8 @@ describe("Profession cores ruling — 2026-09-21", () => {
     /* Four cores moved in this reconciliation and not one of them added a Learning Group: three
        became an existing direct competency route and three became alternatives over groups the
        Profession already had. F06 was added to the Courier as an ordinary route, not as a group. */
-    expect(catalogue.manifest.groups).toBe(96);
-    expect(catalogue.manifest.newGroups).toBe(50);
+    expect(catalogue.manifest.groups).toBe(95);
+    expect(catalogue.manifest.newGroups).toBe(49);
   });
 });
 
@@ -788,5 +811,129 @@ describe("second ruling set — the language blocker is removed", () => {
       expect(row.writtenName).toMatch(/^Written /);
       expect(row.requiresProductOwnerNamingRuling).toBe(false);
     }
+  });
+});
+
+describe("third ruling set — Learning Group membership (settled)", () => {
+  it("holds the four retained groups to their settled memberships, with no choice slot", () => {
+    const settled: Record<string, string[]> = {
+      K01: ["skill:mnemonics", "skill:research"],
+      M10: ["skill:teaching", "weapon_maintenance"],
+      C06: ["skill:masonry", "skill:sculpture"],
+      C07: ["climb", "skill:mining"],
+    };
+    for (const [groupId, members] of Object.entries(settled)) {
+      const group = competencyContentV2LearningGroups.find(
+        (candidate) => candidate.id === groupId,
+      )!;
+      expect([...group.fixedSkillIds].sort()).toEqual(members);
+      expect(group.selectionSlots ?? []).toHaveLength(0);
+    }
+  });
+
+  it("removes exactly the four members the ruling names, and no others", () => {
+    const fixedOf = (groupId: string) =>
+      competencyContentV2LearningGroups.find((group) => group.id === groupId)!.fixedSkillIds;
+    expect(fixedOf("K01")).not.toContain("mathematics");
+    expect(fixedOf("M10")).not.toContain("skill:athletics");
+    expect(fixedOf("C06")).not.toContain("skill:mining");
+    expect(fixedOf("C07")).not.toContain("skill:survival");
+  });
+
+  it("leaves each removed competence reachable through the route the ruling names", () => {
+    const fixedOf = (groupId: string) =>
+      competencyContentV2LearningGroups.find((group) => group.id === groupId)!.fixedSkillIds;
+    expect(fixedOf("K21")).toContain("mathematics");
+    expect(fixedOf("K03")).toContain("mathematics");
+    expect(fixedOf("F04")).toContain("skill:athletics");
+    expect(fixedOf("C07")).toContain("skill:mining");
+    expect(fixedOf("G04")).toContain("skill:survival");
+  });
+
+  it("retires C03 without leaving a one-Skill Learning Group in its place", () => {
+    expect(competencyContentV2LearningGroups.some((group) => group.id === "C03")).toBe(false);
+    /* No surviving group teaches Surveying alone, which is the shape the ruling refuses. */
+    for (const group of competencyContentV2LearningGroups)
+      expect(group.fixedSkillIds.length === 1 && group.fixedSkillIds[0] === "surveying").toBe(
+        false,
+      );
+    expect(catalogue.manifest.groupsNeedingReconsideration).toBe(0);
+  });
+
+  it("creates no Learning Group to absorb the retirement", () => {
+    /* 96 before the membership ruling, one retired, none added. */
+    expect(catalogue.manifest.groups).toBe(95);
+  });
+
+  it("records what became of every route into the retired group", () => {
+    const c03 = competencyContentV2RetiredProposedGroups.find((row) => row.id === "C03")!;
+    expect(c03.rehousing.map((row) => row.professionCode).sort()).toEqual([
+      "P28",
+      "P39",
+      "P40",
+      "P46",
+      "P48",
+      "P49",
+    ]);
+    for (const row of c03.rehousing) expect(row.disposition.length).toBeGreaterThan(40);
+    for (const family of competencyContentV2Families)
+      for (const body of [family, ...(family.tracks ?? [])])
+        for (const route of body.groups ?? []) expect(route.groupId).not.toBe("C03");
+  });
+
+  it("supplies Surveying to the two rehoused occupations that keep it", () => {
+    for (const code of ["P39", "P48"]) {
+      const family = competencyContentV2Families.find((candidate) => candidate.code === code)!;
+      expect(family.skillIds ?? []).toContain("surveying");
+      expect(family.directRoute?.trim()).toBeTruthy();
+    }
+    /* The siege engineer, mason and building designer keep it through F28 instead. */
+    for (const code of ["P28", "P46", "P49"]) {
+      const path = catalogue.paths.find((row) => row.professionCode === code)!;
+      expect(path.fixedSkillIds).toContain("surveying");
+      expect(
+        competencyContentV2Families.find((candidate) => candidate.code === code)!.skillIds ?? [],
+      ).not.toContain("surveying");
+    }
+  });
+
+  it("keeps the Mason's and Miner's replacement routes available", () => {
+    const mason = competencyContentV2Families.find((family) => family.code === "P46")!;
+    expect((mason.groups ?? []).map((route) => route.groupId)).toContain("C07");
+    const miner = competencyContentV2Families.find((family) => family.code === "P47")!;
+    expect((miner.groups ?? []).map((route) => route.groupId)).toContain("G04");
+    const masonPath = catalogue.paths.find((row) => row.professionCode === "P46")!;
+    expect(masonPath.fixedSkillIds).toContain("skill:mining");
+    const minerPath = catalogue.paths.find((row) => row.professionCode === "P47")!;
+    expect(minerPath.fixedSkillIds).toContain("skill:survival");
+  });
+
+  it("keeps every core the membership change touches satisfiable", () => {
+    for (const code of ["P46", "P47", "P82", "P68", "P70"]) {
+      const cores = catalogue.coreRoutes.filter((row) => row.professionCode === code);
+      expect(cores.length).toBeGreaterThan(0);
+      expect(cores.some((row) => row.satisfied)).toBe(true);
+    }
+    expect(catalogue.coreRoutes.every((row) => row.satisfied || !row.groupIds.length)).toBe(true);
+  });
+
+  it("leaves every valid path satisfying an applicable core route", () => {
+    for (const path of catalogue.paths) {
+      const cores = catalogue.coreRoutes.filter((row) => row.pathId === path.pathId);
+      expect(cores.some((row) => row.satisfied)).toBe(true);
+    }
+  });
+
+  it("orphans no base Skill by the membership change", () => {
+    expect(catalogue.coverage.baseSkillsWithoutAnyRoute.map((row) => row.id)).toEqual([
+      "skill:poisons",
+    ]);
+  });
+
+  it("refuses to restore a removed member under breadth pressure", () => {
+    /* The build asserts the settled shapes, so a reversal fails the build rather than a review. */
+    expect(() => buildCompetencyContentV2Catalogue()).not.toThrow();
+    const k01 = competencyContentV2LearningGroups.find((group) => group.id === "K01")!;
+    expect(k01.note).toContain("membership ruling");
   });
 });
