@@ -27,12 +27,23 @@ import {
   competencyContentV2RemovedGroups,
   competencyContentV2RetiredProposedGroups,
   competencyContentV2WrittenLanguageCompetencyIds,
+  COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING,
+  competencyContentV2CanonicalAccessTiers,
+  competencyContentV2DirectRouteAvailability,
+  competencyContentV2GroupAvailability,
+  competencyContentV2ProfessionRouteAvailability,
+  competencyContentV2RouteGaps,
+  competencyContentV2SocialBands,
+  competencyContentV2SocietyLevel1Absences,
   v2SpokenCompetencyName,
   v2WrittenCompetencyName,
   type V2Family,
   type V2LearningGroup,
   type V2PathBody,
   type V2PlayerFacingCategoryId,
+  type V2RouteAvailability,
+  type V2SocialBand,
+  type V2SocietyLevel,
 } from "./competencyContentV2Source";
 
 export interface BreadthPath {
@@ -1141,6 +1152,437 @@ export function buildCompetencyContentV2Catalogue(): CompetencyContentV2Catalogu
   };
 }
 
+/* ------------------------------------------------------------------------------------------ */
+/* Society Level and Social Band route availability                                             */
+/* ------------------------------------------------------------------------------------------ */
+
+const SOCIETY_LEVELS: readonly V2SocietyLevel[] = [1, 2, 3, 4, 5, 6];
+const SOCIAL_BAND_ORDER: readonly V2SocialBand[] = ["L1", "L2", "L3", "L4"];
+
+function bandIndex(band: V2SocialBand): number {
+  return SOCIAL_BAND_ORDER.indexOf(band);
+}
+
+/** A bound is met when the cell is at or above both of its floors. */
+function availableAt(
+  availability: V2RouteAvailability | undefined,
+  societyLevel: V2SocietyLevel,
+  socialBand: V2SocialBand,
+): boolean {
+  if (!availability) return true;
+  if ((availability.minSocietyLevel ?? 1) > societyLevel) return false;
+  return bandIndex(availability.minSocialBand ?? "L1") <= bandIndex(socialBand);
+}
+
+export interface SocietyLevelAvailabilityCell {
+  societyLevel: V2SocietyLevel;
+  socialBand: V2SocialBand;
+  /** Learning Groups whose own inherent bound this cell meets. */
+  availableGroupIds: string[];
+  /** Paths that satisfy at least one applicable core route using only routes available here. */
+  validPathIds: string[];
+  /** Professions with at least one valid path here. */
+  professionCodes: string[];
+  reachableBaseSkillIds: string[];
+  unreachableBaseSkillIds: string[];
+  reachableSpecializationIds: string[];
+  /**
+   * Specializations a valid path still offers here although that path no longer reaches the parent
+   * Skill. Reported, never silently dropped: a direct route grants everything it lists as one route,
+   * so the catalogue cannot always separate them.
+   */
+  specializationsWithoutTheirParent: {
+    pathId: string;
+    specializationId: string;
+    parentId: string;
+  }[];
+}
+
+export interface SocietyLevelAvailabilityAnalysis {
+  societyLevels: readonly V2SocietyLevel[];
+  socialBands: typeof competencyContentV2SocialBands;
+  canonicalAccessTiers: typeof competencyContentV2CanonicalAccessTiers;
+  /** The Society Level this pass authors up to; see the source's scope note. */
+  authoredCeiling: typeof COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING;
+  cells: SocietyLevelAvailabilityCell[];
+  groupBounds: {
+    groupId: string;
+    groupName: string;
+    minSocietyLevel: number;
+    minSocialBand: V2SocialBand;
+    reason: string;
+    /** The canonical access tier this bound matches, when it matches one exactly. */
+    canonicalTierId?: string;
+  }[];
+  professionRouteBounds: typeof competencyContentV2ProfessionRouteAvailability;
+  directRouteBounds: typeof competencyContentV2DirectRouteAvailability;
+  routeGaps: typeof competencyContentV2RouteGaps;
+  societyLevel1Absences: typeof competencyContentV2SocietyLevel1Absences;
+  summary: {
+    groups: number;
+    unrestrictedGroups: number;
+    groupsFromSocietyLevel2: number;
+    groupsAboveSocietyLevel2: number;
+    professionRouteRestrictions: number;
+    directRouteRestrictions: number;
+    routeGaps: number;
+  };
+}
+
+/**
+ * Computes route availability across every (Society Level, Social Band) cell, and checks the result
+ * against the settled model.
+ *
+ * The one rule everything else follows from: a Skill is available wherever ANY valid route reaches
+ * it. Availability is therefore computed per cell as a union over the paths that are still valid
+ * there, and a path is valid only when it still satisfies one of its Profession's core routes.
+ */
+export function buildCompetencyContentV2SocietyLevelAvailability(): SocietyLevelAvailabilityAnalysis {
+  const entries = new Map(fullSkillCatalogueProposal.entries.map((entry) => [entry.id, entry]));
+  const baseSkillIds = fullSkillCatalogueProposal.entries
+    .filter((entry) => entry.competencyType === "base-skill")
+    .map((entry) => entry.id);
+  const groupsById = new Map(
+    competencyContentV2LearningGroups.map((group) => [group.id, group] as const),
+  );
+  const familyByCode = new Map(
+    competencyContentV2Families.map((family) => [family.code, family] as const),
+  );
+
+  /* --- The bounds are data, so their referential integrity is checked before they are used --- */
+  for (const [groupId, availability] of Object.entries(competencyContentV2GroupAvailability)) {
+    if (!groupsById.has(groupId))
+      fail(`Society Level availability names unknown Learning Group ${groupId}`);
+    assertBound(`group ${groupId}`, availability);
+  }
+  const professionRouteKeys = new Set<string>();
+  for (const bound of competencyContentV2ProfessionRouteAvailability) {
+    const key = `${bound.professionCode}/${bound.trackId ?? ""}/${bound.groupId}`;
+    if (professionRouteKeys.has(key)) fail(`duplicate Profession route bound ${key}`);
+    professionRouteKeys.add(key);
+    const family =
+      familyByCode.get(bound.professionCode) ??
+      fail(`Profession route bound names unknown Profession ${bound.professionCode}`);
+    const body: V2PathBody | undefined = bound.trackId
+      ? family.tracks?.find((track) => track.id === bound.trackId)
+      : family;
+    if (!body) fail(`Profession route bound names unknown track ${bound.trackId}`);
+    if (!(body.groups ?? []).some((route) => route.groupId === bound.groupId))
+      fail(`${bound.professionCode} has no route to ${bound.groupId} to restrict`);
+    assertBound(`route ${key}`, bound);
+  }
+  const directRouteKeys = new Set<string>();
+  for (const bound of competencyContentV2DirectRouteAvailability) {
+    const key = `${bound.professionCode}/${bound.trackId ?? ""}`;
+    if (directRouteKeys.has(key)) fail(`duplicate direct route bound ${key}`);
+    directRouteKeys.add(key);
+    const family =
+      familyByCode.get(bound.professionCode) ??
+      fail(`direct route bound names unknown Profession ${bound.professionCode}`);
+    const body: V2PathBody | undefined = bound.trackId
+      ? family.tracks?.find((track) => track.id === bound.trackId)
+      : family;
+    if (!body) fail(`direct route bound names unknown track ${bound.trackId}`);
+    if (!(body.skillIds?.length ?? 0) && !(body.specializationIds?.length ?? 0))
+      fail(`${bound.professionCode} has no direct route to restrict`);
+    assertBound(`direct route ${key}`, bound);
+  }
+
+  const professionRouteBoundFor = (
+    professionCode: string,
+    trackId: string | undefined,
+    groupId: string,
+  ): V2RouteAvailability | undefined =>
+    competencyContentV2ProfessionRouteAvailability.find(
+      (bound) =>
+        bound.professionCode === professionCode &&
+        (bound.trackId ?? undefined) === trackId &&
+        bound.groupId === groupId,
+    );
+  const directRouteBoundFor = (
+    professionCode: string,
+    trackId: string | undefined,
+  ): V2RouteAvailability | undefined =>
+    competencyContentV2DirectRouteAvailability.find(
+      (bound) =>
+        bound.professionCode === professionCode && (bound.trackId ?? undefined) === trackId,
+    );
+
+  const cells: SocietyLevelAvailabilityCell[] = [];
+  for (const societyLevel of SOCIETY_LEVELS) {
+    for (const { id: socialBand } of competencyContentV2SocialBands) {
+      const availableGroupIds = competencyContentV2LearningGroups
+        .filter((group) =>
+          availableAt(competencyContentV2GroupAvailability[group.id], societyLevel, socialBand),
+        )
+        .map((group) => group.id);
+      const availableGroupIdSet = new Set(availableGroupIds);
+
+      const validPathIds: string[] = [];
+      const professionCodes = new Set<string>();
+      const reachableSkills = new Set<string>();
+      const reachableSpecializations = new Set<string>();
+      const specializationsWithoutTheirParent: SocietyLevelAvailabilityCell["specializationsWithoutTheirParent"] =
+        [];
+
+      for (const family of competencyContentV2Families) {
+        for (const { id: pathId, bodies } of pathBodies(family)) {
+          const reachedGroupIds: string[] = [];
+          const fixed = new Set<string>();
+          const specializations = new Set<string>();
+          const slotCandidates = new Set<string>();
+          for (const body of bodies) {
+            const trackId = body === family ? undefined : (body as { id?: string }).id;
+            for (const route of body.groups ?? []) {
+              if (!availableGroupIdSet.has(route.groupId)) continue;
+              if (
+                !availableAt(
+                  professionRouteBoundFor(family.code, trackId, route.groupId),
+                  societyLevel,
+                  socialBand,
+                )
+              )
+                continue;
+              const group = groupsById.get(route.groupId)!;
+              reachedGroupIds.push(group.id);
+              for (const skillId of group.fixedSkillIds) fixed.add(skillId);
+              for (const specializationId of group.specializationIds ?? [])
+                specializations.add(specializationId);
+              for (const slot of group.selectionSlots ?? [])
+                for (const candidateId of slot.candidateSkillIds) slotCandidates.add(candidateId);
+            }
+            if ((body.skillIds?.length ?? 0) > 0 || (body.specializationIds?.length ?? 0) > 0) {
+              if (
+                availableAt(directRouteBoundFor(family.code, trackId), societyLevel, socialBand)
+              ) {
+                for (const skillId of body.skillIds ?? []) fixed.add(skillId);
+                for (const specializationId of body.specializationIds ?? [])
+                  specializations.add(specializationId);
+              }
+            }
+          }
+
+          const applicableCores =
+            bodies
+              .slice()
+              .reverse()
+              .find((body) => (body.coreRoutes?.length ?? 0) > 0)?.coreRoutes ?? [];
+          const valid = applicableCores.some(
+            (core) =>
+              core.groupIds.every((groupId) => reachedGroupIds.includes(groupId)) &&
+              (core.skillIds ?? []).every((skillId) => fixed.has(skillId)) &&
+              (core.writtenLanguageChoiceCount ?? 0) <=
+                competencyContentV2WrittenLanguageCompetencyIds.length,
+          );
+          if (!valid) continue;
+
+          validPathIds.push(pathId);
+          professionCodes.add(family.code);
+          for (const skillId of fixed) reachableSkills.add(skillId);
+          for (const skillId of slotCandidates) reachableSkills.add(skillId);
+          for (const specializationId of specializations) {
+            reachableSpecializations.add(specializationId);
+            const parentId = entries.get(specializationId)?.parent?.id;
+            if (parentId && !fixed.has(parentId) && !specializations.has(parentId))
+              specializationsWithoutTheirParent.push({ pathId, specializationId, parentId });
+          }
+        }
+      }
+
+      cells.push({
+        societyLevel,
+        socialBand,
+        availableGroupIds,
+        validPathIds,
+        professionCodes: [...professionCodes].sort(),
+        reachableBaseSkillIds: baseSkillIds.filter((id) => reachableSkills.has(id)).sort(),
+        unreachableBaseSkillIds: baseSkillIds.filter((id) => !reachableSkills.has(id)).sort(),
+        reachableSpecializationIds: [...reachableSpecializations].sort(),
+        specializationsWithoutTheirParent,
+      });
+    }
+  }
+
+  const cellAt = (societyLevel: V2SocietyLevel, socialBand: V2SocialBand) =>
+    cells.find((cell) => cell.societyLevel === societyLevel && cell.socialBand === socialBand)!;
+
+  /* --- Monotonicity: availability only ever grows with Society Level and with Social Band ---- */
+  for (const cell of cells) {
+    const grows = (other: SocietyLevelAvailabilityCell | undefined, direction: string) => {
+      if (!other) return;
+      const reachable = new Set(other.reachableBaseSkillIds);
+      for (const skillId of cell.reachableBaseSkillIds)
+        if (!reachable.has(skillId))
+          fail(
+            `Skill ${skillId} is reachable at Society Level ${cell.societyLevel} band ${cell.socialBand} but not ${direction}; route availability must never shrink upward`,
+          );
+    };
+    grows(
+      cell.societyLevel < 6
+        ? cellAt((cell.societyLevel + 1) as V2SocietyLevel, cell.socialBand)
+        : undefined,
+      "one Society Level higher",
+    );
+    const higherBand = SOCIAL_BAND_ORDER[bandIndex(cell.socialBand) + 1];
+    grows(higherBand ? cellAt(cell.societyLevel, higherBand) : undefined, "one Social Band higher");
+  }
+
+  /* --- No Skill becomes globally unreachable as a side effect of a bound -------------------- */
+  {
+    const unrestricted = new Set(
+      competencyContentV2Catalogue.paths.flatMap((path) => [
+        ...path.fixedSkillIds,
+        ...path.groupIds.flatMap((groupId) =>
+          (groupsById.get(groupId)?.selectionSlots ?? []).flatMap(
+            (slot) => slot.candidateSkillIds as string[],
+          ),
+        ),
+      ]),
+    );
+    const top = new Set(cellAt(6, "L4").reachableBaseSkillIds);
+    for (const skillId of unrestricted)
+      if (!top.has(skillId))
+        fail(
+          `Skill ${skillId} has a route in the unrestricted catalogue but none at the widest cell; a Society Level bound has made it globally unreachable`,
+        );
+  }
+
+  /* --- Every Profession keeps at least one valid path somewhere ------------------------------ */
+  for (const family of competencyContentV2Families)
+    for (const { id: pathId } of pathBodies(family))
+      if (!cells.some((cell) => cell.validPathIds.includes(pathId)))
+        fail(
+          `path ${pathId} satisfies no core route at any Society Level and Social Band; the Profession would exist nowhere`,
+        );
+
+  /* --- P65's core is a choice over the written-language set, so it needs an explicit check ---- */
+  {
+    const scribe =
+      competencyContentV2Families.find((family) => family.code === "P65") ??
+      fail("P65 Scribe and Copyist is missing");
+    const core = (scribe.coreRoutes ?? [])[0] ?? fail("P65 declares no core route to check");
+    if (!(core.writtenLanguageChoiceCount ?? 0))
+      fail("P65's core no longer carries a written-language choice; this check must be revisited");
+    const scribeCells = cells.filter((cell) => cell.validPathIds.includes(scribe.id));
+    if (!scribeCells.length)
+      fail(
+        "P65 Scribe and Copyist has no valid path anywhere: the records-office route is unreachable at every cell, so the written-language core can never be satisfied",
+      );
+    if (!competencyContentV2WrittenLanguageCompetencyIds.length)
+      fail("P65's written-language choice has nothing to choose from");
+  }
+
+  /* --- The Society Level 1 consequence is asserted exactly, gap by gap ----------------------- */
+  {
+    const actual = new Set(cellAt(1, "L1").unreachableBaseSkillIds);
+    const authored = new Map(
+      competencyContentV2SocietyLevel1Absences.map((row) => [row.skillId, row.disposition]),
+    );
+    if (authored.size !== competencyContentV2SocietyLevel1Absences.length)
+      fail("the Society Level 1 absence record lists a Skill twice");
+    for (const skillId of actual)
+      if (!authored.has(skillId))
+        fail(
+          `Skill ${skillId} is unreachable at Society Level 1 and the absence is not recorded; author it as deliberate or flag it as a route gap`,
+        );
+    for (const [skillId] of authored) {
+      if (!entries.has(skillId))
+        fail(`the Society Level 1 absence record names unknown Skill ${skillId}`);
+      if (!actual.has(skillId))
+        fail(
+          `Skill ${skillId} is recorded as unreachable at Society Level 1 but a route does reach it; the record is stale`,
+        );
+    }
+    const gapSkillIds = new Set(competencyContentV2RouteGaps.map((gap) => gap.skillId));
+    if (gapSkillIds.size !== competencyContentV2RouteGaps.length)
+      fail("a Skill is flagged as a route gap twice");
+    for (const gap of competencyContentV2RouteGaps) {
+      if (authored.get(gap.skillId) !== "route-gap")
+        fail(`route gap ${gap.skillId} is not recorded as a route gap in the absence record`);
+      if (!gap.plausibility.trim() || !gap.closedRoutes.length)
+        fail(`route gap ${gap.skillId} states no plausibility or no closed routes`);
+      const reached = cellAt(gap.unreachableAtSocietyLevel, "L4").reachableBaseSkillIds;
+      if (reached.includes(gap.skillId))
+        fail(
+          `route gap ${gap.skillId} is reachable at Society Level ${gap.unreachableAtSocietyLevel}; the flag is stale`,
+        );
+    }
+    for (const [skillId, disposition] of authored)
+      if (disposition === "route-gap" && !gapSkillIds.has(skillId))
+        fail(`Skill ${skillId} is recorded as a route gap but carries no flagged gap record`);
+  }
+
+  const groupBounds = Object.entries(competencyContentV2GroupAvailability)
+    .map(([groupId, availability]) => {
+      const minSocietyLevel = availability.minSocietyLevel ?? 1;
+      const minSocialBand = availability.minSocialBand ?? "L1";
+      return {
+        groupId,
+        groupName: groupsById.get(groupId)!.name,
+        minSocietyLevel,
+        minSocialBand,
+        reason: availability.reason,
+        canonicalTierId: competencyContentV2CanonicalAccessTiers.find(
+          (tier) =>
+            tier.minSocietyLevel === minSocietyLevel && tier.minSocialBand === minSocialBand,
+        )?.id,
+      };
+    })
+    .sort((left, right) => left.groupId.localeCompare(right.groupId));
+
+  return {
+    societyLevels: SOCIETY_LEVELS,
+    socialBands: competencyContentV2SocialBands,
+    canonicalAccessTiers: competencyContentV2CanonicalAccessTiers,
+    authoredCeiling: COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING,
+    cells,
+    groupBounds,
+    professionRouteBounds: competencyContentV2ProfessionRouteAvailability,
+    directRouteBounds: competencyContentV2DirectRouteAvailability,
+    routeGaps: competencyContentV2RouteGaps,
+    societyLevel1Absences: competencyContentV2SocietyLevel1Absences,
+    summary: {
+      groups: competencyContentV2LearningGroups.length,
+      unrestrictedGroups:
+        competencyContentV2LearningGroups.length -
+        Object.keys(competencyContentV2GroupAvailability).length,
+      groupsFromSocietyLevel2: groupBounds.filter((row) => row.minSocietyLevel === 2).length,
+      groupsAboveSocietyLevel2: groupBounds.filter((row) => row.minSocietyLevel > 2).length,
+      professionRouteRestrictions: competencyContentV2ProfessionRouteAvailability.length,
+      directRouteRestrictions: competencyContentV2DirectRouteAvailability.length,
+      routeGaps: competencyContentV2RouteGaps.length,
+    },
+  };
+}
+
+/**
+ * A bound has to say something, and say it inside this pass's authored scope.
+ *
+ * A `minSocietyLevel` of 1 is a bound that restricts nothing; a band bound above the authored
+ * boundary would be a claim about Society Levels this pass does not author.
+ */
+function assertBound(where: string, availability: V2RouteAvailability): void {
+  if (!availability.reason.trim()) fail(`${where} is bounded with no stated reason`);
+  const minSocietyLevel = availability.minSocietyLevel;
+  if (minSocietyLevel === undefined && availability.minSocialBand === undefined)
+    fail(`${where} records an availability bound that restricts nothing`);
+  if (minSocietyLevel !== undefined) {
+    if (minSocietyLevel < 2)
+      fail(`${where} is bounded at Society Level ${minSocietyLevel}, which restricts nothing`);
+    if (minSocietyLevel > COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING)
+      fail(
+        `${where} is bounded at Society Level ${minSocietyLevel}, above the ${COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING} this pass authors; a higher floor is a later pass's decision`,
+      );
+  }
+  if (
+    availability.minSocialBand !== undefined &&
+    (minSocietyLevel ?? 1) > COMPETENCY_CONTENT_V2_AUTHORED_SOCIETY_LEVEL_CEILING - 1
+  )
+    fail(
+      `${where} carries a Social Band bound above the Society Level 1-2 boundary this pass authors`,
+    );
+}
+
 export interface CompetencyContentV2Analysis {
   approved: BreadthDistribution;
   proposed: BreadthDistribution;
@@ -1155,6 +1597,7 @@ export interface CompetencyContentV2Analysis {
   costInvariants: CostInvariantRow[];
   directGrantPolicy: readonly string[];
   directGrantDecisions: typeof competencyContentV2DirectGrantDecisions;
+  societyLevelAvailability: SocietyLevelAvailabilityAnalysis;
 }
 
 export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
@@ -1179,10 +1622,17 @@ export function analyseCompetencyContentV2(): CompetencyContentV2Analysis {
     costInvariants: catalogue.costInvariants,
     directGrantPolicy: competencyContentV2DirectGrantPolicy,
     directGrantDecisions: competencyContentV2DirectGrantDecisions,
+    societyLevelAvailability: buildCompetencyContentV2SocietyLevelAvailability(),
   };
 }
 
 export const competencyContentV2Catalogue = buildCompetencyContentV2Catalogue();
+/**
+ * Evaluated at import, exactly like the catalogue itself, so an incoherent Society Level bound fails
+ * the build rather than only a test.
+ */
+export const competencyContentV2SocietyLevelAvailability =
+  buildCompetencyContentV2SocietyLevelAvailability();
 export {
   BREADTH_REVIEW_FLOOR,
   competencyContentV2CivilizationLanguages,

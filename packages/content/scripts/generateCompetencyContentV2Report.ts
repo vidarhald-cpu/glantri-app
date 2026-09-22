@@ -57,6 +57,27 @@ const approvedGroupName = new Map(
 );
 const name = (id: string) => entryName.get(id) ?? id;
 
+/**
+ * Hard-wraps a generated paragraph to the repository's 100-column prose width.
+ *
+ * Prettier keeps Markdown prose as authored, so a paragraph whose width depends on a computed number
+ * has to be wrapped here or it drifts out of shape the next time the number changes.
+ */
+const wrap = (text: string, width = 100): string[] => {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && line.length + 1 + word.length > width) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+};
+
 const banner = [
   "> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — awaiting review.**",
   "> Generated from `packages/content/src/proposals/competencyContentV2/`. It is not registered with",
@@ -855,6 +876,195 @@ const grantLines = [
 ];
 writeFileSync(join(outDir, "direct-grant-review.md"), grantLines.join("\n"));
 
+/* --- Society Level and Social Band route availability --------------------------------------- */
+const availability = analysis.societyLevelAvailability;
+const bandName = new Map(availability.socialBands.map((band) => [band.id, band.name]));
+const professionName = new Map(catalogue.families.map((family) => [family.code, family.name]));
+const availabilityLines: string[] = [
+  "# Society Level and Social Band route availability (V2)",
+  "",
+  banner,
+  "",
+  "This report is the authored answer to the one question the settled availability model left open:",
+  "**which individual routes a low Society Level withholds.** The model itself is settled and is not",
+  "revisited here. What is authored is where each bound sits, and the consequence is measured rather",
+  "than asserted.",
+  "",
+  "## Scope of this pass",
+  "",
+  ...wrap(
+    "Only the **Society Level 1-2 boundary** is authored, together with the Social Band bounds that " +
+      `bite inside it. A \`minSocietyLevel\` of ${availability.authoredCeiling} therefore means exactly ` +
+      `"not at Society Level 1 or 2"; whether the true floor is ${availability.authoredCeiling}, 4, 5 ` +
+      "or 6 is a later pass's decision, and the build refuses a higher bound so the wider claim cannot " +
+      "be smuggled in here. For the same reason a Social Band bound is authored only on a route that " +
+      "still exists at Society Level 1 or 2 — which is why the grid below is coarser above the " +
+      "boundary than beneath it.",
+  ),
+  "",
+  "## What the bounds are authored against",
+  "",
+  "`canonicalContent.json` already records, per society and per Social Band, which bodies of training",
+  "that cell reaches. Read back, it gives four tiers and nothing else:",
+  "",
+  "| Tier | Society Level | Social Band |",
+  "| --- | ---: | --- |",
+  ...availability.canonicalAccessTiers.map(
+    (tier) =>
+      `| ${tier.name} | ${tier.minSocietyLevel} | ${tier.minSocialBand} ${bandName.get(tier.minSocialBand)} |`,
+  ),
+  "",
+  "Two facts in that grid do real work here. The Society Level 1 society reaches the same set at",
+  "**every** band — it has no trade, household or court stratum whose training differs — and a Society",
+  "Level 2 society's ladder **stops at the trades tier**. Both reproduce below, from independently",
+  "authored bounds rather than by construction.",
+  "",
+  "The grid is also coarser than this catalogue, and in one respect plainly stale: it admits scholarly,",
+  "legal, fiscal and ship-command training at the Society Level 1 Common Folk cell, which the settled",
+  "model would withhold. It is therefore used as corroboration for the **shape** of a restriction, never",
+  "as per-group authority, and the divergence is reported rather than absorbed.",
+  "",
+  "## The grid",
+  "",
+  "Each cell counts what a learner in that society and that stratum can actually reach: Learning Groups",
+  "whose own bound the cell meets, Professions with at least one satisfiable core route, and base Skills",
+  "reached by the **union** of every valid route.",
+  "",
+  "| Society Level | Social Band | Learning Groups | Professions | Valid paths | Base Skills reached |",
+  "| ---: | --- | ---: | ---: | ---: | ---: |",
+  ...availability.cells.map(
+    (row) =>
+      `| ${row.societyLevel} | ${row.socialBand} ${bandName.get(row.socialBand)} | ${row.availableGroupIds.length} | ${row.professionCodes.length} | ${row.validPathIds.length} | ${row.reachableBaseSkillIds.length} |`,
+  ),
+  "",
+  "## Inherent Learning Group minimums",
+  "",
+  ...wrap(
+    `${availability.summary.unrestrictedGroups} of the ${availability.summary.groups} proposed ` +
+      "Learning Groups carry no bound at all and are available at Society Level 1, Social Band L1. " +
+      `${availability.summary.groupsFromSocietyLevel2} first exist at Society Level 2, and ` +
+      `${availability.summary.groupsAboveSocietyLevel2} do not exist at Society Level 1 or 2.`,
+  ),
+  "",
+  "A bound is authored here only where **the training itself** genuinely requires it. Two shapes are",
+  "used: a Society Level alone, where the society must have the thing but the training is then ordinary",
+  "work at any band; and a Society Level with a Social Band, where the training also belongs to a",
+  "stratum.",
+  "",
+  "| Group | Name | Society Level | Social Band | Canonical tier | Why the training requires it |",
+  "| --- | --- | ---: | --- | --- | --- |",
+  ...availability.groupBounds.map(
+    (row) =>
+      `| ${row.groupId} | ${row.groupName} | ${row.minSocietyLevel} | ${row.minSocialBand} | ${
+        availability.canonicalAccessTiers.find((tier) => tier.id === row.canonicalTierId)?.name ??
+        "level only"
+      } | ${row.reason} |`,
+  ),
+  "",
+  "## Profession route restrictions",
+  "",
+  "The narrower tool, preferred wherever the restriction is specific to the occupational context: the",
+  "curriculum exists here, but this occupation cannot reach it by this road. Each entry is one the",
+  "group's own bound does not already cover.",
+  "",
+  "| Profession | Into | Society Level | Social Band | Why |",
+  "| --- | --- | ---: | --- | --- |",
+  ...availability.professionRouteBounds.map(
+    (row) =>
+      `| ${row.professionCode} ${professionName.get(row.professionCode) ?? ""} | ${row.groupId} | ${row.minSocietyLevel ?? 1} | ${row.minSocialBand ?? "L1"} | ${row.reason} |`,
+  ),
+  "",
+  "## Direct route restrictions",
+  "",
+  "A direct route grants everything it lists as one route, so restricting it withdraws the whole grant.",
+  "Each is therefore authored only where the **whole** grant belongs above the boundary. Every Skill a",
+  "restriction withdraws is then either still reached by another route at that level, or is itself an",
+  "absence recorded and argued below — nothing disappears unaccounted for.",
+  "",
+  "| Profession | Society Level | Social Band | Why |",
+  "| --- | ---: | --- | --- |",
+  ...availability.directRouteBounds.map(
+    (row) =>
+      `| ${row.professionCode} ${professionName.get(row.professionCode) ?? ""} | ${row.minSocietyLevel ?? 1} | ${row.minSocialBand ?? "L1"} | ${row.reason} |`,
+  ),
+  "",
+  "## Flagged route gaps",
+  "",
+  "A route gap is a Skill that **plausibly belongs** at a low Society Level, but whose every authored",
+  "route happens to require more. The settled model requires these to be flagged rather than treated as",
+  "statements about the Skill, and explicitly forbids adding routes to close them — that would be adding",
+  "routes to hit a coverage target, which is the thing the ruling rules out. Each flag is checked against",
+  "the computed availability, so a flag that goes stale fails the build.",
+  "",
+  `${availability.summary.routeGaps} are flagged.`,
+  "",
+  ...availability.routeGaps.flatMap((gap) => [
+    `### ${name(gap.skillId)} — no route at Society Level ${gap.unreachableAtSocietyLevel}`,
+    "",
+    gap.plausibility,
+    "",
+    ...gap.closedRoutes.map((route) => `- ${route}`),
+    "",
+  ]),
+  "## Every Skill absent at Society Level 1, accounted for",
+  "",
+  ...wrap(
+    `${availability.societyLevel1Absences.length} of the ${catalogue.coverage.baseSkills} base Skills ` +
+      "have no route at Society Level 1. The set is asserted exactly, so the authored consequence of " +
+      "this pass cannot drift, and each entry is either a **deliberate** statement about the society " +
+      "or a flagged **route gap**.",
+  ),
+  "",
+  "| Skill | Disposition |",
+  "| --- | --- |",
+  ...availability.societyLevel1Absences.map(
+    (row) => `| ${name(row.skillId)} | ${row.disposition} |`,
+  ),
+  "",
+  "## Cores and paths under restriction",
+  "",
+  ...wrap(
+    `Every one of the ${catalogue.manifest.validPaths} valid paths still satisfies an applicable core ` +
+      "route somewhere, which the build asserts: a Profession that existed nowhere would fail rather " +
+      "than ship. A society that supports none of a Profession's core routes simply does not support " +
+      "that Profession, which is the model working rather than a defect.",
+  ),
+  "",
+  ...(() => {
+    const scribeCells = availability.cells.filter((row) =>
+      row.validPathIds.includes("profession:scribe"),
+    );
+    const lowest = scribeCells[0];
+    return wrap(
+      "**P65 Scribe and Copyist** is the case to watch, because its core is G11 plus a free choice " +
+        "over the written-language set rather than a named group. G11 is a records office, which does " +
+        "not exist at Society Level 1 or 2, so the Scribe first exists at Society Level " +
+        `${lowest?.societyLevel ?? "—"}, band ${lowest?.socialBand ?? "—"} — at ${scribeCells.length} ` +
+        `of the ${availability.cells.length} cells in all. The written-language choice is satisfiable ` +
+        "at every one of them, and the build checks that directly rather than letting it surface later " +
+        "as an unexplained core failure.",
+    );
+  })(),
+  "",
+  "## Specializations whose parent is not reached under restriction",
+  "",
+  ...(() => {
+    const total = availability.cells.reduce(
+      (sum, row) => sum + row.specializationsWithoutTheirParent.length,
+      0,
+    );
+    return wrap(
+      total === 0
+        ? "None, at any cell. A restricted path never offers a Specialization whose parent Skill that " +
+            "same path no longer reaches."
+        : `${total} across all cells, reported rather than absorbed: a direct route grants everything ` +
+            "it lists as one route, so the catalogue cannot always separate them.",
+    );
+  })(),
+  "",
+];
+writeFileSync(join(outDir, "society-level-availability-v2.md"), availabilityLines.join("\n"));
+
 /* --- Machine-readable companion ------------------------------------------------------------ */
 writeFileSync(
   join(outDir, "competency-content-v2.json"),
@@ -881,6 +1091,23 @@ writeFileSync(
       paths: catalogue.paths,
       categories: catalogue.categories,
       civilizationLanguages: competencyContentV2CivilizationLanguages,
+      societyLevelAvailability: {
+        ...analysis.societyLevelAvailability,
+        /* Cells are emitted compactly. The reachable Skill set is the complement of the unreachable
+           one against the base-Skill catalogue, and repeating 24 copies of it would roughly double
+           this file for no added fact. */
+        cells: analysis.societyLevelAvailability.cells.map((row) => ({
+          societyLevel: row.societyLevel,
+          socialBand: row.socialBand,
+          availableGroupIds: row.availableGroupIds,
+          professionCodes: row.professionCodes,
+          validPaths: row.validPathIds.length,
+          reachableBaseSkills: row.reachableBaseSkillIds.length,
+          unreachableBaseSkillIds: row.unreachableBaseSkillIds,
+          reachableSpecializations: row.reachableSpecializationIds.length,
+          specializationsWithoutTheirParent: row.specializationsWithoutTheirParent,
+        })),
+      },
     },
     null,
     2,

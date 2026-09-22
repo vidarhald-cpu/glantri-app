@@ -100,9 +100,39 @@ that Profession at all, and the game says so. No table-level override is needed 
 The second Mason is not a lesser Mason or a different Profession. She learned in fewer places. The
 Skills her society's remaining routes reach are still hers to take.
 
-## What is deliberately not decided here
+## Which routes a low Society Level actually withholds
 
-**Which individual routes a given Society Level withholds is not authored in this proposal.** That is
-contextual availability data, and it is unfinished under **#113**. What is settled is the model: one
-Profession per family, availability applied to routes, Skills reached through the union of all valid
-routes, and an enforceable core.
+The model above is settled. **Which individual routes a low Society Level withholds is now authored**,
+for the Society Level 1-2 boundary and the Social Bands inside it, in
+[Society Level and Social Band route availability](society-level-availability-v2.md). That report is
+generated from the same source the build checks, so the numbers in it cannot drift away from the
+data.
+
+What it authors, in the model's own vocabulary and nothing else:
+
+- **51 of the 95 Learning Groups carry an inherent minimum.** 28 first exist at Society Level 2, and
+  23 do not exist at Society Level 1 or 2. The other 44 are available everywhere.
+- **Four Profession routes carry a restriction of their own**, where the curriculum exists but that
+  occupation cannot reach it by that road.
+- **Seven direct routes carry their own restriction.**
+- **No society-specific Profession anywhere.** A society that supports none of a Profession's core
+  routes simply has no one of that Profession, and the build says so rather than thinning the
+  Profession.
+
+The practical shape of it: a Society Level 1 learner reaches 80 of the 131 base Skills across 42
+Professions, a Society Level 2 trades-and-guilds learner 110 across 63, and the catalogue opens fully
+from Society Level 3.
+
+## What is still deliberately not decided here
+
+**Where a route's floor sits above Society Level 2 is not authored.** A restriction recorded at
+Society Level 3 means only "not at Society Level 1 or 2"; whether the real floor is 3, 4, 5 or 6 is a
+later decision, and the build refuses a higher claim so that one cannot be made here by accident.
+
+**Eight route gaps are flagged, not closed.** Each is a Skill that plausibly belongs low down but
+whose every route happens to require more:
+[Trade](society-level-availability-v2.md#trade--no-route-at-society-level-1),
+[Teaching](society-level-availability-v2.md#teaching--no-route-at-society-level-1), Leadership and
+[five others](society-level-availability-v2.md#flagged-route-gaps). Closing one would mean adding a
+route to reach a coverage target, which is exactly what the ruling rules out. They are reported for a
+Product Owner to look at.
