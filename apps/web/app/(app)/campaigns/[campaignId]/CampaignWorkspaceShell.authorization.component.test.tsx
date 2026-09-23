@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -125,9 +125,39 @@ function primeAuthorizedWorkspace() {
   localStorage.setItem("glantri.remembered-selection.workspace-tab:campaign-1", "scenario");
 }
 
+function focusRefreshBarrier() {
+  /**
+   * The focus listener is attached from a passive effect that is guarded on
+   * settled workspace state, so it attaches in a commit AFTER the one that
+   * renders the awaited private text. A single dispatch can therefore land
+   * with zero listeners and be silently dropped — nothing in the DOM marks
+   * the point at which the listener exists. Following the retrying barrier
+   * PR #292 introduced for `ArtifactImportPanel`, re-dispatch until the
+   * refresh the event is supposed to start has provably begun. `loadAccess`
+   * is invoked synchronously by the refresh, so at most one dispatch is ever
+   * effective and no queued once-value is consumed twice. No assertion is
+   * weakened and no timeout is widened.
+   */
+  const callsBeforeFocus = mocks.loadAccess.mock.calls.length;
+
+  return waitFor(() => {
+    if (mocks.loadAccess.mock.calls.length === callsBeforeFocus) {
+      fireEvent(window, new Event("focus"));
+    }
+
+    expect(mocks.loadAccess.mock.calls.length).toBeGreaterThan(callsBeforeFocus);
+  });
+}
+
 describe("Campaign workspace focus-refresh authorization", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // `mockClear()` — what `vi.clearAllMocks()` performs — clears recorded
+    // calls but does NOT drain `onceImplementations`. A `mockRejectedValueOnce`
+    // a test queued and never consumed therefore survives into the next test,
+    // ahead of the `mockResolvedValueOnce` this priming adds, and that test
+    // fails on an initial load it never wrote. Only `mockReset()` drains the
+    // once-queue, so the queues are reset here and re-primed below.
+    vi.resetAllMocks();
     localStorage.clear();
     primeAuthorizedWorkspace();
   });
@@ -142,7 +172,7 @@ describe("Campaign workspace focus-refresh authorization", () => {
       screen.getByRole("navigation", { name: "Scenario and Encounter context" }),
     ).toBeVisible();
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    await focusRefreshBarrier();
 
     await screen.findByText("Authentication required");
     expect(
@@ -173,7 +203,7 @@ describe("Campaign workspace focus-refresh authorization", () => {
     render(<CampaignWorkspaceShell campaignId="campaign-1" />);
 
     await screen.findByText("The steward moved the seal after midnight.");
-    act(() => window.dispatchEvent(new Event("focus")));
+    await focusRefreshBarrier();
 
     await screen.findByText(
       "We couldn't refresh the Campaign context. Try again or reload the page.",
@@ -199,7 +229,7 @@ describe("Campaign workspace focus-refresh authorization", () => {
     mocks.loadEncounterSummaries.mockRejectedValueOnce(new Error("Temporary network failure"));
     mocks.loadParticipants.mockReturnValueOnce(lateAuthorizationRequest);
 
-    act(() => window.dispatchEvent(new Event("focus")));
+    await focusRefreshBarrier();
 
     await screen.findByText(
       "We couldn't refresh the Campaign context. Try again or reload the page.",
@@ -240,7 +270,7 @@ describe("Campaign workspace focus-refresh authorization", () => {
     render(<CampaignWorkspaceShell campaignId="campaign-1" />);
 
     await screen.findByText("The steward moved the seal after midnight.");
-    act(() => window.dispatchEvent(new Event("focus")));
+    await focusRefreshBarrier();
 
     await screen.findByText("Campaign unavailable");
     expect(

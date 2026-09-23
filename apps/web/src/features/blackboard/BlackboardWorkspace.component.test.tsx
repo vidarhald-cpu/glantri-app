@@ -172,7 +172,9 @@ describe("BlackboardWorkspace", () => {
     render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster={false} />);
     await screen.findByRole("heading", { name: "Blackboard" });
     await user.click(screen.getByRole("button", { name: "Share a reference" }));
-    expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus(),
+    );
 
     const composer = screen.getByRole("heading", { name: "Share a reference" }).closest("section");
     expect(composer).not.toBeNull();
@@ -196,7 +198,7 @@ describe("BlackboardWorkspace", () => {
       }),
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Reference shared");
-    expect(screen.getByRole("heading", { name: "Bell signal" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Bell signal" })).toHaveFocus());
   });
 
   it("runs composed search on the server and opens results in the existing detail surface", async () => {
@@ -226,7 +228,9 @@ describe("BlackboardWorkspace", () => {
     const results = screen.getByRole("region", { name: "Blackboard search results" });
     expect(within(results).getByText("1 found")).toBeVisible();
     await user.click(within(results).getByRole("button", { name: /Route to the caves/ }));
-    expect(screen.getByRole("heading", { name: "Route to the caves" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Route to the caves" })).toHaveFocus(),
+    );
     expect(screen.getByRole("button", { name: "History" })).toBeVisible();
     expect(onRouteChange).toHaveBeenLastCalledWith({
       category: "image_map",
@@ -244,7 +248,9 @@ describe("BlackboardWorkspace", () => {
         routeEntryId="entry-document"
       />,
     );
-    expect(await screen.findByRole("heading", { name: "Intercepted letter" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Intercepted letter" })).toHaveFocus(),
+    );
     expect(screen.getByRole("button", { name: "History" })).toBeVisible();
 
     rerender(
@@ -254,7 +260,9 @@ describe("BlackboardWorkspace", () => {
         routeEntryId="foreign-or-archived-entry"
       />,
     );
-    expect(await screen.findByRole("heading", { name: "Reference unavailable" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Reference unavailable" })).toHaveFocus(),
+    );
     expect(screen.getByText(/removed or is not available in this Campaign/)).toBeVisible();
     expect(document.body.textContent).not.toContain("foreign-or-archived-entry");
   });
@@ -268,7 +276,9 @@ describe("BlackboardWorkspace", () => {
       />,
     );
 
-    expect(await screen.findByRole("heading", { name: "Reference unavailable" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Reference unavailable" })).toHaveFocus(),
+    );
     expect(screen.getByText(/removed or is not available in this Campaign/)).toBeVisible();
     expect(document.body.textContent).not.toContain("foreign-or-archived-entry");
   });
@@ -294,15 +304,17 @@ describe("BlackboardWorkspace", () => {
     await screen.findByRole("heading", { name: "Blackboard" });
     const trigger = screen.getByRole("button", { name: "Share a reference" });
     await user.click(trigger);
-    expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Share a reference" })).toHaveFocus(),
+    );
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
 
     await user.click(trigger);
     await user.click(screen.getByRole("button", { name: "Share reference" }));
     expect(screen.getByRole("alert")).toHaveTextContent("Give this reference a title");
-    expect(screen.getByLabelText("Title")).toHaveFocus();
+    await waitFor(() => expect(screen.getByLabelText("Title")).toHaveFocus());
     expect(screen.getByRole("heading", { name: "Share a reference" })).toBeVisible();
   });
 
@@ -316,9 +328,11 @@ describe("BlackboardWorkspace", () => {
     expect(correctTrigger).toBeVisible();
     expect(screen.getByRole("button", { name: "Remove this entry" })).toBeVisible();
     await user.click(correctTrigger);
-    expect(screen.getByRole("heading", { name: "Correct this reference" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Correct this reference" })).toHaveFocus(),
+    );
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(correctTrigger).toHaveFocus();
+    await waitFor(() => expect(correctTrigger).toHaveFocus());
 
     await user.click(screen.getByRole("button", { name: /Intercepted letter/ }));
     expect(screen.queryByRole("button", { name: "Correct this entry" })).not.toBeInTheDocument();
@@ -408,14 +422,16 @@ describe("BlackboardWorkspace", () => {
     await screen.findByRole("heading", { name: "Blackboard" });
     await user.click(screen.getByRole("button", { name: "Open Bell signal" }));
     await user.click(screen.getByRole("button", { name: "Correct this entry" }));
-    expect(screen.getByRole("heading", { name: "Correct this reference" })).toHaveFocus();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Correct this reference" })).toHaveFocus(),
+    );
     const fact = screen.getByLabelText("Clue or fact");
     await user.clear(fact);
     await user.type(fact, "The bell now rings three times.");
     await user.click(screen.getByRole("button", { name: "Share correction" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
-    expect(screen.getByRole("alert")).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveFocus());
     expect(screen.getByDisplayValue("The bell now rings three times.")).toBeVisible();
     expect(mocks.loadBlackboard).toHaveBeenCalledTimes(2);
   });
