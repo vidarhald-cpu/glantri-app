@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildScenarioSessionView,
@@ -26,6 +26,18 @@ import {
 import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
+
+// Every write path exercised here runs through the service's Serializable interactive
+// transaction inside a three-attempt retry loop, and the service passes no explicit Prisma
+// options, so Prisma's defaults apply per attempt: 2s maxWait + 5s transaction timeout. The
+// legitimate worst case for one contended service call is therefore 3 x (2s + 5s) = 21s, and 30s
+// is that envelope plus room for this suite's fixture setup.
+//
+// This is not a "make it green" bump: Vitest's 5s default cannot cover even a single one of those
+// transactions, so abandoning a test at 5s leaves its transaction holding locks and deadlocking
+// the next test's reset (issue #296). `vi.setConfig` scopes the budget to this file only — every
+// other suite in the package keeps the 5s default, and nothing here raises the global timeout.
+vi.setConfig({ testTimeout: 30_000 });
 
 if (!process.env.DATABASE_URL_TEST) {
   describe.skip("Combat Item atomic resolution integration (DATABASE_URL_TEST not set)", () => {});
