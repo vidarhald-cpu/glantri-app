@@ -1,6 +1,7 @@
 /**
- * Regenerates the NON-CANONICAL Competency Content V2 proposal report under
- * `docs/product/proposals/competency-content-v2/`.
+ * Regenerates the CANONICAL Competency Content V2 report under
+ * `docs/product/proposals/competency-content-v2/`. Accepted by the Product Owner 2026-09-23; see
+ * `docs/decisions/rules/0008-competency-content-v2-canonical-acceptance.md`.
  *
  * Run with: pnpm --filter @glantri/content exec tsx ./scripts/generateCompetencyContentV2Report.ts
  */
@@ -79,9 +80,11 @@ const wrap = (text: string, width = 100): string[] => {
 };
 
 const banner = [
-  "> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — awaiting review.**",
-  "> Generated from `packages/content/src/proposals/competencyContentV2/`. It is not registered with",
-  "> Chargen, not projected into canonical content, and does not replace any approved catalogue.",
+  "> **Status: CANONICAL — accepted by the Product Owner on 2026-09-23 (Forgejo #250).**",
+  "> See [decision record 0008](../../../decisions/rules/0008-competency-content-v2-canonical-acceptance.md).",
+  "> Generated from `packages/content/src/proposals/competencyContentV2/`. It is not yet registered",
+  "> with Chargen, not yet projected into canonical content, and does not yet replace any approved",
+  "> catalogue — that wiring is the separate, explicitly scoped work of #251/#252.",
   "> Regenerate with `pnpm --filter @glantri/content exec tsx ./scripts/generateCompetencyContentV2Report.ts`,",
   "> then run Prettier over this folder.",
 ].join("\n");

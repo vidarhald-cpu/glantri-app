@@ -135,7 +135,9 @@ make the Artifact an Item, and it does not make the Item media.
 The required association semantics — multiplicity, revision pinning, and
 attachment provenance — are settled by
 [PO-SPW-1](#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics).
-The recording mechanism belongs to the slice that implements it.
+The recording mechanism belongs to the slice that implements it, and the
+canonical association **domain layer** it must satisfy is now specified by
+[Content authoring, Scenario preparation and Artifact management §4.1](../product/content-authoring-scenario-preparation-and-artifact-management.md#41-the-canonical-artifact-association-layer).
 
 | Example                | Model                                  |
 | ---------------------- | -------------------------------------- |
@@ -155,6 +157,20 @@ The recording mechanism belongs to the slice that implements it.
 
 This settles the earlier question in both directions: yes to Encounter-level
 association for Items, no to persistent Encounter ownership for pure Artifacts.
+
+> **Clarified and narrowly amended by PRODUCT OWNER RULING C1, 2026-09-23**,
+> recorded in
+> [Content authoring, Scenario preparation and Artifact management §10](../product/content-authoring-scenario-preparation-and-artifact-management.md#10-encounter-and-artifact-ownership-versus-durable-association),
+> which is the controlling contract for that model.
+>
+> **Ownership and durable association are different things.** Artifacts remain
+> Campaign-scoped resources, and an Encounter still does **not own** pure
+> Artifacts merely to support display — the prohibition above is unchanged.
+> However, **durable typed Encounter-to-Artifact associations are approved**
+> where they serve preparation, historical participation/use and later querying.
+> Such associations **survive the Encounter**. Active Encounter state determines
+> the current player projection; **ending the Encounter removes the active
+> filtering effect but does not erase historical associations.**
 
 ### 4.5 Reveal and Share are two different operations
 
@@ -423,6 +439,13 @@ The AI-friendly intake work in
 [#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271) improves
 that authoring seam and is **independent of this milestone**. No slice below
 depends on it, and no slice below may absorb it.
+
+> The controlling contract for that authoring surface — one Artifact system, one
+> import pipeline with several entry points, the central Campaign Material
+> surface, and Scenario preparation — is
+> [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md).
+> It does not change this boundary: Campaign Artifact management remains a GM
+> authoring and index surface and is not the player in-play experience.
 
 ---
 
@@ -811,6 +834,14 @@ entity/table called for by point 6. Nothing in this contract is written against
 **Scope of the ruling.** Contract and product documentation only. It authorizes
 no runtime implementation, schema, or migration beyond what the existing slice
 authorizations already permit.
+
+> **Extended, not changed, on 2026-09-23.** A further Product Owner ruling
+> requires **one canonical Artifact Association domain/service abstraction**
+> across typed targets — not necessarily one SQL table — and explicitly declines
+> to elevate `CampaignItemArtifactAttachment` into the universal mechanism
+> merely because it exists. See
+> [Content authoring, Scenario preparation and Artifact management §4.1](../product/content-authoring-scenario-preparation-and-artifact-management.md#41-the-canonical-artifact-association-layer).
+> The semantics above are unchanged and remain binding.
 
 ### PO-SPW-2 — SETTLED: the Blackboard is meta-level player collaboration
 

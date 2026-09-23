@@ -33,9 +33,16 @@ const mocks = vi.hoisted(() => ({
   commitDefenseReview: vi.fn(),
   commitParticipantReview: vi.fn(),
   runStepWorkflow: vi.fn(),
+  loadCharacterEquipmentState: vi
+    .fn()
+    .mockRejectedValue(new Error("Inspector combat loadout is not served in component tests.")),
   loadEncounter: vi.fn(),
+  loadEncounterItems: vi.fn().mockResolvedValue({ availableItems: [], items: [] }),
   loadItemOptions: vi.fn().mockResolvedValue(undefined),
   loadParticipants: vi.fn(),
+  loadServerCharacterById: vi
+    .fn()
+    .mockRejectedValue(new Error("Inspector combat loadout is not served in component tests.")),
   rollAttack: vi.fn(),
   rollFeint: vi.fn(),
   rollObservation: vi.fn(),
@@ -60,6 +67,23 @@ vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
     rollCombatObservationOnServer: mocks.rollObservation,
     setCombatExperienceDifficultyOnServer: mocks.setCombatExperienceDifficulty,
     submitCombatDeclarationOnServer: mocks.submitDeclaration,
+  };
+});
+
+// The panel and the encounter items surface it renders import from
+// `@/lib/api/localServiceClient`, not from `encounterClient`, so mocking
+// `encounterClient` alone left these functions live: happy-dom issued a real
+// request to the development API for every attempt, which is the connection
+// noise CI logged. `loadEncounterItems` is the one that actually fires here and
+// is served an empty projection; the two character loaders never fire in this
+// file and reject as the unserved endpoint does, so behaviour is unchanged.
+vi.mock("@/lib/api/localServiceClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/localServiceClient")>();
+  return {
+    ...actual,
+    loadCharacterEquipmentState: mocks.loadCharacterEquipmentState,
+    loadEncounterItems: mocks.loadEncounterItems,
+    loadServerCharacterById: mocks.loadServerCharacterById,
   };
 });
 
