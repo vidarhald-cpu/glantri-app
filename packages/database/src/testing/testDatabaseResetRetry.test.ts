@@ -126,6 +126,48 @@ describe("resetTestDatabase lock-conflict containment", () => {
     }
   });
 
+  it("adapts the budget to the observed attempt cost instead of the static 1200ms floor", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      // The 2000ms case above cannot detect a regression in the `worstAttemptMs` adaptation:
+      // at 2000ms the adaptive budget and the static 1200ms floor happen to stop on the same
+      // attempt. 2500ms is chosen to sit inside the band where they diverge.
+      //
+      // The check after attempt k is `k*c + B(k) + W > 7000`, with cumulative backoff
+      // B(1)=100, B(2)=300, B(3)=700 and W = max(1200, worst observed attempt cost).
+      //
+      //   adaptive (W becomes 2500 after attempt 1)
+      //     attempt 1: 2500 + 100 + 2500 = 5100 <= 7000 -> retry
+      //     attempt 2: 5100 + 200 + 2500 = 7800 >  7000 -> stop, 2 attempts, elapsed 5100ms
+      //   static floor (W stays 1200)
+      //     attempt 1: 2500 + 100 + 1200 = 3800 <= 7000 -> retry
+      //     attempt 2: 5100 + 200 + 1200 = 6500 <= 7000 -> retry
+      //     attempt 3: 7800 + 400 + 1200 = 9400 >  7000 -> stop, 3 attempts, elapsed 7800ms
+      //
+      // The adaptation is therefore load-bearing: without it the helper overruns its own 7000ms
+      // budget by 800ms on a host this slow. Asserting exactly two attempts fails if it is gone.
+      const { stub, state } = createFailingPrismaStub(
+        Number.POSITIVE_INFINITY,
+        LOCK_CONFLICT_MESSAGE,
+        () => {
+          vi.advanceTimersByTime(2_500);
+        },
+      );
+
+      await expect(resetTestDatabase(stub)).rejects.toThrow(
+        /PostgreSQL lock conflict \(40P01\) persisted for \d+ms across 2 reset attempts/,
+      );
+
+      expect(state.attempts).toBe(2);
+      expect(consoleError).toHaveBeenCalledTimes(1);
+      expect(consoleError.mock.calls[0]?.[0]).toContain("[resetTestDatabase] DEADLOCK RETRY 1/4");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not treat a message that merely contains the digits 40001 as a lock conflict", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     // A bare substring test classified this as a PostgreSQL serialization failure, retried it

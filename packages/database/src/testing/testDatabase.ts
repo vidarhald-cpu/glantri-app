@@ -66,11 +66,37 @@ export function getTestPrismaClient(): PrismaClient | null {
 //    has actually observed in this call (never below a 1200ms floor derived from the 1045ms
 //    measurement). If it cannot, it stops immediately and fails naming the deadlock.
 //
-// Together: five attempts at the measured rate exhaust at ~6725ms, leaving ~3275ms (33%) of
-// the hook budget; and on a slower host, where attempts cost more, the elapsed check trips
-// earlier instead of later, so the failure still lands inside the budget. The window
-// [5000ms, 10000ms] is the design target - above Prisma's transaction timeout, below the hook
-// timeout.
+// What that actually guarantees is worth stating exactly, because it is not a single window.
+// Write c for the cost of one deadlocked attempt, B(k) for the cumulative backoff after k retries
+// (100/300/700/1500ms), and W = max(1200ms, worst attempt cost observed so far in this call). The
+// fail-fast check runs after attempt k, so attempt k+1 starts only if k*c + B(k) + W <= 7000. With
+// a steady per-attempt cost that yields five bands, not one window:
+//
+//   c <= 1075ms      5 attempts (the attempt bound), exits at 5c + 1500  (<= 6875ms)
+//   1076..1575ms     4 attempts, exits at 4c +  700  (5004..7000ms)
+//   1576..2233ms     3 attempts, exits at 3c +  300  (5028..6999ms)
+//   2234..3450ms     2 attempts, exits at 2c +  100  (4568..7000ms)
+//   c >= 3451ms      1 attempt and no retry at all, exits at c
+//
+// The measured cost above (1008-1045ms: the stock `postgres:16` deadlock_timeout plus reset work)
+// sits in the first band, so the task container and CI both exhaust the full five attempts at
+// ~6540-6725ms. That is the normal case, not a floor. There is deliberately no lower bound: the
+// fourth band exits as early as ~4568ms, and the fifth retries nothing at all.
+//
+// The three invariants that do hold across every band:
+//  * Elapsed time overruns the 7000ms budget only by the amount, if any, by which the *final*
+//    attempt cost more than every earlier attempt and more than the 1200ms floor — the check that
+//    authorised that attempt had already reserved W for it. Where attempt costs do not grow,
+//    elapsed is a flat <= 7000ms. This is what the adaptive `worstAttemptMs` below buys: pinned to
+//    the static 1200ms floor, a host at c = 2500ms would start a third attempt and exit at 7800ms,
+//    past the helper's own budget. `testDatabaseResetRetry.test.ts` pins that divergence so the
+//    adaptation cannot be removed without a test failing.
+//  * The failure names the deadlock rather than degrading into a generic "Hook timed out in
+//    10000ms", because <= 7000ms is inside Vitest's default `hookTimeout`. The single exception is
+//    the fifth band with c > 10_000ms, where one reset attempt alone outlasts the hook; no budget
+//    here can bound the cost of a single `deleteMany` chain against a wedged database.
+//  * The attempt count degrades monotonically as c rises (5, 4, 3, 2, 1), so a slower host gives
+//    up earlier rather than later.
 const RESET_LOCK_CONFLICT_BACKOFF_MS = [100, 200, 400, 800] as const;
 const RESET_LOCK_CONFLICT_MAX_ATTEMPTS = RESET_LOCK_CONFLICT_BACKOFF_MS.length + 1;
 const RESET_LOCK_CONFLICT_BUDGET_MS = 7_000;
