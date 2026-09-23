@@ -1,6 +1,6 @@
 # Artifact packages and library (AM1)
 
-AM1 implements the approved [Artifact architecture](artifact-management-package-import.md) for the owning Campaign GM. Artifact management is independent of global GM/Admin roles. Participants retain the existing explicit Campaign and Scenario publication channels; neither a dependency nor an attachment grants visibility.
+AM1 implements the approved [Artifact architecture](artifact-management-package-import.md) for the owning Campaign GM. The controlling contract for the wider content-authoring, Scenario-preparation and Artifact-management model is [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md). Artifact management is independent of global GM/Admin roles. Participants retain the existing explicit Campaign and Scenario publication channels; neither a dependency nor an attachment grants visibility.
 
 ## Library
 
@@ -14,7 +14,7 @@ The additive migration retains CampaignAsset IDs and existing columns. Ready, li
 
 POST `/campaigns/:campaignId/artifact-imports` accepts multipart, with one UTF-8 JSON `manifest` field first and resource file parts whose field names equal declared resource IDs. Filenames are display metadata only. There is no ZIP extraction, URL fetch, script execution or path resolution. PNG, JPEG, WebP and PDF use the existing signature, declared-type, length and SHA-256 validator; PDFs remain attachment-only.
 
-Limits: 1 MiB manifest; 100 objects; 100 resources; 25 MiB per resource; 100 MiB aggregate streamed resource bytes; 100 dependencies per object; dependency depth 32. Duplicate resource/object/source IDs, unknown fields, unsupported versions, malformed/trailing multipart, incorrect digests and executable declarations fail closed. Resource bytes must all be present and valid before review. Artifact-only object validation and dependency closure are repeated for each selection. Optional unsupported object types may be excluded; no other importer is enabled.
+Limits: 1 MiB manifest; 100 objects; 100 resources; 25 MiB per resource; 100 MiB aggregate streamed resource bytes; 100 dependencies per object; dependency depth 32. Duplicate resource/object/source IDs, unknown fields, unsupported versions, malformed/trailing multipart, incorrect digests and executable declarations fail closed. Resource bytes must all be present and valid before review. Typed object validation and dependency closure are repeated for each selection. The enabled importable types are **Artifact and Item** — Artifact from AM1, Item from #271 — and a package object declaring any other type is an unsupported object type that may be excluded. Optional unsupported object types may be excluded; no importer beyond the enabled set is available. Importable scope is governed by [Content authoring, Scenario preparation and Artifact management §11.5](../product/content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types).
 
 ```json
 {

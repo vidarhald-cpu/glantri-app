@@ -7,6 +7,12 @@ developer tooling, no checksums, no manifests and no repository access.
 Authoritative product rulings: Forgejo issue #271 (intake) and #268 (the Item
 versus Artifact distinction).
 
+> **Controlling contract:**
+> [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md).
+> This document remains the #271 intake contract; the controlling contract
+> governs the wider authoring, Artifact-management and Scenario-preparation
+> model, including importable scope.
+
 ## The division of labour
 
 The person or the AI states only **human and semantic facts**. Glantri derives
@@ -138,9 +144,24 @@ that did not; the problems; and the technical metadata Glantri derived —
 media type, byte size, SHA-256 and storage identity — as confirmation that the
 GM never had to supply any of it.
 
-## The advanced path
+## The advanced entry point
 
 The `Import Artifact package` route, with its authored manifest and declared
 checksums, is unchanged. It remains available for package-shaped work, it is
 not a prerequisite for ordinary intake, and ordinary intake never requires a
 GM to see a manifest.
+
+> **It is not a separate route.** In implementation, ordinary upload, AI-assisted
+> intake and authored package import are **three entry points into one
+> pipeline**: each builds an `ArtifactPackage` client-side through the shared
+> `artifactPackageDerivation`, posts it to
+> `POST /campaigns/:campaignId/artifact-imports`, and is staged, previewed and
+> explicitly accepted through the same `ArtifactImportReview` surface and the
+> same acceptance transaction. They differ only in the surface that assembles
+> the package and in the recorded `producer` —
+> `glantri-app/ordinary-upload`, `glantri-app/ai-intake`, or the authored
+> package's own. See
+> [Content authoring, Scenario preparation and Artifact management §2](content-authoring-scenario-preparation-and-artifact-management.md#2-the-one-pipeline-already-exists).
+
+> **Enabled importable types are Artifact and Item**, not Artifact alone. See
+> [§11.5](content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types).

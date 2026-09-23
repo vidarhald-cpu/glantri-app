@@ -2,6 +2,17 @@
 
 ## 1. Status and scope
 
+> **Controlling contract for content authoring, Artifact management and Scenario
+> preparation:**
+> [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md).
+> It records the Product Owner's 2026-09-23 rulings — C1, C2, C3, the
+> partial-acceptance clarification, the canonical Artifact Association
+> requirement, and the resolution of
+> [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) — and
+> governs where this note and it describe the same model. This note remains
+> authoritative for the #284 record and for the ten `OPEN-PPL-*` decisions that
+> remain open.
+
 **Portfolio areas:** #112 Campaign / Persistent Play, #114 Chargen, #119
 Artifact Management, #120/#227 Campaign Management, #122 AI Integration /
 Player-Created Content\
@@ -669,6 +680,16 @@ Recording #284 §11.
 - **Do not turn Encounter into a second rich authoring document.** Scenario
   carries the broader preparation and history.
 
+> **PRODUCT OWNER RULING C2, 2026-09-23** — recorded in
+> [Content authoring, Scenario preparation and Artifact management §13](content-authoring-scenario-preparation-and-artifact-management.md#13-encounter-stays-lightweight),
+> the controlling contract for this model. The lightweight principle above is
+> **preserved**, and the Scenario GM Plan is the long-form primary planning
+> document. Within that principle, an Encounter may carry **one lightweight
+> GM-only planning note**: plain/Markdown text; collapsible; directly editable;
+> importable/updateable; **no separate rich-document lifecycle.** Authoring
+> Packages may set or update this Encounter field, but **do not model a separate
+> rich "Encounter GM Plan document".**
+
 This is primarily a **preservation and scope-boundary requirement**. It is
 consistent with, and adds nothing to,
 [#268 D2](../architecture/scenario-play-workspace.md#3-controlling-distinctions)
@@ -748,10 +769,16 @@ Recorded in the style of
 and
 [PPV1 §18](../architecture/player-play-v1.md#18-open-decisions-and-recorded-mismatches).
 
-**Every decision below is genuinely open. Options are stated neutrally and none
-is chosen.** A lane that reaches one of these stops and returns it to the
-Product Owner / control plane rather than deciding it in implementation. None of
-these reopens anything settled by #268 or Player Play V1.
+**Every decision below is genuinely open, with one exception. Options are
+stated neutrally and none is chosen.** A lane that reaches one of these stops
+and returns it to the Product Owner / control plane rather than deciding it in
+implementation. None of these reopens anything settled by #268 or Player Play
+V1.
+
+> **Exception: [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded)
+> is SETTLED as of 2026-09-23.** Its heading is retained so existing references
+> continue to resolve. **The other ten decisions remain genuinely open and
+> unchanged.**
 
 ### OPEN-PPL-1 — How identity revelation is modelled
 
@@ -871,21 +898,46 @@ whatever carries notes and revealed-ness must survive the promotion.
 
 ### OPEN-PPL-6 — Where generic versus specific is recorded
 
-**Status:** Open. **Raised by:** #284 §7 (_"as data as well as styling"_).
-**Affects:** lanes B and C.
+**Status:** **SETTLED and closed.**\
+**Settled on:** 2026-09-23\
+**Authority:** PRODUCT OWNER RULING, recorded in
+[Content authoring, Scenario preparation and Artifact management §18.6](content-authoring-scenario-preparation-and-artifact-management.md#186-open-ppl-6-resolved).\
+**Raised by:** #284 §7 (_"as data as well as styling"_).
+**Affects:** lanes B and C.\
+**Gates:** **Nothing.** It no longer gates lane C.
 
-Options, **none chosen**:
+**The question as originally recorded**, retained as provenance:
 
-1. **A property of the Artifact** — an Artifact is generic-library material or
-   bespoke entity art, once and globally.
-2. **A property of the association** — the same Artifact may be a generic
-   stand-in for one entity and bespoke for another.
-3. **Both** — a library classification on the Artifact and a role on each
-   association.
+> Options, **none chosen**:
+>
+> 1. **A property of the Artifact** — an Artifact is generic-library material or
+>    bespoke entity art, once and globally.
+> 2. **A property of the association** — the same Artifact may be a generic
+>    stand-in for one entity and bespoke for another.
+> 3. **Both** — a library classification on the Artifact and a role on each
+>    association.
+>
+> Option 2 and option 3 interact with PO-SPW-1's requirement that an association
+> carry **attachment provenance** and support **zero, one or multiple**
+> representations; option 1 does not.
 
-Option 2 and option 3 interact with PO-SPW-1's requirement that an association
-carry **attachment provenance** and support **zero, one or multiple**
-representations; option 1 does not.
+**What was ruled.** Separate **intrinsic representation nature** from
+**contextual use**.
+
+- **Artifact:** intrinsic representation nature = **generic/reusable**,
+  **specific/bespoke**, or **unspecified** where required.
+- **Association:** contextual role/use — e.g. primary portrait, general
+  appearance, additional representation, fallback usage — plus **association
+  provenance**.
+- **"Generic" describes the content itself. "Currently used as a fallback for X"
+  describes a relationship.**
+- **Representation-readiness state should be derived from these dimensions**
+  rather than duplicating a single ambiguous generic/specific flag.
+
+This is effectively option 3, made precise: the two dimensions are not the same
+fact recorded twice, and readiness is **derived**, not stored as a third flag.
+It satisfies PO-SPW-1's attachment-provenance and multiplicity requirements,
+which the association half carries.
 
 ### OPEN-PPL-7 — The audience granularity of shared/player notes
 
@@ -1051,15 +1103,15 @@ exact-path contract**.
 **Covers:** #284 §6 (Artifact/representation lifecycle), §7 (generic visual
 library).
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dependencies**                | [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)'s association semantics, already settled and **binding on this lane**. [#278](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/278) should land with or before any widening of `CampaignItemArtifactAttachment`, since widening a link table with a known database-level scoping gap enlarges that gap. #268 S6 is the Item-side slice of the same association. [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded), [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) and [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts) before Ready. |
-| **Extends, does not duplicate** | [#268 S6](../architecture/scenario-play-workspace.md#slice-s6--item-attached-artifact-representation-and-blackboard-sharing); the [#119 Artifact Management contract](../architecture/artifact-management-package-import.md#1-status-and-scope); #278; [#239](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/239) for the index side. **PO-SPW-1 point 5 requires evaluating `CampaignItemArtifactAttachment` against the association semantics before reusing it**, and point 6 requires a dedicated link entity otherwise. Nothing in this map presumes that evaluation's outcome.                                                                                                                                                                       |
-| **Data hotspots**               | Prisma schema and migrations (reserved): `CampaignItemArtifactAttachment`, `CampaignAsset`, `ScenarioArtifactReference`, `ArtifactRevision`. `packages/database/src/services/artifactService.ts` (~621 lines, holds `listVisible`). `packages/domain/src/campaign/artifact.ts` (`artifactCommonDtoSchema` — the field set PPV1 records as carrying no scenario scope).                                                                                                                                                                                                                                                                                                                                                                                              |
-| **API/UI hotspots**             | `apps/api/src/routes/artifacts.ts`, `artifactImports.ts`. `apps/web/src/features/artifacts/ArtifactPanel.tsx`, `ArtifactDetails.tsx`, `OrdinaryArtifactUploadPanel.tsx`, `inspection/`. Campaign/Scenario Item routes and UI (reserved hotspot, shared with #268 S4/S5 and PPV1 P2/P7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| **Settled**                     | PO-SPW-1's association semantics, including that a one-to-one pointer field is **not acceptable**; attaching transfers no ownership and an attached Artifact never becomes an Item; consumers reference stable identity; a reference does not grant view rights; **disassociation must not implicitly delete**; attach / edit metadata / replace media / change primary role / disassociate are all first-class; PCs as well as NPCs may carry Artifacts; generic library imagery is visibly distinct, pencil/sketch is the current convention, generic-versus-specific is recorded **as data**, and specific entities may fall back to generic imagery.                                                                                                            |
-| **Still open**                  | [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded), [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation), [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — schema change, and player self-service is an authorization change. PO-SPW-1's [proofs 11 to 14](../architecture/scenario-play-workspace.md#14-verification-expectations-for-authorized-slices) apply directly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dependencies**                | [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)'s association semantics, already settled and **binding on this lane**. [#278](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/278) should land with or before any widening of `CampaignItemArtifactAttachment`, since widening a link table with a known database-level scoping gap enlarges that gap. #268 S6 is the Item-side slice of the same association. [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) and [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts) before Ready. [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is **settled** and no longer gates this lane. |
+| **Extends, does not duplicate** | [#268 S6](../architecture/scenario-play-workspace.md#slice-s6--item-attached-artifact-representation-and-blackboard-sharing); the [#119 Artifact Management contract](../architecture/artifact-management-package-import.md#1-status-and-scope); #278; [#239](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/239) for the index side. **PO-SPW-1 point 5 requires evaluating `CampaignItemArtifactAttachment` against the association semantics before reusing it**, and point 6 requires a dedicated link entity otherwise. Nothing in this map presumes that evaluation's outcome.                                                                                                                                                                                                                    |
+| **Data hotspots**               | Prisma schema and migrations (reserved): `CampaignItemArtifactAttachment`, `CampaignAsset`, `ScenarioArtifactReference`, `ArtifactRevision`. `packages/database/src/services/artifactService.ts` (~621 lines, holds `listVisible`). `packages/domain/src/campaign/artifact.ts` (`artifactCommonDtoSchema` — the field set PPV1 records as carrying no scenario scope).                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **API/UI hotspots**             | `apps/api/src/routes/artifacts.ts`, `artifactImports.ts`. `apps/web/src/features/artifacts/ArtifactPanel.tsx`, `ArtifactDetails.tsx`, `OrdinaryArtifactUploadPanel.tsx`, `inspection/`. Campaign/Scenario Item routes and UI (reserved hotspot, shared with #268 S4/S5 and PPV1 P2/P7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Settled**                     | PO-SPW-1's association semantics, including that a one-to-one pointer field is **not acceptable**; attaching transfers no ownership and an attached Artifact never becomes an Item; consumers reference stable identity; a reference does not grant view rights; **disassociation must not implicitly delete**; attach / edit metadata / replace media / change primary role / disassociate are all first-class; PCs as well as NPCs may carry Artifacts; generic library imagery is visibly distinct, pencil/sketch is the current convention, generic-versus-specific is recorded **as data**, and specific entities may fall back to generic imagery.                                                                                                                                                         |
+| **Still open**                  | [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation), [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts). [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is now settled.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — schema change, and player self-service is an authorization change. PO-SPW-1's [proofs 11 to 14](../architecture/scenario-play-workspace.md#14-verification-expectations-for-authorized-slices) apply directly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ### Lane D — AI parity, batch review and trusted bulk authoring
 
@@ -1068,7 +1120,7 @@ library).
 |                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Dependencies**                | **[#279](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/279) must be settled first** for any tier that could apply a suggested visibility — it is the Reveal-boundary decision, and this note does not answer it. **Lanes A and C must precede the corresponding AI capability**, because [parity](#3-ai-parity-principle) requires the ordinary in-app path to exist; AI may not reach a canonical field humans cannot. [#277](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/277) is the outstanding parity repair from #271 and is arguably this lane's first item. [OPEN-PPL-8](#open-ppl-8--whether-the-review-tiers-are-new-modes-or-configurations) before Ready. |
-| **Extends, does not duplicate** | [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md) and #271; [AM §21.5](../architecture/artifact-management-package-import.md#215-ai-and-player-authoring), [§15 validation and import lifecycle](../architecture/artifact-management-package-import.md#15-validation-and-import-lifecycle), [§17.3 atomic acceptance](../architecture/artifact-management-package-import.md#173-atomic-acceptance) and [§17.4](../architecture/artifact-management-package-import.md#174-no-best-effort-partial-import); the advanced package route, which [stays unchanged](ai-assisted-artifact-intake.md#the-advanced-path).                                                       |
+| **Extends, does not duplicate** | [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md) and #271; [AM §21.5](../architecture/artifact-management-package-import.md#215-ai-and-player-authoring), [§15 validation and import lifecycle](../architecture/artifact-management-package-import.md#15-validation-and-import-lifecycle), [§17.3 atomic acceptance](../architecture/artifact-management-package-import.md#173-atomic-acceptance) and [§17.4](../architecture/artifact-management-package-import.md#174-no-best-effort-partial-import); the advanced package **entry point**, which [stays unchanged](ai-assisted-artifact-intake.md#the-advanced-entry-point) and is not a separate pipeline.       |
 | **Data hotspots**               | `packages/database/src/services/artifactService.ts`; the intake staging path; Prisma schema if a risk classification is persisted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | **API/UI hotspots**             | `apps/web/src/features/artifacts/intake/` (`AiIntakePanel.tsx`, `intakeProposal.ts`); `apps/web/src/features/artifacts/ArtifactImportPanel.tsx`; `apps/api/src/routes/artifacts.ts`, `artifactImports.ts`. **Execution risk:** [#280](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/280) records `ArtifactImportPanel` test flakes under CI load in exactly this surface.                                                                                                                                                                                                                                                                                                        |
 | **Settled**                     | The parity principle itself, as a constraint on every capability; the detailed staged GM review is **preserved** for consequential named/canonical content; batch review uses counts, validation, duplicate and unresolved-association reporting and sampled previews; trusted bulk intake is for low-risk generic visual/library material; **the same underlying in-app/domain operations remain authoritative at every tier**; today's intake creates everything GM-private and guesses nothing.                                                                                                                                                                                         |
@@ -1103,7 +1155,7 @@ Lane A  canonical NPC / Actor authoring
 
 Lane C  Artifact association + PC self-service + generic visual library
          extends #268 S6 / #119; sequence with #278
-         gate: OPEN-PPL-6, OPEN-PPL-9, OPEN-PPL-10                 — QA FLOOR
+         gate: OPEN-PPL-9, OPEN-PPL-10 (OPEN-PPL-6 settled)        — QA FLOOR
 
 Lane D  AI parity + batch review + trusted bulk
          follows the human path it must have parity with (A, C)

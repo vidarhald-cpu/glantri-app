@@ -7,6 +7,7 @@
 - Related issues/PRs: #350, #341, #318, #342, #340, #333
 - Supersedes: direct `CampaignAsset.storageUrl` creation and rendering as an application content path
 - Superseded in revision/lifecycle/import scope by: [AM1 Artifact packages and library](../../architecture/artifact-package-format.md), approved #119 / implementation #203.
+- Authoring, association and Scenario-preparation model: [Content authoring, Scenario preparation and Artifact management](../../product/content-authoring-scenario-preparation-and-artifact-management.md). The storage and privacy boundary decided here is unchanged by it.
 
 ## Context
 
