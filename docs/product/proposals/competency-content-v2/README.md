@@ -1,10 +1,12 @@
-# Competency Content V2 — Product Owner proposal
+# Competency Content V2 — Product Owner content (canonical)
 
-> **Status: NON-CANONICAL PRODUCT OWNER PROPOSAL — reconciled against all 2026-09-21 rulings, awaiting review.**
-> **Content V2 product design is closed by ruling; the catalogue itself is still not canonical.**
-> Nothing in this folder is approved Glantri content. It does not replace the approved
-> [competency reference](../../../rules/competency-reference/README.md), is not registered with
-> Chargen, and is not projected into canonical content.
+> **Status: CANONICAL — accepted by the Product Owner on 2026-09-23 (Forgejo #250).**
+> See [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md)
+> for the acceptance ruling and the completion gate evidence it rests on.
+> This is now approved Glantri content. It does not yet replace the approved
+> [competency reference](../../../rules/competency-reference/README.md), is not yet registered with
+> Chargen, and is not yet projected into canonical content — that wiring is the separate,
+> explicitly scoped work of #251/#252.
 
 Issue: [#266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266), under umbrella #249,
 successor to the integrated [#250](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/250).
@@ -20,9 +22,11 @@ must earn their complexity, cores must be minimal, and the language blocker is r
 the two later **settled rulings of the same day** — **Profession tracks** and **Profession cores** —
 which close the track question outright and settle every core the previous revision had left open. It
 now also carries the final ruling of that day, **Learning Group membership (settled)**, which retires
-one group, reduces four, and **closes Content V2 product design**. Closing the design does **not** make
-the catalogue canonical: it means the remaining genuine Product Owner questions are answered, and what
-is left is bounded completion under settled rules.
+one group, reduces four, and **closes Content V2 product design**. Closing the design did **not**, by
+itself, make the catalogue canonical: it meant the remaining genuine Product Owner questions were
+answered, with bounded completion under settled rules left to follow. The Product Owner separately
+accepted the catalogue as canonical on 2026-09-23, on the clean completion gate that followed that
+completion — see [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
 
 ## Contents
 
@@ -358,7 +362,8 @@ the prose and the numbers cannot drift.
 - **Poisons and Warded-Lock Entry keep their approved absence of a generic occupational route.**
 - **Olog is not corrected**, only flagged for a separate follow-up.
 - **No runtime, UI or Chargen change**, no importer outside this directory, and no entry in
-  `packages/content/src/index.ts`. The proposal is not canonical.
+  `packages/content/src/index.ts`. That wiring remains the separate, explicitly scoped work of
+  #251/#252; it is not authorized by this catalogue's canonical acceptance.
 
 ## Remaining Product Owner decisions
 
@@ -379,8 +384,10 @@ the P65 representation gap (**#113**) and access-provenance presentation (**#252
 Band route authoring is **done**, subject to the eight flagged route gaps and the Society Level 3–6
 refinement it deliberately leaves to a later pass.
 
-**Closing the design does not make Content V2 canonical.** The catalogue is still a non-canonical
-proposal awaiting review, and nothing in this folder is approved Glantri content.
+**Closing the design did not, by itself, make Content V2 canonical.** The Product Owner separately
+accepted the catalogue as canonical on 2026-09-23, on the clean completion gate run against `dev` —
+see [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
+The catalogue is approved Glantri content now, pending only the #251/#252 runtime wiring.
 
 ## Flagged for separate follow-up, not fixed here
 

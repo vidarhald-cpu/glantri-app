@@ -1,20 +1,22 @@
 /**
- * Competency Content V2 — NON-CANONICAL Product Owner proposal (Forgejo #250, umbrella #249).
+ * Competency Content V2 — CANONICAL Product Owner content (Forgejo #250, umbrella #249).
  *
- * This module is proposal content only. It is deliberately NOT exported from the package
- * entry point, NOT projected into `CanonicalContent`, and NOT reachable from Chargen or any
- * other runtime path. The approved catalogues in `targetProfessions.ts`,
- * `skillContentPlatform/targetLearningGroups.ts` and `skillContentPlatform/fullSkillCatalogueProposal.ts`
- * remain the controlling content until the Product Owner accepts or rejects this proposal.
+ * The Product Owner accepted this corpus as canonical on 2026-09-23; see
+ * `docs/decisions/rules/0007-competency-content-v2-canonical-acceptance.md`. It is still
+ * deliberately NOT exported from the package entry point, NOT projected into `CanonicalContent`,
+ * and NOT reachable from Chargen or any other runtime path — wiring it into those paths is the
+ * separate, explicitly scoped work of #251/#252. Until that wiring lands, the approved catalogues
+ * in `targetProfessions.ts`, `skillContentPlatform/targetLearningGroups.ts` and
+ * `skillContentPlatform/fullSkillCatalogueProposal.ts` remain the controlling runtime content.
  *
- * Every identifier used below must resolve against those approved catalogues; the proposal
- * adds no Skill and renames no Skill. It redesigns Learning Groups and Profession curricula,
- * restores first-class `pick N` choice slots, and proposes player-facing category and
- * language corrections.
+ * Every identifier used below must resolve against those approved catalogues; this corpus adds
+ * no Skill and renames no Skill. It redesigns Learning Groups and Profession curricula, restores
+ * first-class `pick N` choice slots, and settles player-facing category and language
+ * corrections.
  */
 
 export const COMPETENCY_CONTENT_V2_SCHEMA_VERSION = "competency-content-v2/proposal" as const;
-export const COMPETENCY_CONTENT_V2_STATUS = "non-canonical-product-owner-proposal" as const;
+export const COMPETENCY_CONTENT_V2_STATUS = "canonical-product-owner-accepted" as const;
 
 export interface V2SelectionSlot {
   /** Stable slot id, unique inside its Learning Group. */

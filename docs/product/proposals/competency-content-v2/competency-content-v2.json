@@ -1,6 +1,6 @@
 {
   "schemaVersion": "competency-content-v2/proposal",
-  "status": "non-canonical-product-owner-proposal",
+  "status": "canonical-product-owner-accepted",
   "manifest": {
     "groups": 95,
     "retainedGroups": 44,
@@ -25,7 +25,7 @@
     "groupOpportunities": 272,
     "directSkillOpportunities": 106,
     "directSpecializationOpportunities": 14,
-    "digest": "sha256:1c8940d43764879c735462159b086561030962a0de19c3fcab458ca5aa6a0762"
+    "digest": "sha256:3ba5d13ae4f423d6646d5e4ed2013f1367e94e05dfd7be4e4355a3a454ffcb39"
   },
   "coverage": {
     "baseSkills": 131,
