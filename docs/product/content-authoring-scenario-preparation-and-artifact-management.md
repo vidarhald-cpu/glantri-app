@@ -1,0 +1,749 @@
+# Content authoring, Scenario preparation and Artifact management
+
+## 1. Status and scope
+
+**Status:** Product Owner approved, 2026-09-23. This is the **controlling
+contract** for content authoring, Scenario preparation and Artifact management.
+Implementation is **not** authorized by this document.
+
+**Authority:** PRODUCT OWNER RULINGS recorded on
+[#284](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284) and
+[#250](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/250), including
+the 2026-09-23 rulings on the three conflicts a reconciliation pass surfaced
+(C1, C2, C3), the partial-acceptance clarification, the canonical Artifact
+Association ruling, and the resolution of OPEN-PPL-6.
+
+This contract **generalizes an implemented pipeline**. It does not introduce a
+second import system, and no reader should build one from it.
+
+### 1.1 What this contract controls
+
+One coherent model for: authoring and importing content; managing Artifacts and
+their associations; preparing a Scenario; and the AI round trip that supports
+all three. Where an older contract says something narrower, the older contract
+points here and this document governs.
+
+### 1.2 What this contract does not do
+
+- It does **not** reopen anything settled by #268 (Scenario Play Workspace),
+  Player Play V1, #271, or #119 Artifact Management, except where a ruling in
+  [section 18](#18-rulings-recorded-here) explicitly and narrowly amends it.
+- It does **not** authorize schema, migration, runtime or UI implementation.
+- It does **not** resolve any open decision other than OPEN-PPL-6. The other ten
+  `OPEN-PPL-*` decisions in
+  [the People/Artifact/GM authoring model](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen)
+  remain open and unchanged.
+- It does **not** answer
+  [#279](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/279). See
+  [section 11.6](#116-visibility-everything-begins-gm-private).
+
+---
+
+## 2. The one pipeline already exists
+
+This is the framing the rest of the document depends on.
+
+**Every authoring path in the implementation already builds an
+`ArtifactPackage` client-side and goes through one staging pipeline.** There is
+one envelope, one staging/preview/explicit-accept lifecycle, one derivation
+module and one confirmation surface. The paths differ only in the surface that
+assembles the package and in the `producer` recorded on it.
+
+| Entry point             | Surface that assembles the package                                | `producer`                    |
+| ----------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| Ordinary GM upload      | `apps/web/src/features/artifacts/OrdinaryArtifactUploadPanel.tsx` | `glantri-app/ordinary-upload` |
+| AI-assisted intake      | `apps/web/src/features/artifacts/intake/intakeProposal.ts`        | `glantri-app/ai-intake`       |
+| Authored package import | `apps/web/src/features/artifacts/ArtifactImportPanel.tsx`         | the package's own producer    |
+
+All three then share:
+
+- **one derivation module** — `apps/web/src/features/artifacts/artifactPackageDerivation.ts`
+  derives resource identity, media type and SHA-256 for every path;
+- **one API boundary** — `POST /campaigns/:campaignId/artifact-imports`, then
+  preview, then explicit accept
+  (`apps/api/src/routes/artifactImports.ts`);
+- **one confirmation surface** — `ArtifactImportReview`, exported from
+  `apps/web/src/features/artifacts/ArtifactImportPanel.tsx`;
+- **one acceptance transaction** —
+  `packages/database/src/repositories/artifactImportRepository.ts`.
+
+> **There is one import system with several contextual entry points.** Any
+> document, plan or slice that describes package import as a _separate route_
+> from ordinary upload or AI intake is describing the surface, not the pipeline,
+> and is stale.
+
+This contract therefore **generalizes** that pipeline. It widens the envelope
+and the entry points. It preserves the staging, preview, explicit-accept and
+privacy behaviour exactly as implemented.
+
+---
+
+## 3. One Artifact system
+
+There is **one uploader and one Artifact management system**. Portrait,
+item image, map, Scenario image and AI intake are **contextual entry points into
+it**, not separate subsystems.
+
+Four pieces of state are independent and must not be collapsed:
+
+| State                     | Lives on        | Meaning                                                                     |
+| ------------------------- | --------------- | --------------------------------------------------------------------------- |
+| Artifact identity         | the Artifact    | which logical Artifact this is, stable across revisions                     |
+| Artifact `kind`           | the Artifact    | what the media is — map, image, portrait, document, handout                 |
+| Association `role`        | the association | how it is used here — primary portrait, general appearance, fallback, other |
+| Visibility / presentation | separate state  | who may see it, and what is currently shown                                 |
+
+**`kind` is not `role`.** The same Artifact may be a portrait by kind and a
+fallback by role in one association and a primary portrait in another. This is
+the structural consequence of the OPEN-PPL-6 resolution in
+[section 18.6](#186-open-ppl-6-resolved).
+
+This restates and does not change
+[#284 §6 as recorded](people-artifact-and-gm-authoring-model.md#7-artifact-and-representation-lifecycle):
+Artifact identity, semantic association, visibility/reveal and current
+presentation are four separate pieces of state.
+
+---
+
+## 4. Typed associations
+
+Campaign, Scenario, Encounter, Person and Item relationships are **canonical
+typed associations**, not free-form tags. Ordinary tags remain, for search.
+
+- **Campaign is the owning scope.** Every Artifact and every association is
+  Campaign-scoped, per
+  [Artifact Management §6.2](../architecture/artifact-management-package-import.md#62-v1-ownership-model).
+- **Scenario association means intended or relevant use**, and is
+  **many-to-many**. It is not ownership and not visibility.
+- Associations are **manageable bidirectionally**: from the Artifact, and from
+  the associated object.
+
+### 4.1 The canonical Artifact Association layer
+
+**PRODUCT OWNER RULING, 2026-09-23 (Slice A).**
+
+> Do not elevate `CampaignItemArtifactAttachment` into the universal canonical
+> association mechanism merely because it exists. Establish a common canonical
+> Artifact Association domain layer supporting: typed target/domain; association
+> role; Campaign scope; bidirectional lookup; durable historical association;
+> association provenance; stable identity; revision pinning/provenance where the
+> associated media semantics require it; attach existing;
+> upload-new-and-attach; disassociate without deleting the Artifact. The
+> physical database representation need not be a single polymorphic table if
+> that would sacrifice referential integrity. Existing
+> `CampaignItemArtifactAttachment` may be migrated, adapted or wrapped as
+> appropriate. **The requirement is one canonical domain/service abstraction,
+> not necessarily one SQL table.**
+
+Required capabilities, restated as a checklist:
+
+1. typed target / domain;
+2. association role;
+3. Campaign scope;
+4. bidirectional lookup;
+5. durable historical association (see [section 9](#9-durable-history));
+6. association provenance (see [section 6](#6-provenance));
+7. stable identity;
+8. revision pinning and revision provenance where the associated media
+   semantics require it, in the sense of
+   [Artifact Management §4.4](../architecture/artifact-management-package-import.md#44-revision-pinning);
+9. attach an existing Artifact;
+10. upload new and attach in one act;
+11. **disassociate without deleting the Artifact.**
+
+This is consistent with, and does not weaken,
+[PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics),
+which already requires zero/one/many multiplicity, revision pinning, attachment
+provenance, and no one-to-one assumption, and which already declines to name a
+table. This ruling adds that the **domain abstraction** is singular even where
+the storage is not.
+
+Attaching, referencing or sharing still transfers no ownership
+([Artifact Management §6.4](../architecture/artifact-management-package-import.md#64-no-implicit-ownership-transfer)),
+and a reference still grants no view rights
+([§9.2](../architecture/artifact-management-package-import.md#92-references-do-not-grant-view-rights)).
+
+---
+
+## 5. Reuse first
+
+Existing canonical content is **reused, not recreated**.
+
+- Adding an existing Person or Item to a Scenario normally makes its relevant
+  canonical representations available automatically.
+- Scenario-specific media may still be attached directly.
+
+> **Reuse first is a reuse of canonical entities, never a byte-level auto-merge.**
+> [INV-ART-02](../architecture/artifact-management-package-import.md#inv-art-02--logical-identity-is-distinct-from-binary-identity)
+> continues to govern: identical bytes never collapse two logical Artifacts, and
+> [§16.5](../architecture/artifact-management-package-import.md#165-generic-merge-prohibited)
+> still prohibits generic merge. "Reuse" means the GM or the package **references
+> an existing canonical identity**; it never means the system silently unifies two
+> Artifacts because their content hashes match.
+
+---
+
+## 6. Provenance
+
+Provenance exists at two levels, and they answer different questions.
+
+**Artifact provenance** — who made this media, and where did it come from:
+
+- author/creator;
+- added or imported by;
+- source, batch and run;
+- optional source/workflow metadata.
+
+This is **provider-neutral**. No field names or assumes a particular AI vendor,
+model or tool.
+
+**Association provenance** — why this Artifact is attached here:
+
+- lightweight, for example "created by AI package X", "confirmed by GM";
+- enough to support audit, package review and **rollback of the association**.
+
+> **Rolling back an association must not delete the Artifact.** Reverting a
+> package's associations removes the relationships it created. The media remains
+> canonical Campaign material, per capability 11 in
+> [section 4.1](#41-the-canonical-artifact-association-layer) and
+> [Artifact Management §7.3](../architecture/artifact-management-package-import.md#73-retirement-rather-than-destructive-deletion).
+
+Object-level import provenance and the Import Record already specified by
+[Artifact Management §18](../architecture/artifact-management-package-import.md#18-provenance-and-import-record)
+are preserved unchanged.
+
+---
+
+## 7. Central Campaign Material surface
+
+One Campaign-level GM surface for finding and managing all authored material.
+
+**Layout:** a searchable, filterable list on the left; a **dominant Inspector**
+on the right; management controls on the surface. The Inspector is the existing
+one — [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector) — specialized,
+never a second Inspector.
+
+**Filters** include: Scenario; Encounter; type/kind; association role;
+visibility; author/source; batch; association status; representation readiness;
+and free search/tags.
+
+**Required capability:** the GM must be able to **filter to all content used by
+a Scenario without entering that Scenario's play UI.**
+
+Associations are manageable **bidirectionally** from this surface.
+
+> **Scope prohibition, carried forward verbatim:**
+> **"Do not build a general-purpose knowledge-management system."**
+> ([#284 §9 as recorded](people-artifact-and-gm-authoring-model.md#10-gm-campaign-material).)
+> The filter list above is the **most likely place for that prohibition to be
+> exceeded**. These are filters over canonical typed associations that already
+> exist. They are not folders, not taxonomies, not a document-management
+> hierarchy, and not a second home for any domain object.
+
+This surface extends
+[Campaign Management V2 §6.2](../architecture/campaign-management-v2.md#62-index-behavior-and-canonical-homes)
+— the index **references** domain objects and does not duplicate them — and
+remains, per
+[#268 §9](../architecture/scenario-play-workspace.md#9-campaign-artifact-management-boundary),
+a **GM authoring and index surface** that is not the player in-play experience
+and not a substitute for it.
+
+---
+
+## 8. Scenario preparation
+
+### 8.1 The Scenario GM Plan
+
+**One canonical long-form GM-only plan per Scenario.**
+
+- Collapsible.
+- Directly editable in the app.
+- Importable and updateable through an Authoring Package.
+- **It is not an Artifact.** It is Scenario-owned authored text.
+
+It is distinct from **all** of the following, and must not be conflated with
+any of them:
+
+| Not the GM Plan          | What it is instead                                                                                                                            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Player-facing scene text | Settled by [OPEN-PPV1-1](../architecture/player-play-v1.md#open-ppv1-1--settled-scenario-and-encounter-each-may-carry-replaceable-scene-text) |
+| GM announcements         | Settled by [PPV1 §9.3](../architecture/player-play-v1.md#93-gm-announcements-versus-scene-text)                                               |
+| Activity / history       | Settled by [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules)                                            |
+| The published summary    | Storage still open — [OPEN-PPL-11](people-artifact-and-gm-authoring-model.md#open-ppl-11--where-the-post-play-summary-lives)                  |
+
+This contract does **not** decide where the GM Plan is stored, and does **not**
+answer OPEN-PPL-11.
+
+### 8.2 Scenario resource assembly
+
+A Scenario assembles its resources by **association**, per
+[section 4](#4-typed-associations): the people, Items, Artifacts and Maps
+relevant to it. Assembly is preparation, not play, and not visibility.
+
+### 8.3 Encounter preparation
+
+Encounter preparation is **contextual state inside Scenario Play**. It is **not
+a player-facing play surface**, consistent with
+[#268 §6.1](../architecture/scenario-play-workspace.md#61-no-separate-encounter-play-page)
+and
+[PPV1 §7.2](../architecture/player-play-v1.md#72-no-parallel-encounter-systems).
+
+When an Encounter is active it **filters the Situation projection** while the
+**Scenario remains the persistent container**.
+
+---
+
+## 9. Durable history
+
+Associations are **historical campaign data**.
+
+- When a Scenario or an Encounter ends, its membership and roster **remain
+  queryable**.
+- Only the **current filtering effect** ceases.
+- This enables derived queries — what material a Scenario used, where a Person
+  has appeared, which Encounters an Artifact participated in.
+
+> **Planned and private material stays distinct from events that actually
+> happened. A GM Plan is never evidence that something occurred in play.**
+> Derived history reads from associations and from Activity; it never promotes
+> preparation text into a record of play. This is the same distinction the
+> Product Owner settled as _plan and actual summary remain distinct_
+> ([#284 §10 as recorded](people-artifact-and-gm-authoring-model.md#111-what-a-scenario-carries)).
+
+---
+
+## 10. Encounter and Artifact: ownership versus durable association
+
+**PRODUCT OWNER RULING, 2026-09-23 (C1).** This narrowly clarifies and amends
+[#268 §4.4](../architecture/scenario-play-workspace.md#44-encounter-association).
+
+> Artifacts remain Campaign-scoped resources; an Encounter does not own pure
+> Artifacts merely to support display. However, durable typed
+> Encounter↔Artifact associations are approved where they serve preparation,
+> historical participation/use and later querying. These associations survive
+> the Encounter. Active Encounter state determines current player projection;
+> ending the Encounter removes the active filtering effect but does not erase
+> historical associations.
+
+Read as a boundary:
+
+| Approved                                                            | Still not approved                                            |
+| ------------------------------------------------------------------- | ------------------------------------------------------------- |
+| A durable typed Encounter↔Artifact **association**                  | Encounter **ownership** of a pure Artifact                    |
+| Association serving preparation, participation history and querying | Introducing ownership semantics **merely to support display** |
+| Associations that survive the Encounter                             | Erasing associations when the Encounter ends                  |
+
+Display remains served by the **encounter-context Reveal action** #268 §4.4
+already specifies, and Reveal remains the GM visibility operation defined by
+[#268 §4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations).
+Nothing here changes Item encounter/scenario presence, which #268 §4.4 already
+settles as real game state.
+
+---
+
+## 11. The General Authoring Package
+
+The **General Authoring Package** is the common envelope for the one pipeline in
+[section 2](#2-the-one-pipeline-already-exists).
+
+### 11.1 What the envelope may carry
+
+- references to existing canonical entities and Artifacts;
+- new media;
+- Scenario GM Plan updates;
+- Encounter definitions;
+- Encounter planning-note updates;
+- associations;
+- provenance;
+- package/batch defaults.
+
+> **The envelope does not automatically make every domain object importable.**
+> See [section 11.5](#115-importable-domain-types).
+
+### 11.2 Identity
+
+- **Stable IDs govern round-trip identity.**
+- **Names are labels**, never identity —
+  [§16.1](../architecture/artifact-management-package-import.md#161-name-equality-is-not-identity-equality).
+- **Package-local IDs identify new proposals** until canonical IDs exist —
+  [§14.1](../architecture/artifact-management-package-import.md#141-package-local-identity).
+
+### 11.3 Package defaults and automated association
+
+A package inherits Campaign, Scenario, author and batch context as defaults.
+**Automatic association is the normal path when the relationship is
+unambiguous.**
+
+There are exactly **three** outcomes for a proposed relationship:
+
+| Outcome                      | Behaviour                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------- |
+| **Resolved**                 | Associate automatically.                                                      |
+| **Ambiguous**                | **Never guess.** Route to review, with the candidates listed.                 |
+| **Intentionally unattached** | A valid library Artifact with no association. **This is not an error state.** |
+
+> **"Intentionally unattached" does not exist today and is recorded here as
+> new.** Current behaviour, per
+> [AI-assisted intake](ai-assisted-artifact-intake.md#relationship-resolution),
+> blocks confirmation on an unresolved relationship until the GM binds a target
+> **or clears it** — there is no way to declare "deliberately unattached" as a
+> distinct, valid outcome. The **never guess** rule and the ambiguous-routing
+> behaviour are existing behaviour and are preserved exactly.
+
+### 11.4 Package semantics are additive
+
+> **A package is ADDITIVE by default. Omission from a later package must not
+> silently delete existing Scenario work.**
+
+A package that does not mention an association, a plan section or an Artifact
+says nothing about it. Removal is an **explicit** act, never an inference from
+absence. This protects hand-authored GM work against a regenerated batch.
+
+### 11.5 Importable domain types
+
+**PRODUCT OWNER RULING, 2026-09-23 (C3).** This **supersedes** the older
+"Artifact only" answer at
+[Artifact Management PO-6](../architecture/artifact-management-package-import.md#po-6--initial-importable-object-scope).
+
+> Importability is **explicit per-domain opt-in** through the common
+> staging/acceptance pipeline. **Artifact and Item are already enabled in
+> implementation.** Correct the stale documentation that still says
+> Artifact-only. The General Authoring Package is the common envelope; it does
+> not automatically make every domain object importable. Scenario GM Plan
+> updates, Encounter creation/planning-note updates and future domain types
+> become importable **only when their owning implementation lane explicitly
+> enables and validates them.** Preserve the existing
+> staging/preview/explicit-accept pipeline and privacy behavior.
+
+Current enabled state:
+
+| Type                                        | Status                                              |
+| ------------------------------------------- | --------------------------------------------------- |
+| Artifact                                    | **Enabled** (AM1)                                   |
+| Item                                        | **Enabled** (#271)                                  |
+| Scenario GM Plan update                     | Not enabled — requires its owning lane to enable it |
+| Encounter / planning note                   | Not enabled — requires its owning lane to enable it |
+| Map, Story, Character/NPC, any other domain | Not enabled — explicit opt-in only                  |
+
+The typed registry in
+[Artifact Management §13](../architecture/artifact-management-package-import.md#13-typed-object-registry)
+continues to govern what an owning domain must define before its type is
+enabled: what may be imported, required validation, legal references, legal
+creation and update semantics, conflict handling, permissions and lifecycle
+consequences.
+
+### 11.6 Visibility: everything begins GM-private
+
+> **Every imported object begins GM-private, regardless of what the producer
+> claims.** A suggested visibility is recorded as a suggestion and is never
+> applied. Sharing remains a separate, deliberate act.
+
+This is existing, implemented behaviour — see
+[AI-assisted intake, Visibility](ai-assisted-artifact-intake.md#visibility) —
+and this contract preserves it without change.
+
+> **Dependency:**
+> [#279](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/279) is the
+> open Product Owner decision on the Reveal boundary. **It blocks any package
+> default that could apply a suggested visibility.** This contract records the
+> dependency and **does not resolve it**.
+
+---
+
+## 12. Bulk intake and review
+
+Bulk intake provides:
+
+- a validation summary;
+- counts by status;
+- spot review of sampled entries;
+- exception review of the entries that need a decision;
+- **partial acceptance**, as defined below.
+
+### 12.1 Partial acceptance means pre-commit selection
+
+**PRODUCT OWNER CLARIFICATION, 2026-09-23.** Stated prominently because a reader
+of the target model alone would otherwise build the behaviour that
+[Artifact Management §17.4](../architecture/artifact-management-package-import.md#174-no-best-effort-partial-import)
+forbids.
+
+> **Partial acceptance = select/deselect entries during staging and atomically
+> commit the selected valid subset. Do not introduce best-effort runtime partial
+> commit after acceptance begins. A failed selected transaction remains a failed
+> transaction.**
+
+Concretely:
+
+- Selection happens **before** acceptance
+  ([§17.1](../architecture/artifact-management-package-import.md#171-optional-selection)),
+  and changing it recomputes dependencies and revalidates
+  ([§17.2](../architecture/artifact-management-package-import.md#172-dependency-recomputation)).
+- The selected graph then commits **atomically**
+  ([§17.3](../architecture/artifact-management-package-import.md#173-atomic-acceptance)).
+- If it fails, **nothing from that attempt is authoritative**
+  ([§17.5](../architecture/artifact-management-package-import.md#175-failed-commit)).
+- **"Import whatever succeeds and leave the rest failed" remains prohibited.**
+
+Nothing in "bulk" or "partial" weakens this. The word _partial_ describes the
+**subset the GM chose**, never a partially committed result.
+
+### 12.2 Review tiers
+
+The graded review tiers — detailed staged GM review, batch review, trusted bulk
+intake — are recorded at
+[#284 §8 as recorded](people-artifact-and-gm-authoring-model.md#9-ai-ingestion-scale).
+A tier changes the **review shape** only; it never changes what an operation
+means and never creates a second canonical path. Whether the tiers are modes or
+configurations remains open under
+[OPEN-PPL-8](people-artifact-and-gm-authoring-model.md#open-ppl-8--whether-the-review-tiers-are-new-modes-or-configurations),
+which this contract does not answer.
+
+---
+
+## 13. Encounter stays lightweight
+
+**PRODUCT OWNER RULING, 2026-09-23 (C2).**
+
+> Preserve the settled principle that Encounter remains comparatively
+> lightweight. The Scenario GM Plan is the long-form primary planning document.
+> An Encounter may have **one lightweight GM-only planning note**: plain or
+> Markdown text; collapsible; directly editable; importable/updateable; **no
+> separate rich-document lifecycle.** Authoring Packages may set or update this
+> Encounter field, but **do not model a separate rich "Encounter GM Plan
+> document".**
+
+| Approved                                   | Still prohibited                                     |
+| ------------------------------------------ | ---------------------------------------------------- |
+| One GM-only planning note **field**        | A second rich authoring document                     |
+| Plain/Markdown text, collapsible, editable | A separate document lifecycle, versioning or history |
+| Packages may set/update the field          | Packages creating an "Encounter GM Plan" entity      |
+
+The settled principle this preserves is
+[#284 §11 as recorded](people-artifact-and-gm-authoring-model.md#12-encounter):
+keep Encounter comparatively lightweight, and **do not turn Encounter into a
+second rich authoring document**. That principle is unchanged; the ruling grants
+one field within it.
+
+It equally does not disturb
+[PO-SPW-3](../architecture/scenario-play-workspace.md#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling).
+
+---
+
+## 14. Scenario Preparation Brief and the AI round trip
+
+A **Scenario Preparation Brief** gives an AI assistant the context it needs to
+propose material for a Scenario, and the assistant returns a **General Authoring
+Package** that enters the ordinary pipeline in
+[section 2](#2-the-one-pipeline-already-exists).
+
+The round trip changes nothing about authority: the returned package is staged,
+previewed and explicitly accepted, and creates nothing before the GM confirms
+([the intake invariant](ai-assisted-artifact-intake.md#the-invariant)).
+
+---
+
+## 15. Representation readiness
+
+Representation readiness is a **derived** state, per the OPEN-PPL-6 resolution
+in [section 18.6](#186-open-ppl-6-resolved). Its reported values are:
+
+| Value                | Meaning                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| **bespoke**          | A specific, purpose-made representation exists and is in use.           |
+| **generic fallback** | A generic/reusable Artifact is currently serving as the representation. |
+| **missing-expected** | A representation is expected here and none exists.                      |
+| **none-required**    | No representation is expected for this object.                          |
+
+Readiness reports **drill into the Campaign Material surface**
+([section 7](#7-central-campaign-material-surface)) rather than forming a
+separate reporting area.
+
+> Readiness is **derived** from the Artifact's intrinsic representation nature
+> and the association's role. It is **not** a fourth stored flag, and it must not
+> reintroduce a single ambiguous generic/specific boolean.
+
+---
+
+## 16. AI parity
+
+> **Anything AI or package intake can canonically create, associate or update
+> MUST also be achievable through in-app human tooling.**
+
+AI may **batch and automate**. It must **not** have privileged domain semantics.
+There is no canonical field an AI can reach that a GM cannot.
+
+This is the same principle recorded at
+[#284 §2 as recorded](people-artifact-and-gm-authoring-model.md#3-ai-parity-principle),
+restated here because [section 11.1](#111-what-the-envelope-may-carry) widens
+what a package may carry, and every widening inherits the parity obligation.
+
+---
+
+## 17. Scope boundaries
+
+| Item                            | Status                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Reusable Encounter templates    | **Later scope.** Recorded, not authorized.                                                             |
+| Random-Encounter mechanics      | **Not in scope.**                                                                                      |
+| Content Production Interface    | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface). |
+| Storage of the Scenario GM Plan | Not decided here.                                                                                      |
+| Anything gated on #279          | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                             |
+
+---
+
+## 18. Rulings recorded here
+
+All rulings below are PRODUCT OWNER rulings of **2026-09-23** unless stated
+otherwise. They are recorded faithfully and are neither softened nor extended.
+
+### 18.1 C1 — Encounter and Artifact persistence
+
+**Status:** Settled. **Amends:** [#268 §4.4](../architecture/scenario-play-workspace.md#44-encounter-association),
+narrowly. **Gates:** Nothing. Full text and boundary in
+[section 10](#10-encounter-and-artifact-ownership-versus-durable-association).
+
+### 18.2 C2 — Encounter planning
+
+**Status:** Settled. **Preserves:** [#284 §11 as recorded](people-artifact-and-gm-authoring-model.md#12-encounter).
+**Gates:** Nothing. Full text in [section 13](#13-encounter-stays-lightweight).
+
+### 18.3 C3 — Importable domain types
+
+**Status:** Settled. **Supersedes:**
+[Artifact Management PO-6](../architecture/artifact-management-package-import.md#po-6--initial-importable-object-scope).
+**Gates:** Nothing; each future type is gated on its own owning lane. Full text
+in [section 11.5](#115-importable-domain-types).
+
+### 18.4 Partial acceptance
+
+**Status:** Clarified and settled. **Preserves:**
+[Artifact Management §17.4](../architecture/artifact-management-package-import.md#174-no-best-effort-partial-import).
+Full text in [section 12.1](#121-partial-acceptance-means-pre-commit-selection).
+
+### 18.5 Slice A — canonical Artifact association architecture
+
+**Status:** Settled. **Consistent with:**
+[PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics).
+Full text in [section 4.1](#41-the-canonical-artifact-association-layer).
+
+### 18.6 OPEN-PPL-6 resolved
+
+**Status:** **SETTLED and closed**, 2026-09-23. **Authority:** Product Owner.
+**Was:**
+[OPEN-PPL-6 — Where generic versus specific is recorded](people-artifact-and-gm-authoring-model.md#open-ppl-6--where-generic-versus-specific-is-recorded).
+**Gates:** Nothing. It no longer gates lane C.
+
+> Separate **intrinsic representation nature** from **contextual use**.
+> **Artifact:** intrinsic representation nature = generic/reusable,
+> specific/bespoke, or unspecified where required.
+> **Association:** contextual role/use, e.g. primary portrait, general
+> appearance, additional representation, fallback usage, plus association
+> provenance.
+> **"Generic" describes the content itself. "Currently used as a fallback for X"
+> describes a relationship.**
+> Representation-readiness state should be **derived** from these dimensions
+> rather than duplicating a single ambiguous generic/specific flag.
+
+This is the resolution recorded in
+[section 3](#3-one-artifact-system) (kind versus role) and
+[section 15](#15-representation-readiness) (derived readiness).
+
+> **No other `OPEN-PPL-*` decision is resolved, narrowed or reopened by this
+> contract.** OPEN-PPL-1, 2, 3, 4, 5, 7, 8, 9, 10 and 11 remain open and
+> unchanged.
+
+---
+
+## 19. Future target: Content Production Interface
+
+**Status:** **Approved as future target architecture.**
+**This is future scope. It does NOT expand slices A to D, and it is NOT
+authorized for implementation.** No lane may absorb it and no slice may treat it
+as a dependency.
+
+### 19.1 The Production Brief/Kit
+
+A **versioned, machine-readable Production Brief/Kit** supplied to local or
+external AI production agents, containing as appropriate:
+
+- the canonical Profession catalogue and its stable IDs;
+- Civilization, Society and other context catalogues;
+- relevant Skill, Learning Group and rule metadata;
+- the existing reusable NPC, Artifact and Encounter-template inventory;
+- coverage and readiness gaps;
+- Authoring Package schemas and examples;
+- approved terminology;
+- visual and art-direction guidance;
+- canonical content version and digest provenance.
+
+The producer returns **the same validated Authoring Package** used by normal
+AI-assisted authoring — not a privileged format.
+
+> **It must not require privileged direct database access.** The Production
+> Brief is data out; the Authoring Package is data in; the ordinary
+> staging/preview/explicit-accept pipeline is the only way material becomes
+> canonical.
+
+### 19.2 Visual guidance must be layered
+
+Visual guidance must **distinguish three layers** and must keep them
+distinguishable to the producer:
+
+1. **canonical setting facts**;
+2. **approved visual/art-direction conventions**;
+3. **optional inspiration/reference material**.
+
+> **Generated artistic convention must not silently become game-world canon.**
+
+### 19.3 Future production use cases
+
+Recorded, not authorized:
+
+- a generic/fallback visual library;
+- **representative Profession NPCs at multiple ages and experience levels**;
+- a reusable authored Encounter Template library;
+- coverage-driven production queues and batches.
+
+### 19.4 Reusable Profession NPC representatives depend on an existing open decision
+
+The use case is recorded above. It **is not resolved here**, and this contract
+**does not silently answer the existing open decision that governs it**.
+
+> **The governing open decision is
+> [OPEN-PPL-4 — What a persistent NPC record is](people-artifact-and-gm-authoring-model.md#open-ppl-4--what-a-persistent-npc-record-is).**
+> A pre-authored, reusable Profession NPC representative is exactly a persistent
+> NPC record, and OPEN-PPL-4 is the unresolved question of which record carries
+> one — a GM-owned `Character`, a `ReusableEntity` whose snapshot is a full
+> character build, or both with promotion between them. It **must be resolved by
+> the Product Owner before any reusable Profession NPC library is produced.**
+
+Adjacent and also unresolved, for the Template half of the same use case:
+[OPEN-PPL-2 — Whether Actor is a new domain entity](people-artifact-and-gm-authoring-model.md#open-ppl-2--whether-actor-is-a-new-domain-entity),
+which names _Template_ as a product concept without deciding whether it is a
+domain entity.
+
+> **Neither blocks slice A.** Slice A is the canonical Artifact Association
+> layer in [section 4.1](#41-the-canonical-artifact-association-layer), which
+> concerns associations between existing typed targets and Artifacts and does
+> not depend on what a persistent NPC record is.
+
+---
+
+## 20. Relationship to existing contracts
+
+This contract is controlling for the model it describes. The documents below
+retain their own authority for everything else and point here for this model.
+
+| Document                                                                                      | Relationship                                                                                                                                             |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types). |
+| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                            |
+| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                              |
+| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                   |
+| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved); the other ten remain open.                                    |
+| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                               |
+| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                     |
+| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                               |
+| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                     |
+| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                   |
+| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                    |
