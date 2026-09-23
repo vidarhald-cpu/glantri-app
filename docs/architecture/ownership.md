@@ -19,6 +19,8 @@ functional-area and reserved-hotspot definitions.
 | Combat experience                  | GM/player combat UI, history, tracker, read models, synchronization, presentation                                 | Combat web features, presentation projections, encounter client synchronization                  |
 | Platform                           | Authentication, shared infrastructure, build/toolchain, cross-cutting API/database concerns, CI/CD                | Auth, shared config/contracts, root tooling, workflows, infrastructure                           |
 
+Content authoring, Artifact association and Scenario preparation cross the Campaign area; their controlling contract is [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md).
+
 Combat engine and combat experience are separate ownership areas. Their boundary should be explicit command, mutation-response, event, synchronization, and read-model contracts rather than assumptions duplicated in handlers and React state.
 
 ## Reserved integration hotspots

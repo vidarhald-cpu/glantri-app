@@ -19,6 +19,13 @@ The initial implementation scope is deliberately bounded:
 
 > **#119 V1 supports GM-managed Artifacts and Artifact-only package import.**
 
+> **Stale as written.** The Item importer has since been enabled by
+> [#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271), so the
+> enabled set is **Artifact and Item**. The controlling contract for importable
+> scope, and for the wider authoring model this contract feeds, is
+> [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md);
+> see its [§11.5](../product/content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types).
+
 The package architecture is designed to accommodate other object types later, but no other Glantri domain becomes importable merely because this generic package boundary exists.
 
 ---
@@ -578,15 +585,24 @@ Conceptually:
 Generic package boundary
         |
         +-- Artifact importer      [enabled in AM1]
-        +-- Map importer           [not enabled by #119]
-        +-- Story importer         [not enabled by #119]
-        +-- Item importer          [not enabled by #119]
+        +-- Item importer          [enabled by #271]
+        +-- Map importer           [not enabled]
+        +-- Story importer         [not enabled]
         +-- other domains          [only by later explicit opt-in]
 ```
 
-For #119 V1:
+For #119 V1 as originally scoped:
 
 > **Artifact is the only enabled importable Glantri object type.**
+
+**That is no longer current.** The **Item** importer was enabled by
+[#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271):
+`packages/domain/src/campaign/artifactPackage.ts` validates an object `type` of
+`Artifact` or `Item`, and
+`packages/database/src/repositories/artifactImportRepository.ts` creates the
+canonical `CharacterEquipmentItem` in the acceptance transaction. The enabled
+set is therefore **Artifact and Item**, and per-domain opt-in is governed by
+[Content authoring, Scenario preparation and Artifact management §11.5](../product/content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types).
 
 The existence of the generic registry does not authorize any other importer.
 
@@ -1366,7 +1382,10 @@ AM1 does not include:
 - silent best-effort partial import;
 - import of Maps;
 - import of Story;
-- import of Items;
+- ~~import of Items~~ — **no longer excluded**; the Item importer was enabled by
+  [#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271) and is
+  live in `artifactPackage.ts` and `artifactImportRepository.ts`, per
+  [Content authoring, Scenario preparation and Artifact management §11.5](../product/content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types);
 - import of Characters/NPCs;
 - import of Campaign runtime/state;
 - import of Combat state;
@@ -1473,11 +1492,27 @@ Source identity, matching provenance or newer package version may identify an up
 
 ## PO-6 — Initial importable object scope
 
-**Resolved:** Artifact only.
+**Resolved:** Artifact only, for AM1 as originally scoped.
 
-AM1 establishes the generic package envelope and import architecture, but only Artifact is enabled as an importable type.
+**SUPERSEDED by PRODUCT OWNER RULING C3, 2026-09-23**, recorded in
+[Content authoring, Scenario preparation and Artifact management §11.5](../product/content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types),
+which is the controlling contract for importable scope.
 
-Every other domain must explicitly define and approve its own future import semantics.
+> Importability is **explicit per-domain opt-in** through the common
+> staging/acceptance pipeline. **Artifact and Item are both already enabled in
+> implementation** — `packages/domain/src/campaign/artifactPackage.ts` accepts
+> an object `type` of `Artifact` or `Item`, and
+> `packages/database/src/repositories/artifactImportRepository.ts` creates the
+> canonical `CharacterEquipmentItem` inside the same acceptance transaction,
+> authorized by the [#271](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/271)
+> ruling. The General Authoring Package is the common envelope; it does **not**
+> automatically make every domain object importable. Scenario GM Plan updates,
+> Encounter creation and planning-note updates, and future domain types become
+> importable **only when their owning implementation lane explicitly enables and
+> validates them.** The existing staging/preview/explicit-accept pipeline and
+> privacy behaviour are preserved.
+
+Every other domain must still explicitly define and approve its own future import semantics.
 
 ---
 

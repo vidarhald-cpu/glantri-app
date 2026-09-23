@@ -124,6 +124,12 @@ Map creation and broader Map UX expansion remain deferred until ordinary
 Artifact and image upload is usable. Do not expand Maps to compensate for the
 current uploader.
 
+> **This dependency is satisfied and generalized.** Ordinary upload, AI-assisted
+> intake and authored package import are three entry points into **one** import
+> pipeline; the GM never handles package-engineering details on the ordinary
+> path. The controlling contract is
+> [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md).
+
 ## 6. Campaign material tracking
 
 Provide one Campaign working surface for keeping track of:
@@ -178,6 +184,12 @@ Examples include:
 
 > **The Campaign index references domain objects; it does not duplicate them.**
 
+> The Campaign Material surface that extends this index — its filters,
+> Inspector and bidirectional association management — is specified by
+> [Content authoring, Scenario preparation and Artifact management §7](../product/content-authoring-scenario-preparation-and-artifact-management.md#7-central-campaign-material-surface),
+> which carries forward the scope prohibition against a general-purpose
+> knowledge-management system.
+
 ## 7. Creation and retrieval are separate user jobs
 
 Creating material and finding, reviewing, or managing existing Campaign
@@ -186,6 +198,10 @@ material are distinct workflows.
 The UI may reuse components, queries, and lists where useful. It must not
 conflate the user's jobs merely because the workflows involve the same entity
 types.
+
+> Creation entry points may share one underlying pipeline without becoming one
+> job. See
+> [Content authoring, Scenario preparation and Artifact management §2](../product/content-authoring-scenario-preparation-and-artifact-management.md#2-the-one-pipeline-already-exists).
 
 ## 8. Artifact and image inspection
 
@@ -243,6 +259,9 @@ is a boundary statement, not a redesign, and this deferral stands.
 Ordinary Campaign authoring requires an upload flow for ordinary image and file
 material. Package validation may remain available for package import, but it is
 not the ordinary authoring experience.
+
+> Both are now the same validated pipeline behind different surfaces, per
+> [Content authoring, Scenario preparation and Artifact management §2](../product/content-authoring-scenario-preparation-and-artifact-management.md#2-the-one-pipeline-already-exists).
 
 ### Items
 

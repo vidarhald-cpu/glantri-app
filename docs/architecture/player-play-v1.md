@@ -882,7 +882,10 @@ The design must be compatible with the later principle that the GM uses the
 **same conceptual Play surface with additional controls**, while separate GM
 management pages handle preparation and administration.
 
-- **Do not design that GM management overhaul now.**
+- **Do not design that GM management overhaul now.** The approved GM authoring
+  model is recorded in
+  [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md),
+  which is GM-side and authorizes no implementation here.
 - **Do not absorb the existing GM Encounter workspace into this Player Play
   work.** It is retained as transitional GM-only management tooling by
   [PO-SPW-3](scenario-play-workspace.md#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling),

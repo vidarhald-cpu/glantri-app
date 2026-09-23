@@ -2,6 +2,8 @@
 
 This guide defines the product responsibilities for the Campaign, Scenario, and Encounter workspaces. These pages should help GMs and players understand what they can do now without exposing admin-only state, internal read-model mechanics, or future implementation notes.
 
+> The controlling contract for GM content authoring, Artifact management and Scenario preparation across these workspaces is [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md).
+
 ## Workspace Boundaries
 
 Character development, Campaign, Scenario, and Encounter are separate workspaces.

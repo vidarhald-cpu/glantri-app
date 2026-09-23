@@ -2,8 +2,15 @@
 
 Ordinary intake of material produced in an AI conversation: loose image or
 document files plus a small documented semantic context, pasted or supplied as
-a context file. It is the ordinary path; the advanced
-`Import Artifact package` route remains separate and optional.
+a context file. It is the ordinary entry point; the advanced
+`Import Artifact package` panel is a different entry point, not a different
+pipeline — both build an `ArtifactPackage` here in the client, post it to
+`POST /campaigns/:campaignId/artifact-imports`, and are staged, previewed and
+explicitly accepted through the same `ArtifactImportReview`. They differ in the
+recorded `producer`.
+
+Controlling contract:
+[Content authoring, Scenario preparation and Artifact management](../../../../../../docs/product/content-authoring-scenario-preparation-and-artifact-management.md).
 
 - `intakeProposal.ts` parses and plans. `planIntake` pairs each described entry
   with exactly one chosen file and reports every mismatch — a named file that
