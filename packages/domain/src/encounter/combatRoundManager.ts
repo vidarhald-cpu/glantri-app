@@ -219,9 +219,30 @@ import {
   type CombatObservationRoundUndoFact,
 } from "./combatObservation";
 import {
+  advanceCombatGenericActionAtOpportunity,
   advanceCombatGenericActionsToRound,
+  combatGenericActionDurationSchema,
+  combatGenericActionPresetSchema,
+  combatGenericActionProgressSchema,
+  combatGenericActionReferenceSchema,
+  combatGenericActionResolutionSchema,
+  combatGenericActionRollRequestSchema,
+  combatGenericActionRollResultSchema,
   combatGenericActionSchema,
+  combatGenericActionStatusSchema,
+  finishCombatGenericAction,
+  getCombatGenericActionOpportunityAdvances,
+  isCombatGenericActionFinalOpportunity,
+  isCombatGenericActionOpportunityOpen,
+  recordCombatGenericActionRoll,
+  reviewCombatGenericAction,
+  activateCombatGenericAction,
   type CombatGenericAction,
+  type CombatGenericActionDuration,
+  type CombatGenericActionPreset,
+  type CombatGenericActionReference,
+  type CombatGenericActionRollRequest,
+  type CombatGenericActionRollResult,
 } from "./combatGenericAction";
 import {
   appendCanonicalCombatStepEventForCommand,
@@ -558,6 +579,12 @@ export const combatRoundCommandTypeSchema = z.enum([
   "commit_round_end_distance_control",
   "advance_combat_boundary",
   "complete_round",
+  "review_combat_task",
+  "advance_combat_task",
+  "roll_combat_task",
+  "resolve_combat_task",
+  "interrupt_combat_task",
+  "cancel_combat_task",
 ]);
 export type CombatRoundCommandType = z.infer<typeof combatRoundCommandTypeSchema>;
 
@@ -1120,6 +1147,7 @@ export const combatRoundPhaseResolutionSubstepSchema = z.enum([
   "break_off",
   "feint",
   "adjust_distance",
+  "perform_task",
   "attack",
   "defense",
   "parry",
@@ -4055,6 +4083,7 @@ function getCombatRoundCursorStepForPhaseResolutionSubstep(input: {
     case "break_off":
     case "feint":
     case "adjust_distance":
+    case "perform_task":
     case "attack":
     case "done":
     case "effects":
@@ -5930,7 +5959,13 @@ function isUndoableCombatRoundCommandType(type: CombatRoundCommandType): boolean
     type === "roll_round_end_health_check" ||
     type === "roll_round_end_distance_control" ||
     type === "commit_round_end_distance_control" ||
-    type === "advance_combat_boundary"
+    type === "advance_combat_boundary" ||
+    type === "review_combat_task" ||
+    type === "advance_combat_task" ||
+    type === "roll_combat_task" ||
+    type === "resolve_combat_task" ||
+    type === "interrupt_combat_task" ||
+    type === "cancel_combat_task"
   );
 }
 
@@ -7052,7 +7087,117 @@ export function combatRoundParticipantHasExecutablePhaseAction(input: {
       return true;
     }
   }
+  // Perform Task is scheduled into the phase its reviewed duration names, so this question is asked
+  // of both phases. `getCombatRoundOpenPerformTaskForParticipant` only ever returns a task
+  // scheduled for the phase asked about, so a Phase 2 task never makes Phase 1 executable, nor the
+  // other way round.
+  if (
+    getCombatRoundOpenPerformTaskForParticipant({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: input.state,
+    })
+  ) {
+    return true;
+  }
   return combatRoundParticipantHasExecutablePhaseAttack(input);
+}
+
+/**
+ * The primary-action opportunity a Perform Task is scheduled for, under the Product Owner ruling of
+ * 2026-09-22 on Forgejo issue #287.
+ *
+ * `{ kind: "phase", phase }` is a one-opportunity task scheduled for the actor's primary-action
+ * opportunity **in the named phase**, and it resolves at that opportunity only. Every other
+ * duration — `round`, `rounds: N` and the unreviewed `gm_decided` — uses the actor's normal
+ * primary-action opportunity, which is Phase 1. Phase duration is therefore **not** equivalent to
+ * `round` or `rounds: N`: a `phase2` task is refused at Phase 1, and a `round` task is refused at
+ * Phase 2.
+ */
+export function getCombatTaskScheduledPhase(
+  duration: CombatGenericActionDuration,
+): CombatRoundPhase {
+  return duration.kind === "phase" ? duration.phase : "phase1";
+}
+
+/**
+ * The one canonical Perform Task holding this participant's primary-action opportunity **in the
+ * given phase** in the current round. Declaration-materialized Perform Task declarations only: the legacy parallel
+ * generic-action channel keeps its own route until A1b converges it.
+ *
+ * A participant can hold more than one live task, because a declaration mints a round-keyed task
+ * whenever no live `taskId` carries forward. Selection is therefore explicit rather than by array
+ * position: a task the GM has already started outranks one that has not been reviewed, and
+ * otherwise the most recently declared task wins. Storage order decides only between two tasks
+ * declared at the very same instant. A task that is not selected is left untouched and becomes
+ * selectable again once the selected one reaches a terminal status.
+ *
+ * A task is only a candidate for the phase its reviewed duration schedules it into, per
+ * `getCombatTaskScheduledPhase`. That is what makes the named phase part of scheduling rather than
+ * collapsing into "the actor's opportunity".
+ *
+ * Perform Task is a normal primary action, so the opportunity belongs to the **participant**, not
+ * to the individual task: once this participant's primary action for this phase has been spent for
+ * the round, no task of theirs is executable in that phase again until the next round. Without that
+ * gate a second, never-progressed task would still look open on its own progress alone and would
+ * grant a second primary action in one round.
+ *
+ * The opportunity is spent when **either** of two independent witnesses says so, because neither
+ * one covers the other:
+ *
+ * - `phaseResolutionStatuses[participantId][phase].substep === "done"` covers every primary action
+ *   that closes the phase without leaving a command the completion-evidence helper recognises — a
+ *   committed feint, break-off, adjust-distance or disarm, and operational-action cancellation.
+ *   All of those set `done` with an action step status of `complete`, not `skipped`.
+ * - `combatRoundParticipantPhaseActionHasCompletionEvidence` is derived from the immutable command
+ *   log rather than from a status the cursor machinery rewrites, and it recognises all four
+ *   consuming task command types. It covers the case the `done` substep does not: a participant
+ *   who is executable through another Phase 1 source — `observe_opponent`, which has no substep of
+ *   its own — has their `done` status cleared and re-derived as `perform_task`, which on its own
+ *   would reopen the already-spent opportunity.
+ *
+ * Keeping both makes the invariant independent of every executability source while staying at
+ * least as strict as the substep gate alone. Undo stays exact either way: undo restores
+ * `previousPhaseResolutionStatus` and removes the command, so it removes the evidence with it.
+ */
+export function getCombatRoundOpenPerformTaskForParticipant(input: {
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatGenericAction | undefined {
+  const open = input.state.genericActions.filter(
+    (action) =>
+      action.declarationKind === "perform_task" &&
+      action.ownerParticipantId === input.participantId &&
+      getCombatTaskScheduledPhase(action.duration) === input.phase &&
+      isCombatGenericActionOpportunityOpen({
+        action,
+        roundNumber: input.state.roundNumber,
+      }),
+  );
+  if (open.length === 0) return undefined;
+  if (
+    input.state.phaseResolutionStatuses[input.participantId]?.[input.phase]?.substep === "done" ||
+    combatRoundParticipantPhaseActionHasCompletionEvidence({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: input.state,
+    })
+  ) {
+    return undefined;
+  }
+  if (open.length === 1) return open[0];
+  const startedRank = (action: CombatGenericAction): number =>
+    action.status === "declared" ? 0 : 1;
+  return open.reduce((selected, candidate) => {
+    if (startedRank(candidate) !== startedRank(selected)) {
+      return startedRank(candidate) > startedRank(selected) ? candidate : selected;
+    }
+    if (candidate.createdAt !== selected.createdAt) {
+      return candidate.createdAt > selected.createdAt ? candidate : selected;
+    }
+    return candidate;
+  });
 }
 
 export function getNextCombatRoundPhaseActionParticipantId(input: {
@@ -7193,6 +7338,10 @@ function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
       ((command.phase === input.phase &&
         (command.type === "roll_attack" ||
           command.type === "skip_phase_action" ||
+          command.type === "advance_combat_task" ||
+          command.type === "resolve_combat_task" ||
+          command.type === "interrupt_combat_task" ||
+          command.type === "cancel_combat_task" ||
           command.type === "back_out_phase_attack")) ||
         combatRoundCommandCancelsPhaseAction({
           command,
@@ -7325,6 +7474,16 @@ function getCombatRoundInitialPhaseResolutionSubstep(input: {
     if (proposal && proposal.status !== "committed" && proposal.status !== "impossible") {
       return "feint";
     }
+  }
+  if (
+    !combatRoundParticipantHasExecutablePhaseAttack(input) &&
+    getCombatRoundOpenPerformTaskForParticipant({
+      participantId: input.participantId,
+      phase: input.phase,
+      state: input.state,
+    })
+  ) {
+    return "perform_task";
   }
   return combatRoundParticipantHasExecutablePhaseAction(input) ? "attack" : "done";
 }
@@ -17937,7 +18096,7 @@ function combatRoundStateHasPhaseResolutionEvidence(input: {
     return true;
   }
 
-  if (input.cursor.substep === "attack") {
+  if (input.cursor.substep === "attack" || input.cursor.substep === "perform_task") {
     const setupCommandType =
       input.cursor.phase === "phase1" ? "roll_initiative_phase1" : "roll_initiative_phase2";
 
@@ -26858,6 +27017,20 @@ function undoCombatRoundCommandAtIndex(input: {
     });
   }
 
+  if (
+    command.type === "review_combat_task" ||
+    command.type === "advance_combat_task" ||
+    command.type === "roll_combat_task" ||
+    command.type === "resolve_combat_task" ||
+    command.type === "interrupt_combat_task" ||
+    command.type === "cancel_combat_task"
+  ) {
+    return undoCombatTaskCommandAtIndex({
+      commandIndex: input.commandIndex,
+      state: normalized,
+    });
+  }
+
   if (command.type === "skip_phase_action") {
     return undoCombatRoundPhaseActionSkipCommandAtIndex({
       commandIndex: input.commandIndex,
@@ -28665,4 +28838,593 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
       rounds: [],
     }),
   ];
+}
+
+/**
+ * Compact, strictly versioned inverse facts for one canonical Perform Task lifecycle command.
+ * Only the fields the command actually touched are recorded. Full `CombatRoundState` snapshots are
+ * forbidden for new commits by the combat task integration matrix.
+ */
+export const combatTaskCommandUndoFactsSchema = z
+  .object({
+    actionId: idSchema,
+    commandId: idSchema,
+    kind: z.enum(["review", "advance", "roll", "resolve", "interrupt", "cancel"]),
+    phase: combatRoundPhaseSchema,
+    previousAwarenessContext: z.object({ kind: z.literal("survey") }).optional(),
+    previousDuration: combatGenericActionDurationSchema,
+    previousLastUpdatedAt: z.string().datetime(),
+    previousPhaseResolutionStatus: combatRoundPhaseResolutionParticipantStatusSchema.optional(),
+    previousPreset: combatGenericActionPresetSchema.optional(),
+    previousProgress: combatGenericActionProgressSchema,
+    previousReference: combatGenericActionReferenceSchema.optional(),
+    previousResolution: combatGenericActionResolutionSchema.optional(),
+    previousRollRequest: combatGenericActionRollRequestSchema.optional(),
+    previousRollResult: combatGenericActionRollResultSchema.optional(),
+    previousStatus: combatGenericActionStatusSchema,
+    previousStepStatus: combatRoundStepStatusSchema.optional(),
+    roundNumber: z.number().int().positive(),
+    version: z.literal(1),
+  })
+  .strict();
+export type CombatTaskCommandUndoFacts = z.infer<typeof combatTaskCommandUndoFactsSchema>;
+
+export type CombatTaskCommandKind = CombatTaskCommandUndoFacts["kind"];
+
+const COMBAT_TASK_COMMAND_TYPES = {
+  advance: "advance_combat_task",
+  cancel: "cancel_combat_task",
+  interrupt: "interrupt_combat_task",
+  resolve: "resolve_combat_task",
+  review: "review_combat_task",
+  roll: "roll_combat_task",
+} as const satisfies Record<CombatTaskCommandKind, CombatRoundCommandType>;
+
+export interface CombatTaskCommandOutcome {
+  action: CombatGenericAction;
+  command: CombatRoundCommand;
+  state: CombatRoundState;
+}
+
+function requireCombatRoundOpenPerformTask(input: {
+  actionId: string;
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatGenericAction {
+  // The named phase is part of scheduling. A task scheduled for the other phase is refused here
+  // rather than silently resolved at whichever opportunity the command happens to arrive at.
+  const scheduled = input.state.genericActions.find(
+    (candidate) => candidate.id === input.actionId && candidate.declarationKind === "perform_task",
+  );
+  if (scheduled && getCombatTaskScheduledPhase(scheduled.duration) !== input.phase) {
+    throw new RangeError(
+      getCombatTaskScheduledPhase(scheduled.duration) === "phase1"
+        ? "This Combat Task is scheduled for the actor's Phase 1 primary-action opportunity."
+        : "This Combat Task is scheduled for the actor's Phase 2 primary-action opportunity.",
+    );
+  }
+  const action = getCombatRoundOpenPerformTaskForParticipant({
+    participantId: input.participantId,
+    phase: input.phase,
+    state: input.state,
+  });
+  if (!action || action.id !== input.actionId) {
+    throw new RangeError("This Combat Task no longer holds the actor's action opportunity.");
+  }
+  const cursor = input.state.phaseResolutionCursor;
+  if (
+    cursor?.phase !== input.phase ||
+    cursor.participantId !== input.participantId ||
+    cursor.substep !== "perform_task"
+  ) {
+    throw new RangeError("The Combat Task is not the current action opportunity.");
+  }
+  return action;
+}
+
+function applyCombatTaskCommand(input: {
+  buildEvent?: (context: { commandId: string; state: CombatRoundState }) => CombatStepEvent;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  consumesOpportunity: boolean;
+  extraFacts?: Record<string, unknown>;
+  kind: CombatTaskCommandKind;
+  nextActions: readonly CombatGenericAction[];
+  participantId: string;
+  phase: CombatRoundPhase;
+  previousAction: CombatGenericAction;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+  updatedAt: string;
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
+  const previousAction = combatGenericActionSchema.parse(input.previousAction);
+  const previousParticipant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+  const beforeCursor = combatRoundCursorSchema.parse({
+    participantId: input.participantId,
+    roundNumber: normalized.roundNumber,
+    step: getCombatRoundAttackCursorStepForPhase(input.phase),
+  });
+  const commandType = COMBAT_TASK_COMMAND_TYPES[input.kind];
+  const commandId =
+    input.command.commandId ??
+    buildCombatRoundCommandId({
+      createdAt: input.command.createdAt,
+      participantId: input.participantId,
+      state: normalized,
+      type: commandType,
+    });
+  const undoFacts = combatTaskCommandUndoFactsSchema.parse({
+    actionId: previousAction.id,
+    commandId,
+    kind: input.kind,
+    phase: input.phase,
+    previousAwarenessContext: previousAction.awarenessContext,
+    previousDuration: previousAction.duration,
+    previousLastUpdatedAt: previousAction.lastUpdatedAt,
+    previousPhaseResolutionStatus:
+      normalized.phaseResolutionStatuses[input.participantId]?.[input.phase],
+    previousPreset: previousAction.preset,
+    previousProgress: previousAction.progress,
+    previousReference: previousAction.reference,
+    previousResolution: previousAction.resolution,
+    previousRollRequest: previousAction.rollRequest,
+    previousRollResult: previousAction.rollResult,
+    previousStatus: previousAction.status,
+    previousStepStatus: previousParticipant?.stepStatuses[actionStep],
+    roundNumber: normalized.roundNumber,
+    version: 1,
+  });
+
+  const withActions = combatRoundStateSchema.parse({
+    ...normalized,
+    genericActions: input.nextActions,
+  });
+  const advanced = input.consumesOpportunity
+    ? moveCombatRoundPhaseResolutionCursorToNextParticipant({
+        phase: input.phase,
+        state: setCombatRoundParticipantStepStatus({
+          participantId: input.participantId,
+          state: setCombatRoundPhaseResolutionStatus({
+            participantId: input.participantId,
+            phase: input.phase,
+            state: withActions,
+            status: { substep: "done", updatedAt: input.updatedAt },
+          }),
+          status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
+          step: actionStep,
+        }),
+        updatedAt: input.updatedAt,
+      })
+    : withActions;
+  const afterCursor = advanced.currentCursor ?? beforeCursor;
+  const command = combatRoundCommandSchema.parse({
+    afterCursor,
+    beforeCursor,
+    createdAt: input.command.createdAt,
+    createdByUserId: input.command.createdByUserId,
+    facts: {
+      ...(input.extraFacts ?? {}),
+      taskId: previousAction.id,
+      taskUndo: undoFacts,
+    },
+    id: commandId,
+    participantId: input.participantId,
+    phase: input.phase,
+    roundNumber: normalized.roundNumber,
+    step: beforeCursor.step,
+    type: commandType,
+  });
+  const event = input.buildEvent?.({ commandId, state: advanced });
+  const selectedStep = getCombatRoundStepForCursorStep(afterCursor.step);
+  const nextAction = combatGenericActionSchema.parse(
+    input.nextActions.find((candidate) => candidate.id === previousAction.id),
+  );
+
+  return {
+    action: nextAction,
+    command,
+    state: combatRoundStateSchema.parse({
+      ...advanced,
+      commands: [...advanced.commands, command],
+      currentCursor: afterCursor,
+      currentStep: selectedStep,
+      ...(event ? { events: [...advanced.events, event] } : {}),
+      selectedParticipantId: afterCursor.participantId ?? input.participantId,
+      selectedStep,
+    }),
+  };
+}
+
+/**
+ * Canonical GM review command. It carries every rule input the task needs — duration, roll basis,
+ * Skill/Stat, Difficulty, reference and the `look_around` preset — and activates the reviewed task
+ * in the same revision so the actor's opportunity is immediately executable.
+ */
+export function reviewCombatTaskAtOpportunity(input: {
+  actionId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  duration: CombatGenericActionDuration;
+  participantId: string;
+  phase: CombatRoundPhase;
+  preset?: CombatGenericActionPreset;
+  reference?: CombatGenericActionReference;
+  rollRequest?: CombatGenericActionRollRequest;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAction = requireCombatRoundOpenPerformTask({
+    actionId: input.actionId,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+  const reviewed = reviewCombatGenericAction({
+    actionId: input.actionId,
+    actions: normalized.genericActions,
+    duration: input.duration,
+    preset: input.preset,
+    reference: input.reference,
+    reviewedAt: input.updatedAt,
+    rollRequest: input.rollRequest,
+  });
+  const activated = activateCombatGenericAction({
+    actionId: input.actionId,
+    activatedAt: input.updatedAt,
+    actions: reviewed,
+    roundNumber: normalized.roundNumber,
+    step: normalized.currentStep,
+  });
+
+  // A review that schedules the task into the other phase does not spend a primary action — it
+  // moves the opportunity. This phase is closed for the participant so the resolution cursor moves
+  // on, and the task becomes executable at its named phase instead. The gate is per phase, so
+  // closing this one cannot grant a second primary action in the other.
+  const scheduledPhase = getCombatTaskScheduledPhase(input.duration);
+  const deferredToOtherPhase = scheduledPhase !== input.phase;
+
+  return applyCombatTaskCommand({
+    command: input.command,
+    consumesOpportunity: deferredToOtherPhase,
+    extraFacts: {
+      duration: input.duration,
+      preset: input.preset,
+      requiredAdvances: getCombatGenericActionOpportunityAdvances(input.duration) ?? null,
+      scheduledPhase,
+    },
+    kind: "review",
+    nextActions: activated,
+    participantId: input.participantId,
+    phase: input.phase,
+    previousAction,
+    state: normalized,
+    submittedBy: "gm",
+    updatedAt: input.updatedAt,
+  });
+}
+
+/** Records the canonical task roll. The roll does not consume the action opportunity. */
+export function rollCombatTaskAtOpportunity(input: {
+  actionId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  participantId: string;
+  phase: CombatRoundPhase;
+  result: CombatGenericActionRollResult;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAction = requireCombatRoundOpenPerformTask({
+    actionId: input.actionId,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+  if (previousAction.rollResult) {
+    throw new RangeError("This Combat Task roll has already been recorded.");
+  }
+  const rolled = recordCombatGenericActionRoll({
+    actionId: input.actionId,
+    actions: normalized.genericActions,
+    result: input.result,
+  });
+
+  return applyCombatTaskCommand({
+    command: input.command,
+    consumesOpportunity: false,
+    extraFacts: { success: input.result.success },
+    kind: "roll",
+    nextActions: rolled,
+    participantId: input.participantId,
+    phase: input.phase,
+    previousAction,
+    state: normalized,
+    submittedBy: "player",
+    updatedAt: input.updatedAt,
+  });
+}
+
+/**
+ * Consumes one primary-action opportunity for a multi-round task without resolving it. Refused at
+ * the task's final opportunity, which belongs to the resolve command.
+ */
+export function advanceCombatTaskAtOpportunity(input: {
+  actionId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+  updatedAt: string;
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAction = requireCombatRoundOpenPerformTask({
+    actionId: input.actionId,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+  if (
+    previousAction.duration.kind !== "gm_decided" &&
+    isCombatGenericActionFinalOpportunity(previousAction)
+  ) {
+    throw new RangeError("This Combat Task completes at this opportunity and must be resolved.");
+  }
+  const advancedActions = advanceCombatGenericActionAtOpportunity({
+    actionId: input.actionId,
+    actions: normalized.genericActions,
+    advancedAt: input.updatedAt,
+    roundNumber: normalized.roundNumber,
+  });
+
+  return applyCombatTaskCommand({
+    command: input.command,
+    consumesOpportunity: true,
+    extraFacts: { status: "advanced" },
+    kind: "advance",
+    nextActions: advancedActions,
+    participantId: input.participantId,
+    phase: input.phase,
+    previousAction,
+    state: normalized,
+    submittedBy: input.submittedBy,
+    updatedAt: input.updatedAt,
+  });
+}
+
+/**
+ * Consumes the task's final primary-action opportunity, resolves it with the GM-authored
+ * player-safe result text and its audience, and emits the canonical `task_resolved` event.
+ */
+export function resolveCombatTaskAtOpportunity(input: {
+  actionId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  participantId: string;
+  phase: CombatRoundPhase;
+  resultText: string;
+  state: CombatRoundState;
+  updatedAt: string;
+  visibleToParticipantIds: readonly string[];
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAction = requireCombatRoundOpenPerformTask({
+    actionId: input.actionId,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+  const known = new Set(normalized.participants.map((entry) => entry.participantId));
+  for (const participantId of input.visibleToParticipantIds) {
+    if (!known.has(participantId)) {
+      throw new RangeError("Choose active participants for the result audience.");
+    }
+  }
+  // Evaluated before the advance, exactly as `advanceCombatTaskAtOpportunity` evaluates it.
+  // `isCombatGenericActionFinalOpportunity` is a pre-advance predicate
+  // (`completedRounds + 1 >= required`), so checking it on the already-advanced action would
+  // permit resolution one opportunity early for every duration of two advances or more.
+  if (!isCombatGenericActionFinalOpportunity(previousAction)) {
+    throw new RangeError("This Combat Task cannot resolve before its reviewed timing completes.");
+  }
+  const advancedActions = advanceCombatGenericActionAtOpportunity({
+    actionId: input.actionId,
+    actions: normalized.genericActions,
+    advancedAt: input.updatedAt,
+    roundNumber: normalized.roundNumber,
+  });
+  const audience = [...new Set([input.participantId, ...input.visibleToParticipantIds])];
+  const resolvedActions = finishCombatGenericAction({
+    actionId: input.actionId,
+    actions: advancedActions,
+    at: input.updatedAt,
+    resolution: {
+      resolvedAt: input.updatedAt,
+      resolvedByUserId: input.command.createdByUserId,
+      text: input.resultText,
+      visibleToParticipantIds: audience,
+    },
+    status: "completed",
+    timing: "primary_action_opportunity",
+  });
+  const rollResult = previousAction.rollResult;
+
+  return applyCombatTaskCommand({
+    buildEvent: ({ commandId, state }) =>
+      combatStepEventSchema.parse({
+        actorParticipantId: input.participantId,
+        commandId,
+        completeness: "complete",
+        encounterId: normalized.encounterId,
+        facts: {
+          gmReview: {
+            actorUserId: input.command.createdByUserId,
+            audienceParticipantIds: audience,
+            taskId: input.actionId,
+          },
+          involvedOutcome: {
+            audienceParticipantIds: audience,
+            resultText: input.resultText,
+            rollOutcome: rollResult ? (rollResult.success ? "succeeded" : "failed") : undefined,
+            taskId: input.actionId,
+          },
+          publicOutcome: { status: "committed", taskId: input.actionId },
+        },
+        id: `${commandId}:event`,
+        missingFacts: [],
+        occurredAt: input.updatedAt,
+        ownerParticipantId: input.participantId,
+        phase: input.phase,
+        roundNumber: normalized.roundNumber,
+        schemaVersion: 1,
+        sequence: getCombatRoundNextEventSequence(state),
+        source: {
+          commandType: "resolve_combat_task",
+          kind: "canonical",
+          sourceIds: [commandId, input.actionId],
+        },
+        status: "committed",
+        step: getCombatRoundPhaseActionStepForPhase(input.phase),
+        type: "task_resolved",
+        visibility: {
+          identityRefs: [{ participantId: input.participantId, role: "actor" }],
+          involvedParticipantIds: audience,
+          outcomeScope: "involved",
+        },
+      }),
+    command: input.command,
+    consumesOpportunity: true,
+    extraFacts: { audienceParticipantIds: audience, status: "completed" },
+    kind: "resolve",
+    nextActions: resolvedActions,
+    participantId: input.participantId,
+    phase: input.phase,
+    previousAction,
+    state: normalized,
+    submittedBy: "gm",
+    updatedAt: input.updatedAt,
+  });
+}
+
+/** GM adjudication that ends the task without a result. Consumes the action opportunity. */
+export function finishCombatTaskAtOpportunity(input: {
+  actionId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  kind: "cancel" | "interrupt";
+  participantId: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAction = requireCombatRoundOpenPerformTask({
+    actionId: input.actionId,
+    participantId: input.participantId,
+    phase: input.phase,
+    state: normalized,
+  });
+  if (input.kind === "interrupt" && previousAction.status !== "active") {
+    throw new RangeError("Only an active Combat Task can be interrupted.");
+  }
+  const finished = finishCombatGenericAction({
+    actionId: input.actionId,
+    actions: normalized.genericActions,
+    at: input.updatedAt,
+    status: input.kind === "interrupt" ? "interrupted" : "cancelled",
+  });
+
+  return applyCombatTaskCommand({
+    command: input.command,
+    consumesOpportunity: true,
+    extraFacts: { status: input.kind === "interrupt" ? "interrupted" : "cancelled" },
+    kind: input.kind,
+    nextActions: finished,
+    participantId: input.participantId,
+    phase: input.phase,
+    previousAction,
+    state: normalized,
+    submittedBy: "gm",
+    updatedAt: input.updatedAt,
+  });
+}
+
+function undoCombatTaskCommandAtIndex(input: {
+  commandIndex: number;
+  state: CombatRoundState;
+}): CombatRoundState | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const command = normalized.commands[input.commandIndex];
+  if (!command || command.roundNumber !== normalized.roundNumber) return undefined;
+
+  const parsed = combatTaskCommandUndoFactsSchema.safeParse(command.facts.taskUndo);
+  if (!parsed.success) return undefined;
+  const undo = parsed.data;
+  if (
+    undo.commandId !== command.id ||
+    undo.roundNumber !== command.roundNumber ||
+    undo.phase !== command.phase
+  ) {
+    return undefined;
+  }
+
+  const actionStep = getCombatRoundPhaseActionStepForPhase(undo.phase);
+  const genericActions = normalized.genericActions.map((candidate) =>
+    candidate.id === undo.actionId
+      ? combatGenericActionSchema.parse({
+          ...candidate,
+          awarenessContext: undo.previousAwarenessContext,
+          duration: undo.previousDuration,
+          lastUpdatedAt: undo.previousLastUpdatedAt,
+          preset: undo.previousPreset,
+          progress: undo.previousProgress,
+          reference: undo.previousReference,
+          resolution: undo.previousResolution,
+          rollRequest: undo.previousRollRequest,
+          rollResult: undo.previousRollResult,
+          status: undo.previousStatus,
+        })
+      : candidate,
+  );
+  const participantStatuses = {
+    ...normalized.phaseResolutionStatuses[command.participantId],
+    [undo.phase]: undo.previousPhaseResolutionStatus,
+  };
+  const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    currentCursor: command.beforeCursor,
+    currentStep: selectedStep,
+    genericActions,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === command.participantId
+        ? {
+            ...participant,
+            stepStatuses:
+              undo.previousStepStatus === undefined
+                ? Object.fromEntries(
+                    Object.entries(participant.stepStatuses).filter(
+                      ([step]) => step !== actionStep,
+                    ),
+                  )
+                : { ...participant.stepStatuses, [actionStep]: undo.previousStepStatus },
+          }
+        : participant,
+    ),
+    phaseResolutionCursor: {
+      participantId: command.participantId,
+      phase: undo.phase,
+      substep: "perform_task",
+    },
+    phaseResolutionStatuses: {
+      ...normalized.phaseResolutionStatuses,
+      [command.participantId]: participantStatuses,
+    },
+    selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
+    selectedStep,
+  });
 }

@@ -72,6 +72,10 @@ export function classifyCombatTrackerTaskAttention(
     case "offensive_parry_brawling_roll":
     case "observation_roll":
     case "parry":
+    case "combat_task_advance":
+    case "combat_task_resolve":
+    case "combat_task_review":
+    case "combat_task_roll":
       return "exceptional";
     default: {
       const exhaustive: never = task.kind;
@@ -161,6 +165,11 @@ function actionLabel(kind: CombatProgressionTaskKind): string {
       return "Round end";
     case "gm_advance_boundary":
       return "Round progression";
+    case "combat_task_advance":
+    case "combat_task_resolve":
+    case "combat_task_review":
+    case "combat_task_roll":
+      return "Perform Task";
   }
 }
 
@@ -196,6 +205,10 @@ function gmText(task: CombatProgressionPresentationTask, owner: string | undefin
       return `Awaiting GM: Review ${owner ?? "the participant"}.`;
     case "round_end_prepare":
       return "Awaiting GM: Prepare round end.";
+    case "combat_task_review":
+      return `Awaiting GM: Review the declared task${owner ? ` for ${owner}` : ""}.`;
+    case "combat_task_resolve":
+      return `Awaiting GM: Resolve the task${owner ? ` for ${owner}` : ""}.`;
     case "gm_advance_boundary":
       if (
         task.transition?.currentBoundary === "round_boundary" ||
@@ -335,6 +348,16 @@ export function buildCombatTrackerTaskHover(
       case "health_review":
         text = owner ? `Health check required for ${owner}.` : "A Health check is required.";
         break;
+      case "combat_task_roll":
+        text = owner
+          ? `${owner} must roll for the declared task.`
+          : "A task roll is required before combat can continue.";
+        break;
+      case "combat_task_advance":
+        text = owner
+          ? `${owner} continues the declared task this round.`
+          : "A task must be advanced before combat can continue.";
+        break;
       case "modifier_review":
       case "commit_initiative":
       case "feint_commit":
@@ -350,6 +373,8 @@ export function buildCombatTrackerTaskHover(
       case "participant_review":
       case "round_end_prepare":
       case "gm_advance_boundary":
+      case "combat_task_review":
+      case "combat_task_resolve":
         text = "Combat is waiting for the required review.";
         break;
     }

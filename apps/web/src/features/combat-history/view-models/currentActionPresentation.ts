@@ -232,6 +232,10 @@ const TASK_ACTION_NAMES: Record<CombatProgressionTaskKind, string> = {
   disarm_holder_roll: "Disarm",
   disarm_commit: "Disarm",
   combat_experience: "Combat Experience",
+  combat_task_advance: "Perform Task",
+  combat_task_resolve: "Perform Task",
+  combat_task_review: "Perform Task",
+  combat_task_roll: "Perform Task",
   continued_contact_maintenance_roll: "Continued Contact",
   commit_initiative: "Initiative",
   critical: "Critical",
@@ -640,6 +644,14 @@ function buttonLabel(task: CombatProgressionPresentationTask): string {
       return task.expectedCommand === "complete_round"
         ? "Open next round"
         : boundaryButtonLabel(task.transition?.targetBoundary);
+    case "combat_task_review":
+      return "Review task";
+    case "combat_task_roll":
+      return "Roll for task";
+    case "combat_task_advance":
+      return "Continue task";
+    case "combat_task_resolve":
+      return "Resolve task";
   }
 }
 
@@ -736,6 +748,14 @@ function requiredNowFor(
       return task.expectedCommand === "complete_round"
         ? "Open next round."
         : boundaryInstruction(task.transition?.targetBoundary);
+    case "combat_task_review":
+      return "Review the declared task and set its rule inputs.";
+    case "combat_task_roll":
+      return "Roll for the declared task.";
+    case "combat_task_advance":
+      return "Continue the declared task this round.";
+    case "combat_task_resolve":
+      return "Resolve the task with its result and audience.";
   }
 }
 

@@ -15,10 +15,16 @@ import {
   getCombatRoundPhaseInitiativeChoiceStatuses,
   getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundOffensiveParryAttemptIdentity,
+  getCombatRoundOpenPerformTaskForParticipant,
   getCombatRoundParryDisarmAttemptIdentity,
   isCombatRoundPhaseResolutionComplete,
   type CombatRoundPhase,
 } from "../combatRoundManager";
+import {
+  getCombatGenericActionOpportunityAdvances,
+  isCombatGenericActionFinalOpportunity,
+  type CombatGenericAction,
+} from "../combatGenericAction";
 import type {
   CombatActionProcessStage,
   CombatManeuverProcessPlan,
@@ -1215,6 +1221,114 @@ function findAdapterAttackProcess(
   );
 }
 
+/**
+ * Projects the one canonical Perform Task holding this actor's Phase 1 primary-action opportunity.
+ * Exactly one task is executable at a time, so the lifecycle stays a single authorized command.
+ */
+function buildPerformTaskProcess(
+  context: ProjectionBuildContext,
+  phase: CombatRoundPhase,
+  participantId: string,
+  action: CombatGenericAction,
+): CombatProgressionProcess {
+  const owner = context.identities.get(participantId);
+  const trackerStep = trackerStepForPhase(phase, "attack");
+  const identity = { actionId: action.id, participantId, phase } as const;
+  const presentationContext = {
+    actionKind: "perform_task",
+    actor: owner,
+    difficulty: action.rollRequest?.difficulty,
+    skill:
+      action.rollRequest?.basis.kind === "skill"
+        ? {
+            id: action.rollRequest.basis.skillId,
+            label: action.rollRequest.basis.skillLabel,
+          }
+        : action.rollRequest?.basis.kind === "stat"
+          ? {
+              id: action.rollRequest.basis.statId,
+              label: action.rollRequest.basis.statLabel,
+            }
+          : undefined,
+  };
+  const reviewPending = action.status === "declared" || action.status === "reviewed";
+  const rollPending =
+    action.status === "active" && Boolean(action.rollRequest) && !action.rollResult;
+  const resolvable = isCombatGenericActionFinalOpportunity(action);
+  const stage: CombatProgressionStageKind = reviewPending
+    ? "review"
+    : rollPending
+      ? "roll"
+      : resolvable
+        ? "commit"
+        : "input";
+  const spec: TaskSpec = reviewPending
+    ? {
+        allowedActors: ["gm"],
+        expectedCommand: "review_combat_task",
+        identity,
+        kind: "combat_task_review",
+        owner: GM_IDENTITY,
+        presentationContext,
+        trackerOwner: owner,
+        trackerStep,
+      }
+    : rollPending
+      ? {
+          expectedCommand: "roll_combat_task",
+          identity,
+          kind: "combat_task_roll",
+          owner,
+          presentationContext,
+          trackerOwner: owner,
+          trackerStep,
+        }
+      : resolvable
+        ? {
+            allowedActors: ["gm"],
+            expectedCommand: "resolve_combat_task",
+            identity,
+            kind: "combat_task_resolve",
+            owner: GM_IDENTITY,
+            presentationContext,
+            trackerOwner: owner,
+            trackerStep,
+          }
+        : {
+            expectedCommand: "advance_combat_task",
+            identity,
+            kind: "combat_task_advance",
+            owner,
+            presentationContext,
+            trackerOwner: owner,
+            trackerStep,
+          };
+
+  return buildProcess(
+    context,
+    "perform_task",
+    [
+      {
+        kind: stage,
+        state: "active",
+        strategy: spec.allowedActors?.length === 1 ? "gm_review" : "single_task",
+        tasks: [spec],
+      },
+    ],
+    { key: action.id },
+  );
+}
+
+/** The total primary-action opportunities the reviewed task still owns, for presentation only. */
+export function getCombatPerformTaskRemainingAdvances(
+  action: CombatGenericAction,
+): number | undefined {
+  const required = getCombatGenericActionOpportunityAdvances(action.duration);
+  return required === undefined
+    ? undefined
+    : Math.max(required - action.progress.completedRounds, 0);
+}
+
 export function buildResolutionProcesses(
   context: ProjectionBuildContext,
   phase: CombatRoundPhase,
@@ -1301,6 +1415,19 @@ export function buildResolutionProcesses(
       : undefined;
   if (phase === "phase1" && substep === "break_off" && participantId) {
     return [buildBreakOffProcess(context, participantId)];
+  }
+  // Perform Task is projected at whichever phase its reviewed duration schedules it into. The
+  // getter only returns a task scheduled for the phase asked about, so a Phase 2 task is never
+  // projected at Phase 1 nor the other way round.
+  if (substep === "perform_task" && participantId) {
+    const performTask = getCombatRoundOpenPerformTaskForParticipant({
+      participantId,
+      phase,
+      state: context.state,
+    });
+    if (performTask) {
+      return [buildPerformTaskProcess(context, phase, participantId, performTask)];
+    }
   }
   const maneuverPlan = participantId
     ? context.actionProcessPlans.find(

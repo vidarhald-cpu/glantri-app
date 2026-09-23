@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   combatRoundStateSchema,
   encounterSessionSchema,
+  resolveCombatTaskAtOpportunity,
+  reviewCombatTaskAtOpportunity,
   setCombatRoundCombatExperienceDifficulty,
+  undoLatestCombatRoundCommand,
 } from "@glantri/domain";
 
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
@@ -157,6 +160,136 @@ if (!process.env.DATABASE_URL_TEST) {
       await expect(
         prisma!.encounterArchivedCombatRound.count({ where: { encounterId: initial.id } }),
       ).resolves.toBe(0);
+    });
+
+    it("round-trips the canonical Perform Task lifecycle through split combat storage", async () => {
+      const taskId = "round:2:participant:aria:declaration:perform_task";
+      const at = "2026-07-26T10:30:00.000Z";
+      const lifecycleState = combatRoundStateSchema.parse({
+        commands: [
+          {
+            afterCursor: { participantId: "aria", roundNumber: 2, step: "i1" },
+            beforeCursor: { participantId: "aria", roundNumber: 2, step: "i1" },
+            createdAt: "2026-07-26T10:00:00.000Z",
+            facts: {},
+            id: "command-i1",
+            participantId: "aria",
+            roundNumber: 2,
+            step: "i1",
+            type: "roll_initiative_phase1",
+          },
+        ],
+        currentCursor: { participantId: "aria", roundNumber: 2, step: "A1" },
+        currentStep: "phase_1_actions",
+        encounterId: "split-integration",
+        genericActions: [
+          {
+            createdAt: at,
+            declarationKind: "perform_task",
+            duration: { kind: "gm_decided" },
+            id: taskId,
+            intent: "Force the portcullis winch.",
+            lastUpdatedAt: at,
+            ownerParticipantId: "aria",
+            progress: { completedRounds: 0 },
+            status: "declared",
+          },
+        ],
+        participants: [
+          {
+            declaration: { actionId: "perform_task", roundNumber: 2, submittedBy: "player" },
+            label: "Aria",
+            participantId: "aria",
+          },
+        ],
+        phaseResolutionCursor: { participantId: "aria", phase: "phase1", substep: "perform_task" },
+        phaseResolutionStatuses: { aria: { phase1: { substep: "perform_task", updatedAt: at } } },
+        roundNumber: 2,
+        rounds: [{ encounterId: "split-integration", roundNumber: 1 }],
+        selectedParticipantId: "aria",
+        selectedStep: "phase_1_actions",
+      });
+      const reviewedState = reviewCombatTaskAtOpportunity({
+        actionId: taskId,
+        command: { createdAt: at, createdByUserId: "user-gm" },
+        duration: { kind: "round" },
+        participantId: "aria",
+        phase: "phase1",
+        state: lifecycleState,
+        updatedAt: at,
+      }).state;
+      const resolvedState = resolveCombatTaskAtOpportunity({
+        actionId: taskId,
+        command: { createdAt: at, createdByUserId: "user-gm" },
+        participantId: "aria",
+        phase: "phase1",
+        resultText: "The winch groans and the portcullis lifts.",
+        state: reviewedState,
+        updatedAt: at,
+        visibleToParticipantIds: [],
+      }).state;
+
+      const session = encounterSessionSchema.parse({
+        ...buildLegacySession("2026-07-26T10:00:00.000Z"),
+        combatRoundState: resolvedState,
+        currentRound: 2,
+      });
+      const created = await prisma!.encounter.create({
+        data: {
+          id: session.id,
+          name: session.title,
+          scenarioId: session.scenarioId,
+          sessionJson: session as never,
+          status: session.status,
+        },
+      });
+      const persistence = createPrismaCombatStatePersistenceRepository(prisma!);
+      const reads = createPrismaCombatStateReadRepository(prisma!);
+      const stored = await persistence.updateCombatEncounter({
+        encounterId: session.id,
+        expectedRevision: created.updatedAt.toISOString(),
+        scenarioId: session.scenarioId,
+        session,
+      });
+
+      const record = await prisma!.encounter.findUniqueOrThrow({
+        include: { activeCombatState: true, archivedCombatRounds: true },
+        where: { id: session.id },
+      });
+      expect(record.combatStorageMode).toBe(COMBAT_STORAGE_MODE_SPLIT_V1);
+      const persistedState = record.activeCombatState!.stateJson as unknown as {
+        commands: { facts: Record<string, unknown>; type: string }[];
+        events: { type: string }[];
+      };
+      expect(persistedState.commands.map((command) => command.type)).toEqual([
+        "roll_initiative_phase1",
+        "review_combat_task",
+        "resolve_combat_task",
+      ]);
+      expect(persistedState.events.map((event) => event.type)).toEqual(["task_resolved"]);
+      const resolveCommand = persistedState.commands.at(-1)!;
+      expect(resolveCommand.facts.taskUndo).toMatchObject({ actionId: taskId, version: 1 });
+      expect(resolveCommand.facts).not.toHaveProperty("previousState");
+
+      // The persisted state is the authority the undo path reads back.
+      const reloaded = await reads.getFullEncounterById(session.id);
+      const reloadedState = combatRoundStateSchema.parse(reloaded!.encounter.combatRoundState);
+      const undone = undoLatestCombatRoundCommand({ state: reloadedState });
+      expect(undone).toEqual(combatRoundStateSchema.parse(reviewedState));
+
+      const afterUndo = await persistence.updateCombatEncounter({
+        encounterId: session.id,
+        expectedRevision: stored.updatedAt,
+        scenarioId: session.scenarioId,
+        session: { ...stored, combatRoundState: undone! },
+      });
+      expect(afterUndo.combatRoundState?.events).toHaveLength(0);
+      expect(afterUndo.combatRoundState?.genericActions[0]).toMatchObject({
+        progress: { completedRounds: 0 },
+        status: "active",
+      });
+
+      await prisma!.encounter.delete({ where: { id: session.id } });
     });
 
     it("keeps concurrent first legacy writes atomic and accepts only one revision", async () => {

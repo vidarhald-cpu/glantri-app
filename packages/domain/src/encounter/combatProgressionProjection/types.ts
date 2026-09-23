@@ -79,6 +79,7 @@ export type CombatProgressionProcessKind =
   | "observation"
   | "offensive_parry"
   | "participant_review"
+  | "perform_task"
   | "round_end";
 
 export type CombatProgressionStageKind =
@@ -136,6 +137,10 @@ export type CombatProgressionTaskKind =
   | "disarm_holder_roll"
   | "disarm_commit"
   | "combat_experience"
+  | "combat_task_advance"
+  | "combat_task_resolve"
+  | "combat_task_review"
+  | "combat_task_roll"
   | "continued_contact_maintenance_roll"
   | "critical"
   | "damage_roll"

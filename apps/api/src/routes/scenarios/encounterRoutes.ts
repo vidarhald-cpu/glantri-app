@@ -31,6 +31,13 @@ import {
   advanceCombatProgressionBoundary,
   acceptedCombatDefenseCalculationSchema,
   authorizeCombatProgressionTask,
+  advanceCombatTaskAtOpportunity,
+  finishCombatTaskAtOpportunity,
+  getCombatRoundOpenPerformTaskForParticipant,
+  getCombatTaskScheduledPhase,
+  resolveCombatTaskAtOpportunity,
+  reviewCombatTaskAtOpportunity,
+  rollCombatTaskAtOpportunity,
   backOutCombatRoundPhaseAttack,
   buildEncounterSessionRevisionFromMetadataView,
   buildEncounterSessionSummaryFromMetadataView,
@@ -2283,6 +2290,13 @@ function normalizeCombatDeclarationMovementIntent(input: {
   });
 }
 
+/** A Combat generic action in one of these statuses is no longer live. */
+const TERMINAL_COMBAT_GENERIC_ACTION_STATUSES: ReadonlySet<string> = new Set([
+  "completed",
+  "interrupted",
+  "cancelled",
+]);
+
 function materializeCombatDeclarationTasks(input: {
   createdAt: string;
   createdByUserId: string;
@@ -2332,8 +2346,7 @@ function materializeCombatDeclarationTasks(input: {
       throw new Error("The selected Combat Task is not available to this participant.");
     }
     const existing =
-      requestedExisting &&
-      !new Set(["completed", "interrupted", "cancelled"]).has(requestedExisting.status)
+      requestedExisting && !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(requestedExisting.status)
         ? requestedExisting
         : undefined;
     const taskId = existing?.id ?? `${declarationId}:${declarationKind}`;
@@ -2345,6 +2358,30 @@ function materializeCombatDeclarationTasks(input: {
         updatedAt: input.createdAt,
       });
     } else {
+      // A participant may hold at most one live Perform Task at a time, under the Product Owner
+      // ruling of 2026-09-22 on Forgejo issue #287. A second one is refused until the existing task
+      // is completed, cancelled or resolved. The already-existing task with this exact id is not a
+      // second task: re-declaring the same round's task is idempotent.
+      //
+      // This refusal is not an enforcement point. It makes the two-live-task state rarer; it
+      // repairs nothing already persisted. The single chokepoint that prevents malformed legacy
+      // state from granting two primary actions remains the domain gate in
+      // `getCombatRoundOpenPerformTaskForParticipant`, whose two witnesses and selection rule are
+      // unchanged by this refusal.
+      if (declarationKind === "perform_task") {
+        const live = genericActions.find(
+          (action) =>
+            action.declarationKind === "perform_task" &&
+            action.ownerParticipantId === input.ownerParticipantId &&
+            action.id !== taskId &&
+            !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(action.status),
+        );
+        if (live) {
+          throw new Error(
+            "This character already has a Combat Task in progress. Complete, resolve or cancel it before declaring another.",
+          );
+        }
+      }
       genericActions = declareCombatGenericAction({
         action: {
           createdAt: input.createdAt,
@@ -7354,6 +7391,317 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
     }
   });
+
+  type CombatTaskLifecycleOperation = "advance" | "finish" | "resolve" | "review" | "roll";
+
+  interface ParsedCombatTaskLifecycleBody extends ParsedCombatTaskCommandIdentity {
+    finishKind: "cancel" | "interrupt";
+    processId?: string;
+    ruleInputs: GenericCombatActionBody;
+    scenarioParticipantId: string;
+    stageId?: string;
+  }
+
+  const parseCombatTaskLifecycleBody = (body: unknown): ParsedCombatTaskLifecycleBody => {
+    const value = parseBodyObject(body, "Combat Task command payload");
+    const finishKind = value.finishKind === "cancel" ? "cancel" : "interrupt";
+    return {
+      ...parseCombatTaskCommandIdentity(value),
+      finishKind,
+      processId: parseOptionalString(value, "processId"),
+      ruleInputs: parseGenericCombatActionBody({ ...value, operation: "review" }),
+      scenarioParticipantId: parseNonEmptyString(
+        value.scenarioParticipantId,
+        "scenarioParticipantId",
+      ),
+      stageId: parseOptionalString(value, "stageId"),
+    };
+  };
+
+  /**
+   * The canonical Perform Task lifecycle. Every mutation is authorized from the exact projected
+   * Current action descriptor — task, execution group, boundary and revision — and never from an
+   * arbitrary client-supplied action id. GM review carries the rule inputs; resolve carries the
+   * audience and the GM-authored player-safe result text.
+   */
+  const registerCombatTaskLifecycleRoute = (
+    path: string,
+    operation: CombatTaskLifecycleOperation,
+  ) => {
+    app.post(path, async (request, reply) => {
+      const user = await requireAuthenticatedUser(request, reply);
+      if (!user) return;
+
+      try {
+        const encounterId = parseId(request.params, "encounterId", "Encounter id");
+        const encounter = await encounterService.getEncounterById(encounterId);
+        if (!encounter?.scenarioId || encounter.status !== "active") {
+          return reply.code(404).send({ error: "Combat encounter not found." });
+        }
+        const scenarioId = encounter.scenarioId;
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+        if (!access) return reply.code(404).send({ error: "Combat encounter not found." });
+
+        const body = parseCombatTaskLifecycleBody(request.body);
+        const gmAuthorizedOperation = access.mode === "gm";
+        const gmOnly = operation === "review" || operation === "resolve" || operation === "finish";
+        if (gmOnly && !gmAuthorizedOperation) {
+          return reply
+            .code(403)
+            .send({ error: "Only the GM can review, resolve, or end a Combat Task." });
+        }
+
+        const scenarioParticipants = await scenarioService.listScenarioParticipants(scenarioId);
+        const participantResolution = resolveCombatParticipantForRequest({
+          accessMode: access.mode,
+          encounter,
+          requestedParticipantId: body.scenarioParticipantId,
+          scenarioParticipants,
+          userId: user.id,
+        });
+        const owner = participantResolution?.scenarioParticipant;
+        const ownerEncounterParticipant = participantResolution?.encounterParticipant;
+        if (!owner || !owner.isActive || !ownerEncounterParticipant) {
+          return reply.code(403).send({ error: "Participant is not assigned to this encounter." });
+        }
+        if (
+          !gmAuthorizedOperation &&
+          (owner.controlledByUserId !== user.id ||
+            !isUserAssignedToEncounterMembership({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }))
+        ) {
+          return reply
+            .code(403)
+            .send({ error: "Player is not assigned to this encounter participant." });
+        }
+
+        const roundState = initializeMaterializedCombatRoundState({
+          encounter,
+          scenarioParticipants,
+        });
+        const commandType =
+          operation === "review"
+            ? ("review_combat_task" as const)
+            : operation === "roll"
+              ? ("roll_combat_task" as const)
+              : operation === "advance"
+                ? ("advance_combat_task" as const)
+                : operation === "resolve"
+                  ? ("resolve_combat_task" as const)
+                  : body.finishKind === "cancel"
+                    ? ("cancel_combat_task" as const)
+                    : ("interrupt_combat_task" as const);
+        // The named phase is part of scheduling under the Product Owner ruling of 2026-09-22 on
+        // Forgejo issue #287: a `{ kind: "phase", phase: "phase2" }` task holds the actor's Phase 2
+        // primary-action opportunity, and every other duration holds Phase 1. The route therefore
+        // derives the phase from the task it is addressing instead of assuming Phase 1. The domain
+        // re-validates it against the live resolution cursor and refuses a mismatch.
+        const addressedTask = roundState.genericActions.find(
+          (action) =>
+            action.id === body.ruleInputs.actionId && action.declarationKind === "perform_task",
+        );
+        const taskPhase = addressedTask
+          ? getCombatTaskScheduledPhase(addressedTask.duration)
+          : (roundState.phaseResolutionCursor?.phase ?? "phase1");
+        const authorization = authorizeCombatTaskCommand({
+          authorization: {
+            actionId: body.ruleInputs.actionId,
+            actor: gmAuthorizedOperation
+              ? { kind: "gm" }
+              : { kind: "combatant", participantId: ownerEncounterParticipant.id },
+            commandType,
+            participantId: ownerEncounterParticipant.id,
+            phase: taskPhase,
+            processId: body.processId,
+            stageId: body.stageId,
+          },
+          encounterRevision: encounter.updatedAt,
+          identity: body,
+          roundState,
+        });
+        if (!authorization.ok) {
+          return reply.code(409).send({ code: authorization.code, error: authorization.message });
+        }
+
+        const existingAction = getCombatRoundOpenPerformTaskForParticipant({
+          participantId: ownerEncounterParticipant.id,
+          phase: taskPhase,
+          state: roundState,
+        });
+        if (!existingAction || existingAction.id !== body.ruleInputs.actionId) {
+          return reply.code(409).send({
+            code: "task_mismatch",
+            error: "This Combat Task no longer holds the actor's action opportunity.",
+          });
+        }
+
+        const submittedAt = new Date().toISOString();
+        const visibleParticipantIds = gmAuthorizedOperation
+          ? undefined
+          : buildPlayerSafeCombatScopeForUser({
+              encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }).visibleParticipantIds;
+        const command = { createdAt: submittedAt, createdByUserId: user.id };
+        const applied =
+          operation === "review"
+            ? reviewCombatTaskAtOpportunity({
+                actionId: existingAction.id,
+                command,
+                duration: body.ruleInputs.duration ?? existingAction.duration,
+                participantId: ownerEncounterParticipant.id,
+                phase: taskPhase,
+                preset: body.ruleInputs.preset,
+                reference:
+                  body.ruleInputs.referenceKind !== undefined
+                    ? resolveGenericCombatActionReference({
+                        body: body.ruleInputs,
+                        encounter,
+                        ownerEncounterParticipantId: ownerEncounterParticipant.id,
+                        ownerScenarioParticipant: owner,
+                        roundState,
+                        visibleParticipantIds,
+                      })
+                    : existingAction.reference,
+                rollRequest:
+                  body.ruleInputs.rollKind !== undefined || body.ruleInputs.preset === "look_around"
+                    ? resolveGenericCombatActionRollRequest({
+                        body: body.ruleInputs,
+                        forceLookAroundPreset: body.ruleInputs.preset === "look_around",
+                        scenarioParticipant: owner,
+                      })
+                    : existingAction.rollRequest,
+                state: roundState,
+                updatedAt: submittedAt,
+              })
+            : operation === "roll"
+              ? rollCombatTaskAtOpportunity({
+                  actionId: existingAction.id,
+                  command,
+                  participantId: ownerEncounterParticipant.id,
+                  phase: taskPhase,
+                  result: resolveGenericCombatActionRoll({
+                    request: (() => {
+                      if (!existingAction.rollRequest) {
+                        throw new RangeError("This Combat Task has no roll to make.");
+                      }
+                      return existingAction.rollRequest;
+                    })(),
+                    rolledAt: submittedAt,
+                    rolledByUserId: user.id,
+                  }),
+                  state: roundState,
+                  updatedAt: submittedAt,
+                })
+              : operation === "advance"
+                ? advanceCombatTaskAtOpportunity({
+                    actionId: existingAction.id,
+                    command,
+                    participantId: ownerEncounterParticipant.id,
+                    phase: taskPhase,
+                    state: roundState,
+                    submittedBy: gmAuthorizedOperation ? "gm" : "player",
+                    updatedAt: submittedAt,
+                  })
+                : operation === "resolve"
+                  ? resolveCombatTaskAtOpportunity({
+                      actionId: existingAction.id,
+                      command,
+                      participantId: ownerEncounterParticipant.id,
+                      phase: taskPhase,
+                      resultText: (() => {
+                        const text = body.ruleInputs.resultText?.trim();
+                        if (!text) {
+                          throw new RangeError(
+                            "Enter the player-safe result before resolving this Combat Task.",
+                          );
+                        }
+                        return text;
+                      })(),
+                      state: roundState,
+                      updatedAt: submittedAt,
+                      visibleToParticipantIds: body.ruleInputs.visibleToParticipantIds,
+                    })
+                  : finishCombatTaskAtOpportunity({
+                      actionId: existingAction.id,
+                      command,
+                      kind: body.finishKind,
+                      participantId: ownerEncounterParticipant.id,
+                      phase: taskPhase,
+                      state: roundState,
+                      updatedAt: submittedAt,
+                    });
+
+        const savedEncounter = await encounterService.updateCombatEncounter({
+          campaignId: access.campaignId,
+          encounterId,
+          expectedRevision: encounter.updatedAt,
+          scenarioId,
+          session: {
+            ...encounter,
+            combatRoundState: applied.state,
+            currentRound: applied.state.roundNumber,
+            updatedAt: submittedAt,
+          },
+        });
+
+        return {
+          command: gmAuthorizedOperation
+            ? applied.command
+            : buildPlayerSafeCombatRoundCommandForUser({
+                command: applied.command,
+                ...buildPlayerSafeCombatScopeForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+              }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({ state: applied.state }),
+          encounter: gmAuthorizedOperation
+            ? savedEncounter
+            : buildPlayerSafeCombatRollMutationEncounterForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+        };
+      } catch (error) {
+        const persistenceErrorResponse = sendCombatWriteError(reply, error);
+        if (persistenceErrorResponse !== undefined) return persistenceErrorResponse;
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to update the Combat Task.",
+        });
+      }
+    });
+  };
+
+  registerCombatTaskLifecycleRoute(
+    "/encounters/:encounterId/combat-round/review-combat-task",
+    "review",
+  );
+  registerCombatTaskLifecycleRoute(
+    "/encounters/:encounterId/combat-round/roll-combat-task",
+    "roll",
+  );
+  registerCombatTaskLifecycleRoute(
+    "/encounters/:encounterId/combat-round/advance-combat-task",
+    "advance",
+  );
+  registerCombatTaskLifecycleRoute(
+    "/encounters/:encounterId/combat-round/resolve-combat-task",
+    "resolve",
+  );
+  registerCombatTaskLifecycleRoute(
+    "/encounters/:encounterId/combat-round/finish-combat-task",
+    "finish",
+  );
 
   app.addHook("preSerialization", async (request, _reply, payload) => {
     const response = measureCombatPerformanceStage("response_construction", () =>

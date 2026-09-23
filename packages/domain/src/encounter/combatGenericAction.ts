@@ -162,6 +162,83 @@ export function getCombatGenericActionTotalRounds(
   return undefined;
 }
 
+export const combatGenericActionPresetSchema = z.enum([
+  "look_around",
+  "environmental_movement",
+  "item_interaction",
+]);
+export type CombatGenericActionPreset = z.infer<typeof combatGenericActionPresetSchema>;
+
+export const combatGenericActionProgressSchema = combatGenericActionSchema.shape.progress;
+export type CombatGenericActionProgress = z.infer<typeof combatGenericActionProgressSchema>;
+
+/**
+ * Perform Task is a normal primary action. Its reviewed duration maps onto the actor's own
+ * primary-action opportunity: one advance per round at that opportunity, completing after exactly
+ * N advances. A phase duration is one such opportunity; `gm_decided` leaves the count with the GM.
+ * This is the single timing authority for the canonical task lifecycle. `COMBAT_ROUND_STEPS`
+ * reasoning in `canCompleteCombatGenericAction` governs only the legacy parallel channel.
+ */
+export function getCombatGenericActionOpportunityAdvances(
+  duration: CombatGenericActionDuration,
+): number | undefined {
+  if (duration.kind === "round" || duration.kind === "phase") return 1;
+  if (duration.kind === "rounds") return duration.rounds;
+  return undefined;
+}
+
+/** True when this opportunity is the task's final advance and may therefore resolve it. */
+export function isCombatGenericActionFinalOpportunity(action: CombatGenericAction): boolean {
+  const required = getCombatGenericActionOpportunityAdvances(action.duration);
+  if (required === undefined) return true;
+  return action.progress.completedRounds + 1 >= required;
+}
+
+/** True when the owner still holds an unconsumed primary-action opportunity for this task. */
+export function isCombatGenericActionOpportunityOpen(input: {
+  action: CombatGenericAction;
+  roundNumber: number;
+}): boolean {
+  const action = input.action;
+  if (action.status === "completed" || action.status === "interrupted") return false;
+  if (action.status === "cancelled") return false;
+  return action.progress.lastProgressedRoundNumber !== input.roundNumber;
+}
+
+/**
+ * Consumes exactly one primary-action opportunity for an active task. It never advances twice in
+ * one round and never exceeds the reviewed advance count.
+ */
+export function advanceCombatGenericActionAtOpportunity(input: {
+  actionId: string;
+  actions: readonly CombatGenericAction[];
+  advancedAt: string;
+  roundNumber: number;
+}): CombatGenericAction[] {
+  const current = requireAction(input.actions, input.actionId);
+  if (current.status !== "active") {
+    throw new RangeError("Only an active Combat Task can advance at its action opportunity.");
+  }
+  if (current.progress.lastProgressedRoundNumber === input.roundNumber) {
+    throw new RangeError("This Combat Task already used its action opportunity this round.");
+  }
+  const required = getCombatGenericActionOpportunityAdvances(current.duration);
+  const next = combatGenericActionSchema.parse({
+    ...current,
+    lastUpdatedAt: input.advancedAt,
+    progress: {
+      ...current.progress,
+      completedRounds: Math.min(
+        current.progress.completedRounds + 1,
+        required ?? Number.MAX_SAFE_INTEGER,
+      ),
+      lastProgressedRoundNumber: input.roundNumber,
+      totalRounds: getCombatGenericActionTotalRounds(current.duration),
+    },
+  });
+  return replaceAction(input.actions, next);
+}
+
 function replaceAction(
   actions: readonly CombatGenericAction[],
   replacement: CombatGenericAction,
@@ -238,6 +315,7 @@ export function reviewCombatGenericAction(input: {
   actionId: string;
   actions: readonly CombatGenericAction[];
   duration: CombatGenericActionDuration;
+  preset?: CombatGenericActionPreset;
   reference?: CombatGenericActionReference;
   reviewedAt: string;
   rollRequest?: CombatGenericActionRollRequest;
@@ -252,10 +330,34 @@ export function reviewCombatGenericAction(input: {
   if (current.preset === "item_interaction" && input.reference?.kind !== "item") {
     throw new RangeError("Canonical Item actions must retain their declared Item.");
   }
+  // A review may only set the canonical `look_around` preset on an otherwise plain task. It never
+  // adds, removes, or rewrites the Item or environmental-movement presets, whose own declaration
+  // invariants are owned by `declareCombatGenericAction`.
+  const preset =
+    input.preset === undefined || input.preset === current.preset
+      ? current.preset
+      : input.preset === "look_around" && current.preset === undefined
+        ? "look_around"
+        : (() => {
+            throw new RangeError("This Combat action preset cannot be set during GM review.");
+          })();
+  // The Perception invariant is asserted where the preset is first applied. An already-preset task
+  // keeps the existing authoritative GM roll adjustment behaviour unchanged.
+  if (preset === "look_around" && current.preset !== "look_around") {
+    if (
+      input.rollRequest?.basis.kind !== "skill" ||
+      input.rollRequest.basis.skillId !== "perception"
+    ) {
+      throw new RangeError("Look around uses the canonical Perception skill.");
+    }
+  }
   const next = combatGenericActionSchema.parse({
     ...current,
+    awarenessContext:
+      preset === "look_around" ? { kind: "survey" } : (current.awarenessContext ?? undefined),
     duration: input.duration,
     lastUpdatedAt: input.reviewedAt,
+    preset,
     progress: {
       completedRounds: 0,
       totalRounds: getCombatGenericActionTotalRounds(input.duration),
@@ -349,6 +451,11 @@ export function finishCombatGenericAction(input: {
   resolution?: CombatGenericActionResolution;
   roundNumber?: number;
   step?: CombatRoundStep;
+  /**
+   * `primary_action_opportunity` is the canonical Perform Task lifecycle timing authority. The
+   * default keeps the legacy parallel channel's round/step reasoning unchanged.
+   */
+  timing?: "primary_action_opportunity";
 }): CombatGenericAction[] {
   const current = requireAction(input.actions, input.actionId);
   if (["completed", "interrupted", "cancelled"].includes(current.status)) {
@@ -360,7 +467,13 @@ export function finishCombatGenericAction(input: {
   if (input.status === "completed" && !input.resolution) {
     throw new RangeError("Enter the GM-controlled result before completing this Combat action.");
   }
-  if (
+  if (input.status === "completed" && input.timing === "primary_action_opportunity") {
+    if (!isCombatGenericActionFinalOpportunity(current)) {
+      throw new RangeError(
+        "This Combat action cannot resolve before its reviewed timing completes.",
+      );
+    }
+  } else if (
     input.status === "completed" &&
     (input.roundNumber === undefined ||
       input.step === undefined ||

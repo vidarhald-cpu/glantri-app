@@ -46,6 +46,7 @@ export const combatStepEventTypeSchema = z.enum([
   "disarm_roll",
   "disarm_result",
   "disarm_committed",
+  "task_resolved",
 ]);
 export type CombatStepEventType = z.infer<typeof combatStepEventTypeSchema>;
 
@@ -172,6 +173,12 @@ export const combatStepEventCommandTypeSchema = z.enum([
   "roll_disarm",
   "commit_disarm",
   "complete_remaining_step",
+  "review_combat_task",
+  "advance_combat_task",
+  "roll_combat_task",
+  "resolve_combat_task",
+  "interrupt_combat_task",
+  "cancel_combat_task",
 ]);
 
 export const combatStepEventSourceSchema = z.object({

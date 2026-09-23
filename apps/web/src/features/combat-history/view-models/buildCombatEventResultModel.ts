@@ -81,6 +81,7 @@ const EVENT_TITLES: Record<ProjectedCombatHistoryEvent["type"], string> = {
   disarm_roll: "Disarm roll",
   disarm_result: "Disarm result",
   disarm_committed: "Disarm committed",
+  task_resolved: "Task resolved",
 };
 
 function humanize(key: string): string {
@@ -391,6 +392,16 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
           [result, difference ? `difference ${difference}` : undefined].filter(Boolean).join(" · "),
         ),
         summary: result ? `Disarm result: ${result}.` : "Disarm produced no effect.",
+      };
+    }
+    case "task_resolved": {
+      const resultText = factLabel(factValue(event, "resultText"));
+      const rollOutcome = factLabel(factValue(event, "rollOutcome"));
+      return {
+        outcomeRows: resultRow(event, rollOutcome ? `Roll: ${rollOutcome}` : undefined),
+        summary: resultText
+          ? `${actor ?? "Participant"} resolved a task: ${resultText}`
+          : `${actor ?? "Participant"} resolved a task.`,
       };
     }
     case "disarm_committed":

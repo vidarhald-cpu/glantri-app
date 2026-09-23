@@ -1623,6 +1623,85 @@ export async function rollCombatObservationOnServer(input: {
   );
 }
 
+export type CombatTaskLifecycleOperation = "advance" | "finish" | "resolve" | "review" | "roll";
+
+const COMBAT_TASK_LIFECYCLE_PATHS: Record<CombatTaskLifecycleOperation, string> = {
+  advance: "advance-combat-task",
+  finish: "finish-combat-task",
+  resolve: "resolve-combat-task",
+  review: "review-combat-task",
+  roll: "roll-combat-task",
+};
+
+/**
+ * Invokes one canonical Perform Task lifecycle command. Every field the server authorizes with
+ * comes from the immutable Current action descriptor; rule inputs, audience, and the GM-authored
+ * player-safe result text are command inputs only.
+ */
+export async function sendCombatTaskLifecycleCommandOnServer(input: {
+  actionId: string;
+  currentEncounter?: EncounterSession;
+  difficulty?: number;
+  duration?: CombatGenericActionDuration;
+  encounterId: string;
+  environmentDescription?: string;
+  executionGroupId: string;
+  expectedRevision: string;
+  finishKind?: "cancel" | "interrupt";
+  itemId?: string;
+  operation: CombatTaskLifecycleOperation;
+  preset?: "look_around";
+  processId?: string;
+  referenceKind?: "none" | "participant" | "item" | "environment";
+  referenceParticipantId?: string;
+  resultText?: string;
+  rollKind?: "none" | "skill" | "stat";
+  scenarioParticipantId: string;
+  skillId?: string;
+  stageId?: string;
+  statId?: string;
+  taskId: string;
+  visibleToParticipantIds?: readonly string[];
+}): Promise<{
+  commandEnvelope: CombatRoundCommandEnvelope;
+  encounter: EncounterSession;
+}> {
+  return sendCombatMutationJson<{
+    commandEnvelope: CombatRoundCommandEnvelope;
+    encounter: EncounterSession;
+  }>(
+    `/encounters/${input.encounterId}/combat-round/${COMBAT_TASK_LIFECYCLE_PATHS[input.operation]}`,
+    {
+      body: JSON.stringify({
+        actionId: input.actionId,
+        difficulty: input.difficulty,
+        duration: input.duration,
+        environmentDescription: input.environmentDescription,
+        executionGroupId: input.executionGroupId,
+        expectedRevision: input.expectedRevision,
+        finishKind: input.finishKind,
+        itemId: input.itemId,
+        preset: input.preset,
+        processId: input.processId,
+        referenceKind: input.referenceKind,
+        referenceParticipantId: input.referenceParticipantId,
+        resultText: input.resultText,
+        rollKind: input.rollKind,
+        scenarioParticipantId: input.scenarioParticipantId,
+        skillId: input.skillId,
+        stageId: input.stageId,
+        statId: input.statId,
+        taskId: input.taskId,
+        visibleToParticipantIds: input.visibleToParticipantIds
+          ? [...input.visibleToParticipantIds]
+          : [],
+      }),
+      method: "POST",
+    },
+    input.currentEncounter,
+  );
+}
+
 export async function rollCombatParryCommandOnServer(input: {
   attackResultId: string;
   attackerParticipantId: string;

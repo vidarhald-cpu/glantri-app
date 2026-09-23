@@ -128,6 +128,7 @@ export {
   rollCombatHitLocationOnServer,
   rollCombatInitiativeOnServer,
   rollCombatObservationOnServer,
+  sendCombatTaskLifecycleCommandOnServer,
   rollCombatParryOnServer,
   rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
