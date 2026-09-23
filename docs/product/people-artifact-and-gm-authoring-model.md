@@ -124,7 +124,9 @@ Recording #284 §1.
 > the applicable GM/Campaign authority. `CampaignRosterEntry` provides Campaign
 > membership and `Character` itself remains independent of Campaign;
 > `ReusableEntity` is reusable source/archetype material, not the canonical
-> persistent identity of a person. See
+> persistent identity of a person. Such a Character has a **designated managing
+> GM** whose permanent-Character lifecycle authority is independent of Campaign
+> roster membership. See
 > [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is).
 
 > **Terminology hazard, recorded rather than resolved.** The word _Actor_
@@ -932,6 +934,49 @@ concern; **nothing about OPEN-PPL-5 is answered, narrowed or pre-empted here.**
   `packages/database/prisma/schema.prisma`. That is recorded as evidence, not as
   an implementation instruction.
 
+**Supplementary Product Owner ruling, 2026-09-23 — pre-roster managing-GM
+authority.** The original ruling left the authority over an ownerless NPC
+Character **before it is rostered in any Campaign** unstated, and authoring
+necessarily precedes rostering. The Product Owner has now settled it, quoted
+verbatim:
+
+> "A persistent ownerless NPC Character has a designated managing GM. That
+> managing GM has permanent-Character lifecycle authority independent of
+> Campaign roster membership, including before first rostering and after removal
+> from a Campaign.
+> `CampaignRosterEntry` continues to govern Campaign membership and
+> Campaign-scoped authority/state; it does not establish permanent ownership.
+> Existing player-owned Character protection remains unchanged: GM status or
+> Campaign membership never grants lifecycle ownership/authority over another
+> user's player-owned Character.
+> Do not overload player `ownerId` to represent the managing GM. If no suitable
+> durable authority relation exists, the implementation must add an explicit
+> representation rather than infer it from GM role or Campaign membership.
+> Record this without narrowing OPEN-PPL-5 or other remaining open decisions."
+
+**Further consequences recorded, not extended:**
+
+- A persistent ownerless NPC Character has a **designated managing GM** whose
+  permanent-Character lifecycle authority is **independent of Campaign roster
+  membership** — before first rostering, while rostered, and after removal.
+- `CampaignRosterEntry` governs Campaign membership and Campaign-scoped
+  authority and state only, and does **not** establish permanent ownership.
+- The player-owned protection is **unchanged**: GM status or Campaign membership
+  never grants lifecycle ownership or authority over another user's
+  player-owned Character.
+- **Binding on the implementing lane:** player `ownerId` must **not** be
+  overloaded to represent the managing GM, and the managing GM must **not** be
+  inferred from GM role or Campaign membership. If no suitable durable authority
+  relation exists, an explicit representation must be added. Recorded in
+  [Character lifecycle authority](../architecture/character-lifecycle-authority.md#the-representation-constraint--ownerid-may-not-be-overloaded).
+- The matrix rows in
+  [Character lifecycle authority](../architecture/character-lifecycle-authority.md#actor-and-privacy-matrix)
+  that conditioned GM read/edit/delete on "while the Character is rostered" are
+  updated accordingly, with the player-owned case kept separate and unamended.
+- **Nothing here narrows
+  [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves)
+  or any other open decision.**
+
 ### OPEN-PPL-5 — What Actor-to-persistent-NPC promotion preserves
 
 **Status:** Open. **Raised by:** #284 §1 ("may be a later capability").
@@ -1136,7 +1181,7 @@ exact-path contract**.
 | **API/UI hotspots**             | `apps/api/src/routes/scenarios/templateRoutes.ts`, `participantRoutes.ts`, `campaignRoutes.ts`. `apps/web/src/features/templates/TemplatesPageContent.tsx`, `apps/web/src/lib/api/campaignClient.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Settled**                     | PC and NPC share the full Character/rules model, differing only in control semantics; Template is a reusable archetype; Actor is the runtime/play instance and may come from either source; manual GM creation of full NPCs is needed; a lightweight/generic Actor path is needed; promotion is a **later** capability; one active Campaign per Character remains the V1 rule; [AI parity](#3-ai-parity-principle) applies to every authoring operation this lane creates.                                                                                                                                                                                                                              |
 | **Still open**                  | [OPEN-PPL-2](#open-ppl-2--whether-actor-is-a-new-domain-entity), [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves). [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) is settled and is no longer in this list. Plus the _Actor_ terminology collision recorded in [section 2](#2-people-model).                                                                                                                                                                                                                                                                                                                                                                     |
-| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) if it changes persisted schema — which options 2 and 3 of OPEN-PPL-2 do. The settled OPEN-PPL-4 answer uses the existing nullable `Character.ownerId` rather than a new persisted shape, but the Character-authority change it implies is security-relevant and carries the floor on that ground.                                                                                                                                                                                                                                                                                                                                              |
+| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) if it changes persisted schema — which options 2 and 3 of OPEN-PPL-2 do. The settled OPEN-PPL-4 answer uses the existing nullable `Character.ownerId` for the absence of a player owner, but its supplementary managing-GM ruling forbids overloading `ownerId` and requires an explicit durable representation where none exists — so this lane may well add a persisted shape as well. Either way the Character-authority change it implies is security-relevant and carries the floor on that ground.                                                                                                                                       |
 
 ### Lane B — Person representation, identity reveal, Inspector and notes/dossier
 

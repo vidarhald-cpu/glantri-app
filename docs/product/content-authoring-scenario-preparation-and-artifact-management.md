@@ -12,7 +12,8 @@ Implementation is **not** authorized by this document.
 the 2026-09-23 rulings on the three conflicts a reconciliation pass surfaced
 (C1, C2, C3), the partial-acceptance clarification, the canonical Artifact
 Association ruling, the resolution of OPEN-PPL-6, the resolution of OPEN-PPL-4,
-and the Scenario GM Plan storage ruling.
+the Scenario GM Plan storage ruling, and the supplementary managing-GM
+authority ruling that completes OPEN-PPL-4.
 
 This contract **generalizes an implemented pipeline**. It does not introduce a
 second import system, and no reader should build one from it.
@@ -726,6 +727,32 @@ The authority consequence is recorded in
 which now explicitly supports GM-controlled Characters with no player owner
 while **preserving unchanged** the rule that a managing GM may not pull another
 user's player-owned Character into a Campaign.
+
+A **supplementary Product Owner ruling of the same date** settles the authority
+that binds such a Character before it is rostered in any Campaign, quoted
+verbatim:
+
+> "A persistent ownerless NPC Character has a designated managing GM. That
+> managing GM has permanent-Character lifecycle authority independent of
+> Campaign roster membership, including before first rostering and after removal
+> from a Campaign.
+> `CampaignRosterEntry` continues to govern Campaign membership and
+> Campaign-scoped authority/state; it does not establish permanent ownership.
+> Existing player-owned Character protection remains unchanged: GM status or
+> Campaign membership never grants lifecycle ownership/authority over another
+> user's player-owned Character.
+> Do not overload player `ownerId` to represent the managing GM. If no suitable
+> durable authority relation exists, the implementation must add an explicit
+> representation rather than infer it from GM role or Campaign membership.
+> Record this without narrowing OPEN-PPL-5 or other remaining open decisions."
+
+It is recorded in
+[Pre-roster and post-removal authority](../architecture/character-lifecycle-authority.md#pre-roster-and-post-removal-authority--the-designated-managing-gm),
+together with the
+[binding representation constraint](../architecture/character-lifecycle-authority.md#the-representation-constraint--ownerid-may-not-be-overloaded)
+that `ownerId` may not be overloaded and the managing GM may not be inferred
+from GM role or Campaign membership. Any lane that adds that representation
+carries the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor).
 
 > **No other `OPEN-PPL-*` decision is resolved, narrowed or reopened by this
 > contract.** OPEN-PPL-1, 2, 3, 5, 7, 8, 9, 10 and 11 remain open and
