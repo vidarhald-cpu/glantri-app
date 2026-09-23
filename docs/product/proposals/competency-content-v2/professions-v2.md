@@ -1,7 +1,7 @@
 # Proposed Professions and valid paths (V2)
 
 > **Status: CANONICAL — accepted by the Product Owner on 2026-09-23 (Forgejo #250).**
-> See [decision record 0007](../../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
+> See [decision record 0008](../../../decisions/rules/0008-competency-content-v2-canonical-acceptance.md).
 > Generated from `packages/content/src/proposals/competencyContentV2/`. It is not yet registered
 > with Chargen, not yet projected into canonical content, and does not yet replace any approved
 > catalogue — that wiring is the separate, explicitly scoped work of #251/#252.

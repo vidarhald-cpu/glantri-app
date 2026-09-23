@@ -2,7 +2,7 @@
  * Competency Content V2 — CANONICAL Product Owner content (Forgejo #250, umbrella #249).
  *
  * The Product Owner accepted this corpus as canonical on 2026-09-23; see
- * `docs/decisions/rules/0007-competency-content-v2-canonical-acceptance.md`. It is still
+ * `docs/decisions/rules/0008-competency-content-v2-canonical-acceptance.md`. It is still
  * deliberately NOT exported from the package entry point, NOT projected into `CanonicalContent`,
  * and NOT reachable from Chargen or any other runtime path — wiring it into those paths is the
  * separate, explicitly scoped work of #251/#252. Until that wiring lands, the approved catalogues

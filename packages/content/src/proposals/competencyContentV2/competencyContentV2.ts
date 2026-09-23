@@ -2,7 +2,7 @@
  * Competency Content V2 — deterministic builder, catalogue checks and effective-breadth analysis.
  *
  * CANONICAL (Product Owner acceptance, 2026-09-23; see
- * `docs/decisions/rules/0007-competency-content-v2-canonical-acceptance.md`). Still a
+ * `docs/decisions/rules/0008-competency-content-v2-canonical-acceptance.md`). Still a
  * reference/analysis export pending #251/#252: nothing here is registered with Chargen, projected
  * into `CanonicalContent`, or exported from the package entry point.
  */

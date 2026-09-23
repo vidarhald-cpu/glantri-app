@@ -1,4 +1,4 @@
-# Rule decision 0007: Competency Content V2 canonical acceptance
+# Rule decision 0008: Competency Content V2 canonical acceptance
 
 - Status: approved
 - Date: 2026-09-23
