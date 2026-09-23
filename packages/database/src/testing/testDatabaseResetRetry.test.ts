@@ -17,7 +17,7 @@ const LOCK_CONFLICT_MESSAGE =
  * `resetTestDatabase` always starts an attempt at `equipmentTransitionEvent`, so accesses of that
  * model count the attempts the helper actually made.
  */
-function createFailingPrismaStub(failures: number, message: string) {
+function createFailingPrismaStub(failures: number, message: string, onAttempt?: () => void) {
   const state = { attempts: 0 };
   const model = {
     deleteMany: async () => {},
@@ -26,6 +26,8 @@ function createFailingPrismaStub(failures: number, message: string) {
   const firstModel = {
     deleteMany: async () => {
       if (state.attempts <= failures) {
+        onAttempt?.();
+
         throw new Error(message);
       }
     },
@@ -95,6 +97,48 @@ describe("resetTestDatabase lock-conflict containment", () => {
 
     expect(consoleError).toHaveBeenCalledTimes(1);
     expect(consoleError.mock.calls[0]?.[0]).toContain("40001");
+  });
+
+  it("stops early, still naming the deadlock, once the elapsed budget cannot fit another attempt", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    try {
+      // A slow host, where each deadlocked attempt costs 2000ms rather than the ~1045ms
+      // measured locally. The attempt bound alone would spend well past the 10s hook timeout,
+      // so the elapsed budget must cut in first and the failure must still name the deadlock.
+      const { stub, state } = createFailingPrismaStub(
+        Number.POSITIVE_INFINITY,
+        LOCK_CONFLICT_MESSAGE,
+        () => {
+          vi.advanceTimersByTime(2_000);
+        },
+      );
+
+      await expect(resetTestDatabase(stub)).rejects.toThrow(
+        /PostgreSQL lock conflict \(40P01\) persisted for \d+ms .* can no longer fit another attempt/s,
+      );
+
+      expect(state.attempts).toBeLessThan(5);
+      expect(consoleError.mock.calls.length).toBe(state.attempts - 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not treat a message that merely contains the digits 40001 as a lock conflict", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    // A bare substring test classified this as a PostgreSQL serialization failure, retried it
+    // five times and mislabelled the failure. Only the delimited SQLSTATE form counts.
+    const { stub, state } = createFailingPrismaStub(
+      1,
+      "Invalid `prisma.character.delete()` invocation: record clx40001abc not found",
+    );
+
+    await expect(resetTestDatabase(stub)).rejects.toThrow(/clx40001abc not found/);
+
+    expect(state.attempts).toBe(1);
+    expect(consoleError).not.toHaveBeenCalled();
   });
 
   it("does not retry or log for an unrelated reset failure", async () => {
