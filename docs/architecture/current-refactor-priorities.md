@@ -1,4 +1,35 @@
-# Current Refactor Priorities
+# Current Refactor Priorities (HISTORICAL — QUARANTINED, NON-AUTHORITATIVE)
+
+> **Status: QUARANTINED — HISTORICAL RECORD ONLY, NON-AUTHORITATIVE. DO NOT USE FOR PLANNING.**
+>
+> **Quarantined on:** 2026-09-23. **Authority:** PRODUCT OWNER instruction on Forgejo issue #287.
+>
+> **Every issue number below is a GitHub number from a different, retired tracker.** This document
+> was compiled from issue exports for the GitHub repository `vidarhald-cpu/glantri-app` and was
+> last reviewed **2026-05-11**. Current Git and case-management authority is the loopback-only
+> **Forgejo** repository `recovery-admin/glantri-app`, per
+> [AGENTS.md](../../AGENTS.md#authority-and-roles).
+>
+> **The numbers collide.** #16, #39, #49, #57, #74, #80, #86 and #91–#118 as used below are
+> **GitHub** numbers. Live **Forgejo** issues share those numbers and mean **entirely unrelated
+> things** — #108, #109, #111, #113 and #116 among them. A reader who carries a number from this
+> document into Forgejo, or who reads a Forgejo issue number into this document, will reach a
+> confidently wrong conclusion. **No number here resolves against the current tracker.**
+>
+> **Do not use this document for prioritization, dispatch, scope, triage, or any planning
+> decision.** It is retained only as a record of how refactor priorities were read in May 2026.
+> For current priority and authorization, use the Forgejo issue tracker and the canonical
+> [task contract](../process/task-contract.md) lifecycle. For current ownership and contended
+> surfaces, use [ownership](./ownership.md); the "Risky Files/Areas" list below is a May 2026
+> snapshot and is **not** the reserved-hotspot register.
+>
+> **The content below is preserved verbatim as it stood on 2026-05-11 and is deliberately not
+> corrected.** Its statements about issue state, duplicate groups, completion and priority were
+> true only of the retired GitHub tracker, if at all.
+
+---
+
+**The original document follows, unaltered.**
 
 Source: GitHub open and closed issue exports for `vidarhald-cpu/glantri-app`, reviewed 2026-05-11.
 
@@ -6,44 +37,44 @@ This document is a planning aid only. It does not supersede issue state in GitHu
 
 ## Open Issues Summary
 
-| Issue | Theme | Current reading | Suggested priority |
-| --- | --- | --- | --- |
-| #49 | Bicep/App Service container drift | Real infra bug: `linuxFxVersion` says Node while deployment uses containers. | P1 |
-| #92 | Characterization tests for chargen/campaign/encounter flows | Open, but comment says duplicate. Still valuable as safety work before further UI/domain refactors. | P1 |
-| #99 | Move generated game content from TS to JSON | Open, but matching closed/superseded issues exist. Broad content-loader refactor. | P2 |
-| #103 | API contract layer / DTOs | Open, but matching closed/superseded issues exist. Important boundary cleanup before more API expansion. | P1 |
-| #105 | Split `ChargenWizard` | Partially done. `ChargenWizard.tsx` is small; remaining risk moved to `ChargenWizardExperience.tsx`. | P1 |
-| #107 | Split scenario/encounter/templates components | Open duplicate comment, but still directionally relevant after recent scenario/roleplay feature growth. | P2 |
-| #108 | Shared admin table/filter components | Open duplicate comment. Useful cleanup, lower urgency than domain/API boundaries. | P3 |
-| #110 | Standardize web styling | Open duplicate comment. Broad visual/dependency cleanup; defer until active feature churn slows. | P3 |
+| Issue | Theme                                                       | Current reading                                                                                          | Suggested priority |
+| ----- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | ------------------ |
+| #49   | Bicep/App Service container drift                           | Real infra bug: `linuxFxVersion` says Node while deployment uses containers.                             | P1                 |
+| #92   | Characterization tests for chargen/campaign/encounter flows | Open, but comment says duplicate. Still valuable as safety work before further UI/domain refactors.      | P1                 |
+| #99   | Move generated game content from TS to JSON                 | Open, but matching closed/superseded issues exist. Broad content-loader refactor.                        | P2                 |
+| #103  | API contract layer / DTOs                                   | Open, but matching closed/superseded issues exist. Important boundary cleanup before more API expansion. | P1                 |
+| #105  | Split `ChargenWizard`                                       | Partially done. `ChargenWizard.tsx` is small; remaining risk moved to `ChargenWizardExperience.tsx`.     | P1                 |
+| #107  | Split scenario/encounter/templates components               | Open duplicate comment, but still directionally relevant after recent scenario/roleplay feature growth.  | P2                 |
+| #108  | Shared admin table/filter components                        | Open duplicate comment. Useful cleanup, lower urgency than domain/API boundaries.                        | P3                 |
+| #110  | Standardize web styling                                     | Open duplicate comment. Broad visual/dependency cleanup; defer until active feature churn slows.         | P3                 |
 
 ## Closed/Superseded Issue Summary
 
 The closed export has 75 closed issues, all marked `completed` by GitHub state reason. They cluster into these useful buckets:
 
-| Bucket | Issues | Reading |
-| --- | --- | --- |
-| Deploy, security, database, monitoring foundation | #16-30, #39-45, #49 open remainder | Most production/deployment setup was completed. #49 remains the main open infra drift. |
-| Pre-refactor test and CI safety | #57-66, #113/#118 | Regression matrix, golden tests, coverage/CI gates, smoke tests, and API/service test foundations were mostly completed. |
-| Early architecture boundary cleanup | #74-90, #93-98 | Earlier T-01 through T-16 batch was closed, but several later open duplicates still exist. Treat issue state as noisy until triaged. |
-| Database/content/docs follow-up refactors | #100-102, #104, #106, #109, #111-112, #114-117 | Later duplicates/refinements for validator splits, DB service splits, docs, format scripts, lint docs, and data README were completed. |
-| Chargen split progress | #93 closed, #105 open with progress comment | The shell was split, but `ChargenWizardExperience.tsx` still needs staged extraction. |
+| Bucket                                            | Issues                                         | Reading                                                                                                                                |
+| ------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Deploy, security, database, monitoring foundation | #16-30, #39-45, #49 open remainder             | Most production/deployment setup was completed. #49 remains the main open infra drift.                                                 |
+| Pre-refactor test and CI safety                   | #57-66, #113/#118                              | Regression matrix, golden tests, coverage/CI gates, smoke tests, and API/service test foundations were mostly completed.               |
+| Early architecture boundary cleanup               | #74-90, #93-98                                 | Earlier T-01 through T-16 batch was closed, but several later open duplicates still exist. Treat issue state as noisy until triaged.   |
+| Database/content/docs follow-up refactors         | #100-102, #104, #106, #109, #111-112, #114-117 | Later duplicates/refinements for validator splits, DB service splits, docs, format scripts, lint docs, and data README were completed. |
+| Chargen split progress                            | #93 closed, #105 open with progress comment    | The shell was split, but `ChargenWizardExperience.tsx` still needs staged extraction.                                                  |
 
 ## Duplicate Groups
 
 These look like duplicate or successor issue pairs/groups. The open issue comments often say “duplicate,” but the open issues were not closed, so GitHub currently sends mixed signals.
 
-| Refactor task | Open issue | Closed/superseded issues | Recommendation |
-| --- | --- | --- | --- |
-| T-06 characterization tests | #92 | #80 | Decide whether #92 should remain the tracking issue. If yes, update body with completed coverage and remaining gaps. |
-| T-09 content TS to JSON | #99 | #86 | Confirm whether #86 completed enough. If not, keep #99 as the continuation issue. |
-| T-12 API contract layer | #103 | #91 | Keep as active only if DTO boundary work is still incomplete. |
-| T-13 Chargen split | #105 | #93 | Keep #105 active; it has a fresh partial-progress comment and clear next slices. |
-| T-14 scenario/encounter/templates split | #107 | #95 | Keep as future cleanup if current large scenario/encounter files remain risky. |
-| T-15 admin table/filter components | #108 | #97 | Defer or close if shared admin component extraction is no longer worth the churn. |
-| T-16 styling strategy | #110 | #98 | Defer until feature churn slows; close one side of the duplicate group. |
-| T-17 DB service/repository split | none open | #102, #112 | Closed; do not reopen unless concrete new pain appears. |
-| T-18 through T-22 docs/format/coverage | none open | #104/#114, #106/#115, #109/#116, #111/#117, #113/#118 | Closed; treat as completed foundation work. |
+| Refactor task                           | Open issue | Closed/superseded issues                              | Recommendation                                                                                                       |
+| --------------------------------------- | ---------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| T-06 characterization tests             | #92        | #80                                                   | Decide whether #92 should remain the tracking issue. If yes, update body with completed coverage and remaining gaps. |
+| T-09 content TS to JSON                 | #99        | #86                                                   | Confirm whether #86 completed enough. If not, keep #99 as the continuation issue.                                    |
+| T-12 API contract layer                 | #103       | #91                                                   | Keep as active only if DTO boundary work is still incomplete.                                                        |
+| T-13 Chargen split                      | #105       | #93                                                   | Keep #105 active; it has a fresh partial-progress comment and clear next slices.                                     |
+| T-14 scenario/encounter/templates split | #107       | #95                                                   | Keep as future cleanup if current large scenario/encounter files remain risky.                                       |
+| T-15 admin table/filter components      | #108       | #97                                                   | Defer or close if shared admin component extraction is no longer worth the churn.                                    |
+| T-16 styling strategy                   | #110       | #98                                                   | Defer until feature churn slows; close one side of the duplicate group.                                              |
+| T-17 DB service/repository split        | none open  | #102, #112                                            | Closed; do not reopen unless concrete new pain appears.                                                              |
+| T-18 through T-22 docs/format/coverage  | none open  | #104/#114, #106/#115, #109/#116, #111/#117, #113/#118 | Closed; treat as completed foundation work.                                                                          |
 
 ## Recommended Priority Order
 
