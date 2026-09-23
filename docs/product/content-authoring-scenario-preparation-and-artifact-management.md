@@ -11,7 +11,9 @@ Implementation is **not** authorized by this document.
 [#250](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/250), including
 the 2026-09-23 rulings on the three conflicts a reconciliation pass surfaced
 (C1, C2, C3), the partial-acceptance clarification, the canonical Artifact
-Association ruling, and the resolution of OPEN-PPL-6.
+Association ruling, the resolution of OPEN-PPL-6, the resolution of OPEN-PPL-4,
+the Scenario GM Plan storage ruling, and the supplementary managing-GM
+authority ruling that completes OPEN-PPL-4.
 
 This contract **generalizes an implemented pipeline**. It does not introduce a
 second import system, and no reader should build one from it.
@@ -29,10 +31,12 @@ points here and this document governs.
   Player Play V1, #271, or #119 Artifact Management, except where a ruling in
   [section 18](#18-rulings-recorded-here) explicitly and narrowly amends it.
 - It does **not** authorize schema, migration, runtime or UI implementation.
-- It does **not** resolve any open decision other than OPEN-PPL-6. The other ten
-  `OPEN-PPL-*` decisions in
+- It does **not** resolve any open decision other than OPEN-PPL-6 and
+  OPEN-PPL-4. The other nine `OPEN-PPL-*` decisions in
   [the People/Artifact/GM authoring model](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen)
-  remain open and unchanged.
+  remain open and unchanged. OPEN-PPL-4 is settled by the 2026-09-23 Product
+  Owner ruling recorded in that document and reflected here in
+  [section 19.4](#194-reusable-profession-npc-representatives-depend-on-an-existing-open-decision).
 - It does **not** answer
   [#279](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/279). See
   [section 11.6](#116-visibility-everything-begins-gm-private).
@@ -271,8 +275,45 @@ any of them:
 | Activity / history       | Settled by [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules)                                            |
 | The published summary    | Storage still open — [OPEN-PPL-11](people-artifact-and-gm-authoring-model.md#open-ppl-11--where-the-post-play-summary-lives)                  |
 
-This contract does **not** decide where the GM Plan is stored, and does **not**
-answer OPEN-PPL-11.
+#### Storage — SETTLED, 2026-09-23
+
+**PRODUCT OWNER RULING**, quoted verbatim. Indexed in
+[section 18.7](#187-scenario-gm-plan-storage).
+
+> "It is a canonical nullable long-form text field owned by Scenario, GM-only
+> and Markdown/plain-text capable. It is not an Artifact, generic Note/KM
+> entity, or separate rich-document object. Authoring-package changes stage
+> updates through the common import pipeline. Stale package context must not
+> silently overwrite a newer GM edit; use the existing Scenario
+> revision/concurrency mechanism or equivalent conflict detection."
+
+- **What it is.** A **canonical nullable long-form text field owned by
+  `Scenario`**, **GM-only**, and **Markdown/plain-text capable**.
+- **What it is not.** **Not** an Artifact, **not** a generic Note/KM entity,
+  **not** a separate rich-document object.
+- **Package updates.** Authoring-package changes **stage updates through the
+  common import pipeline** of [section 2](#2-the-one-pipeline-already-exists).
+  They never write directly, and GM Plan update remains a type that its owning
+  lane must explicitly enable per
+  [section 11.5](#115-importable-domain-types).
+- **Conflict detection.** **Stale package context must not silently overwrite a
+  newer GM edit.** The existing Scenario revision/concurrency mechanism is the
+  `expectedRevision` check in `updateScenario` in
+  `packages/database/src/repositories/scenarioRepository.ts`: under a row lock
+  it compares the caller's `expectedRevision` against the Scenario's
+  `updatedAt` revision and raises
+  `ScenarioPersistenceError("stale_revision")` on mismatch. It is the same
+  opaque-revision shape as `expectedUpdatedAt` in
+  [Character lifecycle authority](../architecture/character-lifecycle-authority.md#editsynchronize).
+  The implementing lane uses that mechanism or an equivalent conflict
+  detection; it does not invent a silent last-writer-wins path.
+
+Because the field is **GM-only**, the lane that implements it is a privacy
+projection change and carries the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor).
+
+This ruling settles **the storage of the GM Plan only**. It does **not** answer
+OPEN-PPL-11, which remains open.
 
 ### 8.2 Scenario resource assembly
 
@@ -581,13 +622,13 @@ what a package may carry, and every widening inherits the parity obligation.
 
 ## 17. Scope boundaries
 
-| Item                            | Status                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Reusable Encounter templates    | **Later scope.** Recorded, not authorized.                                                             |
-| Random-Encounter mechanics      | **Not in scope.**                                                                                      |
-| Content Production Interface    | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface). |
-| Storage of the Scenario GM Plan | Not decided here.                                                                                      |
-| Anything gated on #279          | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                             |
+| Item                            | Status                                                                                                                  |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Reusable Encounter templates    | **Later scope.** Recorded, not authorized.                                                                              |
+| Random-Encounter mechanics      | **Not in scope.**                                                                                                       |
+| Content Production Interface    | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface).                  |
+| Storage of the Scenario GM Plan | **Settled**, 2026-09-23. See [section 8.1](#81-the-scenario-gm-plan) and [section 18.7](#187-scenario-gm-plan-storage). |
+| Anything gated on #279          | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                                              |
 
 ---
 
@@ -648,9 +689,76 @@ This is the resolution recorded in
 [section 3](#3-one-artifact-system) (kind versus role) and
 [section 15](#15-representation-readiness) (derived readiness).
 
+### 18.7 Scenario GM Plan storage
+
+**Status:** **SETTLED and closed**, 2026-09-23. **Authority:** Product Owner.
+**Gates:** Nothing further on storage; importability still requires the
+explicit opt-in in [section 11.5](#115-importable-domain-types). Full text in
+[section 8.1](#81-the-scenario-gm-plan).
+
+> "It is a canonical nullable long-form text field owned by Scenario, GM-only
+> and Markdown/plain-text capable. It is not an Artifact, generic Note/KM
+> entity, or separate rich-document object. Authoring-package changes stage
+> updates through the common import pipeline. Stale package context must not
+> silently overwrite a newer GM edit; use the existing Scenario
+> revision/concurrency mechanism or equivalent conflict detection."
+
+The named existing mechanism is the `expectedRevision` /
+`ScenarioPersistenceError("stale_revision")` check in `updateScenario` in
+`packages/database/src/repositories/scenarioRepository.ts`.
+
+### 18.8 OPEN-PPL-4 resolved
+
+**Status:** **SETTLED and closed**, 2026-09-23. **Authority:** Product Owner.
+**Was:**
+[OPEN-PPL-4 — What a persistent NPC record is](people-artifact-and-gm-authoring-model.md#open-ppl-4--what-a-persistent-npc-record-is).
+**Gates:** Nothing. It no longer gates lane A, and it never gated slice A.
+
+> "A persistent NPC is a Character using the same full Character/rules model as
+> a PC, but with no player owner and with GM control under the applicable
+> GM/Campaign authority.
+> `CampaignRosterEntry` provides Campaign membership; Character itself remains
+> independent of Campaign.
+> `ReusableEntity` is reusable source/archetype material, not the canonical
+> persistent identity of a person."
+
+The authority consequence is recorded in
+[Character lifecycle authority](../architecture/character-lifecycle-authority.md#gm-controlled-characters-with-no-player-owner),
+which now explicitly supports GM-controlled Characters with no player owner
+while **preserving unchanged** the rule that a managing GM may not pull another
+user's player-owned Character into a Campaign.
+
+A **supplementary Product Owner ruling of the same date** settles the authority
+that binds such a Character before it is rostered in any Campaign, quoted
+verbatim:
+
+> "A persistent ownerless NPC Character has a designated managing GM. That
+> managing GM has permanent-Character lifecycle authority independent of
+> Campaign roster membership, including before first rostering and after removal
+> from a Campaign.
+> `CampaignRosterEntry` continues to govern Campaign membership and
+> Campaign-scoped authority/state; it does not establish permanent ownership.
+> Existing player-owned Character protection remains unchanged: GM status or
+> Campaign membership never grants lifecycle ownership/authority over another
+> user's player-owned Character.
+> Do not overload player `ownerId` to represent the managing GM. If no suitable
+> durable authority relation exists, the implementation must add an explicit
+> representation rather than infer it from GM role or Campaign membership.
+> Record this without narrowing OPEN-PPL-5 or other remaining open decisions."
+
+It is recorded in
+[Pre-roster and post-removal authority](../architecture/character-lifecycle-authority.md#pre-roster-and-post-removal-authority--the-designated-managing-gm),
+together with the
+[binding representation constraint](../architecture/character-lifecycle-authority.md#the-representation-constraint--ownerid-may-not-be-overloaded)
+that `ownerId` may not be overloaded and the managing GM may not be inferred
+from GM role or Campaign membership. Any lane that adds that representation
+carries the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor).
+
 > **No other `OPEN-PPL-*` decision is resolved, narrowed or reopened by this
-> contract.** OPEN-PPL-1, 2, 3, 4, 5, 7, 8, 9, 10 and 11 remain open and
-> unchanged.
+> contract.** OPEN-PPL-1, 2, 3, 5, 7, 8, 9, 10 and 11 remain open and
+> unchanged. OPEN-PPL-5 in particular is untouched beyond recording that later
+> materialization/promotion from reusable content to a persistent Character
+> remains its concern.
 
 ---
 
@@ -706,21 +814,36 @@ Recorded, not authorized:
 
 ### 19.4 Reusable Profession NPC representatives depend on an existing open decision
 
-The use case is recorded above. It **is not resolved here**, and this contract
-**does not silently answer the existing open decision that governs it**.
+_The heading is retained so existing references continue to resolve. The
+decision it named — OPEN-PPL-4 — is now settled; other decisions in this section
+remain open._
 
-> **The governing open decision is
-> [OPEN-PPL-4 — What a persistent NPC record is](people-artifact-and-gm-authoring-model.md#open-ppl-4--what-a-persistent-npc-record-is).**
+The use case is recorded above. It **is not authorized here**.
+
+> **The governing decision,
+> [OPEN-PPL-4 — What a persistent NPC record is](people-artifact-and-gm-authoring-model.md#open-ppl-4--what-a-persistent-npc-record-is),
+> is SETTLED as of 2026-09-23 and no longer blocks this use case.**
 > A pre-authored, reusable Profession NPC representative is exactly a persistent
-> NPC record, and OPEN-PPL-4 is the unresolved question of which record carries
-> one — a GM-owned `Character`, a `ReusableEntity` whose snapshot is a full
-> character build, or both with promotion between them. It **must be resolved by
-> the Product Owner before any reusable Profession NPC library is produced.**
+> NPC record, and the Product Owner has ruled that a persistent NPC **is a
+> `Character` with no player owner**, GM-controlled under the applicable
+> GM/Campaign authority. `ReusableEntity` is reusable source/archetype material
+> and is **not** the canonical persistent identity of a person. See
+> [section 18.8](#188-open-ppl-4-resolved).
 
-Adjacent and also unresolved, for the Template half of the same use case:
+**What is still required before any reusable Profession NPC library is
+produced:** production of such a library is future scope that is not authorized
+by this contract, and the **Template half** of the use case, plus any
+materialization step from reusable content into persistent Characters, still
+depends on the decisions below.
+
+Adjacent and still unresolved, for the Template half of the same use case:
 [OPEN-PPL-2 — Whether Actor is a new domain entity](people-artifact-and-gm-authoring-model.md#open-ppl-2--whether-actor-is-a-new-domain-entity),
 which names _Template_ as a product concept without deciding whether it is a
-domain entity.
+domain entity, and
+[OPEN-PPL-5 — What Actor-to-persistent-NPC promotion preserves](people-artifact-and-gm-authoring-model.md#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves),
+which remains the concern for later materialization/promotion from reusable
+content to a persistent `Character`. Both stand exactly as they did; neither is
+narrowed here.
 
 > **Neither blocks slice A.** Slice A is the canonical Artifact Association
 > layer in [section 4.1](#41-the-canonical-artifact-association-layer), which
@@ -734,16 +857,16 @@ domain entity.
 This contract is controlling for the model it describes. The documents below
 retain their own authority for everything else and point here for this model.
 
-| Document                                                                                      | Relationship                                                                                                                                             |
-| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types). |
-| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                            |
-| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                              |
-| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                   |
-| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved); the other ten remain open.                                    |
-| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                               |
-| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                     |
-| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                               |
-| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                     |
-| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                   |
-| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                    |
+| Document                                                                                      | Relationship                                                                                                                                                                      |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                          |
+| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                     |
+| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                       |
+| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                            |
+| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); the other nine remain open. |
+| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                        |
+| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                              |
+| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                        |
+| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                              |
+| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                            |
+| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                             |

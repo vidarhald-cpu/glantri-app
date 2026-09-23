@@ -119,6 +119,16 @@ Recording #284 §1.
   required now.
 - The current **V1 rule remains one active Campaign per Character**.
 
+> **Which record carries a persistent NPC is settled as of 2026-09-23.** A
+> persistent NPC is a `Character` with **no player owner**, GM-controlled under
+> the applicable GM/Campaign authority. `CampaignRosterEntry` provides Campaign
+> membership and `Character` itself remains independent of Campaign;
+> `ReusableEntity` is reusable source/archetype material, not the canonical
+> persistent identity of a person. Such a Character has a **designated managing
+> GM** whose permanent-Character lifecycle authority is independent of Campaign
+> roster membership. See
+> [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is).
+
 > **Terminology hazard, recorded rather than resolved.** The word _Actor_
 > already has a second meaning in this repository:
 > [Character lifecycle authority](../architecture/character-lifecycle-authority.md#actor-and-privacy-matrix)
@@ -718,20 +728,20 @@ orientation facts for sizing, not a contract.** Per
 a preflight near activation re-establishes them against then-current `dev`; this
 section will go stale and is not to be treated as an exact-path design.
 
-| Fact                                                                                                                                                                                                                                             | Why it matters                                                                                                                                                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ReusableEntity` exists in `packages/database/prisma/schema.prisma` and `reusableEntitySchema` in `packages/domain/src/campaign/scenario.ts`, with kinds `npc` / `monster` / `animal`.                                                           | A non-PC person record already exists. It is **owned by `gmUserId` and is not campaign-scoped**, which a Campaign-scoped dossier would have to reckon with.                                                                                                                                                      |
-| `ReusableEntity` carries a single `description` and a single `notes`, and `CampaignRosterEntry` carries a single `notes`.                                                                                                                        | **No GM-private / player-visible split exists on any person record today.** [Section 6.1](#61-the-gm-only-dossier) is therefore new work, not a flag on an existing field.                                                                                                                                       |
-| `CampaignActorClass` in `apps/web/src/lib/campaigns/campaignActors.ts` is already `template` / `campaign_npc` / `generated_npc`, and derives from a `ReusableEntity` snapshot.                                                                   | The Template/NPC/generated-Actor trichotomy already exists in the client, above a domain that does not distinguish them.                                                                                                                                                                                         |
-| `CampaignRosterSourceType` is `character` / `reusableEntity` / `template` and `CampaignRosterCategory` is `pc` / `npc` / `template`.                                                                                                             | Part of #284 §1's vocabulary is already in the persisted roster model.                                                                                                                                                                                                                                           |
-| `apps/web/src/lib/templates/npcArchetypeTemplates.ts` and `apps/web/src/features/templates/TemplatesPageContent.tsx` are the existing archetype authoring surface.                                                                               | An NPC/Actor authoring lane extends this rather than starting a new surface.                                                                                                                                                                                                                                     |
-| Neither `Character` nor `ReusableEntity` carries any representation, portrait or Artifact reference.                                                                                                                                             | Person-to-Artifact association is genuinely absent, unlike Item-to-Artifact.                                                                                                                                                                                                                                     |
-| `CampaignItemArtifactAttachment` exists (from #271, PR #275) with a composite `(campaignId, artifactId)` FK but only a simple FK on `itemId`.                                                                                                    | The existing attachment mechanism, and the subject of [#278](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/278). [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics) states it is **not** automatically canonical. |
-| `CampaignNote` + `CampaignNoteAssociation` exist, with `CampaignNoteReferenceType` = `campaign` / `scenario` / `encounter` / `character` / `npc` / `artifact` / `tag`, a `@@unique([noteId, type, targetId])` and a `@@index([type, targetId])`. | A multi-association substrate indexed in **both** directions already exists — directly relevant to [section 10](#10-gm-campaign-material)'s bidirectional navigation.                                                                                                                                            |
-| `Scenario` has `name`, `description`, `kind`, `status`, `mapAssetId`, `liveStateJson`. There is **no** separate GM-private planning field, **no** player framing field and **no** post-play summary field.                                       | [Section 11](#11-scenario-authoring-and-history) is mostly new fields/state, and a single `description` today serves an audience that would have to be split.                                                                                                                                                    |
-| `Encounter` has `name`, `status`, `sessionJson`, `combatStorageMode` and archive counters.                                                                                                                                                       | Encounter is **already** lightweight. [Section 12](#12-encounter) is a preservation requirement.                                                                                                                                                                                                                 |
-| `CampaignAsset` carries `gmNotes` with the schema comment _"Never included in the player-facing Artifact projection"_, plus `audience`, `visibility`, `artifactKind`, `altText`.                                                                 | The GM-private-field pattern already has a second worked instance on the Artifact side.                                                                                                                                                                                                                          |
-| `apps/web/app/(app)/campaigns/[campaignId]/CampaignWorkspaceShell.tsx` is ~1,707 lines and is the real player and GM arena, per [PPV1 §17.1](../architecture/player-play-v1.md#171-the-existing-player-surface--verified-facts).                 | Any UI in lanes B and E lands in the densest reserved hotspot in the repository.                                                                                                                                                                                                                                 |
+| Fact                                                                                                                                                                                                                                             | Why it matters                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ReusableEntity` exists in `packages/database/prisma/schema.prisma` and `reusableEntitySchema` in `packages/domain/src/campaign/scenario.ts`, with kinds `npc` / `monster` / `animal`.                                                           | A non-PC person record already exists. It is **owned by `gmUserId` and is not campaign-scoped**, which a Campaign-scoped dossier would have to reckon with. Per the settled [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) it is **reusable source/archetype material, not the canonical persistent identity of a person**. |
+| `ReusableEntity` carries a single `description` and a single `notes`, and `CampaignRosterEntry` carries a single `notes`.                                                                                                                        | **No GM-private / player-visible split exists on any person record today.** [Section 6.1](#61-the-gm-only-dossier) is therefore new work, not a flag on an existing field.                                                                                                                                                              |
+| `CampaignActorClass` in `apps/web/src/lib/campaigns/campaignActors.ts` is already `template` / `campaign_npc` / `generated_npc`, and derives from a `ReusableEntity` snapshot.                                                                   | The Template/NPC/generated-Actor trichotomy already exists in the client, above a domain that does not distinguish them.                                                                                                                                                                                                                |
+| `CampaignRosterSourceType` is `character` / `reusableEntity` / `template` and `CampaignRosterCategory` is `pc` / `npc` / `template`.                                                                                                             | Part of #284 §1's vocabulary is already in the persisted roster model.                                                                                                                                                                                                                                                                  |
+| `apps/web/src/lib/templates/npcArchetypeTemplates.ts` and `apps/web/src/features/templates/TemplatesPageContent.tsx` are the existing archetype authoring surface.                                                                               | An NPC/Actor authoring lane extends this rather than starting a new surface.                                                                                                                                                                                                                                                            |
+| Neither `Character` nor `ReusableEntity` carries any representation, portrait or Artifact reference.                                                                                                                                             | Person-to-Artifact association is genuinely absent, unlike Item-to-Artifact.                                                                                                                                                                                                                                                            |
+| `CampaignItemArtifactAttachment` exists (from #271, PR #275) with a composite `(campaignId, artifactId)` FK but only a simple FK on `itemId`.                                                                                                    | The existing attachment mechanism, and the subject of [#278](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/278). [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics) states it is **not** automatically canonical.                        |
+| `CampaignNote` + `CampaignNoteAssociation` exist, with `CampaignNoteReferenceType` = `campaign` / `scenario` / `encounter` / `character` / `npc` / `artifact` / `tag`, a `@@unique([noteId, type, targetId])` and a `@@index([type, targetId])`. | A multi-association substrate indexed in **both** directions already exists — directly relevant to [section 10](#10-gm-campaign-material)'s bidirectional navigation.                                                                                                                                                                   |
+| `Scenario` has `name`, `description`, `kind`, `status`, `mapAssetId`, `liveStateJson`. There is **no** separate GM-private planning field, **no** player framing field and **no** post-play summary field.                                       | [Section 11](#11-scenario-authoring-and-history) is mostly new fields/state, and a single `description` today serves an audience that would have to be split.                                                                                                                                                                           |
+| `Encounter` has `name`, `status`, `sessionJson`, `combatStorageMode` and archive counters.                                                                                                                                                       | Encounter is **already** lightweight. [Section 12](#12-encounter) is a preservation requirement.                                                                                                                                                                                                                                        |
+| `CampaignAsset` carries `gmNotes` with the schema comment _"Never included in the player-facing Artifact projection"_, plus `audience`, `visibility`, `artifactKind`, `altText`.                                                                 | The GM-private-field pattern already has a second worked instance on the Artifact side.                                                                                                                                                                                                                                                 |
+| `apps/web/app/(app)/campaigns/[campaignId]/CampaignWorkspaceShell.tsx` is ~1,707 lines and is the real player and GM arena, per [PPV1 §17.1](../architecture/player-play-v1.md#171-the-existing-player-surface--verified-facts).                 | Any UI in lanes B and E lands in the densest reserved hotspot in the repository.                                                                                                                                                                                                                                                        |
 
 ---
 
@@ -769,15 +779,16 @@ Recorded in the style of
 and
 [PPV1 §18](../architecture/player-play-v1.md#18-open-decisions-and-recorded-mismatches).
 
-**Every decision below is genuinely open, with one exception. Options are
+**Every decision below is genuinely open, with two exceptions. Options are
 stated neutrally and none is chosen.** A lane that reaches one of these stops
 and returns it to the Product Owner / control plane rather than deciding it in
 implementation. None of these reopens anything settled by #268 or Player Play
 V1.
 
-> **Exception: [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded)
-> is SETTLED as of 2026-09-23.** Its heading is retained so existing references
-> continue to resolve. **The other ten decisions remain genuinely open and
+> **Exceptions: [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) and
+> [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) are both
+> SETTLED as of 2026-09-23.** Their headings are retained so existing references
+> continue to resolve. **The other nine decisions remain genuinely open and
 > unchanged.**
 
 ### OPEN-PPL-1 — How identity revelation is modelled
@@ -857,25 +868,114 @@ weakening the existing note model.
 
 ### OPEN-PPL-4 — What a persistent NPC record is
 
-**Status:** Open. **Raised by:** #284 §1. **Affects:** lane A.
+**Status:** **SETTLED and closed.**\
+**Settled on:** 2026-09-23\
+**Authority:** PRODUCT OWNER RULING, recorded on
+[#284](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284).\
+**Raised by:** #284 §1. **Affects:** lane A.\
+**Gates:** **Nothing.** It no longer gates lane A.
 
-#284 settles that a persistent PC and a persistent NPC use the **same full
-Character and rules model**, and that only control semantics differ. It does not
-say which record carries it.
+**The question as originally recorded**, retained as provenance:
 
-Options, **none chosen**:
+> #284 settles that a persistent PC and a persistent NPC use the **same full
+> Character and rules model**, and that only control semantics differ. It does
+> not say which record carries it.
+>
+> Options, **none chosen**:
+>
+> 1. **A `Character` with no player owner**, GM-controlled through existing
+>    Campaign authority.
+> 2. **A `ReusableEntity` whose snapshot is a full character build** — closest
+>    to today's shape, per [section 13](#13-existing-model-orientation).
+> 3. **Both**, with promotion between them — which folds into
+>    [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves).
+>
+> Option 1 interacts with
+> [Character lifecycle authority](../architecture/character-lifecycle-authority.md#actor-and-privacy-matrix),
+> which is written around a player owner, and with the V1 rule of **one active
+> Campaign per Character**, which #284 §1 explicitly retains.
 
-1. **A `Character` with no player owner**, GM-controlled through existing
-   Campaign authority.
-2. **A `ReusableEntity` whose snapshot is a full character build** — closest to
-   today's shape, per [section 13](#13-existing-model-orientation).
-3. **Both**, with promotion between them — which folds into
-   [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves).
+**What was ruled**, quoted verbatim:
 
-Option 1 interacts with
-[Character lifecycle authority](../architecture/character-lifecycle-authority.md#actor-and-privacy-matrix),
-which is written around a player owner, and with the V1 rule of **one active
-Campaign per Character**, which #284 §1 explicitly retains.
+> "A persistent NPC is a Character using the same full Character/rules model as
+> a PC, but with no player owner and with GM control under the applicable
+> GM/Campaign authority.
+> `CampaignRosterEntry` provides Campaign membership; Character itself remains
+> independent of Campaign.
+> `ReusableEntity` is reusable source/archetype material, not the canonical
+> persistent identity of a person.
+> Update the relevant authority/lifecycle documentation as necessary to
+> explicitly support GM-controlled Characters with no player owner. Do not
+> resolve OPEN-PPL-5 beyond recording that later materialization/promotion from
+> reusable content to persistent Character remains its concern."
+
+**This is option 1.** Option 2 is explicitly rejected **as the canonical
+persistent identity of a person**: `ReusableEntity` remains reusable
+source/archetype material. Option 3 is not chosen. The ruling records only that
+later materialization/promotion from reusable content to a persistent Character
+remains
+[OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves)'s
+concern; **nothing about OPEN-PPL-5 is answered, narrowed or pre-empted here.**
+
+**Consequences recorded, not extended:**
+
+- **Character identity is not Campaign-scoped.** `CampaignRosterEntry` provides
+  Campaign membership; the `Character` record itself remains independent of
+  Campaign.
+- [Character lifecycle authority](../architecture/character-lifecycle-authority.md#gm-controlled-characters-with-no-player-owner)
+  is extended to support a Character with no player owner, controlled by the GM
+  under the applicable GM/Campaign authority, **without weakening the existing
+  protection that a managing GM may not pull another user's player-owned
+  Character into a Campaign**.
+- The V1 rule of **one active Campaign per Character** is unchanged. #284 §1
+  retains it and this ruling does not amend it.
+- The ruling describes an ownership state the schema already permits:
+  `Character.ownerId` is declared `String?` in
+  `packages/database/prisma/schema.prisma`. That is recorded as evidence, not as
+  an implementation instruction.
+
+**Supplementary Product Owner ruling, 2026-09-23 — pre-roster managing-GM
+authority.** The original ruling left the authority over an ownerless NPC
+Character **before it is rostered in any Campaign** unstated, and authoring
+necessarily precedes rostering. The Product Owner has now settled it, quoted
+verbatim:
+
+> "A persistent ownerless NPC Character has a designated managing GM. That
+> managing GM has permanent-Character lifecycle authority independent of
+> Campaign roster membership, including before first rostering and after removal
+> from a Campaign.
+> `CampaignRosterEntry` continues to govern Campaign membership and
+> Campaign-scoped authority/state; it does not establish permanent ownership.
+> Existing player-owned Character protection remains unchanged: GM status or
+> Campaign membership never grants lifecycle ownership/authority over another
+> user's player-owned Character.
+> Do not overload player `ownerId` to represent the managing GM. If no suitable
+> durable authority relation exists, the implementation must add an explicit
+> representation rather than infer it from GM role or Campaign membership.
+> Record this without narrowing OPEN-PPL-5 or other remaining open decisions."
+
+**Further consequences recorded, not extended:**
+
+- A persistent ownerless NPC Character has a **designated managing GM** whose
+  permanent-Character lifecycle authority is **independent of Campaign roster
+  membership** — before first rostering, while rostered, and after removal.
+- `CampaignRosterEntry` governs Campaign membership and Campaign-scoped
+  authority and state only, and does **not** establish permanent ownership.
+- The player-owned protection is **unchanged**: GM status or Campaign membership
+  never grants lifecycle ownership or authority over another user's
+  player-owned Character.
+- **Binding on the implementing lane:** player `ownerId` must **not** be
+  overloaded to represent the managing GM, and the managing GM must **not** be
+  inferred from GM role or Campaign membership. If no suitable durable authority
+  relation exists, an explicit representation must be added. Recorded in
+  [Character lifecycle authority](../architecture/character-lifecycle-authority.md#the-representation-constraint--ownerid-may-not-be-overloaded).
+- The matrix rows in
+  [Character lifecycle authority](../architecture/character-lifecycle-authority.md#actor-and-privacy-matrix)
+  that conditioned GM read/edit/delete on "while the Character is rostered" are
+  updated accordingly, with the player-owned case kept separate and unamended.
+- **Nothing here narrows
+  [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves)
+  or any other open decision.**
 
 ### OPEN-PPL-5 — What Actor-to-persistent-NPC promotion preserves
 
@@ -1075,13 +1175,13 @@ exact-path contract**.
 
 |                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dependencies**                | Its own decision gate: [OPEN-PPL-2](#open-ppl-2--whether-actor-is-a-new-domain-entity) and [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) must be settled before Ready. **No dependency on any Player Play slice** — this is GM authoring, and #268/PPV1 consume its output rather than gating it. Lanes B and E both depend on it.                                                                                                                                                                                                                                                                                                                                                         |
+| **Dependencies**                | Its own decision gate: [OPEN-PPL-2](#open-ppl-2--whether-actor-is-a-new-domain-entity) must be settled before Ready. [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) is **settled (2026-09-23)** and no longer gates it. **No dependency on any Player Play slice** — this is GM authoring, and #268/PPV1 consume its output rather than gating it. Lanes B and E both depend on it.                                                                                                                                                                                                                                                                                                         |
 | **Extends, does not duplicate** | The existing archetype/Actor surface (`apps/web/src/features/templates/TemplatesPageContent.tsx` ~2,348 lines, `apps/web/src/lib/templates/npcArchetypeTemplates.ts`, `apps/web/src/lib/campaigns/campaignActors.ts`); [Character lifecycle authority](../architecture/character-lifecycle-authority.md#authorities); the Campaign roster model; #227/[#236 Membership and Scenario surface](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/236). **Not** the retained GM Encounter workspace — [PO-SPW-3](../architecture/scenario-play-workspace.md#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling) forbids new capability there. |
 | **Data hotspots**               | Prisma schema and migrations (reserved): `ReusableEntity`, `ScenarioParticipant`, `CampaignRosterEntry`, `Character`. `packages/domain/src/campaign/scenario.ts` (`reusableEntitySchema`, `reusableEntityKindSchema`, `campaignRosterSourceTypeSchema`). `packages/database/src/services/campaignService.ts`, `campaignManagementService.ts`, `packages/database/src/repositories/scenarioRepository.ts`.                                                                                                                                                                                                                                                                                               |
 | **API/UI hotspots**             | `apps/api/src/routes/scenarios/templateRoutes.ts`, `participantRoutes.ts`, `campaignRoutes.ts`. `apps/web/src/features/templates/TemplatesPageContent.tsx`, `apps/web/src/lib/api/campaignClient.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Settled**                     | PC and NPC share the full Character/rules model, differing only in control semantics; Template is a reusable archetype; Actor is the runtime/play instance and may come from either source; manual GM creation of full NPCs is needed; a lightweight/generic Actor path is needed; promotion is a **later** capability; one active Campaign per Character remains the V1 rule; [AI parity](#3-ai-parity-principle) applies to every authoring operation this lane creates.                                                                                                                                                                                                                              |
-| **Still open**                  | [OPEN-PPL-2](#open-ppl-2--whether-actor-is-a-new-domain-entity), [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is), [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves). Plus the _Actor_ terminology collision recorded in [section 2](#2-people-model).                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) if it changes persisted schema — which options 2 and 3 of OPEN-PPL-2 and options 1 and 3 of OPEN-PPL-4 all do.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Still open**                  | [OPEN-PPL-2](#open-ppl-2--whether-actor-is-a-new-domain-entity), [OPEN-PPL-5](#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves). [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) is settled and is no longer in this list. Plus the _Actor_ terminology collision recorded in [section 2](#2-people-model).                                                                                                                                                                                                                                                                                                                                                                     |
+| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) if it changes persisted schema — which options 2 and 3 of OPEN-PPL-2 do. The settled OPEN-PPL-4 answer uses the existing nullable `Character.ownerId` for the absence of a player owner, but its supplementary managing-GM ruling forbids overloading `ownerId` and requires an explicit durable representation where none exists — so this lane may well add a persisted shape as well. Either way the Character-authority change it implies is security-relevant and carries the floor on that ground.                                                                                                                                       |
 
 ### Lane B — Person representation, identity reveal, Inspector and notes/dossier
 
@@ -1146,7 +1246,7 @@ history), §11 (Encounter).
 
 ```text
 Lane A  canonical NPC / Actor authoring
-   │        gate: OPEN-PPL-2, OPEN-PPL-4, OPEN-PPL-5
+   │        gate: OPEN-PPL-2, OPEN-PPL-5 (OPEN-PPL-4 settled)
    ├── Lane B  representation, identity reveal, Inspector, notes/dossier
    │        also needs: PPV1 P1 + P2 (Inspector host), Lane C (association)
    │        gate: OPEN-PPL-1, OPEN-PPL-3, OPEN-PPL-7, OPEN-PPL-9   — QA FLOOR
