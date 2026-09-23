@@ -42,9 +42,9 @@ import {
 const catalogue = competencyContentV2Catalogue;
 
 describe("Competency Content V2 proposal status", () => {
-  it("is marked non-canonical", () => {
-    expect(COMPETENCY_CONTENT_V2_STATUS).toBe("non-canonical-product-owner-proposal");
-    expect(catalogue.status).toBe("non-canonical-product-owner-proposal");
+  it("is marked canonical", () => {
+    expect(COMPETENCY_CONTENT_V2_STATUS).toBe("canonical-product-owner-accepted");
+    expect(catalogue.status).toBe("canonical-product-owner-accepted");
   });
 
   it("leaves the approved catalogues untouched", () => {
