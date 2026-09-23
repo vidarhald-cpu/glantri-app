@@ -1,7 +1,7 @@
 # Why the same Profession teaches different things in different places
 
 > **Status: CANONICAL — accepted by the Product Owner on 2026-09-23 (Forgejo #250).**
-> See [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
+> See [decision record 0007](../../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
 > This is the player-facing explanation of the Society-Level availability model authored in this
 > folder. It is not yet registered with Chargen, not yet projected into canonical content, and does
 > not yet replace any approved catalogue — that wiring is the separate, explicitly scoped work of

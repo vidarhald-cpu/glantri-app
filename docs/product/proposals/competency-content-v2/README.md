@@ -1,7 +1,7 @@
 # Competency Content V2 — Product Owner content (canonical)
 
 > **Status: CANONICAL — accepted by the Product Owner on 2026-09-23 (Forgejo #250).**
-> See [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md)
+> See [decision record 0007](../../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md)
 > for the acceptance ruling and the completion gate evidence it rests on.
 > This is now approved Glantri content. It does not yet replace the approved
 > [competency reference](../../../rules/competency-reference/README.md), is not yet registered with
@@ -26,7 +26,7 @@ one group, reduces four, and **closes Content V2 product design**. Closing the d
 itself, make the catalogue canonical: it meant the remaining genuine Product Owner questions were
 answered, with bounded completion under settled rules left to follow. The Product Owner separately
 accepted the catalogue as canonical on 2026-09-23, on the clean completion gate that followed that
-completion — see [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
+completion — see [decision record 0007](../../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
 
 ## Contents
 
@@ -386,7 +386,7 @@ refinement it deliberately leaves to a later pass.
 
 **Closing the design did not, by itself, make Content V2 canonical.** The Product Owner separately
 accepted the catalogue as canonical on 2026-09-23, on the clean completion gate run against `dev` —
-see [decision record 0007](../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
+see [decision record 0007](../../../decisions/rules/0007-competency-content-v2-canonical-acceptance.md).
 The catalogue is approved Glantri content now, pending only the #251/#252 runtime wiring.
 
 ## Flagged for separate follow-up, not fixed here
