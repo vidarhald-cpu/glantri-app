@@ -43,7 +43,10 @@ Campaign membership does not transfer Character ownership or control. A player
 initiates joining an eligible Campaign with a Character they are authorized to
 control. A managing Campaign GM may remove that Character from the Campaign but
 may not pull another user's player-owned Character into it. No additional
-invitation or approval workflow is implied.
+invitation or approval workflow is implied. A Character with **no player owner**
+is covered separately by
+[GM-controlled Characters with no player owner](#gm-controlled-characters-with-no-player-owner);
+that section does not weaken this paragraph.
 
 Global roles do not replace these relationships. The `game_master` role alone
 does not grant access to another GM's Campaign or Characters, and Admin
@@ -51,6 +54,64 @@ capability does not automatically make the user a Campaign GM. Any separately
 accepted Admin Character operation remains an Admin-scoped action rather than
 Campaign-management authority. See
 [Architecture decision 0005](../decisions/architecture/0005-role-scope-and-campaign-ownership.md).
+
+## GM-controlled Characters with no player owner
+
+**PRODUCT OWNER RULING, 2026-09-23. Settled.** Recorded as
+[OPEN-PPL-4](../product/people-artifact-and-gm-authoring-model.md#open-ppl-4--what-a-persistent-npc-record-is).
+
+> "A persistent NPC is a Character using the same full Character/rules model as
+> a PC, but with no player owner and with GM control under the applicable
+> GM/Campaign authority.
+> `CampaignRosterEntry` provides Campaign membership; Character itself remains
+> independent of Campaign.
+> `ReusableEntity` is reusable source/archetype material, not the canonical
+> persistent identity of a person."
+
+A `Character` may therefore exist with **no player owner**. It uses the same
+full Character and rules model as a player-owned Character; only control
+semantics differ.
+
+- **Control.** A Character with no player owner is controlled by the GM under
+  the applicable GM/Campaign authority. Every row of the
+  [actor and privacy matrix](#actor-and-privacy-matrix) is unchanged; such a
+  Character simply has no actor in the _player owner_ column.
+- **Identity is not Campaign-scoped.** `CampaignRosterEntry` provides Campaign
+  membership. The canonical `Character` record remains independent of Campaign,
+  and membership still creates no second Character authority.
+- **`ReusableEntity` is not this record.** It remains reusable source/archetype
+  material and is not the canonical persistent identity of a person.
+- **Schema evidence.** `Character.ownerId` is already declared `String?` in
+  `packages/database/prisma/schema.prisma`, so "no player owner" is an ownership
+  state the current schema already permits. This is recorded as evidence of the
+  existing shape, not as an implementation instruction.
+- **The V1 rule is unchanged.** One active Campaign per Character continues to
+  apply to Characters with and without a player owner alike.
+
+### The player-owned protection is unchanged
+
+**A managing Campaign GM may not pull another user's player-owned Character into
+a Campaign.** That protection survives this ruling intact. It is neither
+weakened, qualified, nor traded against the new capability.
+
+| Character               | Who may add it to a Campaign                                                                                                                                                      |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Has a player owner**  | Only the controlling player initiates joining an eligible Campaign. A managing GM may remove that membership but **may not** pull another user's player-owned Character into one. |
+| **Has no player owner** | The GM may add it under the applicable GM/Campaign authority, because there is no player owner whose control would be bypassed.                                                   |
+
+The new capability is defined by the **absence of a player owner**, not by the
+GM role. A GM role by itself never becomes authority over a Character that has a
+player owner, and an ownerless Character never becomes a route to reach one.
+
+### Not settled here
+
+- What authority binds a GM-controlled Character with no player owner **before**
+  it is rostered in any Campaign is not stated by the ruling and is not invented
+  here. The implementing lane must establish it.
+- Later materialization or promotion from reusable content to a persistent
+  Character remains the concern of
+  [OPEN-PPL-5](../product/people-artifact-and-gm-authoring-model.md#open-ppl-5--what-actor-to-persistent-npc-promotion-preserves)
+  and is not answered, narrowed or pre-empted here.
 
 Browser-local records follow the same presentation boundary. An owner may recover their own retained record, an owning GM may see one only when the scoped server Character remains accessible, and an admin may see retained records. A GM role by itself never grants access to another account's browser-local Character. Account switching therefore cannot expose retained records that are outside the active actor's scope.
 
@@ -95,6 +156,13 @@ A stale delete returns `409 stale_character` and changes nothing.
    Campaign membership refers to the canonical Character and does not create
    another Character authority. The managing GM may remove the membership but
    may not pull in another user's player-owned Character.
+   A Character with **no player owner** is instead rostered by the GM under the
+   applicable GM/Campaign authority; membership still refers to the canonical
+   Character, still creates no second Character authority, and still does not
+   make Character identity Campaign-scoped. The prohibition in the preceding
+   sentence is unaffected and continues to protect every player-owned
+   Character. See
+   [GM-controlled Characters with no player owner](#gm-controlled-characters-with-no-player-owner).
 8. **Snapshotted:** Scenario admission copies the Character into Scenario-owned snapshot/live state. Later Character edits have no effect unless the owning GM invokes the existing explicit equipment refresh.
 9. **Deleted:** the canonical Character and roster references are removed at the expected revision. Existing Scenario snapshots remain usable historical state with no live Character link.
 10. **Retired:** the current schema has no Character retirement state. Retirement is unsupported rather than silently represented as deletion, roster removal, or a browser-local flag; adding it requires a future explicit server lifecycle decision.
