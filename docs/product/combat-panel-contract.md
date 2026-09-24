@@ -716,7 +716,7 @@ any event type added later; a positive list fails loudly.
 
 Recorded from the control-plane analysis, confirmed by the control plane:
 
-- **Publish:** `attack`, `parry`, `damage_committed`, `hit_location`, `critical`, `observation`,
+- **Publish:** `attack`, `parry`, `damage_committed`, `hit_location`, `critical`,
   visible `health_check`, and the **terminal** `*_result` / `*_committed` members of feint,
   break-off, adjust-distance, disarm and distance-control — plus the new `task_resolved` from
   [A1](#1212-a1--combat-task-lifecycle-convergence) and the existing `item_resolution`
@@ -730,16 +730,32 @@ Recorded from the control-plane analysis, confirmed by the control plane:
   Forgejo issue #287** — `offensive_parry_brawling`, `continued_contact_maintenance`,
   `feint_impossible`, `adjust_distance_adjustment`, `distance_control_applied` and
   `disarm_opened`. Those six are suppressed because they are **intermediate or mechanical Combat
-  states rather than terminal narrative outcomes** suitable for the shared session record.
+  states rather than terminal narrative outcomes** suitable for the shared session record. Also
+  suppressed, and **reclassified out of the publish list by the later Product Owner ruling of
+  2026-09-24**: `observation`.
 - **`round_boundary` is safe to suppress** because `ScenarioEventLog.roundNumber` already exists
   and is populated. Temporal structure survives as a row attribute without publishing the event.
   Confirmed by the control plane.
 
+**`observation` is suppressed, not published — settled by the Product Owner ruling of 2026-09-24
+on Forgejo issue #317.** Observation / Observe Opponent is **combat-process and
+information-acquisition state, not a shared Scenario-history event**. Its progress and result
+**may remain available to the appropriate private and GM combat surfaces**; it is not published
+into Situation Activity merely because the action occurred. Where a later consequence of
+observation becomes independently player-visible and narratively meaningful, **that consequence is
+published through its own appropriate event**, never through the observation bookkeeping. This is
+the terminal-outcome guard below applied to `observation`, and it is the only correct way to make
+such a consequence recap-visible.
+
+> **The existing `gm_only` emitter scope is not to be changed merely to make the old publish list
+> true.** `observation` is emitted at `outcomeScope: "gm_only"`, and that scope stands. The
+> classification moves; the emitter does not.
+
 **The itemization is discharged; every current member of the enum is classified.** The six
 members that previously fell under neither recorded set are suppressed above under the ruling of
-2026-09-22, so **no pre-`Ready` itemization step remains**. The positive-list test must still
-enumerate **every** member of `combatStepEventTypeSchema`, so a member added later cannot be left
-unclassified.
+2026-09-22, and `observation` is suppressed under the ruling of 2026-09-24, so **no pre-`Ready`
+itemization step remains**. The positive-list test must still enumerate **every** member of
+`combatStepEventTypeSchema`, so a member added later cannot be left unclassified.
 
 **Binding rule — the terminal-outcome guard.** This is a rule with an acceptance check below, not
 advice:
