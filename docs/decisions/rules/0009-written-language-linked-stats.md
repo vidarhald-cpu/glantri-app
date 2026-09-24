@@ -66,7 +66,7 @@ together with the three that already carry `["int", "int"]` in
 `packages/content/src/targetCompetencies.ts`: `written:mogrebi:sacred-mogrebi`,
 `written:ologian:church-ologian`, and `written:phoenician:phoenician`.
 
-**This is a decision, not an inference.** The three pre-existing entries are *consistent with*
+**This is a decision, not an inference.** The three pre-existing entries are _consistent with_
 this ruling; they are not its basis, and their prior existence did not by itself authorize
 extending the same value to the other eight. The Product Owner is recording `["int", "int"]` as an
 **explicit current rules decision** for all 11 written competencies, uniformly, precisely because
@@ -81,7 +81,7 @@ make on its own.
   authorized unless a future product requirement reopens the question (see below).
 - The existing prohibition on inheriting written-tradition linked stats from generic Literacy or
   Language (`packages/content/src/targetCompetencies.ts:129`) **still stands**. This ruling does
-  not relax, narrow, or otherwise change that prohibition; it settles the linked-stats *value* by
+  not relax, narrow, or otherwise change that prohibition; it settles the linked-stats _value_ by
   explicit decision instead of by the inheritance path that prohibition forecloses.
 
 **Reopening condition.** This ruling is revisited only if a future product requirement reopens the
