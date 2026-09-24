@@ -2,8 +2,11 @@
 
 - Status: approved
 - Date: 2026-09-23
+- Amended: 2026-09-24 (Product Owner ruling, Forgejo #250 — runtime projection ownership moves to
+  #306; self-amendment, same record)
 - Product owner: Vidar Hald
-- Related issues/PRs: Forgejo #250 (umbrella #249), successor #266; unblocks #251, #252
+- Related issues/PRs: Forgejo #250 (umbrella #249), successor #266; unblocks #251, #252; runtime
+  projection now owned by #306 (see 2026-09-24 amendment below)
 - Complements: [Chargen and Competency Experience Product Contract](../../product/chargen-competency-experience-contract.md); the corpus itself under [`docs/product/proposals/competency-content-v2/`](../../product/proposals/competency-content-v2/README.md)
 - Supersedes: none — this record does not change any prior rule decision. It changes only the
   status of the Competency Content V2 corpus itself, from Product Owner proposal to accepted
@@ -49,6 +52,19 @@ separate, later act that settles the second one.
 This ruling is independent of, and not blocked by, the unrelated test-harness problem the Product
 Owner's acceptance comment refers to.
 
+**2026-09-24 amendment.** Ruling item 3 below states that runtime wiring "is the separate,
+explicitly scoped work of #251 and #252." That statement predates a newer controlling Skill
+sequence. The Product Owner ruled, 2026-09-24: "amend decision 0008 to reflect the newer
+controlling Skill sequence, with #306 owning runtime projection." The controlling sequence,
+recorded on Forgejo #306, is: canonical Content V2 runtime projection foundation (**#306**) →
+**#251** Chargen conformance → **#252** competency/reference/provenance UI. Item 3's original text
+is preserved unedited below; as amended, runtime projection into `CanonicalContent` and Chargen
+reachability is now the scope of **#306**, with #251 and #252 remaining downstream, scoped exactly
+as item 3 already describes, now building on #306's projection rather than performing it
+themselves. Nothing else in this record changes: the corpus remains canonical, unchanged in
+content, and unwired into runtime by this ruling — only which issue owns doing that wiring is
+corrected.
+
 ## Ruling
 
 **Competency Content V2 is canonical Glantri content**, effective 2026-09-23, on the Product
@@ -66,6 +82,14 @@ This ruling is a **status change only**:
    deliberately unexported from `packages/content/src/index.ts`, unprojected into
    `CanonicalContent`, and unreachable from Chargen. Making the application consume it is the
    separate, explicitly scoped work of **#251** and **#252**, which this ruling unblocks.
+
+   > **2026-09-24 amendment.** This item's text is preserved above exactly as originally approved.
+   > As amended, the "separate, explicitly scoped work" of wiring the corpus into runtime is now
+   > owned by **#306** (canonical Content V2 runtime projection foundation), with #251 (Chargen
+   > conformance) and #252 (competency/reference/provenance UI) downstream of #306's projection,
+   > per the Product Owner's 2026-09-24 ruling recorded above. This does not reopen or narrow what
+   > this ruling unblocks; it corrects which issue performs the projection itself.
+
 4. The corpus's own location under `docs/product/proposals/competency-content-v2/` and
    `packages/content/src/proposals/competencyContentV2/` is unchanged. Canonical acceptance is not
    a relocation; any future rename or move is separate, coordinated work.
@@ -76,7 +100,8 @@ The completion gate is the mechanism this repository already uses to verify cont
 and completeness independent of the test-harness problem the Product Owner's acceptance comment
 distinguishes it from. Its clean run against the accepted `dev` baseline is sufficient evidence
 for the Product Owner's acceptance, and nothing about that acceptance requires or implies
-premature runtime wiring, which stays properly scoped to #251/#252.
+premature runtime wiring, which stays properly scoped — as amended 2026-09-24, to #306's runtime
+projection foundation, then #251/#252.
 
 ## Executable examples
 
@@ -94,8 +119,9 @@ premature runtime wiring, which stays properly scoped to #251/#252.
   cite this record.
 - `packages/content/src/proposals/competencyContentV2/competencyContentV2.test.ts` asserts the new
   canonical status value in place of the retired non-canonical one.
-- No schema, evaluator, importer, UI, or Chargen change is authorized by this record. #251 and
-  #252 remain the authority for any runtime wiring.
+- No schema, evaluator, importer, UI, or Chargen change is authorized by this record. As amended
+  2026-09-24, #306 is the authority for the runtime projection foundation, and #251 and #252
+  remain the authority for Chargen conformance and UI built on it, respectively.
 
 ## Verification and traceability
 
@@ -105,3 +131,7 @@ premature runtime wiring, which stays properly scoped to #251/#252.
   independent of this test-harness problem and its completion gate is clean. Unblock #251/#252."
 - Corpus: [`docs/product/proposals/competency-content-v2/README.md`](../../product/proposals/competency-content-v2/README.md).
 - Source: `packages/content/src/proposals/competencyContentV2/`.
+- 2026-09-24 amendment authority: Product Owner ruling, "amend decision 0008 to reflect the newer
+  controlling Skill sequence, with #306 owning runtime projection." Controlling sequence recorded
+  on Forgejo #306: #306 (runtime projection foundation) → #251 (Chargen conformance) → #252
+  (competency/reference/provenance UI).

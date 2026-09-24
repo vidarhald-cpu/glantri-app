@@ -5,7 +5,8 @@
 > This is the player-facing explanation of the Society-Level availability model authored in this
 > folder. It is not yet registered with Chargen, not yet projected into canonical content, and does
 > not yet replace any approved catalogue — that wiring is the separate, explicitly scoped work of
-> #251/#252. It is written to be read by a player, not by the build.
+> #306 (runtime projection foundation), then #251/#252, per decision 0008's 2026-09-24 amendment.
+> It is written to be read by a player, not by the build.
 
 ## The short version
 
