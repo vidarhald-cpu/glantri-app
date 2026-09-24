@@ -31,6 +31,15 @@ describe("Artifact contracts", () => {
   });
 
   it("keeps player/common DTOs free of locators and provenance internals", () => {
+    expect(Object.keys(artifactCommonDtoSchema.shape).sort()).toEqual([
+      "altText",
+      "artifactKind",
+      "campaignId",
+      "description",
+      "id",
+      "mediaType",
+      "title",
+    ]);
     const dto = artifactCommonDtoSchema.parse({
       altText: "A mountain pass",
       artifactKind: "map",

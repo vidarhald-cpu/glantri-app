@@ -1,6 +1,7 @@
 export { prisma } from "./client";
 export * from "./services/authService";
 export * from "./services/artifactService";
+export * from "./services/artifactAssociationService";
 export * from "./services/blackboardService";
 export * from "./services/blackboardViewerCharacter";
 export * from "./artifacts/artifactBinaryStore";
