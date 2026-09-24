@@ -6,7 +6,8 @@
 > This is now approved Glantri content. It does not yet replace the approved
 > [competency reference](../../../rules/competency-reference/README.md), is not yet registered with
 > Chargen, and is not yet projected into canonical content — that wiring is the separate,
-> explicitly scoped work of #251/#252.
+> explicitly scoped work of #306 (runtime projection foundation), then #251 (Chargen conformance)
+> and #252 (competency/reference/provenance UI), per decision 0008's 2026-09-24 amendment.
 
 Issue: [#266](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/266), under umbrella #249,
 successor to the integrated [#250](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/250).
@@ -363,7 +364,8 @@ the prose and the numbers cannot drift.
 - **Olog is not corrected**, only flagged for a separate follow-up.
 - **No runtime, UI or Chargen change**, no importer outside this directory, and no entry in
   `packages/content/src/index.ts`. That wiring remains the separate, explicitly scoped work of
-  #251/#252; it is not authorized by this catalogue's canonical acceptance.
+  #306 (runtime projection foundation), then #251/#252, per decision 0008's 2026-09-24 amendment;
+  it is not authorized by this catalogue's canonical acceptance.
 
 ## Remaining Product Owner decisions
 
@@ -387,7 +389,8 @@ refinement it deliberately leaves to a later pass.
 **Closing the design did not, by itself, make Content V2 canonical.** The Product Owner separately
 accepted the catalogue as canonical on 2026-09-23, on the clean completion gate run against `dev` —
 see [decision record 0008](../../../decisions/rules/0008-competency-content-v2-canonical-acceptance.md).
-The catalogue is approved Glantri content now, pending only the #251/#252 runtime wiring.
+The catalogue is approved Glantri content now, pending only the runtime wiring owned by #306,
+then #251/#252 (decision 0008's 2026-09-24 amendment).
 
 ## Flagged for separate follow-up, not fixed here
 
