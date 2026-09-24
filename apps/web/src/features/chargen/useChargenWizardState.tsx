@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   defaultCanonicalContent,
-  withTargetLearningGroupsAndProfessions,
+  withCompetencyContentV2,
   type CanonicalContent,
   validateCanonicalContent,
 } from "@glantri/content";
@@ -161,7 +161,7 @@ export function useChargenWizardState() {
   const [buildDecreaseStat, setBuildDecreaseStat] = useState<GlantriCharacteristicKey>("dex");
 
   const content: CanonicalContent = useMemo(
-    () => withTargetLearningGroupsAndProfessions(buildTargetRuntimeContent(contentSource)),
+    () => withCompetencyContentV2(buildTargetRuntimeContent(contentSource)),
     [contentSource],
   );
   const selectedRolledProfile = selectedProfileId
@@ -682,7 +682,7 @@ export function useChargenWizardState() {
         primaryPoolTotal: activeRuleSet.ordinarySkillPoints,
       }));
 
-      const activeCatalogue = withTargetLearningGroupsAndProfessions(
+      const activeCatalogue = withCompetencyContentV2(
         buildTargetRuntimeContent(createTargetCompetencyChargenSource(startingContent)),
       ).chargenCatalogue;
       const isHistoricalDraft =

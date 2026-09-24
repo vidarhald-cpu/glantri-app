@@ -41,7 +41,7 @@ if (!process.env.DATABASE_URL_TEST) {
       });
       const seed = await createTestCharacter(prisma!, owner.id);
       const original = await service.getCharacterById(seed.id);
-      const targetDefinition = getApprovedTargetSkillDefinition("skill:surgery")!;
+      const targetDefinition = getApprovedTargetSkillDefinition("skill:poisons")!;
       const build = characterBuildSchema.parse({
         ...original!.build,
         id: "issue168-persisted-target",

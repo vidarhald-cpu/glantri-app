@@ -12,6 +12,7 @@ import {
   skillGroupDefinitionSchema,
   skillSpecializationSchema,
   societyLevelAccessSchema,
+  type CompetencyV2Runtime,
 } from "@glantri/domain";
 
 export const canonicalContentSchema = z.object({
@@ -33,7 +34,7 @@ export const canonicalContentSchema = z.object({
 export type CanonicalContent = Omit<z.infer<typeof canonicalContentSchema>, "skills"> & {
   skills: import("@glantri/domain").SkillDefinition[];
   chargenCatalogue?: {
-    sourceId: "full-target-competencies";
+    sourceId: "full-target-competencies" | "competency-content-v2";
     professionSourceDigest?: string;
     groupSourceDigest?: string;
     professionIds?: readonly string[];
@@ -42,6 +43,7 @@ export type CanonicalContent = Omit<z.infer<typeof canonicalContentSchema>, "ski
     specializationIds: readonly string[];
   };
   compatibilityContent?: CanonicalContent;
+  competencyV2?: CompetencyV2Runtime;
 };
 
 export interface CanonicalContentLoader {

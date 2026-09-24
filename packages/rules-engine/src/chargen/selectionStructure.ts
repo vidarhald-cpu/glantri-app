@@ -4,6 +4,7 @@ import type {
   CharacterChargenGroupSlotSelection,
   CharacterSkill,
   CharacterProgression,
+  CompetencyV2Runtime,
   LanguageDefinition,
   ProfessionDefinition,
   ProfessionFamilyDefinition,
@@ -21,6 +22,7 @@ import {
 } from "@glantri/domain";
 
 import { resolveEffectiveProfessionPackage } from "../professions/resolveEffectiveProfessionPackage";
+import { resolveCompetencyV2PathAvailability } from "../professions/resolveCompetencyV2Path";
 
 /*
   Terminology guardrail:
@@ -29,6 +31,7 @@ import { resolveEffectiveProfessionPackage } from "../professions/resolveEffecti
 */
 
 interface ChargenSelectionContentShape {
+  competencyV2?: CompetencyV2Runtime;
   chargenCatalogue?: { skillIds: readonly string[]; professionIds?: readonly string[] };
   civilizations?: CivilizationDefinition[];
   languages?: LanguageDefinition[];
@@ -58,6 +61,8 @@ export interface ChargenMotherTongueSummary {
   languageName?: string;
   optionalLanguageNames: string[];
   skill?: SkillDefinition;
+  spokenCompetencyId?: string;
+  writtenCompetencyId?: string;
   startingLevel: number;
 }
 
@@ -171,7 +176,7 @@ function getCivilizationDefinition(
 }
 
 export function buildChargenMotherTongueSummary(input: {
-  content: Pick<ChargenSelectionContentShape, "civilizations" | "skills">;
+  content: Pick<ChargenSelectionContentShape, "civilizations" | "skills" | "competencyV2">;
   civilizationId?: string;
   educationLevel: number;
 }): ChargenMotherTongueSummary {
@@ -189,13 +194,29 @@ export function buildChargenMotherTongueSummary(input: {
   }
 
   const startingLevel = Math.max(11, input.educationLevel);
-  const languageName = civilization.motherTongueLanguageName;
+  const v2Language = input.content.competencyV2?.civilizationLanguages.find(
+    (row) => row.civilizationId === civilization.id,
+  );
+  if (input.content.competencyV2 && !v2Language) {
+    throw new Error(`No V2 language availability for Civilization ${civilization.id}.`);
+  }
+  const spokenSkill =
+    v2Language &&
+    input.content.skills.find((candidate) => candidate.id === v2Language.spokenCompetencyId);
+  if (v2Language && !spokenSkill) {
+    throw new Error(`No V2 spoken competency ${v2Language.spokenCompetencyId}.`);
+  }
+  const languageName = spokenSkill
+    ? spokenSkill.name.replace(/^Spoken /, "")
+    : civilization.motherTongueLanguageName;
 
   return {
     displayLabel: `${skill.name} (${languageName})`,
     languageName,
     optionalLanguageNames: civilization.optionalLanguageNames ?? [],
     skill,
+    spokenCompetencyId: v2Language?.spokenCompetencyId,
+    writtenCompetencyId: v2Language?.writtenCompetencyId,
     startingLevel,
   };
 }
@@ -365,21 +386,31 @@ export function buildChargenSelectableSkillSummary(input: {
     content: input.content,
     subtypeId: input.professionId,
   });
+  const v2Available = resolveCompetencyV2PathAvailability({
+    content: input.content,
+    professionId: input.professionId,
+    societyId: input.societyId,
+    socialBand: input.societyLevel,
+  });
   const societyAccess = input.content.chargenCatalogue?.professionIds
     ? undefined
     : getSocietyAccess(input.content, input.societyLevel, input.societyId);
   const allowedGroupIds = uniqueIds(
-    input.content.chargenCatalogue?.professionIds
-      ? [
-          ...professionPackage.core.finalEffectiveGroupIds,
-          ...professionPackage.favored.finalEffectiveGroupIds,
-        ]
-      : (societyAccess?.skillGroupIds.filter((groupId) =>
-          [
+    v2Available
+      ? v2Available.valid
+        ? v2Available.availableGroupIds
+        : []
+      : input.content.chargenCatalogue?.professionIds
+        ? [
             ...professionPackage.core.finalEffectiveGroupIds,
             ...professionPackage.favored.finalEffectiveGroupIds,
-          ].includes(groupId),
-        ) ?? []),
+          ]
+        : (societyAccess?.skillGroupIds.filter((groupId) =>
+            [
+              ...professionPackage.core.finalEffectiveGroupIds,
+              ...professionPackage.favored.finalEffectiveGroupIds,
+            ].includes(groupId),
+          ) ?? []),
   );
   const normalSkillIds = uniqueIds([
     ...input.content.skills
@@ -397,8 +428,14 @@ export function buildChargenSelectableSkillSummary(input: {
             societyId: input.societyId ?? "",
           },
         )),
-    ...professionPackage.core.finalEffectiveSkillIds,
-    ...professionPackage.favored.finalEffectiveSkillIds,
+    ...(v2Available
+      ? v2Available.valid
+        ? v2Available.availableDirectSkillIds
+        : []
+      : [
+          ...professionPackage.core.finalEffectiveSkillIds,
+          ...professionPackage.favored.finalEffectiveSkillIds,
+        ]),
   ]);
   const normalSkillIdSet = new Set(
     normalSkillIds.filter(
@@ -620,7 +657,7 @@ export function syncChargenLanguageSkillRows(input: {
 }
 
 export function syncChargenMotherTongueSkillRow(input: {
-  content: Pick<ChargenSelectionContentShape, "civilizations" | "skills">;
+  content: Pick<ChargenSelectionContentShape, "civilizations" | "skills" | "competencyV2">;
   civilizationId?: string;
   educationLevel: number;
   progression: CharacterProgression;
