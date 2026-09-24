@@ -70,6 +70,57 @@ Useful references:
 - Regression guidance: `docs/testing-regression-matrix.md`
 - Rule and architecture decisions: `docs/decisions/`
 
+## Controlling sources, decision frontier, and development-stage data
+
+Product Owner process ruling, effective **2026-09-24**. It governs how workers use repository documentation and how the project currently treats application data. It **does not** relax any safety, QA, or authority rule — see [What this ruling does not change](#what-this-ruling-does-not-change).
+
+### Controlling sources
+
+- Each implementation issue names a **small controlling source set**: the current product/architecture contracts and explicit decisions that actually govern that slice. Builders implement against that set and the issue contract, and are **not** expected to reconcile the repository's complete documentation history.
+- Current approved contracts and explicit decisions **control over** older proposals, superseded descriptions, stale issue wording, historical investigations, and provenance material. Historical material remains useful evidence and provenance; it is **not an independent blocker merely because its wording differs** from a newer controlling decision.
+- The Orchestrator may update, mark historical, supersede, or quarantine stale guidance where the current controlling intent is clear. Do not seek semantic consistency with old material at the expense of a newer approved product decision.
+
+### Escalation threshold
+
+Escalate to the control plane when: two **current controlling** sources genuinely conflict; a choice materially changes current V1 product behaviour; security, privacy, or authorization is materially affected; destructive handling of data that actually requires preservation is involved; or a consequential architectural choice is required for the current slice.
+
+Differences with historical or non-controlling material are normally documentation maintenance, not a product-owner decision. The Orchestrator has authority to perform that maintenance, but **not** to reinterpret or override newer approved product intent merely to manufacture semantic coherence with older documentation.
+
+### Decision frontier
+
+Decide only what the currently authorized product actually requires. Future or hypothetical behaviour is deferred unless the current implementation materially depends on it, or the current choice would materially foreclose a reasonably foreseeable near-term requirement.
+
+In particular, present implementation work must not be required to settle hypothetical future semantics such as moving or copying Characters between Campaigns, transferring equipment between future Campaigns, future multi-Campaign Character lifecycle, future player ownership models, or other scenarios for which no current product feature exists.
+
+**Reasonable extensibility is sufficient; hypothetical completeness is not required.**
+
+### Feature preparation leaves one clear contract
+
+Before dispatch: make the issue contract self-contained; name its controlling sources; update or clearly supersede nearby stale guidance likely to mislead a Builder; and leave one obvious current implementation contract for that feature. Do not ask Builders to adjudicate generations of historical documentation.
+
+### Development-stage data policy
+
+Glantri is currently in a **draft/development stage**. Until the product owner explicitly declares otherwise, current application data is development/test data, and preserving existing in-app content is not a product requirement in itself.
+
+Do migration, backward-compatibility, or data-preservation work only where needed to: preserve the ability to continue development; preserve meaningful regression or diagnostic fixtures; avoid masking a real product defect; or satisfy an explicitly approved near-term requirement.
+
+Resetting, rebuilding, or recreating development data is acceptable where materially simpler and safer than preserving draft state. Before destructive or resetting work, preserve a copy only where existing data has genuine testing or diagnostic value. **Do not build generalized migration, compatibility, or zero-downtime preservation machinery merely to retain current development records.**
+
+#### Reversal condition — check before applying the policy above
+
+**This policy changes the moment the product owner explicitly identifies Campaign/play state as durable play data whose results must be retained. From that point onward, preservation and migration become first-class product constraints for that data.**
+
+The draft-stage policy applies only while the draft/development stage is in force, and only to development records. A reader arriving after that declaration, or after Glantri leaves the draft/development stage, must not apply it to durable play data or to production data.
+
+### What this ruling does not change
+
+The development-stage data policy concerns the **disposability of development records**. It is not a safety relaxation, and it weakens none of the following, which remain in force exactly as written:
+
+- **The [mandatory QA floor](#mandatory-qa-floor).** Its first trigger — "database migrations and any change to persisted schema or stored data semantics" — is unchanged. A change can be floor-class **because it changes stored-data semantics**, even when the stored records themselves are disposable. Forgejo issue #306 is the live worked example: projecting the canonical Competency corpus onto the runtime catalogue is floor-class on its stored-data semantics regardless of whether current rows are disposable.
+- **The protected playtest database.** `docs/dev-database.md`: "The normal database at `localhost:5432/glantri` is **protected shared user state**." This file: "never use the protected `localhost:5432/glantri` database from a linked worktree." Disposable task databases remain mandatory for all worker database use.
+- **Every destructive-action confirmation requirement already in force**, including the named-disposable-target and explicit-confirmation requirements in `docs/process/task-contract.md` and `docs/dev-database.md`: "If current-worktree ownership cannot be proved from the task contract and repository preflight, the command does not run."
+- **The production, branch-protection, and credential boundary.** This file: "Never push or merge to `main`, deploy, change production/Azure configuration or secrets, or treat credentials as authority." Branch protection is unchanged.
+
 ## Cost-aware execution
 
 - The Orchestrator owns per-task model/effort selection and fresh-versus-resume, within control-plane policy. Workers may recommend escalation but may not independently spawn workers or expand model budget.
@@ -112,7 +163,7 @@ Preservation QA and other mechanically specifiable verification may use a cheape
 ## Rule and architecture discipline
 
 - Cite source documents, pages, sheets, cells, ranges, formulas, or approved rule decisions precisely.
-- Do not silently resolve source conflicts or invent Glantri rules. Record material rulings under `docs/decisions/` and protect them with focused examples/tests.
+- Do not silently resolve source conflicts or invent Glantri rules. Record material rulings under `docs/decisions/` and protect them with focused examples/tests. This governs Glantri rule and source evidence; stale or superseded documentation wording is governed by [controlling sources](#controlling-sources) and is normally documentation maintenance.
 - Keep raw import, enrichment, normalization, derivation, and verification separate.
 - Current combat convention: `effectiveSkillNumber` is total skill XP, including direct and group-derived contributions.
 - Apps may import packages; packages never import apps. `packages/domain` is the bottom layer, and `packages/rules-engine` imports only from domain.
