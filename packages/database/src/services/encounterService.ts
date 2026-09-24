@@ -1,8 +1,11 @@
 import {
+  buildCombatLogProjection,
   canTransitionEncounterStatus,
+  isCombatStepEventPublishedToActivity,
   isEncounterMutable,
   isScenarioLiveInteractive,
   refreshScenarioParticipantPersistentCombatModifiers,
+  type CombatLogSummaryFacts,
   type EncounterSession,
   type EncounterSessionSummary,
   type CombatStepEvent,
@@ -34,6 +37,30 @@ function collectCombatStepEvents(session: EncounterSession): CombatStepEvent[] {
   const state = session.combatRoundState;
   if (!state) return [];
   return [...state.rounds.flatMap((round) => round.events), ...state.events];
+}
+
+/**
+ * Activity summaries derive from the **same** `CombatLogSummaryFacts` the Combat Log already uses,
+ * so Combat never grows a second, independently drifting summariser
+ * (combat-panel-contract.md 12.7, 12.13 A2-Q1). Events the Combat Log does not project carry no
+ * entry here and fall back to their own public-scope facts at projection time.
+ */
+function collectCombatLogSummaryFacts(
+  session: EncounterSession,
+): Record<string, CombatLogSummaryFacts> {
+  const state = session.combatRoundState;
+  if (!state) return {};
+  const facts: Record<string, CombatLogSummaryFacts> = {};
+  for (const entry of buildCombatLogProjection({
+    encounterId: session.id,
+    sourceRevision: session.updatedAt,
+    state,
+  }).events) {
+    for (const sourceEventId of entry.sourceEventIds) {
+      facts[sourceEventId] ??= entry.summaryFacts;
+    }
+  }
+  return facts;
 }
 
 export class EncounterCombatWriteError extends Error {
@@ -233,8 +260,12 @@ export class EncounterService {
       const existingEventIds = new Set(collectCombatStepEvents(existing).map((event) => event.id));
       return await this.encounterRepository.updateCombatEncounter({
         ...input,
+        // combat-panel-contract.md 12.7 is satisfied on the server: a suppressed event is never
+        // forwarded as an Activity objectiveEvent at all.
+        objectiveEventSummaryFacts: collectCombatLogSummaryFacts(input.session),
         objectiveEvents: collectCombatStepEvents(input.session).filter(
-          (event) => !existingEventIds.has(event.id),
+          (event) =>
+            !existingEventIds.has(event.id) && isCombatStepEventPublishedToActivity(event.type),
         ),
       });
     } catch (error) {

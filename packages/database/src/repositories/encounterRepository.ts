@@ -1,6 +1,10 @@
 import {
+  buildCombatActivityFacts,
+  COMBAT_ACTIVITY_FACTS_PAYLOAD_KEY,
   encounterSessionSchema,
   encounterSessionSummarySchema,
+  isCombatStepEventPublishedToActivity,
+  type CombatLogSummaryFacts,
   type EncounterSession,
   type EncounterSessionSummary,
   type CombatStepEvent,
@@ -92,6 +96,8 @@ export interface EncounterRepository {
     scenarioId?: string | null;
     session: EncounterSession;
     objectiveEvents?: CombatStepEvent[];
+    /** Combat Log summary facts for the forwarded events, keyed by `CombatStepEvent.id`. */
+    objectiveEventSummaryFacts?: Readonly<Record<string, CombatLogSummaryFacts>>;
     participantStateUpdates?: Array<{
       expectedRevision: string;
       participantId: string;
@@ -339,6 +345,10 @@ export function createPrismaEncounterRepository(
         afterPersist: async (transaction, encounter) => {
           if (!encounter.scenarioId) return;
           for (const event of input.objectiveEvents ?? []) {
+            // Write-side narrowing (combat-panel-contract.md 12.7/12.13): round and phase
+            // bookkeeping never becomes an Activity row in the first place. The read-side gate in
+            // `projectScenarioObjectiveHistory` covers the legacy rows 12.19 forbids migrating.
+            if (!isCombatStepEventPublishedToActivity(event.type)) continue;
             const toScenarioParticipantId = (participantId: string | undefined) =>
               encounter.participants.find(
                 (participant) =>
@@ -353,23 +363,39 @@ export function createPrismaEncounterRepository(
                     const scenarioParticipantId = toScenarioParticipantId(participantId);
                     return scenarioParticipantId ? [scenarioParticipantId] : [];
                   });
+            // A2-Q1: a GM-adjudicated outcome carries its GM-authored player-safe text, exactly as
+            // `combatItemInteractionService` already does for an Item resolution. Every automatic
+            // outcome stores structured facts instead, and its sentence is produced per viewer.
+            const gmAuthoredSummary =
+              event.type === "task_resolved" &&
+              typeof event.facts.involvedOutcome.resultText === "string" &&
+              event.facts.involvedOutcome.resultText.trim().length > 0
+                ? event.facts.involvedOutcome.resultText
+                : undefined;
+            const activityFacts = buildCombatActivityFacts({
+              event,
+              summaryFacts: input.objectiveEventSummaryFacts?.[event.id],
+              toScenarioParticipantId,
+            });
             await transaction.scenarioEventLog.create({
               data: {
                 eventType: "encounter_combat_outcome",
                 participantId: null,
                 payloadJson: asJson({
                   ...(audienceParticipantIds ? { audienceParticipantIds } : {}),
+                  [COMBAT_ACTIVITY_FACTS_PAYLOAD_KEY]: activityFacts,
                   actorParticipantId,
                   combatEventId: event.id,
                   combatSequence: event.sequence,
                   encounterId: encounter.id,
                   eventKind: event.type,
+                  ...(gmAuthoredSummary ? { gmAuthoredSummary: true } : {}),
                   sourceOccurredAt: event.occurredAt,
                 }),
                 phase: event.phase === "phase1" ? 1 : event.phase === "phase2" ? 2 : null,
                 roundNumber: event.roundNumber,
                 scenarioId: encounter.scenarioId,
-                summary: `Combat: ${event.type.replaceAll("_", " ")}.`,
+                summary: gmAuthoredSummary ?? `Combat: ${event.type.replaceAll("_", " ")}.`,
               },
             });
           }

@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  isCombatActivityEventKindPublished,
+  readCombatActivityFacts,
+  renderCombatActivitySummary,
+  type CombatActivityViewer,
+} from "../encounter/combatActivityProjection";
 import { projectCombatGenericActionsForPlayer } from "../encounter/combatGenericAction";
 import { buildPlayerSafeCombatScopeForUser } from "../encounter/combatPlayerVisibility";
 import {
@@ -160,15 +166,49 @@ function eventKind(event: ScenarioEventLog): string {
   return typeof value === "string" && value.length > 0 ? value : event.eventType;
 }
 
+type ObjectiveHistoryContext = {
+  encounters: EncounterSession[];
+  participants: ScenarioParticipant[];
+  userId: string;
+};
+
+/**
+ * Produces the player-facing Activity sentence for this viewer from the structured facts stored on
+ * the row (combat-panel-contract.md 12.13, ruling A2-Q1). A GM-adjudicated outcome keeps its
+ * GM-authored text; an automatic outcome is rendered per viewer, so no single stored string is
+ * cross-viewer authority. Rows written before A2 carry no structured facts and keep their stored
+ * summary — 12.19 forbids rewriting them.
+ */
+function projectCombatOutcomeSummary(input: {
+  event: ScenarioEventLog;
+  participantDisplayNames: ReadonlyMap<string, string>;
+  viewerMode: "gm" | "player";
+  visibleParticipantIdsForEncounter: (encounterId: string | undefined) => ReadonlySet<string>;
+  controlledParticipantIds: ReadonlySet<string>;
+}): string {
+  if (readEventPayload(input.event).gmAuthoredSummary === true) return input.event.summary;
+  const facts = readCombatActivityFacts(input.event.payload);
+  if (!facts) return input.event.summary;
+  const viewer: CombatActivityViewer =
+    input.viewerMode === "gm"
+      ? { kind: "gm" }
+      : {
+          controlledParticipantIds: input.controlledParticipantIds,
+          kind: "player",
+          visibleParticipantIds: input.visibleParticipantIdsForEncounter(
+            eventEncounterId(input.event),
+          ),
+        };
+  return renderCombatActivitySummary({
+    facts,
+    participantDisplayNames: input.participantDisplayNames,
+    viewer,
+  });
+}
+
 function canViewCurrentItemOutcome(
   event: ScenarioEventLog,
-  context:
-    | {
-        encounters: EncounterSession[];
-        participants: ScenarioParticipant[];
-        userId: string;
-      }
-    | undefined,
+  context: ObjectiveHistoryContext | undefined,
 ): boolean {
   if (!context || !eventAudienceParticipantIds(event)?.length) return false;
   const payload = readEventPayload(event);
@@ -248,6 +288,32 @@ export function projectScenarioObjectiveHistory(input: {
   };
   viewerMode: "gm" | "player";
 }): z.infer<typeof scenarioSessionHistoryEventSchema>[] {
+  const participantDisplayNames = new Map(
+    (input.itemOutcomeContext?.participants ?? []).map((participant) => [
+      participant.id,
+      participant.snapshot.displayName,
+    ]),
+  );
+  const visibleParticipantIdsByEncounterId = new Map<string, ReadonlySet<string>>();
+  const visibleParticipantIdsForEncounter = (
+    encounterId: string | undefined,
+  ): ReadonlySet<string> => {
+    const context = input.itemOutcomeContext;
+    if (!encounterId || !context) return new Set<string>();
+    const cached = visibleParticipantIdsByEncounterId.get(encounterId);
+    if (cached) return cached;
+    const encounter = context.encounters.find((entry) => entry.id === encounterId);
+    const visible = encounter
+      ? buildPlayerSafeCombatScopeForUser({
+          encounter,
+          scenarioParticipants: context.participants,
+          userId: context.userId,
+        }).visibleParticipantIds
+      : new Set<string>();
+    visibleParticipantIdsByEncounterId.set(encounterId, visible);
+    return visible;
+  };
+
   return [...input.eventLogs]
     .sort(
       (left, right) =>
@@ -258,6 +324,27 @@ export function projectScenarioObjectiveHistory(input: {
     .flatMap((event) => {
       const parsedType = scenarioObjectiveHistoryEventTypeSchema.safeParse(event.eventType);
       if (!parsedType.success || !playerSafeHistoryTypes.has(parsedType.data)) return [];
+
+      // Read-side narrowing, keyed on the structured classification every stored row already
+      // carries (combat-panel-contract.md 12.7/12.13/12.19). This is a positive publish list: an
+      // `eventKind` nobody classified is suppressed for players rather than leaking through.
+      // GM audit keeps the complete legacy record.
+      if (
+        input.viewerMode === "player" &&
+        parsedType.data === "encounter_combat_outcome" &&
+        !isCombatActivityEventKindPublished(eventKind(event))
+      ) {
+        return [];
+      }
+
+      // A gm_only outcome is never player-safe, whatever its event type. GM audit still keeps it.
+      if (
+        input.viewerMode === "player" &&
+        parsedType.data === "encounter_combat_outcome" &&
+        readCombatActivityFacts(event.payload)?.outcomeScope === "gm_only"
+      ) {
+        return [];
+      }
 
       if (
         input.viewerMode === "player" &&
@@ -299,7 +386,16 @@ export function projectScenarioObjectiveHistory(input: {
           id: event.id,
           scenarioId: event.scenarioId,
           sequence: event.sequence ?? input.eventLogs.indexOf(event) + 1,
-          summary: event.summary,
+          summary:
+            parsedType.data === "encounter_combat_outcome"
+              ? projectCombatOutcomeSummary({
+                  controlledParticipantIds: input.controlledParticipantIds,
+                  event,
+                  participantDisplayNames,
+                  viewerMode: input.viewerMode,
+                  visibleParticipantIdsForEncounter,
+                })
+              : event.summary,
           type: parsedType.data,
         }),
       ];
