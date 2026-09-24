@@ -397,6 +397,7 @@ model User {
   artifactAuditEvents ArtifactAuditEvent[] @relation("ArtifactAuditActor")
   attachedArtifactReferences ScenarioArtifactReference[] @relation("ScenarioArtifactAttachedBy")
   attachedItemArtifacts CampaignItemArtifactAttachment[] @relation("CampaignItemArtifactAttachedBy")
+  disassociatedItemArtifacts CampaignItemArtifactAttachment[] @relation("CampaignItemArtifactDisassociatedBy")
   publishedArtifactReferences ScenarioArtifactReference[] @relation("ScenarioArtifactPublishedBy")
   controlledScenarioParticipants ScenarioParticipant[] @relation("ScenarioParticipantController")
   reusableEntities ReusableEntity[]
@@ -482,6 +483,7 @@ model CharacterEquipmentItem {
   @@index([holderCharacterId])
   @@index([holderCharacterId, locationId])
   @@index([campaignContextId])
+  @@unique([campaignContextId, id])
 }
 
 model CharacterStorageLocation {
@@ -1047,6 +1049,7 @@ model ArtifactRevision {
   artifactId String
   artifact CampaignAsset @relation("ArtifactRevisions", fields: [artifactId], references: [id], onDelete: Restrict)
   currentFor CampaignAsset? @relation("ArtifactCurrentRevision")
+  itemAssociations CampaignItemArtifactAttachment[]
   number Int
   storageProvider String
   storageKey String
@@ -1058,6 +1061,7 @@ model ArtifactRevision {
   actorUserId String
   createdAt DateTime @default(now())
   @@unique([artifactId, number])
+  @@unique([artifactId, id])
 }
 
 model ArtifactImportSession {
@@ -1077,22 +1081,28 @@ model ArtifactImportSession {
   @@index([campaignId, actorUserId, createdAt])
 }
 
-/// Representation link from a canonical Item to an Artifact that depicts it.
-/// Attaching a representation never transfers ownership, changes Item
-/// presence or location, or makes the Artifact into a game-world object.
+/// Item-specific physical storage for the canonical typed Artifact Association
+/// service. Association role and history are independent of Artifact visibility.
 model CampaignItemArtifactAttachment {
   id String @id @default(cuid())
   campaignId String
   itemId String
   artifactId String
+  role String @default("representation")
+  provenanceKind String @default("legacy")
+  provenanceRef String?
+  revisionId String?
   attachedByUserId String
   createdAt DateTime @default(now())
+  disassociatedAt DateTime?
+  disassociatedByUserId String?
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  item CharacterEquipmentItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item CharacterEquipmentItem @relation(fields: [campaignId, itemId], references: [campaignContextId, id], onDelete: Cascade, onUpdate: NoAction)
   artifact CampaignAsset @relation(fields: [campaignId, artifactId], references: [campaignId, id], onDelete: Cascade)
+  revision ArtifactRevision? @relation(fields: [artifactId, revisionId], references: [artifactId, id], onDelete: Restrict)
   attachedByUser User @relation("CampaignItemArtifactAttachedBy", fields: [attachedByUserId], references: [id], onDelete: Restrict)
+  disassociatedByUser User? @relation("CampaignItemArtifactDisassociatedBy", fields: [disassociatedByUserId], references: [id], onDelete: Restrict)
 
-  @@unique([itemId, artifactId])
   @@index([campaignId, artifactId])
   @@index([campaignId, itemId])
 }
