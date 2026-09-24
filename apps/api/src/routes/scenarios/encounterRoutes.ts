@@ -2392,6 +2392,39 @@ function materializeCombatDeclarationTasks(input: {
         updatedAt: input.createdAt,
       });
     } else {
+      // A1b invariant hardening — the canonical declaration id must be free, or already be this
+      // same declaration-owned action.
+      //
+      // `taskId` here is the fully derivable canonical id `<round>:<participant>:declaration:<kind>`,
+      // so an action created outside declaration can occupy it before the declaration that owns it
+      // ever runs — `combatItemInteractionRoutes` still mints Combat actions from a fully
+      // client-supplied action id, and such an action carries no `declarationKind`.
+      // `declareCombatGenericAction` returns its input **unchanged** when the id is taken, so
+      // minting over an occupied id answered 200 having created nothing: no task for the canonical
+      // projection to see, nothing for the one-live-task refusal to count, and a persisted
+      // declaration intent whose `taskId` names an action that is not this task. The next
+      // declaration then read that persisted id back through carry-forward, found a mismatched
+      // `declarationKind`, and refused — permanently, for every later Perform Task declaration by
+      // that participant.
+      //
+      // The failure mode is an explicit refusal rather than a silent reuse or a fallback id. A
+      // silent success with no task is precisely the defect being closed, and a fallback id would
+      // fork the server-owned identity scheme that carry-forward and the canonical projection both
+      // address by. Refusal throws before anything is persisted, so the declaration intent is never
+      // written, the participant is never left holding an intent that points at a non-task, and the
+      // same declaration succeeds as soon as the occupying action leaves canonical state.
+      const canonicalIdOccupant = genericActions.find((action) => action.id === taskId);
+      if (
+        canonicalIdOccupant &&
+        (canonicalIdOccupant.ownerParticipantId !== input.ownerParticipantId ||
+          canonicalIdOccupant.declarationKind !== declarationKind)
+      ) {
+        throw new Error(
+          declarationKind === "perform_task"
+            ? "This round's Combat Task identity for this character is already held by another Combat action. Resolve or cancel that action before declaring a Task."
+            : "This round's Small Action identity for this character is already held by another Combat action. Resolve or cancel that action before declaring a Small Action.",
+        );
+      }
       // A participant may hold at most one live Perform Task at a time, under the Product Owner
       // ruling of 2026-09-22 on Forgejo issue #287. A second one is refused until the existing task
       // is completed, cancelled or resolved. The already-existing task with this exact id is not a
@@ -2416,18 +2449,36 @@ function materializeCombatDeclarationTasks(input: {
           );
         }
       }
-      genericActions = declareCombatGenericAction({
-        action: {
-          createdAt: input.createdAt,
-          createdByUserId: input.createdByUserId,
-          declarationKind,
-          duration: { kind: "gm_decided" },
-          id: taskId,
+      // The one case where the canonical id is legitimately occupied at mint time: this
+      // participant's own live action of this same declared kind, reached without carry-forward —
+      // the persisted intent named a different primary action, or carries no id at all. That is
+      // this same task, so its intent is updated exactly as the carry-forward branch above would,
+      // rather than being silently dropped. A terminal occupant is deliberately left alone: its
+      // handling is unchanged from the accepted baseline and is not part of this hardening.
+      if (
+        canonicalIdOccupant &&
+        !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(canonicalIdOccupant.status)
+      ) {
+        genericActions = updateCombatGenericActionIntent({
+          actionId: taskId,
+          actions: genericActions,
           intent: description,
-          ownerParticipantId: input.ownerParticipantId,
-        },
-        actions: genericActions,
-      });
+          updatedAt: input.createdAt,
+        });
+      } else {
+        genericActions = declareCombatGenericAction({
+          action: {
+            createdAt: input.createdAt,
+            createdByUserId: input.createdByUserId,
+            declarationKind,
+            duration: { kind: "gm_decided" },
+            id: taskId,
+            intent: description,
+            ownerParticipantId: input.ownerParticipantId,
+          },
+          actions: genericActions,
+        });
+      }
     }
     return { ...selection, description, taskId };
   };

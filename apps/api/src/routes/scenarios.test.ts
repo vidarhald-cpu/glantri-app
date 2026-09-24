@@ -10662,12 +10662,15 @@ describe("scenarios route contract", () => {
    * existing task rather than a second one — and produced a task the canonical projection never
    * sees, because an action created outside declaration carries no `declarationKind`.
    */
-  function setupA1bTaskIdentityFixture(input: { liveTaskStatus?: string } = {}) {
+  function setupA1bTaskIdentityFixture(
+    input: { liveTaskStatus?: string; squatCanonicalTaskId?: boolean } = {},
+  ) {
     const encounterParticipants = makeTwoCombatEncounterParticipants();
     const encounter = makeCombatEncounterWithResolvedCombatExperience({
       participants: encounterParticipants,
     }) as EncounterSession;
     const earlierTaskId = "round:1:participant:encounter-participant-1:declaration:perform_task";
+    const canonicalTaskId = "round:2:participant:encounter-participant-1:declaration:perform_task";
     encounter.currentRound = 2;
     encounter.combatRoundState = combatRoundStateSchema.parse({
       ...initializeCombatRoundState({ encounter }),
@@ -10699,6 +10702,23 @@ describe("scenarios route contract", () => {
               },
             ]
           : []),
+        // The live collision vector: a Combat action created outside declaration — the canonical
+        // Item-interaction route mints one from a fully client-supplied action id — sitting on the
+        // id this round's declaration will derive for its own Perform Task.
+        ...(input.squatCanonicalTaskId
+          ? [
+              {
+                createdAt: "2026-09-18T07:30:00.000Z",
+                duration: { kind: "round" },
+                id: canonicalTaskId,
+                intent: "An action created outside declaration.",
+                lastUpdatedAt: "2026-09-18T07:30:00.000Z",
+                ownerParticipantId: "encounter-participant-1",
+                progress: { completedRounds: 0 },
+                status: "declared",
+              },
+            ]
+          : []),
       ],
       roundNumber: 2,
     });
@@ -10711,7 +10731,7 @@ describe("scenarios route contract", () => {
       encounter,
       participants: participants as unknown as ScenarioParticipant[],
     });
-    return { earlierTaskId, encounter, participants };
+    return { canonicalTaskId, earlierTaskId, encounter, participants };
   }
 
   async function declarePerformTask(input: { description: string; taskId?: string }) {
@@ -10737,6 +10757,147 @@ describe("scenarios route contract", () => {
     await app.close();
     return response;
   }
+
+  /**
+   * A1b invariant hardening — Forgejo issue #311.
+   *
+   * The canonical declaration task id is fully derivable, so a Combat action created outside
+   * declaration can occupy it first — `combatItemInteractionRoutes` still mints actions from a
+   * fully client-supplied id, and those carry no `declarationKind`.
+   * `declareCombatGenericAction` returns its input unchanged on an id that is already taken, so
+   * materialization used to answer 200 having created nothing: the canonical projection never saw
+   * a task, the one-live-task refusal had nothing to count, and the persisted intent named an
+   * action that is not this task — which then wedged every later Perform Task declaration by that
+   * participant on the carry-forward `declarationKind` check. The id is refused instead, before
+   * anything is persisted.
+   */
+  it("refuses a declaration whose canonical Combat Task id is held by an action created outside declaration", async () => {
+    const fixture = setupA1bTaskIdentityFixture({ squatCanonicalTaskId: true });
+
+    const refused = await declarePerformTask({ description: "Haul the cart across the gate." });
+
+    expect(refused.statusCode, JSON.stringify(refused.json())).toBe(400);
+    expect(refused.json().error).toMatch(
+      /Combat Task identity for this character is already held by another Combat action/,
+    );
+    // Nothing is persisted, so the participant cannot be wedged: no declaration intent naming a
+    // non-task is written, and the occupying action is left exactly as it was.
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    expect(
+      fixture.encounter.combatRoundState!.genericActions.find(
+        (action) => action.id === fixture.canonicalTaskId,
+      ),
+    ).toMatchObject({ intent: "An action created outside declaration.", status: "declared" });
+
+    // The refusal repeats identically rather than escalating, and it is recoverable in this same
+    // round: once the occupying action leaves canonical state the identical declaration succeeds
+    // and mints the canonical Combat Task.
+    const refusedAgain = await declarePerformTask({
+      description: "Haul the cart across the gate.",
+    });
+    expect(refusedAgain.statusCode, JSON.stringify(refusedAgain.json())).toBe(400);
+    expect(refusedAgain.json().error).toBe(refused.json().error);
+
+    fixture.encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...fixture.encounter.combatRoundState,
+      genericActions: fixture.encounter.combatRoundState!.genericActions.filter(
+        (action) => action.id !== fixture.canonicalTaskId,
+      ),
+    });
+
+    const accepted = await declarePerformTask({ description: "Haul the cart across the gate." });
+
+    expect(accepted.statusCode, JSON.stringify(accepted.json())).toBe(200);
+    const acceptedState =
+      mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session.combatRoundState;
+    expect(acceptedState.genericActions).toMatchObject([
+      { id: "client-minted-action-1" },
+      {
+        declarationKind: "perform_task",
+        id: fixture.canonicalTaskId,
+        intent: "Haul the cart across the gate.",
+        status: "declared",
+      },
+    ]);
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        state: acceptedState,
+      }),
+    ).toMatchObject({ id: fixture.canonicalTaskId });
+  });
+
+  it("refuses a declaration whose canonical Combat Task id is held by another participant's task", async () => {
+    const fixture = setupA1bTaskIdentityFixture();
+    fixture.encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...fixture.encounter.combatRoundState,
+      genericActions: [
+        ...fixture.encounter.combatRoundState!.genericActions,
+        {
+          createdAt: "2026-09-18T07:30:00.000Z",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: fixture.canonicalTaskId,
+          intent: "Somebody else's task.",
+          lastUpdatedAt: "2026-09-18T07:30:00.000Z",
+          ownerParticipantId: "encounter-participant-2",
+          progress: { completedRounds: 0 },
+          status: "declared",
+        },
+      ],
+    });
+
+    const response = await declarePerformTask({ description: "Haul the cart across the gate." });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+    expect(response.json().error).toMatch(
+      /Combat Task identity for this character is already held by another Combat action/,
+    );
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The one case where the canonical id is legitimately occupied at mint time: this participant's
+   * own live declaration-owned Task of this kind, reached without carry-forward because the
+   * persisted intent names a different primary action. That is this same task, so the declaration
+   * updates its intent exactly as carry-forward would, instead of being silently dropped.
+   */
+  it("updates this participant's own live task already holding the canonical Combat Task id", async () => {
+    const fixture = setupA1bTaskIdentityFixture();
+    fixture.encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...fixture.encounter.combatRoundState,
+      genericActions: [
+        ...fixture.encounter.combatRoundState!.genericActions,
+        {
+          createdAt: "2026-09-18T07:30:00.000Z",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: fixture.canonicalTaskId,
+          intent: "Bar the gate.",
+          lastUpdatedAt: "2026-09-18T07:30:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          status: "declared",
+        },
+      ],
+    });
+
+    const response = await declarePerformTask({ description: "Haul the cart across the gate." });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const tasks =
+      mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session.combatRoundState
+        .genericActions;
+    expect(tasks).toHaveLength(2);
+    expect(tasks[1]).toMatchObject({
+      declarationKind: "perform_task",
+      id: fixture.canonicalTaskId,
+      intent: "Haul the cart across the gate.",
+      status: "declared",
+    });
+  });
 
   it("refuses a client-supplied Combat Task id that would adopt an action created outside declaration", async () => {
     setupA1bTaskIdentityFixture({ liveTaskStatus: "declared" });
