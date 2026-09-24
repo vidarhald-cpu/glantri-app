@@ -465,7 +465,11 @@ them. **Those rulings are authoritative and are cross-referenced, not re-decided
 **All eight mismatches M1-M8 are now resolved or ruled, and #287 carries no remaining open Product
 Owner question.** The one question surfaced during A1a implementation — whether an unresolved
 `phase2` Perform Task should recur or expire — is answered and settled in
-[12.18](#1218-phase-2-perform-task-recurrence-versus-expiry--settled).
+[12.18](#1218-phase-2-perform-task-recurrence-versus-expiry--settled). The one gate
+[A2](#1213-a2--player-safe-activity-projection) still carried — whether already-persisted
+bookkeeping rows are retained for GM audit under a distinct `eventType` — is answered and settled
+in [12.19](#1219-a2-bookkeeping-retention-and-the-no-migration-shape--settled), which also fixes
+A2's shape as **requiring no migration**.
 
 **These are task contracts, not authorization.** Nothing here is dispatched. Each contract
 becomes executable only after a Forgejo issue body carries it through the canonical
@@ -664,11 +668,20 @@ In scope:
 - Write-side narrowing: which `CombatStepEvent` records `packages/database/src/services/encounterService.ts`
   forwards as Activity `objectiveEvents` at all.
 - **Projection-side narrowing keyed on `payloadJson.eventKind`**, because **historical rows are
-  not backfilled** and roughly eleven bookkeeping types are already persisted.
+  not backfilled** and roughly eleven bookkeeping types are already persisted. This is the
+  **existing structured classification** the 2026-09-23 ruling in
+  [12.19](#1219-a2-bookkeeping-retention-and-the-no-migration-shape--settled) relies on: every
+  `encounter_combat_outcome` row already written by
+  `packages/database/src/repositories/encounterRepository.ts` carries `payloadJson.eventKind` set
+  to the `CombatStepEventType`, and `projectScenarioObjectiveHistory` in
+  `packages/domain/src/campaign/scenarioSession.ts` already reads it through its `eventKind`
+  helper and already gates on it for `item_resolution`. **Legacy rows are therefore classifiable
+  as they stand, which is why no migration is required.**
 - Publishing the meaningful task and Item outcomes Activity does not carry today.
 - Producing the Activity summary **through the authorized viewer projection**.
 
-Out of scope: A1's domain work; M7; A3's deletion; any backfill; any new player log.
+Out of scope: A1's domain work; M7; A3's deletion; any backfill; **any historical `eventType`
+migration or reclassification of already-persisted rows**; any new player log.
 
 #### The A2-Q1 ruling, and what it requires
 
@@ -749,10 +762,14 @@ into a deny list: **A2 remains a positive publish list asserted by test.**
 
 - **Blocked on A1** for `task_resolved`, so the publish list includes it from the start.
 - **Not blocked on M5 or M6, which are now settled.**
-- One decision must be taken **before dispatch, not during**: whether already-persisted
-  bookkeeping rows are retained for GM audit under a distinct `eventType`. Retaining them leaves
-  historical encounters inconsistent unless backfilled — **and a backfill would be a migration**,
-  which changes A2's shape.
+- **The bookkeeping-retention gate is closed.** Whether already-persisted bookkeeping rows are
+  retained for GM audit under a distinct `eventType` was the one decision this contract required
+  **before dispatch, not during**. It is **settled by the Product Owner ruling of 2026-09-23 on
+  Forgejo issue #287**, recorded verbatim in
+  [12.19](#1219-a2-bookkeeping-retention-and-the-no-migration-shape--settled). The answer is **no
+  distinct `eventType` and no backfill**: existing persisted bookkeeping is left untouched and is
+  suppressed at projection time through the `payloadJson.eventKind` classification those rows
+  already carry. **A2 therefore requires no migration**, and **no gate remains open on A2.**
 
 #### Reused, by path
 
@@ -780,6 +797,16 @@ change three ways:** which rows are written at all; what `summary` _means_ (toda
 derived from the event type, afterwards produced per viewer from structured facts); and which
 `payloadJson` fields projection authority depends on. A2 must assert positively that Prisma schema
 and migrations are untouched.
+
+**A2 requires no migration of any kind — not a Prisma schema migration and not a data migration.**
+Settled by the 2026-09-23 ruling in
+[12.19](#1219-a2-bookkeeping-retention-and-the-no-migration-shape--settled). Existing persisted
+bookkeeping rows are left exactly as they are; suppression is a **read-side** decision taken in the
+player-safe projection using the `payloadJson.eventKind` classification those rows already carry;
+and only **prospectively written** events carry the corrected structured classification. GM audit
+may retain and access the legacy records. **The three stored-data semantics changes listed above
+apply to newly written rows and to what the projection selects — they are not a licence to rewrite
+history.**
 
 #### Hotspots
 
@@ -1148,7 +1175,9 @@ and settled** by the Product Owner ruling of 2026-09-22 on Forgejo issue #287, t
 classification of A2's six remaining event types. **No separate mid-round generic-action
 declaration path is preserved solely for `look_around`.** Neither item is a pre-`Ready` gate any
 longer, and **no open item remains in [A1](#1212-a1--combat-task-lifecycle-convergence) or
-[A2](#1213-a2--player-safe-activity-projection) that must be settled before `Ready`.**
+[A2](#1213-a2--player-safe-activity-projection) that must be settled before `Ready`.** A2's last
+gate — bookkeeping retention under a distinct `eventType` — is closed by the 2026-09-23 ruling in
+[12.19](#1219-a2-bookkeeping-retention-and-the-no-migration-shape--settled).
 
 ---
 
@@ -1195,3 +1224,83 @@ leaves no verified declaration-surface escape." This does not reopen A1a's scope
 control; it records a requirement for A1b. See
 [rule decision 0007](../decisions/rules/0007-perform-task-phase-scheduling-and-single-live-task.md)
 for the durable record of both rulings.
+
+---
+
+### 12.19 A2 bookkeeping retention and the no-migration shape — settled
+
+**Status:** **Settled.**\
+**Settled on:** 2026-09-23\
+**Authority:** PRODUCT OWNER RULING on Forgejo issue #287, answering the one gate
+[12.13's dependencies](#1213-a2--player-safe-activity-projection) still carried.\
+**Gates:** **Nothing.** [A2](#1213-a2--player-safe-activity-projection) carries no remaining open
+Product Owner question, and this ruling closes the last one.
+
+**The question as originally recorded**, retained as provenance:
+
+> One decision must be taken **before dispatch, not during**: whether already-persisted
+> bookkeeping rows are retained for GM audit under a distinct `eventType`. Retaining them leaves
+> historical encounters inconsistent unless backfilled — **and a backfill would be a migration**,
+> which changes A2's shape.
+
+**What was ruled.** Quoted verbatim:
+
+> - no historical migration/backfill merely to reclassify bookkeeping events;
+> - existing persisted bookkeeping remains untouched;
+> - player-safe Activity suppresses non-publishable bookkeeping through existing structured
+>   classification;
+> - GM audit may retain/access legacy records;
+> - prospective events use the correct structured classification.
+>
+> "Do not add a historical `eventType` migration solely for A2."
+
+#### The consequence an implementer must not miss — A2 requires no migration
+
+The five bullets are one shape, not five preferences. Taken together they mean:
+
+1. **Legacy rows stay exactly as they are.** No `eventType` rewrite, no backfill, no data
+   migration, no Prisma schema migration. Historical encounters are not made "consistent" by
+   editing them.
+2. **Suppression is a read-side decision** taken in the player-safe Activity projection, using
+   classification that **already exists on the stored rows**.
+3. **Only newly written events** carry the corrected structured classification.
+4. **GM audit may retain and access the legacy records.** Suppression narrows the player-safe
+   projection; it does not remove or downgrade the GM's authorized history.
+
+Anywhere this contract previously implied that retention would force a backfill, and therefore a
+migration, that implication is **withdrawn**. [12.13's Persistence and schema](#1213-a2--player-safe-activity-projection)
+now states the no-migration shape positively.
+
+#### The existing structured classification, by path
+
+"Existing structured classification" is concrete, not aspirational. It is
+**`payloadJson.eventKind` on the `ScenarioEventLog` row**, carrying the `CombatStepEventType`
+value:
+
+- **Written by** `packages/database/src/repositories/encounterRepository.ts`, which sets
+  `eventKind: event.type` into `payloadJson` on every `encounter_combat_outcome` row it creates.
+  **This has already been written for the rows that exist**, which is exactly why no backfill is
+  needed to classify them.
+- **Read by** the `eventKind` helper in `packages/domain/src/campaign/scenarioSession.ts`, which
+  falls back to the row's `eventType` when the payload field is absent.
+- **Already used as a suppression key** by `projectScenarioObjectiveHistory` in the same file,
+  which for `viewerMode === "player"` drops an `encounter_combat_outcome` row whose
+  `eventKind` is `item_resolution` when `canViewCurrentItemOutcome` denies it. A2's positive
+  publish list extends this established mechanism to the remaining kinds rather than inventing one.
+- **Enumerated by** `combatStepEventTypeSchema` in
+  `packages/domain/src/encounter/combatStepEventSchema.ts`, which is the enum
+  [12.13's positive-list test](#1213-a2--player-safe-activity-projection) must assert against in
+  full.
+
+**Reasoning.** A distinct audit `eventType` would have bought consistency only by rewriting
+history, and a migration to reclassify already-correct structured data is cost without a
+behavioural gain: the classification A2 needs is already on every stored row. Leaving persisted
+bookkeeping untouched also keeps the GM's audit record intact, which is the record the distinct
+`eventType` was proposed to protect in the first place.
+
+**This does not reopen [A2-Q1](#1213-a2--player-safe-activity-projection) or the M5/M6 rulings in
+[12.17](#1217-m5-and-m6--settled-and-the-remaining-blockers-to-a3).** It settles retention and
+migration shape only. A2 remains **floor class and non-downgradable** on both stored-data-semantics
+and privacy-projection grounds, and the [#271 precedent](#127-logging-and-the-activity-projection)
+still applies: suppression must happen on the server, in the projection, never in a component or a
+view-model.
