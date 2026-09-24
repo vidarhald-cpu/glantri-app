@@ -51,11 +51,14 @@ authorize a live command.
 | `gm_advance_boundary`                         | Fully descriptor-bound | Requires command type, revision, exact task/group, current boundary, and target boundary for every top-level transition.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Perform Task lifecycle                        | Fully descriptor-bound | `combat_task_review`, `combat_task_roll`, `combat_task_advance` and `combat_task_resolve` project one executable task at the owner's primary-action opportunity for the phase its duration names: Phase 1 for `round`, `rounds: N` and `gm_decided` durations, and the named phase — Phase 1 or Phase 2 — for a `phase` duration. Every lifecycle command requires the exact projected task, execution group, boundary, revision and `actionId`, and is refused, in both directions, when addressed at the task's other phase. Rule inputs reach the task through the GM review command; audience and GM-authored player-safe result text are resolve-command inputs. |
 
-One task-integration gap remains, and it is scheduled: the parallel
-`POST /encounters/:encounterId/combat-round/generic-actions` channel still authorizes from a
-client-supplied action id. Closing that second creation path is A1b's deliverable, and A1a lands
-with that route deliberately open so `GenericCombatActionPanel` survives as the temporary invoker
-under introduce-then-retire. No other gap remains. Editable rule inputs (declarations, choices,
+There are no remaining task-integration gaps. A1b (Forgejo issue #311) closed the last one: the
+parallel `POST /encounters/:encounterId/combat-round/generic-actions` channel no longer authorizes
+from a client-supplied action id. It creates nothing — its `declare` operation is refused — every
+remaining operation must name an action that already exists in canonical state, and a
+declaration-materialized Perform Task is refused there outright so its lifecycle is authorized only
+from the exact projected task, execution group, boundary and revision.
+`GenericCombatActionPanel` stays mounted as the temporary invoker for non-task generic actions and
+task history under introduce-then-retire; retiring it is A3's work. Editable rule inputs (declarations, choices,
 roll sources, and GM review values) remain local form state by design, but no handler derives
 combat identity or command eligibility from those forms, the inspector, cursors, or
 latest-result chains.
@@ -192,6 +195,38 @@ explicitly cancelled; it never silently expires or resolves in another phase, an
 grants an additional primary action, settled by the Product Owner ruling of 2026-09-22 recorded in
 [the #287 contract's §12.18](../product/combat-panel-contract.md#1218-phase-2-perform-task-recurrence-versus-expiry--settled)
 and [rule decision 0007](../decisions/rules/0007-perform-task-phase-scheduling-and-single-live-task.md).
+
+Server-owned Combat Task identity and the declaration-surface escape (2026-09-24, A1b, Forgejo
+issue #311): a submitted declaration intent never originates `taskId`. The server mints it, writes
+it into the persisted declaration intent, and cross-round carry-forward reads only that persisted
+value; the carried action must belong to the declaring participant and carry the matching
+`declarationKind`. Honouring a client-chosen `taskId` was the second creation path: it let a caller
+mint an action through the parallel route under an arbitrary id and then have the declaration adopt
+it, which skipped the one-live-task refusal and produced a task the canonical projection never sees.
+An action with no `declarationKind` is invisible to `getCombatRoundOpenPerformTaskForParticipant`
+and is therefore never projected, driven or counted as a Perform Task; no backfill reclassifies
+those rows. Separately, rule decision 0007 ruling 3's declaration-surface escape is
+`cancelCombatTaskAtDeclarationBoundary`: the **same** `cancel_combat_task` command and the same
+compact versioned inverse facts as the opportunity cancel, issued at the declaration boundary and
+authorized on the participant's own declaration descriptor. The two boundaries are mutually
+exclusive — the declaration cancel is refused while the task holds the actor's current action
+opportunity, and the opportunity cancel is refused everywhere else. It spends no opportunity and
+moves no cursor, and its undo removes the command and restores the task's own fields and nothing
+else. Current action owns the control, so no commit control is added inside the Action Selector.
+
+The escape works **within** the round it is needed, not only across rounds. Two things make that
+true. The canonical task id `round:<N>:participant:<pid>:declaration:<kind>` is minted once per
+round per participant per kind, so a cancelled task still holds it; a replacement declared in the
+same round is therefore minted under a distinct server-owned id derived from the canonical one
+(`…:replacement:<n>`), because `declareCombatGenericAction` returns its input unchanged on a taken
+id and the declaration would otherwise answer `200` having created nothing. Identity stays
+server-owned, and carry-forward is unaffected because it addresses the persisted intent's `taskId`
+rather than reconstructing an id. Separately, a `cancel_combat_task` command whose compact inverse
+facts record `boundary: "declaration"` is **not** command-log completion evidence: it applies with
+`consumesOpportunity: false`, so reading it as a spent primary action closed the very opportunity
+the cancel had just freed. The opportunity-boundary cancel, which does spend the opportunity, still
+counts, and no other command records a declaration boundary, so neither witness is weakened
+anywhere else.
 
 One live Perform Task per participant (2026-09-22, Product Owner ruling on Forgejo issue #287):
 `materializeCombatDeclarationTasks` refuses a `perform_task` declaration while the declaring

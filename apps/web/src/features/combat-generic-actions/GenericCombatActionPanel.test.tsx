@@ -240,66 +240,14 @@ describe("GenericCombatActionPanel", () => {
     expect(onEncounterUpdated).not.toHaveBeenCalled();
   });
 
-  it("declares the Survey preset with canonical Perception and a visible numeric Difficulty", async () => {
-    render(
-      <GenericCombatActionPanel
-        encounter={encounter}
-        isGm={false}
-        onEncounterUpdated={vi.fn()}
-        participantId="encounter-aster"
-        scenarioParticipants={[scenarioParticipant]}
-      />,
-    );
-
-    expect(screen.getByText("Perception")).toBeInTheDocument();
-    expect(screen.getByLabelText("Action Difficulty")).toHaveValue(26);
-    fireEvent.change(screen.getByLabelText("What do you intend to do?"), {
-      target: { value: "Survey the dark balcony for movement." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Declare generic action" }));
-
-    await waitFor(() => expect(updateGenericCombatActionOnServer).toHaveBeenCalledTimes(1));
-    expect(updateGenericCombatActionOnServer).toHaveBeenCalledWith(
-      expect.objectContaining({
-        difficulty: 26,
-        intent: "Survey the dark balcony for movement.",
-        operation: "declare",
-        participantId: "encounter-aster",
-        preset: "look_around",
-        rollKind: "skill",
-        skillId: "perception",
-      }),
-    );
-  });
-
-  it("supports a simple action with no roll", async () => {
-    render(
-      <GenericCombatActionPanel
-        encounter={encounter}
-        isGm={false}
-        onEncounterUpdated={vi.fn()}
-        participantId="encounter-aster"
-        scenarioParticipants={[scenarioParticipant]}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText("Generic action"), { target: { value: "other" } });
-    fireEvent.change(screen.getByLabelText("Roll"), { target: { value: "none" } });
-    fireEvent.change(screen.getByLabelText("What do you intend to do?"), {
-      target: { value: "Bar the door." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Declare generic action" }));
-
-    await waitFor(() => expect(updateGenericCombatActionOnServer).toHaveBeenCalledTimes(1));
-    expect(updateGenericCombatActionOnServer).toHaveBeenCalledWith(
-      expect.objectContaining({ intent: "Bar the door.", operation: "declare" }),
-    );
-    expect(
-      vi.mocked(updateGenericCombatActionOnServer).mock.calls[0]?.[0].rollKind,
-    ).toBeUndefined();
-  });
-
-  it("defensively omits hidden round participants from the player reference selector", () => {
+  /**
+   * A1b (Forgejo issue #311) retired this panel's declaration control together with the parallel
+   * route's `declare` operation. The panel stays mounted as the temporary invoker for non-task
+   * generic actions and task history under introduce-then-retire; retiring it is A3's work.
+   * `look_around` is a preset of the Combat declaration under the Product Owner ruling of
+   * 2026-09-22 on Forgejo issue #287, so no mid-round generic declaration path remains.
+   */
+  it("offers a player no way to create a Combat action and no participant selector", () => {
     const playerSafeEncounter = {
       ...encounter,
       combatRoundState: {
@@ -320,15 +268,13 @@ describe("GenericCombatActionPanel", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Reference"), {
-      target: { value: "participant" },
-    });
-    const selector = screen.getByLabelText("Referenced participant");
-    expect(within(selector).getByRole("option", { name: "Aster" })).toBeInTheDocument();
-    expect(within(selector).queryByRole("option", { name: "Hidden watcher" })).toBeNull();
-    expect(
-      Array.from((selector as HTMLSelectElement).options).map((option) => option.value),
-    ).not.toContain("encounter-hidden");
+    expect(screen.queryByRole("button", { name: "Declare generic action" })).toBeNull();
+    expect(screen.queryByLabelText("Generic action")).toBeNull();
+    expect(screen.queryByLabelText("What do you intend to do?")).toBeNull();
+    expect(screen.queryByLabelText("Reference")).toBeNull();
+    expect(screen.queryByLabelText("Referenced participant")).toBeNull();
+    expect(document.body.textContent).not.toContain("Hidden watcher");
+    expect(updateGenericCombatActionOnServer).not.toHaveBeenCalled();
   });
 
   it("lets the GM adjust roll basis, Difficulty, and typed reference without claiming Current task", async () => {

@@ -186,6 +186,7 @@ import {
   rollCombatObservationOnServer,
   rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
+  sendCombatTaskLifecycleCommandOnServer,
   type CombatItemInteractionOptions,
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
@@ -8052,6 +8053,44 @@ export default function CombatRoundManagerPanel({
         ) : null}
       </div>
     ) : null;
+  /**
+   * The one live Perform Task blocking this participant's declaration, if any. The one-live-task
+   * refusal in `materializeCombatDeclarationTasks` names cancellation as its remedy, and rule
+   * decision 0007 ruling 3 requires a declaration-surface control that reaches it.
+   */
+  const inspectorLiveCombatTask =
+    !inspectorIsHistorical &&
+    selectedRoundIsActive &&
+    currentActionPresentation?.taskKind === "submit_declaration" &&
+    currentActionPresentation.primaryAction.descriptor?.commandType === "declare_action" &&
+    inspector.participant?.participantId
+      ? roundState.genericActions.find(
+          (action) =>
+            action.declarationKind === "perform_task" &&
+            action.ownerParticipantId === inspector.participant?.participantId &&
+            action.status !== "completed" &&
+            action.status !== "cancelled" &&
+            action.status !== "interrupted",
+        )
+      : undefined;
+  const inspectorLiveCombatTaskControls = inspectorLiveCombatTask ? (
+    <div style={{ display: "grid", gap: "0.4rem" }}>
+      <div>Live Combat Task: {inspectorLiveCombatTask.intent}</div>
+      <div>
+        A participant holds one Combat Task at a time. Cancel this one to declare a different
+        Perform Task.
+      </div>
+      <button
+        disabled={saving}
+        onClick={() =>
+          void cancelInspectorLiveCombatTask(currentActionPresentation?.primaryAction.descriptor)
+        }
+        type="button"
+      >
+        Cancel Combat Task
+      </button>
+    </div>
+  ) : null;
   const inspectorCriticalBleedTreatmentControls =
     selectedScenarioParticipant && !inspectorIsHistorical ? (
       <CriticalBleedTreatmentControls
@@ -8063,6 +8102,7 @@ export default function CombatRoundManagerPanel({
       />
     ) : null;
   const inspectorPreActionControls =
+    inspectorLiveCombatTaskControls ||
     inspectorCriticalBleedTreatmentControls ||
     inspectorDefenseReviewControls ||
     inspectorMissileReadinessControls ||
@@ -8080,6 +8120,7 @@ export default function CombatRoundManagerPanel({
       <>
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
+        {inspectorLiveCombatTaskControls}
         {inspectorCriticalBleedTreatmentControls}
         {inspectorCurrentActionOutcomeControls}
         {inspectorDefenseReviewControls}
@@ -9365,6 +9406,57 @@ export default function CombatRoundManagerPanel({
     });
 
     return declaredThisRound && input.status === "pending" ? "submitted" : input.status;
+  }
+
+  /**
+   * The declaration-surface escape required by rule decision 0007 ruling 3. Current action owns
+   * the command, as the settled M5 split requires — no commit control is added inside the Action
+   * Selector — and the command authorizes on the participant's own declaration descriptor. It
+   * issues the canonical `cancel_combat_task` command, not a second cancellation mechanism.
+   */
+  async function cancelInspectorLiveCombatTask(candidate?: CurrentActionCommandDescriptor) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: ["declare_action"],
+      presentation: currentActionPresentation,
+      requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const liveTask = inspectorLiveCombatTask;
+    if (!descriptor || !participant || !liveTask) {
+      setSaveError("The live Combat Task is no longer available to cancel.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter } = await sendCombatTaskLifecycleCommandOnServer({
+        actionId: liveTask.id,
+        boundary: "declaration",
+        currentEncounter: encounter,
+        encounterId: descriptor.encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        finishKind: "cancel",
+        operation: "finish",
+        processId: descriptor.processId,
+        scenarioParticipantId: participant.id,
+        stageId: descriptor.stageId,
+        taskId: descriptor.taskId,
+      });
+      const nextRoundState = combatRoundStateSchema.parse(nextEncounter.combatRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to cancel the live Combat Task.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveInspectorDeclaration(candidate?: CurrentActionCommandDescriptor) {
