@@ -12,6 +12,7 @@ import {
 } from "@glantri/domain";
 import { prisma } from "../client";
 import { ArtifactConflictError, ArtifactNotFoundError } from "../services/artifactService";
+import { ArtifactAssociationService } from "../services/artifactAssociationService";
 import {
   buildCampaignEquipmentItemId,
   buildDescriptiveCampaignEquipmentItem,
@@ -583,24 +584,13 @@ export class ArtifactImportRepository {
             );
           }
           for (const link of links) {
-            await tx.campaignItemArtifactAttachment.upsert({
-              where: { itemId_artifactId: { artifactId: link.artifactId, itemId: link.itemId } },
-              create: {
-                artifactId: link.artifactId,
-                attachedByUserId: actorUserId,
-                campaignId,
-                itemId: link.itemId,
-              },
-              update: {},
-            });
-            await tx.artifactAuditEvent.create({
-              data: {
-                campaignId,
-                artifactId: link.artifactId,
-                actorUserId,
-                action: "item_representation_attach",
-                metadataJson: { importId: id, itemId: link.itemId, localId: proposal.id },
-              },
+            await new ArtifactAssociationService(this.client).attachInTransaction(tx, {
+              artifactId: link.artifactId,
+              campaignId,
+              provenance: { kind: "import", ref: id },
+              role: "representation",
+              target: { kind: "item", id: link.itemId },
+              userId: actorUserId,
             });
           }
         }
