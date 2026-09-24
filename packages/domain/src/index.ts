@@ -42,6 +42,7 @@ export * from "./encounter/combatResultPresentation";
 export * from "./encounter/combatReadModels";
 export * from "./encounter/combatMutationResponse";
 export * from "./encounter/combatLogProjection";
+export * from "./encounter/combatActivityProjection";
 export * from "./encounter/combatStepEvents";
 export * from "./encounter/combatStepEventSchema";
 export * from "./encounter/combatDistance";

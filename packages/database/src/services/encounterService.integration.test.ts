@@ -621,7 +621,11 @@ if (!process.env.DATABASE_URL_TEST) {
         ...participant.state,
         combatEffects,
       });
-      const combatEvent = combatStepEventSchema.parse({
+      // combat-panel-contract.md 12.7/12.13: `declaration` is round and phase bookkeeping and is
+      // suppressed at the data boundary; `attack` is a published, narratively meaningful outcome.
+      // Both are committed in the same write so the assertion proves selection, not absence of
+      // traffic.
+      const suppressedCombatEvent = combatStepEventSchema.parse({
         actorParticipantId: participant.id,
         completeness: "complete",
         encounterId: encounter.id,
@@ -640,11 +644,35 @@ if (!process.env.DATABASE_URL_TEST) {
           outcomeScope: "involved",
         },
       });
+      const publishedCombatEvent = combatStepEventSchema.parse({
+        actorParticipantId: participant.id,
+        completeness: "complete",
+        encounterId: encounter.id,
+        facts: { publicOutcome: { hit: true } },
+        id: "c1-combat-event-attack",
+        occurredAt: "2026-08-29T10:02:01.000Z",
+        roundNumber: 2,
+        schemaVersion: 1,
+        sequence: 1,
+        source: { kind: "canonical" },
+        status: "recorded",
+        step: "phase_1_actions",
+        type: "attack",
+        visibility: {
+          involvedParticipantIds: [participant.id],
+          outcomeScope: "involved",
+        },
+      });
+      const combatEvent = publishedCombatEvent;
       const encounterWithCombatEvent = encounterSessionSchema.parse({
         ...encounter,
         combatRoundState: {
           ...encounter.combatRoundState!,
-          events: [...encounter.combatRoundState!.events, combatEvent],
+          events: [
+            ...encounter.combatRoundState!.events,
+            suppressedCombatEvent,
+            publishedCombatEvent,
+          ],
         },
       });
       const saved = await service.commitCombatParticipantStateMutation({
@@ -673,14 +701,30 @@ if (!process.env.DATABASE_URL_TEST) {
           sequence: expect.any(Number),
         }),
       ]);
-      expect(
-        objectiveEvents.find((event) => event.eventType === "encounter_combat_outcome")?.payload,
-      ).toMatchObject({
+      const combatOutcomePayload = objectiveEvents.find(
+        (event) => event.eventType === "encounter_combat_outcome",
+      )?.payload as Record<string, unknown> | undefined;
+      expect(combatOutcomePayload).toMatchObject({
         actorParticipantId: participant.id,
         audienceParticipantIds: [participant.id],
         combatEventId: combatEvent.id,
         encounterId: encounter.id,
-        eventKind: "declaration",
+        eventKind: "attack",
+      });
+      // The suppressed bookkeeping event was never written as an Activity row at all.
+      expect(
+        objectiveEvents.some(
+          (event) =>
+            event.eventType === "encounter_combat_outcome" &&
+            (event.payload as Record<string, unknown> | null)?.eventKind === "declaration",
+        ),
+      ).toBe(false);
+      // Structured facts are persisted so the sentence can be produced per viewer; GM-only and
+      // roller-private material is not carried into the player-safe read path.
+      expect(combatOutcomePayload?.activityFacts).toMatchObject({
+        eventType: "attack",
+        outcomeScope: "involved",
+        publicOutcome: { hit: true },
       });
       await expect(
         service.commitCombatParticipantStateMutation({

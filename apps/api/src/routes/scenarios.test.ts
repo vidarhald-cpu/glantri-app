@@ -6681,6 +6681,235 @@ describe("scenarios route contract", () => {
     }
   });
 
+  it("publishes only player-safe Combat outcomes in the Activity payload, per viewer", async () => {
+    // combat-panel-contract.md 12.7/12.13 and Player Play V1 9.2. Every assertion below is on the
+    // API response payload, never on rendered DOM: the #271 precedent requires the selection and
+    // the identity resolution to happen on the server.
+    const encounter = encounterSessionSchema.parse({
+      createdAt: "2026-09-24T10:00:00.000Z",
+      id: "encounter-a",
+      kind: "combat",
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-participant-a",
+          label: "Player A",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-a",
+        },
+        {
+          id: "encounter-participant-c",
+          label: "Rival",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-c",
+        },
+      ],
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Library",
+      updatedAt: "2026-09-24T10:01:00.000Z",
+    });
+    const activityFacts = (overrides: Record<string, unknown>) => ({
+      identities: [
+        {
+          hiddenIdentityFallback: "unseen_attacker",
+          participantId: "participant-c",
+          role: "attacker",
+        },
+        {
+          hiddenIdentityFallback: "unseen_target",
+          participantId: "participant-a",
+          role: "defender",
+        },
+      ],
+      outcomeScope: "perceived",
+      publicOutcome: {},
+      status: "recorded",
+      ...overrides,
+    });
+    const eventLogs = [
+      {
+        createdAt: "2026-09-24T10:02:00.000Z",
+        eventType: "encounter_combat_outcome",
+        id: "event-declaration",
+        payload: { encounterId: "encounter-a", eventKind: "declaration" },
+        scenarioId: "scenario-1",
+        summary: "Combat: declaration.",
+      },
+      {
+        createdAt: "2026-09-24T10:02:10.000Z",
+        eventType: "encounter_combat_outcome",
+        id: "event-round-boundary",
+        payload: { encounterId: "encounter-a", eventKind: "round_boundary" },
+        scenarioId: "scenario-1",
+        summary: "Combat: round boundary.",
+      },
+      {
+        createdAt: "2026-09-24T10:02:20.000Z",
+        eventType: "encounter_combat_outcome",
+        id: "event-feint-roll",
+        payload: { encounterId: "encounter-a", eventKind: "feint_roll" },
+        scenarioId: "scenario-1",
+        summary: "Combat: feint roll.",
+      },
+      {
+        createdAt: "2026-09-24T10:02:30.000Z",
+        eventType: "encounter_combat_outcome",
+        id: "event-attack",
+        payload: {
+          activityFacts: activityFacts({
+            eventType: "attack",
+            publicOutcome: { hit: true },
+            summaryFacts: { kind: "attack_resolved", outcome: "hit", weaponName: "Longsword" },
+          }),
+          encounterId: "encounter-a",
+          eventKind: "attack",
+        },
+        scenarioId: "scenario-1",
+        summary: "Combat: attack.",
+      },
+      {
+        createdAt: "2026-09-24T10:02:35.000Z",
+        eventType: "encounter_combat_outcome",
+        id: "event-gm-only",
+        payload: {
+          activityFacts: activityFacts({
+            eventType: "critical",
+            outcomeScope: "gm_only",
+            publicOutcome: {},
+          }),
+          audienceParticipantIds: ["participant-a", "participant-c"],
+          encounterId: "encounter-a",
+          eventKind: "critical",
+        },
+        scenarioId: "scenario-1",
+        summary: "Combat: critical.",
+      },
+      {
+        createdAt: "2026-09-24T10:02:40.000Z",
+        eventType: "encounter_combat_outcome",
+        id: "event-task",
+        payload: {
+          audienceParticipantIds: ["participant-a"],
+          encounterId: "encounter-a",
+          eventKind: "task_resolved",
+          gmAuthoredSummary: true,
+        },
+        scenarioId: "scenario-1",
+        summary: "Player A forced the library door open.",
+      },
+    ];
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      createdAt: "2026-09-24T09:00:00.000Z",
+      description: "Find the Lost Seal.",
+      id: "scenario-1",
+      kind: "mixed",
+      name: "Lost Seal",
+      status: "live",
+      updatedAt: "2026-09-24T10:02:00.000Z",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+      {
+        controlledByUserId: "player-1",
+        id: "participant-a",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Player A" },
+        sourceType: "character",
+      },
+      {
+        controlledByUserId: "player-c",
+        id: "participant-c",
+        isActive: true,
+        role: "player_character",
+        scenarioId: "scenario-1",
+        snapshot: { displayName: "Rival" },
+        sourceType: "character",
+      },
+    ]);
+    mocks.scenarioService.listScenarioEventLogs.mockResolvedValue(eventLogs);
+    mocks.scenarioService.resolveScenarioAvailableObjects.mockResolvedValue([]);
+    mocks.scenarioService.resolveEquipmentStatuses.mockResolvedValue({});
+    mocks.encounterService.listEncountersByScenario.mockResolvedValue([encounter]);
+    const app = await buildScenarioTestApp();
+
+    const defenderResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue({ ...mocks.playerUser, id: "player-c" });
+    const attackerResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+    const gmResponse = await app.inject({
+      method: "GET",
+      url: "/scenarios/scenario-1/session",
+    });
+    await app.close();
+
+    expect(defenderResponse.statusCode, defenderResponse.body).toBe(200);
+    const defenderHistory = defenderResponse.json().session.history as Array<{
+      eventKind: string;
+      id: string;
+      summary: string;
+    }>;
+
+    // Negative payload assertions: suppressed bookkeeping never reaches the player payload.
+    for (const suppressed of ["declaration", "round_boundary", "feint_roll"]) {
+      expect(defenderHistory.some((entry) => entry.eventKind === suppressed)).toBe(false);
+      expect(defenderResponse.body).not.toContain(`"${suppressed}"`);
+    }
+    // A gm_only outcome reaches no player, even though `critical` is on the publish list.
+    expect(defenderHistory.map((entry) => entry.id)).toEqual(["event-attack", "event-task"]);
+
+    // Recap sufficiency: a resolved Perform Task reaches the entitled player with its GM-authored
+    // player-safe text, unchanged.
+    expect(defenderHistory.find((entry) => entry.id === "event-task")?.summary).toBe(
+      "Player A forced the library door open.",
+    );
+
+    // Per-viewer identity from the same stored facts, with no stored rendered string as authority.
+    const attackerHistory = attackerResponse.json().session.history as Array<{
+      id: string;
+      summary: string;
+    }>;
+    const gmHistory = gmResponse.json().session.history as Array<{ id: string; summary: string }>;
+    const defenderSentence = defenderHistory.find((entry) => entry.id === "event-attack")?.summary;
+    const attackerSentence = attackerHistory.find((entry) => entry.id === "event-attack")?.summary;
+    const gmSentence = gmHistory.find((entry) => entry.id === "event-attack")?.summary;
+    expect(defenderSentence).toBe("Rival attacked you with Longsword. The attack hit.");
+    expect(attackerSentence).toBe("You attacked Player A with Longsword. The attack hit.");
+    expect(gmSentence).toBe("Rival attacked Player A with Longsword. The attack hit.");
+    expect(defenderSentence).not.toBe(attackerSentence);
+    expect(defenderSentence).not.toBe(gmSentence);
+    // The mechanically derived stored string is never the player-facing sentence.
+    expect(defenderSentence).not.toBe("Combat: attack.");
+
+    // The GM's audit history keeps every legacy and bookkeeping row: suppression is player-safe
+    // narrowing, not deletion (12.19).
+    expect(gmHistory.map((entry) => entry.id)).toEqual([
+      "event-declaration",
+      "event-round-boundary",
+      "event-feint-roll",
+      "event-attack",
+      "event-gm-only",
+      "event-task",
+    ]);
+
+    // A non-entitled viewer receives no row at all for an outcome whose audience excludes them.
+    expect(attackerHistory.some((entry) => entry.id === "event-task")).toBe(false);
+    expect(attackerResponse.body).not.toContain("forced the library door open");
+  });
+
   it("projects player Combat participants with viewer-aware hidden and GM-only privacy", async () => {
     const scenario = {
       campaignId: "campaign-1",
