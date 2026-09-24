@@ -16,8 +16,10 @@ Association ruling, the resolution of OPEN-PPL-6, the resolution of OPEN-PPL-4,
 the Scenario GM Plan storage ruling, and the supplementary managing-GM
 authority ruling that completes OPEN-PPL-4 — plus the **2026-09-24** rulings
 that answer **OPEN-PPL-9 for V1** while deferring future context-specific
-scoping ([section 18.9](#189-open-ppl-9-answered-for-v1)) and **defer
-OPEN-PPL-10 without deciding it** ([section 18.10](#1810-open-ppl-10-deferred-and-non-blocking)).
+scoping ([section 18.9](#189-open-ppl-9-answered-for-v1)), **defer
+OPEN-PPL-10 without deciding it** ([section 18.10](#1810-open-ppl-10-deferred-and-non-blocking)),
+and **narrowly authorize a two-layer Scenario presentation override**
+([section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)).
 
 This contract **generalizes an implemented pipeline**. It does not introduce a
 second import system, and no reader should build one from it.
@@ -36,10 +38,12 @@ points here and this document governs.
   [section 18](#18-rulings-recorded-here) explicitly and narrowly amends it.
 - It does **not** authorize schema, migration, runtime or UI implementation.
 - It resolves **only** OPEN-PPL-6 and OPEN-PPL-4 (both settled and closed,
-  2026-09-23), and records the two Product Owner rulings of **2026-09-24**:
+  2026-09-23), and records the Product Owner rulings of **2026-09-24**:
   **OPEN-PPL-9 answered for V1** with future scoping deferred
-  ([section 18.9](#189-open-ppl-9-answered-for-v1)), and **OPEN-PPL-10 deferred
-  while remaining open** ([section 18.10](#1810-open-ppl-10-deferred-and-non-blocking)).
+  ([section 18.9](#189-open-ppl-9-answered-for-v1)), **OPEN-PPL-10 deferred
+  while remaining open** ([section 18.10](#1810-open-ppl-10-deferred-and-non-blocking)),
+  and the **narrow Scenario presentation override**
+  ([section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)).
   In the
   [People/Artifact/GM authoring model](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen),
   **seven decisions — OPEN-PPL-1, 2, 3, 5, 7, 8 and 11 — remain open, unranked
@@ -208,7 +212,13 @@ Binding on the implementing lane:
 3. **Selections are global to the Person.** V1 builds **no** generalized
    Campaign-, Scenario-, entitlement- or play-context-specific primary-selection
    system, and **no** scope column, override table or resolution-order rule for
-   a scope that does not yet exist.
+   a scope that does not yet exist. **Amended 2026-09-24, Product Owner,
+   narrowly:** the single exception is the two-layer Scenario **presentation**
+   override of
+   [section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1),
+   which overrides a Scenario's inherited presentation and **does not** create
+   Scenario-scoped roles or alter these global selections. **Everything else
+   this clause forbids remains forbidden.**
 4. **Artifact visibility is independent of selection**, per
    [section 3](#3-one-artifact-system).
 5. **"At most one selected" constrains selection, not association
@@ -714,16 +724,17 @@ what a package may carry, and every widening inherits the parity obligation.
 
 ## 17. Scope boundaries
 
-| Item                                             | Status                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reusable Encounter templates                     | **Later scope.** Recorded, not authorized.                                                                                                                                                                                                                                       |
-| Random-Encounter mechanics                       | **Not in scope.**                                                                                                                                                                                                                                                                |
-| Content Production Interface                     | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface).                                                                                                                                                                           |
-| Storage of the Scenario GM Plan                  | **Settled**, 2026-09-23. See [section 8.1](#81-the-scenario-gm-plan) and [section 18.7](#187-scenario-gm-plan-storage).                                                                                                                                                          |
-| Anything gated on #279                           | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                                                                                                                                                                                                       |
-| V1 representation selection                      | **Settled for V1**, 2026-09-24: two global singleton roles plus additional illustrations, visibility independent. See [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) and [section 18.9](#189-open-ppl-9-answered-for-v1).                                    |
-| Context-specific representation overrides        | **Deferred, not rejected.** Per Campaign / entitlement tier / Scenario / play context. Not built in V1; returns to the Product Owner. See [section 18.9](#189-open-ppl-9-answered-for-v1).                                                                                       |
-| Player self-service Artifact creation/management | **Future scope, and non-blocking for this contract.** [OPEN-PPL-10](people-artifact-and-gm-authoring-model.md#open-ppl-10--the-authority-model-for-player-self-service-artifacts) stays **open and deferred**; see [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). |
+| Item                                                 | Status                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reusable Encounter templates                         | **Later scope.** Recorded, not authorized.                                                                                                                                                                                                                                       |
+| Random-Encounter mechanics                           | **Not in scope.**                                                                                                                                                                                                                                                                |
+| Content Production Interface                         | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface).                                                                                                                                                                           |
+| Storage of the Scenario GM Plan                      | **Settled**, 2026-09-23. See [section 8.1](#81-the-scenario-gm-plan) and [section 18.7](#187-scenario-gm-plan-storage).                                                                                                                                                          |
+| Anything gated on #279                               | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                                                                                                                                                                                                       |
+| V1 representation selection                          | **Settled for V1**, 2026-09-24: two global singleton roles plus additional illustrations, visibility independent. See [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) and [section 18.9](#189-open-ppl-9-answered-for-v1).                                    |
+| Narrow Scenario presentation override                | **Authorized for V1**, amended 2026-09-24. Two layers only, resolved as override-if-present then canonical default. See [section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1).                                                                          |
+| Context-specific representation overrides in general | **Deferred, not rejected.** Per Campaign / entitlement tier / play context, and any generic scope column or resolution hierarchy. Not built in V1; returns to the Product Owner. See [section 18.9](#189-open-ppl-9-answered-for-v1).                                            |
+| Player self-service Artifact creation/management     | **Future scope, and non-blocking for this contract.** [OPEN-PPL-10](people-artifact-and-gm-authoring-model.md#open-ppl-10--the-authority-model-for-player-self-service-artifacts) stays **open and deferred**; see [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). |
 
 ---
 
@@ -899,6 +910,13 @@ to the Product Owner.
   required** — so V1 builds the global default and **not** the override
   mechanism.
 
+**Amended 2026-09-24, Product Owner, narrowly.** The deferred half is reduced by
+exactly one carve-out: the two-layer Scenario **presentation** override of
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)
+is authorized for V1. The per-Campaign, per-entitlement-tier and per-play-context
+cases, and the general context-specific override mechanism, **remain deferred and
+still return to the Product Owner.**
+
 **It resolves nothing else.**
 [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
 is untouched: which of a Person's two selected roles reaches a given viewer is a
@@ -930,6 +948,33 @@ player self-service **stops and returns it to the Product Owner**, and the
 deferral is lifted when player self-service is actually prioritized.
 [Artifact Management PO-3](../architecture/artifact-management-package-import.md#po-3--player-artifact-creationsubmission)
 is unchanged and still defers player creation from AM1.
+
+### 18.11 Narrow Scenario presentation override authorized for V1
+
+**Status:** **SETTLED FOR V1, 2026-09-24.** **Authority:** Product Owner.
+**Amends, narrowly:** [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person)
+clause 3, [section 17](#17-scope-boundaries) and the deferred half of
+[section 18.9](#189-open-ppl-9-answered-for-v1). **Gates:** Nothing beyond the
+lane that builds it.
+
+> "A Scenario may optionally override the inherited general/unidentified image
+> and/or description, and may optionally override the inherited identified image
+> and/or description. Absence of an override means use the canonical Person
+> presentation. This does **not** create Scenario-scoped primary roles or modify
+> the Person's canonical Artifact selections. **No** generic context/scope
+> column, arbitrary resolution hierarchy, entitlement-specific override system
+> or per-player override is authorized.
+>
+> Resolution is simply: **Scenario override if present → otherwise canonical
+> Person default.**"
+
+**The authorization is exactly this and no wider.** The general context-specific
+override case of [section 18.9](#189-open-ppl-9-answered-for-v1) stays deferred,
+and every other prohibition in
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) clause 3
+stands. The product/UI shape of the override is recorded in
+[Campaign Material and Scenario Builder §7](campaign-material-and-scenario-builder-ui.md#7-scenario-overlays);
+**this section authorizes the mechanism, not its implementation.**
 
 ---
 

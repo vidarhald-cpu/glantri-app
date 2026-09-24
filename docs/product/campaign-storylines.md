@@ -29,8 +29,14 @@ These negative boundaries are as binding as the scope below.
   domain model, which is controlled by
   [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md).
 - It does **not** authorize schema, migration, runtime or UI implementation.
-- It does **not** decide where Story Notes are stored, and it does not answer
-  [OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives).
+- It does **not** choose a physical storage representation for Storylines or
+  Story Notes ([section 2.1](#21-relationships-must-be-referentially-sound)).
+- It does **not** answer
+  [OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives),
+  and **must not be read as broadening into a general resolution of it.**
+  Recording Storyline and Story Note as dedicated GM-only domain objects settles
+  those two objects and nothing else about where the Campaign-scoped GM-only
+  dossier lives.
 
 ---
 
@@ -42,6 +48,11 @@ Two concepts, and no more.
 
 **Story Note** — a GM-only native text node inside a Storyline.
 
+**Both are dedicated GM-only domain objects.** A Storyline is **not** an
+Artifact, a Story Note is **not** an Artifact, and neither is an instance of a
+generic Note or knowledge-management system. They are modelled as their own
+domain objects with their own GM-only lifecycle.
+
 A Story Note supports:
 
 - a title;
@@ -50,18 +61,29 @@ A Story Note supports:
 - ordering and hierarchy;
 - an optional lightweight type/category, such as chapter, person, event,
   background, object or general;
-- **typed links** to People, Items, Artifacts, Scenarios and other appropriate
-  game objects;
+- **typed links** to **at least People, Items, Artifacts and Scenarios**, and to
+  other appropriate game objects;
 - links to other Story Notes;
 - ordinary external hyperlinks.
 
-### 2.1 The hierarchy is flexible
+### 2.1 Relationships must be referentially sound
+
+The requirement on every relationship above — parent, Story-Note link and typed
+link to a game object — is that it is a **referentially sound typed
+relationship**: the target type is known, the target exists, and a deleted or
+moved target cannot leave a dangling or mistyped reference.
+
+**No physical representation is chosen here.** This contract states the
+requirement, not a table, column, join or storage shape; the implementing lane
+selects one that satisfies it.
+
+### 2.2 The hierarchy is flexible
 
 **Story → Chapter → Event is not a required schema and must not be prescribed as
 one.** A chapter may link to several Scenarios, and one Scenario may relate to
 multiple Storylines.
 
-### 2.2 Story Notes never absorb domain state
+### 2.3 Story Notes never absorb domain state
 
 **A Story Note about a Person does not become a Person or Character field.** It
 **links** to the canonical Person. The canonical editors remain the only home

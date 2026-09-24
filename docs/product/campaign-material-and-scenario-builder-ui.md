@@ -124,6 +124,25 @@ information. The Artifact-role half of this model is the V1 vocabulary in
 — selected primary portrait, selected general appearance, additional
 illustration — and selection remains independent of visibility.
 
+### 3.1 The two canonical presentation texts
+
+The **general/unidentified description** and the **identified description** are
+**two canonical texts on the Person presentation model**. They are not Artifact
+content, not a Story Note ([Campaign Storylines §2](campaign-storylines.md#2-model)),
+and not the GM-only dossier.
+
+| Text                                 | Player-safe                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| **general/unidentified description** | while the Person is visible but **unidentified**                                                  |
+| **identified description**           | once the Person is **recognized** ([section 7.4](#74-recognition-is-shared-scenario-party-state)) |
+
+**The GM-only dossier remains private and is neither of these texts.** Its
+structural-exclusion standard in
+[People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier)
+is unchanged, and no part of it may be surfaced as a presentation text.
+
+### 3.2 The Person Inspector
+
 The Campaign Material **Person Inspector**:
 
 - manages these representations and their associations;
@@ -131,10 +150,11 @@ The Campaign Material **Person Inspector**:
 - exposes use and history;
 - allows reuse of the Person in another Scenario.
 
-> **Which layer reaches a given viewer is not decided here.** That is a
-> visibility/projection question owned by
-> [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled),
-> which remains open.
+> **Which layer applies is decided by shared Scenario-party recognition state**
+> ([section 7.4](#74-recognition-is-shared-scenario-party-state)), not on the
+> Person. The general modelling of identity revelation —
+> [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
+> — remains open, and per-player recognition remains deferred.
 
 ---
 
@@ -202,7 +222,7 @@ spine.
 
 - Scenario Builder **normally inherits canonical presentation** from
   [section 3](#3-person-presentation-in-campaign-material).
-- It may **sparsely override the image and/or the description, for either
+- It may **optionally override the image and/or the description, for either
   presentation layer, for this Scenario**.
 - **Removing an override returns to the Campaign default.** Defaults are
   **never copied into Scenario state**; absence of an override is inheritance,
@@ -212,24 +232,60 @@ Worked example: the canonical unidentified presentation is a generic officer;
 the Scenario override is a customs-officer disguise; the canonical identified
 presentation is the Captain Varro portrait.
 
-### 7.1 Three distinct concepts
+### 7.1 The resolution rule
+
+> **Scenario override if present → otherwise canonical Person default.**
+
+That is the entire rule. It is applied independently to each of the four
+presentation slots — unidentified image, unidentified description, identified
+image, identified description — and there is **no third layer and no further
+ordering**.
+
+### 7.2 What the override is and is not
+
+The override is **authorized for V1 in exactly this narrow form**, and the
+controlling contract records the amendment at
+[Content authoring §18.11](content-authoring-scenario-preparation-and-artifact-management.md#1811-narrow-scenario-presentation-override-authorized-for-v1).
+
+**Authorized:** a Scenario may optionally override the inherited
+general/unidentified image and/or description, and may optionally override the
+inherited identified image and/or description.
+
+**Not authorized — none of the following may be built:**
+
+| Not authorized                                                                      |
+| ----------------------------------------------------------------------------------- |
+| A **generic context/scope column**                                                  |
+| An **arbitrary resolution hierarchy** beyond [section 7.1](#71-the-resolution-rule) |
+| An **entitlement-specific override system**                                         |
+| A **per-player override**                                                           |
+| **Scenario-scoped primary roles**                                                   |
+| **Modification of the Person's canonical Artifact selections**                      |
+
+The Person's canonical selections stay global and untouched, per
+[Content authoring §4.2](content-authoring-scenario-preparation-and-artifact-management.md#42-the-v1-association-role-vocabulary-for-a-person).
+**Everything that clause 3 of that section forbids, other than this one narrow
+override, remains forbidden**, and the general context-specific override case
+remains deferred to the Product Owner.
+
+### 7.3 Three distinct concepts
 
 **Presence, visibility/recognition and presentation are conceptually distinct**
 and must not be collapsed into one another or into a single flag.
 
-### 7.2 No per-player controls in V1
+### 7.4 Recognition is shared Scenario-party state
 
-**For V1, recognition and presentation state is Scenario-party-wide, not per
-player. V1 builds no per-player visibility or recognition controls.**
+**For V1, recognition is shared Scenario-party state, not per-player state.**
 
-> **Relationship to the deferred half of
-> [Content authoring §18.9](content-authoring-scenario-preparation-and-artifact-management.md#189-open-ppl-9-answered-for-v1).**
-> That ruling defers per-Campaign, per-entitlement-tier and per-Scenario
-> context-specific **representation overrides** and returns them to the Product
-> Owner. The Scenario presentation override in this section falls in that
-> deferred scope. The controlling contract must be amended before an
-> implementing lane builds it; this document records the approved design, not an
-> amendment to §18.9.
+- **Scenario preparation establishes the initial unidentified/identified
+  state.**
+- **The GM may change that state during play.**
+- **Presentation resolves from that shared state**, plus the optional Scenario
+  override and the canonical fallback of [section 7.1](#71-the-resolution-rule).
+
+**Per-player recognition is deferred, not rejected.** V1 builds no per-player
+visibility or recognition controls, and nothing built for V1 may make per-player
+recognition a redesign rather than an extension.
 
 ---
 
@@ -242,25 +298,37 @@ A prepared message may optionally reference a speaker Person, a related Item, a
 related Artifact, an Encounter, and the relevant Scenario stage or context.
 Typical cases are a Person speaking and a narrator or material message.
 
-- Prepared messages **remain GM-only until published**.
-- In V1, publication is **shared to the Scenario's players as a group. There is
-  no per-player audience selector.**
-- **Publishing creates the appropriate durable player-safe Activity/history
-  event**, consistent with
-  [Content authoring §9](content-authoring-scenario-preparation-and-artifact-management.md#9-durable-history).
+- Prepared messages are **GM-only Scenario planning content** and **remain
+  GM-only until published**.
+- **Nothing enters Activity before publication.** A prepared but unpublished
+  message has no Activity representation of any kind.
+- In V1, publication is **party-wide — shared to the Scenario's players as a
+  group. There is no per-player audience selector.**
 - **V1 builds no dialogue trees and no automatic narrative triggers.**
 
-> An unpublished prepared message is not recap-eligible: it is excluded from the
-> session-summary source by
-> [People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source),
-> and eligibility is earned by publication. Prepared announcements are a
-> recorded **deferred** capability in
-> [PPV1 §14](../architecture/player-play-v1.md#14-deferred-capabilities), and
+### 8.1 Publication creates a `scenario_announcement` Activity event
+
+**Publishing a prepared message creates an explicit player-safe Activity event
+of kind `scenario_announcement`**, consistent with
+[Content authoring §9](content-authoring-scenario-preparation-and-artifact-management.md#9-durable-history)
+and projected by the rules in
+[PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules).
+
+The event carries **the published text and only the safe references needed for
+rendering and history** — no GM-only preparation context travels with it.
+
+> **Implementing this persisted Activity kind is floor-class.** It changes
+> persisted player-safe/privacy-projected semantics, so the lane that builds it
+> carries the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — the
+> same classification
 > [PPV1 §9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)
-> records that adding an announcement event type is a persisted-semantics change
-> on a privacy-projected surface carrying the
-> [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor). Neither is
-> authorized here.
+> already applies to adding an announcement event type. **This document settles
+> the design; it authorizes no implementation.**
+
+An unpublished prepared message is not recap-eligible: it is excluded from the
+session-summary source by
+[People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source),
+and eligibility is earned by publication.
 
 ---
 
