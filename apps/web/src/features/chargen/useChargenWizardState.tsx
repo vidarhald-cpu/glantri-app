@@ -24,6 +24,7 @@ import {
   applyProfessionGrants,
   buildChargenLanguageSelectionSummary,
   buildChargenMotherTongueSummary,
+  buildChargenCoreRouteStatus,
   applyChargenStatBuild,
   applyChargenStatExchange,
   allocateChargenPoint,
@@ -371,6 +372,13 @@ export function useChargenWizardState() {
     societyId: activeSocietyId,
     societyLevel: activeSocialBand,
   });
+  const coreRouteStatus = buildChargenCoreRouteStatus({
+    content,
+    professionId: selectedProfessionId,
+    progression,
+    societyId: activeSocietyId,
+    socialBand: activeSocialBand,
+  });
   const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(selectableSkillSummary);
   const skillAccess =
     selectedProfessionId && activeSocietyId && activeSocialBand !== undefined
@@ -424,10 +432,7 @@ export function useChargenWizardState() {
   );
   const otherSkills = sortSkills(
     visibleSkillDefinitions.filter(
-      (skill) =>
-        skill.id !== "language" &&
-        skillDisplayGroupIds.get(skill.id) === undefined &&
-        !skillAccess.normalSkillIds.includes(skill.id),
+      (skill) => skill.id !== "language" && !skill.specializationOfSkillId,
     ),
   );
   const skillRowsById = new Map<string, SkillBrowseRow>(
@@ -931,12 +936,33 @@ export function useChargenWizardState() {
       return {
         ...current,
         chargenSelections: {
+          selectedCoreRouteId: current.chargenSelections?.selectedCoreRouteId,
           selectedLanguageIds: current.chargenSelections?.selectedLanguageIds ?? [],
           selectedGroupSlots: nextSelections,
           selectedSkillIds: current.chargenSelections?.selectedSkillIds ?? [],
         },
       };
     });
+  }
+
+  function handleSelectCoreRoute(routeId: string) {
+    if (
+      !coreRouteStatus.requiresSelection ||
+      !coreRouteStatus.applicableRoutes.some((route) => route.id === routeId)
+    ) {
+      return;
+    }
+
+    setProgression((current) => ({
+      ...current,
+      chargenSelections: {
+        selectedCoreRouteId: routeId,
+        selectedGroupSlots: current.chargenSelections?.selectedGroupSlots ?? [],
+        selectedLanguageIds: current.chargenSelections?.selectedLanguageIds ?? [],
+        selectedSkillIds: current.chargenSelections?.selectedSkillIds ?? [],
+      },
+    }));
+    setFeedback(["Profession core route selected. Its requirements now govern completion."]);
   }
 
   function handleToggleLanguageSelection(languageId: string) {
@@ -988,6 +1014,7 @@ export function useChargenWizardState() {
       return {
         ...current,
         chargenSelections: {
+          selectedCoreRouteId: current.chargenSelections?.selectedCoreRouteId,
           selectedLanguageIds: [...currentSelections],
           selectedGroupSlots: current.chargenSelections?.selectedGroupSlots ?? [],
           selectedSkillIds: current.chargenSelections?.selectedSkillIds ?? [],
@@ -1453,7 +1480,7 @@ export function useChargenWizardState() {
                           {skillTypeLabel}
                         </span>
                       ) : null}
-                      {input.showOutsideNormalAccessBadge ? (
+                      {input.showOutsideNormalAccessBadge && !row.isNormalAccess ? (
                         <span style={getBadgeStyle({ muted: true })}>Outside normal access</span>
                       ) : null}
                       <button onClick={() => toggleSkillDetails(row.rowKey)} type="button">
@@ -1678,6 +1705,7 @@ export function useChargenWizardState() {
     chargenPolicy,
     civilizations,
     content,
+    coreRouteStatus,
     coreProfessionSections,
     specialAccessSection,
     currentUser,
@@ -1760,6 +1788,7 @@ export function useChargenWizardState() {
     handleResumeChargen,
     handleResetStatAdjustments,
     handleSelectGroupSlotSkill,
+    handleSelectCoreRoute,
     handleStartChargen,
     handleToggleLanguageSelection,
     setBuildDecreaseStat,

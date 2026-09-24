@@ -5,7 +5,8 @@ import type { CanonicalContentShape } from "./primaryAllocation/_helpers";
 import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { buildChargenMotherTongueSummary } from "./selectionStructure";
-import { getActiveGroupSkillCost } from "./primaryAllocation/costs";
+import { getActiveGroupSkillCost, getOrdinaryPoolTotal } from "./primaryAllocation/costs";
+import { buildChargenCoreRouteStatus } from "./coreRouteSelection";
 
 /** Validate target Chargen purchases against server-resolved content, never caller packages. */
 export function validateTargetChargenBuild(
@@ -47,8 +48,19 @@ export function validateTargetChargenBuild(
     societyId: build.societyId,
     societyLevel: build.societyLevel ?? 1,
   });
-  let primary = 0,
-    secondary = 0;
+  const coreRouteStatus = buildChargenCoreRouteStatus({
+    content,
+    professionId: profession.id,
+    progression: build.progression,
+    societyId: build.societyId,
+    socialBand: build.societyLevel ?? 1,
+  });
+  if (!coreRouteStatus.isSelectionValid)
+    errors.push("Invalid or missing Profession core-route selection.");
+  else if (coreRouteStatus.effectiveRoute && !coreRouteStatus.isComplete)
+    errors.push(`Incomplete Profession core route: ${coreRouteStatus.effectiveRoute.label}.`);
+  let ordinaryEligibleCost = 0,
+    flexibleOnlyCost = 0;
   const p = build.progression;
   // Derived grants are recomputed from purchases using the existing relationship engine.
   // Submitted derived ranks and attribution cannot seed or amplify that computation.
@@ -117,8 +129,9 @@ export function validateTargetChargenBuild(
     const quote = getActiveGroupSkillCost({ content, groupId: group.groupId, progression: p });
     if (quote.cost === undefined) errors.push(quote.error ?? "Invalid group quote.");
     else {
-      primary += group.primaryRanks * quote.cost;
-      secondary += group.secondaryRanks * quote.cost;
+      if (group.secondaryRanks > 0)
+        errors.push(`Invalid flexible-rank attribution for Learning Group ${group.groupId}.`);
+      ordinaryEligibleCost += (group.primaryRanks + group.secondaryRanks) * quote.cost;
     }
   }
   for (const skill of p.skills) {
@@ -136,8 +149,8 @@ export function validateTargetChargenBuild(
         skill.ranks !== skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks
       )
         errors.push("Invalid mother-tongue grant.");
-      primary += skill.primaryRanks * 2;
-      secondary += skill.secondaryRanks * 2;
+      ordinaryEligibleCost += skill.primaryRanks * 2;
+      flexibleOnlyCost += skill.secondaryRanks * 2;
       continue;
     }
     if (
@@ -160,9 +173,16 @@ export function validateTargetChargenBuild(
         }).blockingReasons.map((r) => r.message),
       );
     const ordinary = access.normalSkillIds.includes(skill.skillId);
-    if (skill.primaryRanks && !ordinary) errors.push(`No ordinary access to ${skill.skillId}.`);
-    primary += skill.primaryRanks * 2;
-    secondary += skill.secondaryRanks * (ordinary ? 2 : 1);
+    const purchasedRanks = skill.primaryRanks + skill.secondaryRanks;
+    if (ordinary) {
+      if (purchasedRanks > 0 && (skill.secondaryRanks > 0 || skill.category !== "ordinary"))
+        errors.push(`Invalid ordinary-rank attribution for ${skill.skillId}.`);
+      ordinaryEligibleCost += purchasedRanks * 2;
+    } else {
+      if (purchasedRanks > 0 && (skill.primaryRanks > 0 || skill.category !== "secondary"))
+        errors.push(`Invalid flexible-rank attribution for ${skill.skillId}.`);
+      flexibleOnlyCost += purchasedRanks;
+    }
   }
   for (const spec of p.specializations) {
     if (spec.ranks !== spec.secondaryRanks + (spec.relationshipGrantedRanks ?? 0))
@@ -178,8 +198,10 @@ export function validateTargetChargenBuild(
           target: { targetType: "specialization", specialization: definition },
         }).blockingReasons.map((r) => r.message),
       );
-    secondary += spec.secondaryRanks > 0 ? 4 + (spec.secondaryRanks - 1) * 2 : 0;
+    flexibleOnlyCost += spec.secondaryRanks > 0 ? 4 + (spec.secondaryRanks - 1) * 2 : 0;
   }
+  const primary = Math.min(getOrdinaryPoolTotal(p), ordinaryEligibleCost);
+  const secondary = flexibleOnlyCost + Math.max(0, ordinaryEligibleCost - primary);
   if (p.primaryPoolSpent !== primary || p.secondaryPoolSpent !== secondary)
     errors.push("Recorded Chargen spending does not match authoritative purchase prices.");
   if (

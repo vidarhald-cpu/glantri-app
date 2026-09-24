@@ -24,6 +24,7 @@ interface SkillAllocationStepProps {
 export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
   const {
     content,
+    coreRouteStatus,
     coreProfessionSections,
     draftView,
     expandedAllocationSections,
@@ -32,6 +33,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     handleRemoveAllocation,
     handleRemoveSpecialization,
     handleSelectGroupSlotSkill,
+    handleSelectCoreRoute,
     handleToggleLanguageSelection,
     languageSelectionSummary,
     languageSkillViews,
@@ -146,6 +148,87 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
             </div>
           </div>
         </div>
+
+        {coreRouteStatus.requiresSelection ? (
+          <section
+            aria-labelledby="profession-core-route-heading"
+            style={{
+              background: "#fbfaf5",
+              border: "1px solid #d9ddd8",
+              borderRadius: 12,
+              display: "grid",
+              gap: "0.75rem",
+              padding: "1rem",
+            }}
+          >
+            <div style={{ display: "grid", gap: "0.25rem" }}>
+              <h3 id="profession-core-route-heading" style={{ margin: 0 }}>
+                Choose your Profession core route
+              </h3>
+              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                This choice defines which mandatory training completes the Profession. Training
+                offered by the other route remains available for purchase.
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: "0.6rem" }}>
+              {coreRouteStatus.applicableRoutes.map((route) => {
+                const groupNames = route.groupIds.map(
+                  (id) => content.skillGroups.find((group) => group.id === id)?.name ?? id,
+                );
+                const skillNames = route.skillIds.map(
+                  (id) => content.skills.find((skill) => skill.id === id)?.name ?? id,
+                );
+                const requirements = [
+                  ...groupNames,
+                  ...skillNames,
+                  ...(route.writtenLanguageChoiceCount > 0
+                    ? [`${route.writtenLanguageChoiceCount} written-language choice`]
+                    : []),
+                ];
+
+                return (
+                  <label
+                    key={route.id}
+                    style={{
+                      alignItems: "start",
+                      background:
+                        coreRouteStatus.selectedCoreRouteId === route.id ? "#ece8da" : "#fff",
+                      border: "1px solid #d9ddd8",
+                      borderRadius: 10,
+                      display: "grid",
+                      gap: "0.25rem",
+                      gridTemplateColumns: "auto minmax(0, 1fr)",
+                      padding: "0.75rem",
+                    }}
+                  >
+                    <input
+                      checked={coreRouteStatus.selectedCoreRouteId === route.id}
+                      name="profession-core-route"
+                      onChange={() => handleSelectCoreRoute(route.id)}
+                      type="radio"
+                      value={route.id}
+                    />
+                    <span style={{ display: "grid", gap: "0.2rem" }}>
+                      <strong>{route.label}</strong>
+                      <span style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                        {requirements.length > 0
+                          ? requirements.join(" • ")
+                          : "No purchases required"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {coreRouteStatus.effectiveRoute ? (
+              <div role="status" style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                {coreRouteStatus.isComplete
+                  ? "Selected core route complete."
+                  : "Selected core route still has required training to acquire."}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         <section
           style={{

@@ -19,6 +19,11 @@ export const EXISTING_SPECIALIZATION_COST = 2;
 
 export type ChargenSkillAccessRoute = "ordinary" | "flexible";
 
+export interface ChargenPoolAllocation {
+  primary: number;
+  secondary: number;
+}
+
 export function getSkillSpendCost(skill: SkillDefinition): number;
 export function getSkillSpendCost(
   skill: SkillDefinition | ChargenTargetSkillDefinition,
@@ -108,7 +113,7 @@ export function getActiveGroupSkillCost(input: {
       : total;
   }, 0);
 
-  if (totalIndividualCost <= 0) {
+  if (totalIndividualCost <= 0 && (group.specializationIds?.length ?? 0) === 0) {
     return { error: "This skill group has no active skills to price." };
   }
 
@@ -158,18 +163,17 @@ export function chooseChargenPool(input: {
   normalAccess: boolean;
   profile?: RolledCharacterProfile;
   progression: CharacterProgression;
-}): "primary" | "secondary" | null {
+}): ChargenPoolAllocation | null {
   const ordinaryRemaining =
     getOrdinaryPoolTotal(input.progression) - input.progression.primaryPoolSpent;
   const flexibleRemaining =
     getFlexiblePoolTotal(input.profile, input.progression) - input.progression.secondaryPoolSpent;
 
-  if (input.normalAccess && ordinaryRemaining >= input.cost) {
-    return "primary";
-  }
+  const primary = input.normalAccess ? Math.min(Math.max(0, ordinaryRemaining), input.cost) : 0;
+  const secondary = input.cost - primary;
 
-  if (flexibleRemaining >= input.cost) {
-    return "secondary";
+  if (flexibleRemaining >= secondary) {
+    return { primary, secondary };
   }
 
   return null;

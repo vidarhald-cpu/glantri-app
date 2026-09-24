@@ -408,6 +408,23 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.blockingReasons).toHaveLength(0);
   });
 
+  it("allows a required dependency from a persisted relationship-granted rank", () => {
+    const progression = buildProgression({ literacy: 0 });
+    progression.skills[0]!.relationshipGrantedRanks = 1;
+    progression.skills[0]!.ranks = 1;
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression,
+      target: {
+        skill: getSkill("history"),
+        targetType: "skill",
+      },
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
   it("warns but allows when a recommended dependency is missing", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,
@@ -648,6 +665,23 @@ describe("evaluateSkillSelection", () => {
     const evaluation = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({}, { combat: 3 }),
+      target: {
+        specialization: getSpecialization("dueling"),
+        targetType: "specialization",
+      },
+    });
+
+    expect(evaluation.isAllowed).toBe(true);
+    expect(evaluation.blockingReasons).toHaveLength(0);
+  });
+
+  it("allows a specialization when persisted relationship ranks meet the parent threshold", () => {
+    const progression = buildProgression({ weapon_training: 0 });
+    progression.skills[0]!.relationshipGrantedRanks = 3;
+    progression.skills[0]!.ranks = 3;
+    const evaluation = evaluateSkillSelection({
+      content: testContent,
+      progression,
       target: {
         specialization: getSpecialization("dueling"),
         targetType: "specialization",

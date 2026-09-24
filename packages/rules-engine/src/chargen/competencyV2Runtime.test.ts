@@ -4,7 +4,15 @@ import {
   getApprovedTargetChargenContent,
   getApprovedV2RuntimeContent,
 } from "@glantri/content";
-import { allocateChargenPoint, createChargenProgression } from "./primaryAllocation";
+import {
+  allocateChargenPoint,
+  buildChargenSkillAccessSummary,
+  chooseChargenPool,
+  createChargenProgression,
+  getActiveGroupSkillCost,
+  getAllowedSecondaryGroupIds,
+} from "./primaryAllocation";
+import { buildChargenCoreRouteStatus } from "./coreRouteSelection";
 import {
   buildChargenMotherTongueSummary,
   buildChargenSelectableSkillSummary,
@@ -215,5 +223,227 @@ describe("canonical V2 runtime projection", () => {
     expect(
       allocateChargenPoint({ ...base, societyId: "pastoral_clan_nomadic", societyLevel: 2 }).error,
     ).toBeUndefined();
+  });
+
+  it("keeps every base Skill discoverable on the individual purchase surface", () => {
+    const access = buildChargenSkillAccessSummary({
+      content,
+      professionId: "profession:soldier",
+      societyId: "renaissance_city_state",
+      societyLevel: 4,
+    });
+    const baseSkillIds = content.skills
+      .filter((skill) => !skill.specializationOfSkillId)
+      .map((skill) => skill.id);
+
+    expect(access.otherSkillIds).toEqual(expect.arrayContaining(baseSkillIds));
+    expect(access.otherSkillIds).toContain("brawling");
+    expect(access.otherSkillIds).toEqual(expect.arrayContaining(access.normalSkillIds));
+  });
+
+  it("resolves V2 flexible group access at band 4 without a Profession filter", () => {
+    const allowed = getAllowedSecondaryGroupIds(content, "renaissance_city_state", 4);
+    const courier = available("profession:courier", 6, 4);
+
+    expect(allowed.length).toBeGreaterThan(0);
+    expect(allowed.some((groupId) => !courier.availableGroupIds.includes(groupId))).toBe(true);
+    expect(allowed).toEqual(
+      expect.arrayContaining(
+        projection.groupBounds
+          .filter(
+            (bound) =>
+              (bound.minSocietyLevel ?? 1) <= 6 &&
+              Number((bound.minSocialBand ?? "L1").slice(1)) <= 4,
+          )
+          .map((bound) => bound.groupId),
+      ),
+    );
+  });
+
+  it("persists one applicable core route for completion without narrowing acquisition", () => {
+    const base = {
+      content,
+      professionId: "profession:courier",
+      societyId: "pastoral_clan_nomadic",
+      societyLevel: 1,
+    };
+    const progression = createChargenProgression();
+    const missingSelection = buildChargenCoreRouteStatus({
+      ...base,
+      progression,
+      socialBand: base.societyLevel,
+    });
+
+    expect(missingSelection.applicableRoutes).toHaveLength(3);
+    expect(missingSelection.requiresSelection).toBe(true);
+    expect(missingSelection.isSelectionValid).toBe(false);
+
+    progression.chargenSelections = {
+      ...progression.chargenSelections!,
+      selectedCoreRouteId: "profession:courier:core:foot",
+    };
+    const before = buildChargenCoreRouteStatus({
+      ...base,
+      progression,
+      socialBand: base.societyLevel,
+    });
+    expect(before.effectiveRoute?.id).toBe("profession:courier:core:foot");
+    expect(before.isComplete).toBe(false);
+
+    const foot = allocateChargenPoint({
+      ...base,
+      progression,
+      targetId: "F04",
+      targetType: "group",
+    });
+    expect(foot.error).toBeUndefined();
+    expect(
+      buildChargenCoreRouteStatus({
+        ...base,
+        progression: foot.progression,
+        socialBand: base.societyLevel,
+      }).isComplete,
+    ).toBe(true);
+
+    const otherRoutePurchase = allocateChargenPoint({
+      ...base,
+      progression: foot.progression,
+      targetId: "G05",
+      targetType: "group",
+    });
+    expect(otherRoutePurchase.error).toBeUndefined();
+    expect(otherRoutePurchase.progression.chargenSelections?.selectedCoreRouteId).toBe(
+      "profession:courier:core:foot",
+    );
+  });
+
+  it("uses the sole applicable core route without persisting an artificial choice", () => {
+    const progression = createChargenProgression();
+    const status = buildChargenCoreRouteStatus({
+      content,
+      professionId: "profession:courier",
+      progression,
+      societyId: "forager_ritual_tribal",
+      socialBand: 1,
+    });
+
+    expect(status.applicableRoutes.map((route) => route.id)).toEqual([
+      "profession:courier:core:foot",
+    ]);
+    expect(status.requiresSelection).toBe(false);
+    expect(status.isSelectionValid).toBe(true);
+    expect(status.effectiveRoute?.id).toBe("profession:courier:core:foot");
+    expect(progression.chargenSelections?.selectedCoreRouteId).toBeUndefined();
+  });
+
+  it("splits one eligible purchase across Ordinary then Flexible funds", () => {
+    expect(
+      chooseChargenPool({
+        cost: 7,
+        normalAccess: true,
+        progression: {
+          ...createChargenProgression(),
+          primaryPoolSpent: 58,
+          secondaryPoolTotal: 5,
+        },
+      }),
+    ).toEqual({ primary: 2, secondary: 5 });
+  });
+
+  it("reallocates identical builds deterministically regardless of purchase order", () => {
+    const context = {
+      content,
+      professionId: "profession:courier",
+      societyId: "pastoral_clan_nomadic",
+      societyLevel: 1,
+    };
+    const buyInOrder = (skillIds: string[]) => {
+      let progression = {
+        ...createChargenProgression(),
+        primaryPoolTotal: 1,
+        secondaryPoolTotal: 20,
+      };
+      for (const targetId of skillIds) {
+        const result = allocateChargenPoint({
+          ...context,
+          progression,
+          targetId,
+          targetType: "skill",
+        });
+        expect(result.error).toBeUndefined();
+        progression = result.progression;
+      }
+      return progression;
+    };
+    const first = buyInOrder(["skill:wayfinding", "skill:deception"]);
+    const second = buyInOrder(["skill:deception", "skill:wayfinding"]);
+
+    expect(first.primaryPoolSpent).toBe(second.primaryPoolSpent);
+    expect(first.secondaryPoolSpent).toBe(second.secondaryPoolSpent);
+    expect(
+      first.skills
+        .map(({ skillId, category, primaryRanks, secondaryRanks }) => ({
+          skillId,
+          category,
+          primaryRanks,
+          secondaryRanks,
+        }))
+        .sort((left, right) => left.skillId.localeCompare(right.skillId)),
+    ).toEqual(
+      second.skills
+        .map(({ skillId, category, primaryRanks, secondaryRanks }) => ({
+          skillId,
+          category,
+          primaryRanks,
+          secondaryRanks,
+        }))
+        .sort((left, right) => left.skillId.localeCompare(right.skillId)),
+    );
+  });
+
+  it("prices and purchases a Specialization-only Learning Group without granting the Specialization", () => {
+    const specializedContent = structuredClone(content);
+    specializedContent.skillGroups.push({
+      id: "test:specialization-only",
+      name: "Specialization-only instruction",
+      specializationIds: ["fencing"],
+      sortOrder: 999,
+    });
+    const courier = specializedContent.competencyV2!.paths.find(
+      (path) => path.id === "profession:courier",
+    )!;
+    courier.routes.push({
+      groupId: "test:specialization-only",
+      id: "test:specialization-only-route",
+      kind: "group",
+      label: "Specialization-only route",
+      skillIds: [],
+      specializationIds: [],
+    });
+    const progression = createChargenProgression();
+
+    expect(
+      getActiveGroupSkillCost({
+        content: specializedContent,
+        groupId: "test:specialization-only",
+        progression,
+      }),
+    ).toEqual({ cost: 1 });
+    const purchase = allocateChargenPoint({
+      content: specializedContent,
+      professionId: "profession:courier",
+      progression,
+      societyId: "pastoral_clan_nomadic",
+      societyLevel: 1,
+      targetId: "test:specialization-only",
+      targetType: "group",
+    });
+    expect(purchase.error).toBeUndefined();
+    expect(purchase.progression.skillGroups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ groupId: "test:specialization-only", primaryRanks: 1 }),
+      ]),
+    );
+    expect(purchase.progression.specializations).toHaveLength(0);
   });
 });
