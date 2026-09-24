@@ -2,9 +2,10 @@
 
 ## 1. Status and scope
 
-**Status:** Product Owner approved, 2026-09-23. This is the **controlling
-contract** for content authoring, Scenario preparation and Artifact management.
-Implementation is **not** authorized by this document.
+**Status:** Product Owner approved, 2026-09-23; extended by the Product Owner
+rulings of 2026-09-24. This is the **controlling contract** for content
+authoring, Scenario preparation and Artifact management. Implementation is
+**not** authorized by this document.
 
 **Authority:** PRODUCT OWNER RULINGS recorded on
 [#284](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284) and
@@ -13,7 +14,10 @@ the 2026-09-23 rulings on the three conflicts a reconciliation pass surfaced
 (C1, C2, C3), the partial-acceptance clarification, the canonical Artifact
 Association ruling, the resolution of OPEN-PPL-6, the resolution of OPEN-PPL-4,
 the Scenario GM Plan storage ruling, and the supplementary managing-GM
-authority ruling that completes OPEN-PPL-4.
+authority ruling that completes OPEN-PPL-4 — plus the **2026-09-24** rulings
+that answer **OPEN-PPL-9 for V1** while deferring future context-specific
+scoping ([section 18.9](#189-open-ppl-9-answered-for-v1)) and **defer
+OPEN-PPL-10 without deciding it** ([section 18.10](#1810-open-ppl-10-deferred-and-non-blocking)).
 
 This contract **generalizes an implemented pipeline**. It does not introduce a
 second import system, and no reader should build one from it.
@@ -31,11 +35,16 @@ points here and this document governs.
   Player Play V1, #271, or #119 Artifact Management, except where a ruling in
   [section 18](#18-rulings-recorded-here) explicitly and narrowly amends it.
 - It does **not** authorize schema, migration, runtime or UI implementation.
-- It does **not** resolve any open decision other than OPEN-PPL-6 and
-  OPEN-PPL-4. The other nine `OPEN-PPL-*` decisions in
-  [the People/Artifact/GM authoring model](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen)
-  remain open and unchanged. OPEN-PPL-4 is settled by the 2026-09-23 Product
-  Owner ruling recorded in that document and reflected here in
+- It resolves **only** OPEN-PPL-6 and OPEN-PPL-4 (both settled and closed,
+  2026-09-23), and records the two Product Owner rulings of **2026-09-24**:
+  **OPEN-PPL-9 answered for V1** with future scoping deferred
+  ([section 18.9](#189-open-ppl-9-answered-for-v1)), and **OPEN-PPL-10 deferred
+  while remaining open** ([section 18.10](#1810-open-ppl-10-deferred-and-non-blocking)).
+  In the
+  [People/Artifact/GM authoring model](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen),
+  **seven decisions — OPEN-PPL-1, 2, 3, 5, 7, 8 and 11 — remain open, unranked
+  and unchanged.** OPEN-PPL-4 is settled by the 2026-09-23 Product Owner ruling
+  recorded in that document and reflected here in
   [section 19.4](#194-reusable-profession-npc-representatives-depend-on-an-existing-open-decision).
 - It does **not** answer
   [#279](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/279). See
@@ -90,17 +99,27 @@ it**, not separate subsystems.
 
 Four pieces of state are independent and must not be collapsed:
 
-| State                     | Lives on        | Meaning                                                                     |
-| ------------------------- | --------------- | --------------------------------------------------------------------------- |
-| Artifact identity         | the Artifact    | which logical Artifact this is, stable across revisions                     |
-| Artifact `kind`           | the Artifact    | what the media is — map, image, portrait, document, handout                 |
-| Association `role`        | the association | how it is used here — primary portrait, general appearance, fallback, other |
-| Visibility / presentation | separate state  | who may see it, and what is currently shown                                 |
+| State                     | Lives on        | Meaning                                                                                              |
+| ------------------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
+| Artifact identity         | the Artifact    | which logical Artifact this is, stable across revisions                                              |
+| Artifact `kind`           | the Artifact    | what the media is — map, image, portrait, document, handout                                          |
+| Association `role`        | the association | how it is used here — primary portrait, general appearance, additional illustration, fallback, other |
+| Visibility / presentation | separate state  | who may see it, and what is currently shown                                                          |
 
 **`kind` is not `role`.** The same Artifact may be a portrait by kind and a
 fallback by role in one association and a primary portrait in another. This is
 the structural consequence of the OPEN-PPL-6 resolution in
 [section 18.6](#186-open-ppl-6-resolved).
+
+**Selection is not visibility.** The 2026-09-24 ruling in
+[section 18.9](#189-open-ppl-9-answered-for-v1) settles for V1 that a persistent
+Person carries **at most one selected primary portrait**, **at most one selected
+general appearance**, and **zero or more additional illustrations**, all
+**global to that Person** — and that **Artifact visibility remains independent**
+of those selections. Selecting an Artifact as a Person's primary portrait
+therefore reveals nothing and publishes nothing; the fourth row of the table
+above continues to decide who may see it. The two selected roles are
+**independent singletons**, not one slot with two possible fillers.
 
 This restates and does not change
 [#284 §6 as recorded](people-artifact-and-gm-authoring-model.md#7-artifact-and-representation-lifecycle):
@@ -142,7 +161,8 @@ typed associations**, not free-form tags. Ordinary tags remain, for search.
 Required capabilities, restated as a checklist:
 
 1. typed target / domain;
-2. association role;
+2. association role — see [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person)
+   for the V1 vocabulary this must carry for a Person;
 3. Campaign scope;
 4. bidirectional lookup;
 5. durable historical association (see [section 9](#9-durable-history));
@@ -166,6 +186,47 @@ Attaching, referencing or sharing still transfers no ownership
 ([Artifact Management §6.4](../architecture/artifact-management-package-import.md#64-no-implicit-ownership-transfer)),
 and a reference still grants no view rights
 ([§9.2](../architecture/artifact-management-package-import.md#92-references-do-not-grant-view-rights)).
+
+### 4.2 The V1 association-role vocabulary for a Person
+
+**PRODUCT OWNER RULING, 2026-09-24.** Full text and the deferral boundary are in
+[section 18.9](#189-open-ppl-9-answered-for-v1). This section records what the
+association layer above must support **for a persistent Person in V1**, and
+nothing more.
+
+| V1 role                         | Multiplicity per Person | Selection scope          |
+| ------------------------------- | ----------------------- | ------------------------ |
+| **selected primary portrait**   | **at most one**         | **global to the Person** |
+| **selected general appearance** | **at most one**         | **global to the Person** |
+| **additional illustration**     | **zero or more**        | **global to the Person** |
+
+Binding on the implementing lane:
+
+1. The two selected roles are **independent singletons**. A Person may hold
+   both, either, or neither. They are not two values of one "primary" slot.
+2. Additional illustrations are an **open set** with no selection semantics.
+3. **Selections are global to the Person.** V1 builds **no** generalized
+   Campaign-, Scenario-, entitlement- or play-context-specific primary-selection
+   system, and **no** scope column, override table or resolution-order rule for
+   a scope that does not yet exist.
+4. **Artifact visibility is independent of selection**, per
+   [section 3](#3-one-artifact-system).
+5. **"At most one selected" constrains selection, not association
+   multiplicity.** A Person still carries zero, one or many Artifact
+   associations. Implementing this as a one-to-one pointer field is explicitly
+   **not acceptable** under
+   [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics),
+   which is unchanged by this ruling.
+6. The vocabulary is **not closed against future roles**, and the global scope
+   above is the **default** that a future context-specific override would
+   override. Recording it does not foreclose the deferred options; building an
+   override mechanism now exceeds the ruling.
+
+This sits **inside** the OPEN-PPL-6 resolution
+([section 18.6](#186-open-ppl-6-resolved)) rather than amending it: role remains
+on the association, intrinsic representation nature remains on the Artifact, and
+representation readiness remains **derived** from both
+([section 15](#15-representation-readiness)).
 
 ---
 
@@ -230,6 +291,17 @@ never a second Inspector.
 **Filters** include: Scenario; Encounter; type/kind; association role;
 visibility; author/source; batch; association status; representation readiness;
 and free search/tags.
+
+The **association-role filter** is a filter over the role vocabulary that
+already exists on the association. For a Person in V1 that vocabulary is the one
+in [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) — selected
+primary portrait, selected general appearance, additional illustration — and the
+filter is **global**, matching the global scope of the selections themselves.
+Because selection and visibility are independent, the role filter and the
+**visibility** filter are **separate filters that must not be conflated**:
+filtering to "selected primary portrait" says nothing about who can see it.
+This filter must **not** acquire a per-Campaign, per-tier or per-play-context
+selection dimension in V1; no such dimension exists to filter on.
 
 **Required capability:** the GM must be able to **filter to all content used by
 a Scenario without entering that Scenario's play UI.**
@@ -603,6 +675,26 @@ separate reporting area.
 > and the association's role. It is **not** a fourth stored flag, and it must not
 > reintroduce a single ambiguous generic/specific boolean.
 
+**For a Person in V1, the association half of that derivation is now
+determinable.** The roles readiness derives from are exactly those in
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person), and the
+selections are **global to the Person**, so **readiness for a Person is likewise
+a single global state** in V1 — there is no per-Campaign, per-tier or
+per-Scenario readiness value, because there is no such selection to derive one
+from. Readiness is still **derived**, not stored.
+
+Because **selection is independent of visibility**, readiness reports what a
+representation **is**, never what a given viewer may see. A Person whose
+selected primary portrait is bespoke reads **bespoke** even where that Artifact
+is not visible to a particular viewer; the Campaign Material surface's
+visibility filter is the separate axis for that.
+
+> **Extensibility, without building it.** If a future ruling introduces
+> context-specific representation overrides
+> ([section 18.9](#189-open-ppl-9-answered-for-v1)), readiness stays derived and
+> simply derives from the selection that resolves in that context. **V1 must not
+> anticipate that by storing readiness or by adding a scope dimension to it.**
+
 ---
 
 ## 16. AI parity
@@ -622,13 +714,16 @@ what a package may carry, and every widening inherits the parity obligation.
 
 ## 17. Scope boundaries
 
-| Item                            | Status                                                                                                                  |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Reusable Encounter templates    | **Later scope.** Recorded, not authorized.                                                                              |
-| Random-Encounter mechanics      | **Not in scope.**                                                                                                       |
-| Content Production Interface    | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface).                  |
-| Storage of the Scenario GM Plan | **Settled**, 2026-09-23. See [section 8.1](#81-the-scenario-gm-plan) and [section 18.7](#187-scenario-gm-plan-storage). |
-| Anything gated on #279          | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                                              |
+| Item                                             | Status                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reusable Encounter templates                     | **Later scope.** Recorded, not authorized.                                                                                                                                                                                                                                       |
+| Random-Encounter mechanics                       | **Not in scope.**                                                                                                                                                                                                                                                                |
+| Content Production Interface                     | **Future target architecture only.** See [section 19](#19-future-target-content-production-interface).                                                                                                                                                                           |
+| Storage of the Scenario GM Plan                  | **Settled**, 2026-09-23. See [section 8.1](#81-the-scenario-gm-plan) and [section 18.7](#187-scenario-gm-plan-storage).                                                                                                                                                          |
+| Anything gated on #279                           | Blocked; see [section 11.6](#116-visibility-everything-begins-gm-private).                                                                                                                                                                                                       |
+| V1 representation selection                      | **Settled for V1**, 2026-09-24: two global singleton roles plus additional illustrations, visibility independent. See [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) and [section 18.9](#189-open-ppl-9-answered-for-v1).                                    |
+| Context-specific representation overrides        | **Deferred, not rejected.** Per Campaign / entitlement tier / Scenario / play context. Not built in V1; returns to the Product Owner. See [section 18.9](#189-open-ppl-9-answered-for-v1).                                                                                       |
+| Player self-service Artifact creation/management | **Future scope, and non-blocking for this contract.** [OPEN-PPL-10](people-artifact-and-gm-authoring-model.md#open-ppl-10--the-authority-model-for-player-self-service-artifacts) stays **open and deferred**; see [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). |
 
 ---
 
@@ -760,6 +855,82 @@ carries the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor).
 > materialization/promotion from reusable content to a persistent Character
 > remains its concern.
 
+### 18.9 OPEN-PPL-9 answered for V1
+
+**Status:** **SETTLED FOR V1, 2026-09-24. Future scoping DEFERRED, not
+rejected — this decision is not closed.** **Authority:** Product Owner.
+**Was, and remains the standing record:**
+[OPEN-PPL-9 — The scope of a selected primary representation](people-artifact-and-gm-authoring-model.md#open-ppl-9--the-scope-of-a-selected-primary-representation).
+**Gates:** **Nothing in V1.** It no longer gates lane B or lane C. It still
+governs any future context-specific representation override, which must return
+to the Product Owner.
+
+> "**OPEN-PPL-9 / V1 representation selection**: do not build a generalized
+> Campaign-, Scenario-, entitlement- or play-context-specific primary-selection
+> system now.
+> For current V1:
+>
+> - a persistent Person may have at most one selected primary portrait;
+> - at most one selected general appearance;
+> - zero or more additional illustrations;
+> - those selections are global to that Person;
+> - Artifact visibility remains independent.
+>
+> Future context-specific representation overrides are deferred until an actual
+> product need requires them."
+
+**Both halves are binding and neither may be dropped.**
+
+- **The V1 half is a complete, implementable answer.** It is recorded as the V1
+  role vocabulary in
+  [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person), as the
+  selection-versus-visibility separation in [section 3](#3-one-artifact-system),
+  as the role filter in [section 7](#7-central-campaign-material-surface), and
+  as global derived readiness in
+  [section 15](#15-representation-readiness). A lane needs no further ruling to
+  build it.
+- **The deferred half is a deferral, not a rejection.** Per-Campaign,
+  per-entitlement-tier and per-Scenario/per-play-context scoping remain
+  available to a future Product Owner decision. Nothing recorded here may be
+  read as ruling them out, and nothing here may be implemented in a way that
+  would make them a redesign rather than an extension. Under the Product Owner's
+  [decision frontier](people-artifact-and-gm-authoring-model.md#151-the-decision-frontier),
+  **reasonable extensibility is sufficient; hypothetical completeness is not
+  required** — so V1 builds the global default and **not** the override
+  mechanism.
+
+**It resolves nothing else.**
+[OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
+is untouched: which of a Person's two selected roles reaches a given viewer is a
+visibility/projection question that OPEN-PPL-1 still owns.
+[PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)
+and [section 18.6](#186-open-ppl-6-resolved) are both unchanged.
+
+### 18.10 OPEN-PPL-10 deferred and non-blocking
+
+**Status:** **OPEN. Deferred as of 2026-09-24. No option is chosen, ranked or
+rejected. It is not settled and not closed.** **Authority for the deferral:**
+Product Owner. **Standing record:**
+[OPEN-PPL-10 — The authority model for player self-service Artifacts](people-artifact-and-gm-authoring-model.md#open-ppl-10--the-authority-model-for-player-self-service-artifacts).
+**Gates:** **Nothing in the current GM-controlled content-authoring
+implementation.** It still gates any work that actually implements player
+self-service Artifact creation or management.
+
+> "**OPEN-PPL-10**: player self-service Artifact creation/management is future
+> scope and does not block the current GM-controlled content-authoring
+> implementation. Keep the future decision open/deferred until player
+> self-service is actually prioritized."
+
+**What changed is the blocking status, not the decision.** The three options in
+the standing record are preserved intact and **unranked**. This contract governs
+**GM authoring**, and the ruling finds that GM authoring does not materially
+depend on how player self-service authority is eventually modelled. It remains a
+**permission decision and not a Builder choice**; a lane that reaches actual
+player self-service **stops and returns it to the Product Owner**, and the
+deferral is lifted when player self-service is actually prioritized.
+[Artifact Management PO-3](../architecture/artifact-management-package-import.md#po-3--player-artifact-creationsubmission)
+is unchanged and still defers player creation from AM1.
+
 ---
 
 ## 19. Future target: Content Production Interface
@@ -857,16 +1028,16 @@ narrowed here.
 This contract is controlling for the model it describes. The documents below
 retain their own authority for everything else and point here for this model.
 
-| Document                                                                                      | Relationship                                                                                                                                                                      |
-| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                          |
-| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                     |
-| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                       |
-| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                            |
-| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); the other nine remain open. |
-| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                        |
-| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                              |
-| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                        |
-| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                              |
-| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                            |
-| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                             |
+| Document                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                                                                                                                                                                                                                                                                      |
+| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                                                                                                                                                                                                                                                                 |
+| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                                                                                                                                                                                                                                                                   |
+| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                                                                                                                                                                                                                                                                        |
+| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); OPEN-PPL-9 answered **for V1** by [section 18.9](#189-open-ppl-9-answered-for-v1) with future scoping deferred; OPEN-PPL-10 **still open but deferred and non-blocking** per [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). The other seven remain open. |
+| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                                                                                                                                                                                                                                                                    |
+| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                                                                                                                                                                                                                                                                          |
+| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                                                                                                                                                                                                                                                                    |
+| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                                                                                                                                                                                                                                                                          |
+| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                                                                                                                                                                                                                                                                        |
+| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                                                                                                                                                                                                                                                                         |
