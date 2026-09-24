@@ -5,7 +5,7 @@ defined in the
 [canonical development operating model](./process/development-operating-model.md).
 This document owns database isolation and safety procedure.
 
-The normal database at `localhost:5432/glantri` is **protected shared user state**. It can contain valuable development users, characters, campaigns, scenarios, and other records. A separate Git worktree only isolates files; it does not isolate PostgreSQL.
+The normal database at `localhost:5432/glantri` is **protected shared user state**. It can contain valuable development users, characters, campaigns, scenarios, and other records. A separate Git worktree only isolates files; it does not isolate PostgreSQL. The draft/development-stage data policy in `AGENTS.md` does not make this database disposable: it governs whether preservation and migration work is a product requirement, not whether a worker may touch protected shared state.
 
 ## Two Supported Database Modes
 
