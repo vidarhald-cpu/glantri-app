@@ -1640,6 +1640,13 @@ const COMBAT_TASK_LIFECYCLE_PATHS: Record<CombatTaskLifecycleOperation, string> 
  */
 export async function sendCombatTaskLifecycleCommandOnServer(input: {
   actionId: string;
+  /**
+   * Which authorized boundary the command is issued at. `opportunity` (the default) authorizes on
+   * the projected Perform Task descriptor. `declaration` is the declaration-surface cancellation
+   * required by rule decision 0007 ruling 3, and authorizes on the participant's own declaration
+   * descriptor instead; it is only valid with `operation: "finish"` and `finishKind: "cancel"`.
+   */
+  boundary?: "opportunity" | "declaration";
   currentEncounter?: EncounterSession;
   difficulty?: number;
   duration?: CombatGenericActionDuration;
@@ -1674,6 +1681,7 @@ export async function sendCombatTaskLifecycleCommandOnServer(input: {
     {
       body: JSON.stringify({
         actionId: input.actionId,
+        boundary: input.boundary,
         difficulty: input.difficulty,
         duration: input.duration,
         environmentDescription: input.environmentDescription,
@@ -1926,6 +1934,13 @@ export async function assignRoleplayStatCheckOnServer(input: {
   return payload.encounter;
 }
 
+/**
+ * Drives one already-canonical generic Combat action. A1b (Forgejo issue #311) removed this
+ * channel's `declare` operation: it was the only way an arbitrary client-chosen action id could
+ * enter canonical state, and it is refused by the server. Combat Tasks are created at the Combat
+ * declaration, and a declaration-materialized Perform Task is driven only by the canonical
+ * `*-combat-task` lifecycle routes.
+ */
 export async function updateGenericCombatActionOnServer(input: {
   actionId: string;
   difficulty?: number;
@@ -1933,10 +1948,8 @@ export async function updateGenericCombatActionOnServer(input: {
   encounterId: string;
   environmentDescription?: string;
   expectedRevision: string;
-  intent?: string;
   itemId?: string;
-  operation: "declare" | "review" | "activate" | "roll" | "resolve" | "interrupt" | "cancel";
-  participantId?: string;
+  operation: "review" | "activate" | "roll" | "resolve" | "interrupt" | "cancel";
   preset?: "look_around";
   referenceKind?: "none" | "participant" | "item" | "environment";
   referenceParticipantId?: string;

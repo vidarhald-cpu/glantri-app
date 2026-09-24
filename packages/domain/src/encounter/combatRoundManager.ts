@@ -7122,8 +7122,11 @@ export function getCombatTaskScheduledPhase(
 
 /**
  * The one canonical Perform Task holding this participant's primary-action opportunity **in the
- * given phase** in the current round. Declaration-materialized Perform Task declarations only: the legacy parallel
- * generic-action channel keeps its own route until A1b converges it.
+ * given phase** in the current round. Declaration-materialized Perform Task declarations only: an
+ * action carrying no `declarationKind` was not created by declaration and is never projected,
+ * driven or counted as a Perform Task. A1b (Forgejo issue #311) converged the parallel
+ * generic-action route, which no longer creates an action from a client-supplied id and refuses to
+ * drive a declaration-materialized Perform Task at all.
  *
  * A participant can hold more than one live task, because a declaration mints a round-keyed task
  * whenever no live `taskId` carries forward. Selection is therefore explicit rather than by array
@@ -28848,6 +28851,17 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
 export const combatTaskCommandUndoFactsSchema = z
   .object({
     actionId: idSchema,
+    /**
+     * Which authorized boundary issued the command (A1b, Forgejo issue #311).
+     *
+     * `opportunity` is every lifecycle command taken at the actor's own primary-action
+     * opportunity, and is the default an already-persisted record reads back as.
+     * `declaration` is the declaration-surface cancellation required by
+     * [rule decision 0007](../../../../docs/decisions/rules/0007-perform-task-phase-scheduling-and-single-live-task.md)
+     * ruling 3. A `declaration` command touches nothing but the task's own fields, so its undo
+     * restores those fields and removes the command and nothing else.
+     */
+    boundary: z.enum(["opportunity", "declaration"]).default("opportunity"),
     commandId: idSchema,
     kind: z.enum(["review", "advance", "roll", "resolve", "interrupt", "cancel"]),
     phase: combatRoundPhaseSchema,
@@ -28924,6 +28938,7 @@ function requireCombatRoundOpenPerformTask(input: {
 }
 
 function applyCombatTaskCommand(input: {
+  boundary?: "opportunity" | "declaration";
   buildEvent?: (context: { commandId: string; state: CombatRoundState }) => CombatStepEvent;
   command: { commandId?: string; createdAt: string; createdByUserId?: string };
   consumesOpportunity: boolean;
@@ -28943,11 +28958,17 @@ function applyCombatTaskCommand(input: {
   const previousParticipant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
-  const beforeCursor = combatRoundCursorSchema.parse({
-    participantId: input.participantId,
-    roundNumber: normalized.roundNumber,
-    step: getCombatRoundAttackCursorStepForPhase(input.phase),
-  });
+  const atDeclarationBoundary = input.boundary === "declaration";
+  // A declaration-boundary command is cursor-neutral: it records the cursor the round is already
+  // on rather than the action-step cursor a command taken at the opportunity records, and it
+  // leaves that cursor exactly where it was.
+  const beforeCursor = combatRoundCursorSchema.parse(
+    (atDeclarationBoundary ? normalized.currentCursor : undefined) ?? {
+      participantId: input.participantId,
+      roundNumber: normalized.roundNumber,
+      step: getCombatRoundAttackCursorStepForPhase(input.phase),
+    },
+  );
   const commandType = COMBAT_TASK_COMMAND_TYPES[input.kind];
   const commandId =
     input.command.commandId ??
@@ -28959,6 +28980,7 @@ function applyCombatTaskCommand(input: {
     });
   const undoFacts = combatTaskCommandUndoFactsSchema.parse({
     actionId: previousAction.id,
+    boundary: atDeclarationBoundary ? "declaration" : "opportunity",
     commandId,
     kind: input.kind,
     phase: input.phase,
@@ -29030,11 +29052,17 @@ function applyCombatTaskCommand(input: {
     state: combatRoundStateSchema.parse({
       ...advanced,
       commands: [...advanced.commands, command],
-      currentCursor: afterCursor,
-      currentStep: selectedStep,
+      // The declaration boundary changes the task and nothing else: no cursor, no selected step,
+      // no selected participant. That is what makes its undo an exact removal.
+      ...(atDeclarationBoundary
+        ? {}
+        : {
+            currentCursor: afterCursor,
+            currentStep: selectedStep,
+            selectedParticipantId: afterCursor.participantId ?? input.participantId,
+            selectedStep,
+          }),
       ...(event ? { events: [...advanced.events, event] } : {}),
-      selectedParticipantId: afterCursor.participantId ?? input.participantId,
-      selectedStep,
     }),
   };
 }
@@ -29351,6 +29379,83 @@ export function finishCombatTaskAtOpportunity(input: {
   });
 }
 
+/**
+ * The declaration-surface escape required by
+ * [rule decision 0007](../../../../docs/decisions/rules/0007-perform-task-phase-scheduling-and-single-live-task.md)
+ * ruling 3: *"Carry a clear way to cancel an existing live Perform Task as an A1b requirement,
+ * since the current hard block otherwise leaves no verified declaration-surface escape."*
+ *
+ * This is the **same** `cancel_combat_task` command as `finishCombatTaskAtOpportunity`'s cancel —
+ * same command type, same compact versioned inverse facts, same undo — reached at the one other
+ * boundary where a GM meets the one-live-task refusal. It is not a second cancellation path:
+ * the two boundaries are mutually exclusive. While the task holds the actor's open opportunity and
+ * the phase-resolution cursor is on it, this function refuses and Current action owns the cancel;
+ * everywhere else Current action refuses and this one owns it.
+ *
+ * It spends no opportunity and moves no cursor. An escape that consumed the actor's primary action
+ * would not be an escape: the whole point of the ruling is to let a participant blocked from
+ * declaring a new Perform Task declare one instead, in this same round.
+ */
+export function cancelCombatTaskAtDeclarationBoundary(input: {
+  actionId: string;
+  command: { commandId?: string; createdAt: string; createdByUserId?: string };
+  participantId: string;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatTaskCommandOutcome {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const previousAction = normalized.genericActions.find(
+    (candidate) =>
+      candidate.id === input.actionId &&
+      candidate.declarationKind === "perform_task" &&
+      candidate.ownerParticipantId === input.participantId &&
+      candidate.status !== "completed" &&
+      candidate.status !== "cancelled" &&
+      candidate.status !== "interrupted",
+  );
+  if (!previousAction) {
+    throw new RangeError("This participant has no live Combat Task to cancel.");
+  }
+  const phase = getCombatTaskScheduledPhase(previousAction.duration);
+  const cursor = normalized.phaseResolutionCursor;
+  const holdsOpenOpportunity =
+    getCombatRoundOpenPerformTaskForParticipant({
+      participantId: input.participantId,
+      phase,
+      state: normalized,
+    })?.id === previousAction.id;
+  if (
+    holdsOpenOpportunity &&
+    cursor?.phase === phase &&
+    cursor.participantId === input.participantId &&
+    cursor.substep === "perform_task"
+  ) {
+    throw new RangeError(
+      "This Combat Task holds the actor's current action opportunity. Cancel it from Current action.",
+    );
+  }
+
+  return applyCombatTaskCommand({
+    boundary: "declaration",
+    command: input.command,
+    consumesOpportunity: false,
+    extraFacts: { status: "cancelled" },
+    kind: "cancel",
+    nextActions: finishCombatGenericAction({
+      actionId: input.actionId,
+      actions: normalized.genericActions,
+      at: input.updatedAt,
+      status: "cancelled",
+    }),
+    participantId: input.participantId,
+    phase,
+    previousAction,
+    state: normalized,
+    submittedBy: "gm",
+    updatedAt: input.updatedAt,
+  });
+}
+
 function undoCombatTaskCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
@@ -29388,6 +29493,17 @@ function undoCombatTaskCommandAtIndex(input: {
         })
       : candidate,
   );
+  // A declaration-boundary command changed the task and nothing else, so its undo removes the
+  // command and restores the task's own fields. Touching the cursor, the phase-resolution status
+  // or the participant's step statuses here would introduce a change the command never made.
+  if (undo.boundary === "declaration") {
+    return combatRoundStateSchema.parse({
+      ...normalized,
+      commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+      genericActions,
+    });
+  }
+
   const participantStatuses = {
     ...normalized.phaseResolutionStatuses[command.participantId],
     [undo.phase]: undo.previousPhaseResolutionStatus,

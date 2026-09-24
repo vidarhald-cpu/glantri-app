@@ -1736,10 +1736,12 @@ export function PlayerCombatActionSelectorPanel({
             onChange={(event) =>
               commitDeclarationIntent({
                 ...effectiveDeclarationIntent,
+                // Combat Task identity is server-owned (A1b, Forgejo issue #311): the UI never
+                // originates or echoes `taskId`. The server mints it, persists it in the
+                // declaration intent, and falls back to that persisted value across rounds.
                 primaryAction: {
                   actionId: "perform_task",
                   description: event.target.value || undefined,
-                  taskId: effectiveDeclarationIntent.primaryAction?.taskId,
                 },
               })
             }
@@ -1834,7 +1836,6 @@ export function PlayerCombatActionSelectorPanel({
                 secondaryAction: {
                   actionId: secondaryActionId,
                   description: event.target.value || undefined,
-                  taskId: effectiveDeclarationIntent.secondaryAction?.taskId,
                 },
               })
             }

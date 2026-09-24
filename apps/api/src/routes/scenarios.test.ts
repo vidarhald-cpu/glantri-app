@@ -10,6 +10,7 @@ import {
   buildEncounterAccessMetadataViewFromPersistedSession,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
+  getCombatRoundOpenPerformTaskForParticipant,
   canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
   combatDefenseSnapshotSchema,
@@ -3837,7 +3838,15 @@ describe("scenarios route contract", () => {
     );
   });
 
-  it("persists generic Combat actions idempotently and rejects hidden participant references", async () => {
+  /**
+   * A1b (Forgejo issue #311) closed this channel's `declare` operation, which was the only way an
+   * arbitrary client-chosen action id could enter canonical state. The player-safe projection of
+   * this route's mutation response and its idempotency are unchanged, and are re-proved here
+   * through the one operation a player still reaches, `roll`, on an action that already exists.
+   * The player reference selector is retired with `declare`: a player no longer supplies a
+   * reference on this route at all.
+   */
+  it("keeps the player-safe projection and idempotency of a canonical generic Combat action", async () => {
     const encounterParticipants = [
       makeEncounterCombatParticipant({
         id: "encounter-participant-1",
@@ -3909,16 +3918,32 @@ describe("scenarios route contract", () => {
         snapshot: { displayName: "Hidden spy" },
       }),
     ] as unknown as ScenarioParticipant[];
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...encounter.combatRoundState,
+      genericActions: [
+        {
+          createdAt: "2026-09-18T08:00:00.000Z",
+          duration: { kind: "round" },
+          id: "generic-action-1",
+          intent: "Bar the gate.",
+          lastUpdatedAt: "2026-09-18T08:00:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          rollRequest: {
+            basis: { baseValue: 14, kind: "stat", statId: "dex", statLabel: "Dexterity" },
+            difficulty: 26,
+          },
+          status: "active",
+        },
+      ],
+    });
     setupCombatDeclarationRoute({ encounter, participants, user: mocks.playerUser });
     setupMutableCombatRouteState({ encounter, participants, user: mocks.playerUser });
     const app = await buildScenarioTestApp();
     const requestBody = {
       actionId: "generic-action-1",
-      duration: { kind: "round" },
       expectedRevision: encounter.updatedAt,
-      intent: "Bar the gate.",
-      operation: "declare",
-      participantId: "encounter-participant-1",
+      operation: "roll",
     };
 
     const declared = await app.inject({
@@ -3934,9 +3959,12 @@ describe("scenarios route contract", () => {
     const hiddenReference = await app.inject({
       method: "POST",
       payload: {
-        ...requestBody,
         actionId: "generic-action-hidden-ref",
+        duration: { kind: "round" },
         expectedRevision: retried.json().encounter.updatedAt,
+        intent: "Watch the spy.",
+        operation: "declare",
+        participantId: "encounter-participant-1",
         referenceKind: "participant",
         referenceParticipantId: "encounter-participant-hidden",
       },
@@ -3944,14 +3972,15 @@ describe("scenarios route contract", () => {
     });
     await app.close();
 
-    expect(declared.statusCode).toBe(200);
+    expect(declared.statusCode, JSON.stringify(declared.json())).toBe(200);
     expect(declared.json().encounter.combatRoundState.genericActions).toMatchObject([
       {
         id: "generic-action-1",
         intent: "Bar the gate.",
-        status: "declared",
+        status: "active",
       },
     ]);
+    expect(declared.json().encounter.combatRoundState.genericActions[0].rollResult).toBeDefined();
     expect(
       declared
         .json()
@@ -3986,10 +4015,14 @@ describe("scenarios route contract", () => {
     expect(retried.statusCode).toBe(200);
     expect(retried.json().encounter.combatRoundState.genericActions).toHaveLength(1);
     expect(mocks.encounterService.updateCombatEncounter).toHaveBeenCalledTimes(1);
+    // The second creation path is closed: the request never reaches reference resolution, and it
+    // still leaks nothing about the hidden participant it named.
     expect(hiddenReference.statusCode).toBe(400);
     expect(hiddenReference.json()).toEqual({
-      error: "Choose an active visible Combat participant.",
+      code: "declaration_route_required",
+      error: "Declare this Combat Task in the Combat declaration.",
     });
+    expect(mocks.encounterService.updateCombatEncounter).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(hiddenReference.json())).not.toContain("Hidden spy");
     expect(JSON.stringify(hiddenReference.json())).not.toContain("encounter-participant-hidden");
   });
@@ -10616,6 +10649,310 @@ describe("scenarios route contract", () => {
         status: "declared",
       });
     }
+  });
+
+  /**
+   * A1b route convergence — Forgejo issue #311.
+   *
+   * The parallel generic-action route stops being a second way to create and drive a Perform Task,
+   * and Combat Task identity becomes server-owned. Both halves matter: a caller could mint an
+   * arbitrary action id through `POST .../generic-actions` with `operation: "declare"`, then name
+   * that action as its Perform Task in the declaration intent's `taskId`. The declaration adopted
+   * it, which skipped the one-live-task refusal — the adopted action reads as the participant's
+   * existing task rather than a second one — and produced a task the canonical projection never
+   * sees, because an action created outside declaration carries no `declarationKind`.
+   */
+  function setupA1bTaskIdentityFixture(input: { liveTaskStatus?: string } = {}) {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const encounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    }) as EncounterSession;
+    const earlierTaskId = "round:1:participant:encounter-participant-1:declaration:perform_task";
+    encounter.currentRound = 2;
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter }),
+      genericActions: [
+        // An action minted outside declaration. It carries no `declarationKind`, exactly like one
+        // the parallel route used to create from a client-chosen id.
+        {
+          createdAt: "2026-09-18T07:00:00.000Z",
+          duration: { kind: "round" },
+          id: "client-minted-action-1",
+          intent: "Anything at all.",
+          lastUpdatedAt: "2026-09-18T07:00:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          status: "declared",
+        },
+        ...(input.liveTaskStatus
+          ? [
+              {
+                createdAt: "2026-09-18T08:00:00.000Z",
+                declarationKind: "perform_task",
+                duration: { kind: "gm_decided" },
+                id: earlierTaskId,
+                intent: "Bar the gate.",
+                lastUpdatedAt: "2026-09-18T08:00:00.000Z",
+                ownerParticipantId: "encounter-participant-1",
+                progress: { completedRounds: 0 },
+                status: input.liveTaskStatus,
+              },
+            ]
+          : []),
+      ],
+      roundNumber: 2,
+    });
+    const participants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({ controlledByUserId: "other-player", id: "participant-2" }),
+    ];
+    setupCombatDeclarationRoute({ encounter, participants });
+    setupMutableCombatRouteState({
+      encounter,
+      participants: participants as unknown as ScenarioParticipant[],
+    });
+    return { earlierTaskId, encounter, participants };
+  }
+
+  async function declarePerformTask(input: { description: string; taskId?: string }) {
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "perform_task",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        intent: {
+          primaryAction: {
+            actionId: "perform_task",
+            description: input.description,
+            ...(input.taskId ? { taskId: input.taskId } : {}),
+          },
+          relativePositions: [],
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+    return response;
+  }
+
+  it("refuses a client-supplied Combat Task id that would adopt an action created outside declaration", async () => {
+    setupA1bTaskIdentityFixture({ liveTaskStatus: "declared" });
+
+    const response = await declarePerformTask({
+      description: "Haul the cart across the gate.",
+      taskId: "client-minted-action-1",
+    });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+    expect(response.json().error).toMatch(/already has a Combat Task in progress/);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
+  it("mints the server Combat Task id and ignores the client-supplied one", async () => {
+    setupA1bTaskIdentityFixture();
+
+    const response = await declarePerformTask({
+      description: "Haul the cart across the gate.",
+      taskId: "client-minted-action-1",
+    });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+    const tasks = updatedEncounter.combatRoundState.genericActions;
+    expect(tasks).toHaveLength(2);
+    // The named action is untouched: it is neither adopted nor given a `declarationKind`.
+    expect(tasks[0]).toMatchObject({
+      id: "client-minted-action-1",
+      intent: "Anything at all.",
+      status: "declared",
+    });
+    expect(tasks[0].declarationKind).toBeUndefined();
+    expect(tasks[1]).toMatchObject({
+      declarationKind: "perform_task",
+      id: "round:2:participant:encounter-participant-1:declaration:perform_task",
+      intent: "Haul the cart across the gate.",
+      status: "declared",
+    });
+    expect(updatedEncounter.combatRoundState.participants[0].declaration.intent).toMatchObject({
+      primaryAction: {
+        taskId: "round:2:participant:encounter-participant-1:declaration:perform_task",
+      },
+    });
+  });
+
+  /**
+   * The `declarationKind` legacy-projection gap, established rather than assumed. An action with
+   * no `declarationKind` is invisible to `getCombatRoundOpenPerformTaskForParticipant`, so it can
+   * never be projected or driven as a Perform Task, and it never blocks a declaration. It cannot
+   * be reached by carry-forward either: the carried id comes only from the server's own persisted
+   * declaration intent, and the carried action must match the declared kind exactly.
+   */
+  it("never treats an action without declarationKind as a Perform Task", async () => {
+    const fixture = setupA1bTaskIdentityFixture();
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        state: fixture.encounter.combatRoundState!,
+      }),
+    ).toBeUndefined();
+
+    const response = await declarePerformTask({ description: "Bar the gate." });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    const tasks =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+        .genericActions;
+    expect(tasks.map((task: { id: string }) => task.id)).toEqual([
+      "client-minted-action-1",
+      "round:2:participant:encounter-participant-1:declaration:perform_task",
+    ]);
+  });
+
+  it("refuses to create a Combat action from a client-supplied id on the parallel route", async () => {
+    setupA1bTaskIdentityFixture();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "client-minted-action-2",
+        duration: { kind: "round" },
+        expectedRevision: "2026-07-30T08:00:00.000Z",
+        intent: "Mint an action of my own.",
+        operation: "declare",
+        participantId: "encounter-participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/generic-actions",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+    expect(response.json()).toEqual({
+      code: "declaration_route_required",
+      error: "Declare this Combat Task in the Combat declaration.",
+    });
+    expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+  });
+
+  it.each(["review", "activate", "roll", "resolve", "interrupt", "cancel"] as const)(
+    "refuses to %s a declaration-materialized Perform Task through the parallel route",
+    async (operation) => {
+      vi.clearAllMocks();
+      const fixture = setupA1bTaskIdentityFixture({ liveTaskStatus: "active" });
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: fixture.earlierTaskId,
+          expectedRevision: fixture.encounter.updatedAt,
+          operation,
+          visibleToParticipantIds: [],
+        },
+        url: "/encounters/encounter-1/combat-round/generic-actions",
+      });
+      await app.close();
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(409);
+      expect(response.json()).toEqual({
+        code: "task_route_converged",
+        error: "Drive this Combat Task from Current action at the actor's action opportunity.",
+      });
+      expect(mocks.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    },
+  );
+
+  /**
+   * Rule decision 0007 ruling 3's declaration-surface escape, proved as a full round trip: the
+   * declaration is blocked, the GM cancels the live task at the declaration boundary, and the next
+   * declaration succeeds with a freshly minted task id.
+   */
+  it("lets the GM cancel a live Combat Task from the declaration boundary and then declare a new one", async () => {
+    const fixture = setupA1bTaskIdentityFixture({ liveTaskStatus: "declared" });
+
+    const blocked = await declarePerformTask({ description: "Haul the cart across the gate." });
+    expect(blocked.statusCode, JSON.stringify(blocked.json())).toBe(400);
+    expect(blocked.json().error).toMatch(/already has a Combat Task in progress/);
+
+    const membership = resolveEncounterParticipantMembership({
+      encounter: fixture.encounter,
+      scenarioParticipants: fixture.participants as unknown as Parameters<
+        typeof resolveEncounterParticipantMembership
+      >[0]["scenarioParticipants"],
+    });
+    const declarationTask = buildCombatProgressionProjection(
+      initializeCombatRoundState({
+        encounter: { ...fixture.encounter, participants: membership.participants },
+      }),
+    )
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .find(
+        (task) =>
+          task.expectedCommand === "declare_action" &&
+          (task.identity.participantId === "encounter-participant-1" ||
+            (task.owner?.kind === "combatant" &&
+              task.owner.participantId === "encounter-participant-1")),
+      );
+    expect(
+      declarationTask,
+      "the declaration boundary projects a declare_action task",
+    ).toBeDefined();
+
+    const cancelApp = await buildScenarioTestApp();
+    const cancelled = await cancelApp.inject({
+      method: "POST",
+      payload: {
+        actionId: fixture.earlierTaskId,
+        boundary: "declaration",
+        executionGroupId: declarationTask!.executionGroupId,
+        expectedRevision: fixture.encounter.updatedAt,
+        finishKind: "cancel",
+        processId: declarationTask!.processId,
+        scenarioParticipantId: "participant-1",
+        stageId: declarationTask!.stageId,
+        taskId: declarationTask!.id,
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/finish-combat-task",
+    });
+    await cancelApp.close();
+
+    expect(cancelled.statusCode, JSON.stringify(cancelled.json())).toBe(200);
+    const cancelledState = cancelled.json().encounter.combatRoundState;
+    expect(
+      cancelledState.genericActions.find(
+        (action: { id: string }) => action.id === fixture.earlierTaskId,
+      ),
+    ).toMatchObject({ status: "cancelled" });
+    expect(cancelled.json().command).toMatchObject({ type: "cancel_combat_task" });
+    // The escape spends no primary action and moves no cursor.
+    expect(cancelledState.phaseResolutionStatuses["encounter-participant-1"]).toBeUndefined();
+    expect(cancelledState.currentStep).toBe(fixture.encounter.combatRoundState!.currentStep);
+
+    const declared = await declarePerformTask({ description: "Haul the cart across the gate." });
+    expect(declared.statusCode, JSON.stringify(declared.json())).toBe(200);
+    const declaredTasks =
+      mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session.combatRoundState
+        .genericActions;
+    expect(
+      declaredTasks.find((task: { id: string }) => task.id === fixture.earlierTaskId),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      declaredTasks.find(
+        (task: { id: string }) =>
+          task.id === "round:2:participant:encounter-participant-1:declaration:perform_task",
+      ),
+    ).toMatchObject({
+      declarationKind: "perform_task",
+      intent: "Haul the cart across the gate.",
+      status: "declared",
+    });
   });
 
   it.each([

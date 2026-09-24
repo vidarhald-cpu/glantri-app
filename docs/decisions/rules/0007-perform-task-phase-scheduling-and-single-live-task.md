@@ -211,8 +211,18 @@ Perform Tasks"`.
   `packages/domain/src/encounter/combatTaskLifecycle.test.ts`, describe block `"phase duration
 schedules the named primary-action opportunity"`, in particular the tests `"defers the Phase 1
 opportunity when review schedules the task into Phase 2"` and `"never grants two primary actions
-across the two phases"`. The A1b cancellation requirement is not yet implemented; it is carried as
-  a requirement for A1b, not verified by any existing test.
+across the two phases"`. The A1b cancellation requirement is implemented by A1b (Forgejo issue
+  #311) as `cancelCombatTaskAtDeclarationBoundary` in
+  `packages/domain/src/encounter/combatRoundManager.ts`, reached through
+  `POST /encounters/:encounterId/combat-round/finish-combat-task` with `boundary: "declaration"`
+  and surfaced by Current action at the declaration boundary. It issues the same
+  `cancel_combat_task` command and the same compact versioned inverse facts as the opportunity
+  cancel; the two boundaries are mutually exclusive, and the declaration boundary spends no
+  opportunity and moves no cursor. Protected by
+  `packages/domain/src/encounter/combatTaskLifecycle.test.ts`, describe block
+  `"declaration-boundary Combat Task cancellation (A1b)"`, and by
+  `apps/api/src/routes/scenarios.test.ts`, test `"lets the GM cancel a live Combat Task from the
+declaration boundary and then declare a new one"`, which proves the full round trip.
 - Documentation: [Combat task integration matrix](../../architecture/combat-task-integration-matrix.md),
   Perform Task lifecycle row and narrative; [Combat Panel Contract §12.18](../../product/combat-panel-contract.md#1218-phase-2-perform-task-recurrence-versus-expiry--settled)
   now records ruling 3 as settled rather than open.

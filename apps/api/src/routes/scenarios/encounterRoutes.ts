@@ -32,6 +32,7 @@ import {
   acceptedCombatDefenseCalculationSchema,
   authorizeCombatProgressionTask,
   advanceCombatTaskAtOpportunity,
+  cancelCombatTaskAtDeclarationBoundary,
   finishCombatTaskAtOpportunity,
   getCombatRoundOpenPerformTaskForParticipant,
   getCombatTaskScheduledPhase,
@@ -2297,6 +2298,34 @@ const TERMINAL_COMBAT_GENERIC_ACTION_STATUSES: ReadonlySet<string> = new Set([
   "cancelled",
 ]);
 
+/**
+ * Combat Task identity is server-owned (A1b, Forgejo issue #311).
+ *
+ * A submitted declaration intent never originates `taskId`. `materializeCombatDeclarationTasks`
+ * mints the canonical id and writes it into the persisted intent, and cross-round carry-forward
+ * reads it back from that persisted intent only. Honouring a client-chosen `taskId` was the second
+ * creation path: it let a caller name any existing `CombatGenericAction` — including one it had
+ * just minted through the parallel generic-action route under an arbitrary id — as this
+ * participant's Perform Task. That both skipped the one-live-task refusal, because the adopted
+ * action is treated as the participant's own existing task rather than a second one, and produced
+ * a task the canonical projection never sees, because an action created outside declaration
+ * carries no `declarationKind`.
+ *
+ * This drops the field rather than rejecting the request, so a client that echoes the server's own
+ * last declaration back unchanged still declares successfully. Nothing is lost by dropping it: the
+ * only legitimate value is the one the server already persisted.
+ *
+ * `combatDeclarationPrimaryIntentSchema` is deliberately **not** narrowed — A1b must not change it,
+ * and persisted intents still carry the server-minted `taskId`.
+ */
+function dropSubmittedCombatDeclarationTaskId<T extends { taskId?: string }>(
+  selection: T | undefined,
+): T | undefined {
+  if (!selection || selection.taskId === undefined) return selection;
+  const { taskId: _submittedTaskId, ...rest } = selection;
+  return rest as T;
+}
+
 function materializeCombatDeclarationTasks(input: {
   createdAt: string;
   createdByUserId: string;
@@ -2331,17 +2360,22 @@ function materializeCombatDeclarationTasks(input: {
       );
     }
     const previousSelection = input.previousIntent?.[slot];
+    // Carry-forward reads the **persisted** declaration intent only. `selection.taskId` was
+    // stripped by `dropSubmittedCombatDeclarationTaskId`, so the sole source of a carried id is the
+    // id this server minted and wrote back on an earlier declaration.
     const requestedTaskId =
-      selection.taskId ??
-      (previousSelection?.actionId === declarationKind ? previousSelection.taskId : undefined);
+      previousSelection?.actionId === declarationKind ? previousSelection.taskId : undefined;
     const requestedExisting = requestedTaskId
       ? genericActions.find((action) => action.id === requestedTaskId)
       : undefined;
+    // The carried action must be this participant's and must carry the matching `declarationKind`.
+    // An action with no `declarationKind` was not created by declaration — the canonical Perform
+    // Task projection filters on that field, so adopting one would carry forward a task that never
+    // appears at the actor's opportunity.
     if (
       requestedExisting &&
       (requestedExisting.ownerParticipantId !== input.ownerParticipantId ||
-        (requestedExisting.declarationKind &&
-          requestedExisting.declarationKind !== declarationKind))
+        requestedExisting.declarationKind !== declarationKind)
     ) {
       throw new Error("The selected Combat Task is not available to this participant.");
     }
@@ -2503,7 +2537,12 @@ function normalizeCombatDeclarationIntentForRequest(input: {
     return { ...position, targetParticipantId: targetRoundParticipant.participantId };
   });
 
-  return combatDeclarationIntentSchema.parse({ ...input.intent, relativePositions });
+  return combatDeclarationIntentSchema.parse({
+    ...input.intent,
+    primaryAction: dropSubmittedCombatDeclarationTaskId(input.intent.primaryAction),
+    relativePositions,
+    secondaryAction: dropSubmittedCombatDeclarationTaskId(input.intent.secondaryAction),
+  });
 }
 
 function parseParticipantCommandBody(
@@ -7145,26 +7184,38 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const canAccessExistingAction =
         isGm || existingOwnerScenarioParticipant?.controlledByUserId === user.id;
 
-      if (!isGm && body.operation !== "declare" && !canAccessExistingAction) {
+      // A1b route convergence, Forgejo issue #311. This parallel channel no longer accepts an
+      // arbitrary client-supplied action id as authority.
+      //
+      // 1. It creates nothing. `declare` was the only way a caller-chosen id could enter
+      //    `genericActions`, and that is what made a second creation path possible: the
+      //    declaration could then be pointed at the resulting action. Combat Tasks are created at
+      //    the Combat declaration, and `look_around` is a preset of that declaration under the
+      //    Product Owner ruling of 2026-09-22 on Forgejo issue #287, so no mid-round generic
+      //    declaration path remains to preserve.
+      // 2. Every remaining operation must name an action that already exists in canonical state.
+      // 3. A declaration-materialized Perform Task is refused here outright. Its lifecycle is
+      //    authorized on task and boundary identity by the canonical `*-combat-task` routes —
+      //    exact projected task, execution group, boundary and revision — and driving it from here
+      //    would bypass phase scheduling, the one-primary-action gate, command emission and the
+      //    compact inverse undo facts.
+      if (body.operation === "declare") {
+        return reply.code(400).send({
+          code: "declaration_route_required",
+          error: "Declare this Combat Task in the Combat declaration.",
+        });
+      }
+      if (!isGm && !canAccessExistingAction) {
         return reply.code(404).send({ error: "Combat action not found." });
       }
-
-      // A retried declaration with the same client-generated identity returns the cached canonical
-      // action even if the encounter revision advanced after the first successful write.
-      if (body.operation === "declare" && existingAction) {
-        if (!canAccessExistingAction) {
-          return reply.code(404).send({ error: "Combat action not found." });
-        }
-        return {
-          encounter:
-            access.mode === "gm"
-              ? encounter
-              : buildPlayerSafeEncounterForUser({
-                  encounter,
-                  scenarioParticipants,
-                  userId: user.id,
-                }),
-        };
+      if (!existingAction) {
+        return reply.code(404).send({ error: "Combat action not found." });
+      }
+      if (existingAction.declarationKind === "perform_task") {
+        return reply.code(409).send({
+          code: "task_route_converged",
+          error: "Drive this Combat Task from Current action at the actor's action opportunity.",
+        });
       }
       // A repeated roll request returns the first server-owned roll, including after a refresh,
       // instead of advancing the revision or consuming another random roll.
@@ -7186,8 +7237,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
 
-      const ownerParticipantId =
-        body.operation === "declare" ? body.participantId : existingAction?.ownerParticipantId;
+      // Ownership comes from canonical state, never from the request body.
+      const ownerParticipantId = existingAction.ownerParticipantId;
       const ownerEncounterParticipant = ownerParticipantId
         ? resolveEncounterParticipantByRollParticipantId({
             participantId: ownerParticipantId,
@@ -7209,7 +7260,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           .code(403)
           .send({ error: "This Combat action is not assigned to this player." });
       }
-      if (!isGm && body.operation !== "declare" && body.operation !== "roll") {
+      if (!isGm && body.operation !== "roll") {
         return reply.code(403).send({ error: "Only the GM can review or resolve Combat actions." });
       }
       const visibleParticipantIds = isGm
@@ -7222,37 +7273,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       const now = new Date().toISOString();
       let genericActions = roundState.genericActions;
-      if (body.operation === "declare") {
-        if (!body.intent) return reply.code(400).send({ error: "Describe what you intend to do." });
-        const duration = body.duration ?? { kind: "round" as const };
-        const rollRequest = resolveGenericCombatActionRollRequest({
-          body,
-          forceLookAroundPreset: body.preset === "look_around",
-          scenarioParticipant: ownerScenarioParticipant,
-        });
-        const reference = resolveGenericCombatActionReference({
-          body,
-          encounter,
-          ownerEncounterParticipantId: ownerEncounterParticipant.id,
-          ownerScenarioParticipant,
-          roundState,
-          visibleParticipantIds,
-        });
-        genericActions = declareCombatGenericAction({
-          action: {
-            createdAt: now,
-            createdByUserId: user.id,
-            duration,
-            id: body.actionId,
-            intent: body.intent,
-            ownerParticipantId: ownerEncounterParticipant.id,
-            preset: body.preset,
-            reference,
-            rollRequest,
-          },
-          actions: genericActions,
-        });
-      } else if (body.operation === "review") {
+      if (body.operation === "review") {
         if (!isGm) return reply.code(403).send({ error: "Only the GM can review Combat actions." });
         const duration = body.duration ?? existingAction!.duration;
         const rollRequest =
@@ -7395,6 +7416,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
   type CombatTaskLifecycleOperation = "advance" | "finish" | "resolve" | "review" | "roll";
 
   interface ParsedCombatTaskLifecycleBody extends ParsedCombatTaskCommandIdentity {
+    boundary: "opportunity" | "declaration";
     finishKind: "cancel" | "interrupt";
     processId?: string;
     ruleInputs: GenericCombatActionBody;
@@ -7407,6 +7429,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
     const finishKind = value.finishKind === "cancel" ? "cancel" : "interrupt";
     return {
       ...parseCombatTaskCommandIdentity(value),
+      boundary: value.boundary === "declaration" ? "declaration" : "opportunity",
       finishKind,
       processId: parseOptionalString(value, "processId"),
       ruleInputs: parseGenericCombatActionBody({ ...value, operation: "review" }),
@@ -7485,6 +7508,73 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter,
           scenarioParticipants,
         });
+
+        // The declaration-surface cancellation required by rule decision 0007 ruling 3. It issues
+        // the same `cancel_combat_task` command as the cancel below, at the other boundary a GM
+        // can meet the one-live-task refusal at, and it authorizes on exactly the boundary
+        // identity that boundary projects: the participant's own declaration descriptor, resolved
+        // the same way `POST /combat-declaration` resolves it. The two boundaries are mutually
+        // exclusive — the domain refuses this one while the task holds the actor's current action
+        // opportunity, and refuses the opportunity cancel everywhere else.
+        if (operation === "finish" && body.boundary === "declaration") {
+          if (body.finishKind !== "cancel") {
+            return reply
+              .code(400)
+              .send({ error: "Only cancellation is available at the declaration boundary." });
+          }
+          const declarationProjection = buildCombatProgressionProjection(roundState, {
+            participation: projectActiveCombatParticipation({
+              encounterRevision: encounter.updatedAt,
+              scenarioParticipants,
+              state: roundState,
+            }),
+          });
+          const declarationAuthorization = authorizeCombatTaskCommand({
+            authorization: {
+              actor: { kind: "gm" },
+              commandType: "declare_action",
+              participantId: ownerEncounterParticipant.id,
+              processId: body.processId,
+              stageId: body.stageId,
+            },
+            encounterRevision: encounter.updatedAt,
+            identity: body,
+            projection: declarationProjection,
+            roundState,
+          });
+          if (!declarationAuthorization.ok) {
+            return reply.code(409).send({
+              code: declarationAuthorization.code,
+              error: "Declaration is closed for this participant.",
+            });
+          }
+          const cancelledAt = new Date().toISOString();
+          const cancelled = cancelCombatTaskAtDeclarationBoundary({
+            actionId: body.ruleInputs.actionId,
+            command: { createdAt: cancelledAt, createdByUserId: user.id },
+            participantId: ownerEncounterParticipant.id,
+            state: roundState,
+            updatedAt: cancelledAt,
+          });
+          const savedAfterCancel = await encounterService.updateCombatEncounter({
+            campaignId: access.campaignId,
+            encounterId,
+            expectedRevision: encounter.updatedAt,
+            scenarioId,
+            session: {
+              ...encounter,
+              combatRoundState: cancelled.state,
+              currentRound: cancelled.state.roundNumber,
+              updatedAt: cancelledAt,
+            },
+          });
+          return {
+            command: cancelled.command,
+            commandEnvelope: buildCombatRoundCommandEnvelope({ state: cancelled.state }),
+            encounter: savedAfterCancel,
+          };
+        }
+
         const commandType =
           operation === "review"
             ? ("review_combat_task" as const)

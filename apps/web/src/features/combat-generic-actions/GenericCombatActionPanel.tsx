@@ -53,10 +53,6 @@ const STAT_OPTIONS: Array<{ id: GlantriCharacteristicKey; label: string }> = [
   { id: "will", label: "Willpower" },
 ];
 
-function makeActionId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `combat-action-${Date.now()}-${Math.random()}`;
-}
-
 function durationLabel(duration: CombatGenericActionDuration): string {
   if (duration.kind === "phase") return duration.phase === "phase1" ? "Phase 1" : "Phase 2";
   if (duration.kind === "round") return "One round";
@@ -121,22 +117,6 @@ export function GenericCombatActionPanel({
   skills = [],
 }: GenericCombatActionPanelProps) {
   const actions = encounter.combatRoundState?.genericActions ?? [];
-  const [actionId, setActionId] = useState(makeActionId);
-  const [preset, setPreset] = useState<"look_around" | "other">("look_around");
-  const [intent, setIntent] = useState("");
-  const [durationKind, setDurationKind] = useState<CombatGenericActionDuration["kind"]>("round");
-  const [durationPhase, setDurationPhase] = useState<"phase1" | "phase2">("phase1");
-  const [rounds, setRounds] = useState(2);
-  const [rollKind, setRollKind] = useState<"none" | "skill" | "stat">("skill");
-  const [skillId, setSkillId] = useState("perception");
-  const [statId, setStatId] = useState<GlantriCharacteristicKey>("con");
-  const [difficulty, setDifficulty] = useState(26);
-  const [referenceKind, setReferenceKind] = useState<
-    "none" | "participant" | "item" | "environment"
-  >("none");
-  const [referenceParticipantId, setReferenceParticipantId] = useState("");
-  const [itemId, setItemId] = useState("");
-  const [environmentDescription, setEnvironmentDescription] = useState("");
   const [selectedActionId, setSelectedActionId] = useState(
     actions.find((action) => !isFinishedAction(action))?.id ?? actions.at(-1)?.id ?? "",
   );
@@ -196,13 +176,8 @@ export function GenericCombatActionPanel({
             member.characterId === candidate.characterId),
       ),
     );
-  const ownerScenarioParticipant = findScenarioParticipant(participantId);
   const reviewOwnerScenarioParticipant = findScenarioParticipant(
     selectedAction?.ownerParticipantId,
-  );
-  const canonicalItems = useMemo(
-    () => itemOptions(ownerScenarioParticipant),
-    [ownerScenarioParticipant],
   );
   const reviewCanonicalItems = useMemo(
     () => itemOptions(reviewOwnerScenarioParticipant),
@@ -299,38 +274,6 @@ export function GenericCombatActionPanel({
     }
   }
 
-  async function declareAction() {
-    if (!participantId) return;
-    const chosenRollKind = preset === "look_around" ? "skill" : rollKind;
-    const next = await mutate({
-      actionId,
-      difficulty: chosenRollKind === "none" ? undefined : difficulty,
-      duration: buildDuration(durationKind, rounds, durationPhase),
-      encounterId: encounter.id,
-      environmentDescription: referenceKind === "environment" ? environmentDescription : undefined,
-      expectedRevision: encounter.updatedAt,
-      intent,
-      itemId: referenceKind === "item" ? itemId : undefined,
-      operation: "declare",
-      participantId,
-      preset: preset === "look_around" ? "look_around" : undefined,
-      referenceKind: referenceKind === "none" ? undefined : referenceKind,
-      referenceParticipantId: referenceKind === "participant" ? referenceParticipantId : undefined,
-      rollKind: chosenRollKind === "none" ? undefined : chosenRollKind,
-      skillId:
-        chosenRollKind === "skill"
-          ? preset === "look_around"
-            ? "perception"
-            : skillId
-          : undefined,
-      statId: chosenRollKind === "stat" ? statId : undefined,
-    });
-    if (next) {
-      setActionId(makeActionId());
-      setIntent("");
-    }
-  }
-
   async function operate(
     operation: "review" | "activate" | "roll" | "resolve" | "interrupt" | "cancel",
   ) {
@@ -410,186 +353,6 @@ export function GenericCombatActionPanel({
         isGm={isGm}
         onEncounterUpdated={onEncounterUpdated}
       />
-
-      {showGenericDeclarationControls && (!isGm || participantId) ? (
-        <div style={{ display: "grid", gap: "0.65rem" }}>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>Generic action</span>
-            <select
-              value={preset}
-              onChange={(event) => {
-                const next = event.target.value as "look_around" | "other";
-                setPreset(next);
-                if (next === "look_around") {
-                  setRollKind("skill");
-                  setSkillId("perception");
-                }
-              }}
-            >
-              <option value="look_around">Look around</option>
-              <option value="other">Other action</option>
-            </select>
-          </label>
-          <label style={{ display: "grid", gap: "0.25rem" }}>
-            <span>What do you intend to do?</span>
-            <textarea
-              maxLength={2000}
-              onChange={(event) => setIntent(event.target.value)}
-              rows={3}
-              value={intent}
-            />
-          </label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <label>
-              <span>Time </span>
-              <select
-                value={durationKind}
-                onChange={(event) =>
-                  setDurationKind(event.target.value as CombatGenericActionDuration["kind"])
-                }
-              >
-                <option value="phase">One phase</option>
-                <option value="round">One round</option>
-                <option value="rounds">Several rounds</option>
-                <option value="gm_decided">GM decides</option>
-              </select>
-            </label>
-            {durationKind === "phase" ? (
-              <label>
-                <span>Phase </span>
-                <select
-                  onChange={(event) => setDurationPhase(event.target.value as "phase1" | "phase2")}
-                  value={durationPhase}
-                >
-                  <option value="phase1">Phase 1</option>
-                  <option value="phase2">Phase 2</option>
-                </select>
-              </label>
-            ) : null}
-            {durationKind === "rounds" ? (
-              <label>
-                <span>Rounds </span>
-                <input
-                  min={2}
-                  onChange={(event) => setRounds(Number(event.target.value))}
-                  type="number"
-                  value={rounds}
-                />
-              </label>
-            ) : null}
-            {preset !== "look_around" ? (
-              <label>
-                <span>Roll </span>
-                <select
-                  value={rollKind}
-                  onChange={(event) => setRollKind(event.target.value as typeof rollKind)}
-                >
-                  <option value="none">No roll</option>
-                  <option value="skill">Skill</option>
-                  <option value="stat">Stat</option>
-                </select>
-              </label>
-            ) : (
-              <strong>Perception</strong>
-            )}
-            {preset === "look_around" || rollKind !== "none" ? (
-              <label>
-                <span>Difficulty </span>
-                <input
-                  aria-label="Action Difficulty"
-                  min={1}
-                  max={200}
-                  onChange={(event) => setDifficulty(Number(event.target.value))}
-                  type="number"
-                  value={difficulty}
-                />
-              </label>
-            ) : null}
-          </div>
-          {preset !== "look_around" && rollKind === "skill" ? (
-            <label>
-              <span>Skill </span>
-              <select value={skillId} onChange={(event) => setSkillId(event.target.value)}>
-                {skills.map((skill) => (
-                  <option key={skill.id} value={skill.id}>
-                    {skill.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          {preset !== "look_around" && rollKind === "stat" ? (
-            <label>
-              <span>Stat </span>
-              <select
-                value={statId}
-                onChange={(event) => setStatId(event.target.value as GlantriCharacteristicKey)}
-              >
-                {STAT_OPTIONS.map((stat) => (
-                  <option key={stat.id} value={stat.id}>
-                    {stat.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <label>
-            <span>Reference </span>
-            <select
-              value={referenceKind}
-              onChange={(event) => setReferenceKind(event.target.value as typeof referenceKind)}
-            >
-              <option value="none">None</option>
-              <option value="participant">Participant</option>
-              <option value="item">Item</option>
-              <option value="environment">Environment</option>
-            </select>
-          </label>
-          {referenceKind === "participant" ? (
-            <select
-              aria-label="Referenced participant"
-              value={referenceParticipantId}
-              onChange={(event) => setReferenceParticipantId(event.target.value)}
-            >
-              <option value="">Choose participant</option>
-              {participantOptions.map((entry) => (
-                <option key={entry.participantId} value={entry.participantId}>
-                  {entry.label}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          {referenceKind === "item" ? (
-            <select
-              aria-label="Referenced Item"
-              value={itemId}
-              onChange={(event) => setItemId(event.target.value)}
-            >
-              <option value="">Choose Item</option>
-              {canonicalItems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          {referenceKind === "environment" ? (
-            <input
-              aria-label="Environment reference"
-              maxLength={500}
-              onChange={(event) => setEnvironmentDescription(event.target.value)}
-              value={environmentDescription}
-            />
-          ) : null}
-          <button
-            disabled={busy || !intent.trim()}
-            onClick={() => void declareAction()}
-            type="button"
-          >
-            Declare generic action
-          </button>
-        </div>
-      ) : null}
 
       {actions.length > 0 ? (
         <div style={{ display: "grid", gap: "0.75rem", minWidth: 0 }}>

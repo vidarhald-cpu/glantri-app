@@ -5,6 +5,7 @@ import {
   authorizeCombatProgressionTask,
   buildCombatLogProjection,
   buildCombatProgressionProjection,
+  cancelCombatTaskAtDeclarationBoundary,
   combatDeclarationPrimaryIntentSchema,
   combatRoundStateSchema,
   finishCombatTaskAtOpportunity,
@@ -1255,5 +1256,112 @@ describe("phase duration schedules the named primary-action opportunity", () => 
         taskId: projected.id,
       }),
     ).toMatchObject({ ok: false });
+  });
+});
+
+/**
+ * The declaration-surface escape required by rule decision 0007 ruling 3. It is the same
+ * `cancel_combat_task` command as the opportunity cancel, issued at the other boundary a GM can
+ * meet the one-live-task refusal at, and the two boundaries are mutually exclusive.
+ */
+describe("declaration-boundary Combat Task cancellation (A1b)", () => {
+  function declarationState(overrides: Partial<CombatGenericAction> = {}): CombatRoundState {
+    return combatRoundStateSchema.parse({
+      currentCursor: { participantId: "a", roundNumber: 2, step: "DE" },
+      currentStep: "select_actions",
+      encounterId: "encounter-1",
+      genericActions: [task({ ...overrides })],
+      participants: [
+        { label: "Aline", participantId: "a" },
+        { label: "Brand", participantId: "b" },
+      ],
+      roundNumber: 2,
+      selectedParticipantId: "a",
+      selectedStep: "select_actions",
+    });
+  }
+
+  it("cancels the live task without spending the actor's primary action", () => {
+    const source = declarationState();
+    const outcome = cancelCombatTaskAtDeclarationBoundary({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      state: source,
+      updatedAt: later,
+    });
+
+    expect(outcome.action.status).toBe("cancelled");
+    expect(outcome.command.type).toBe("cancel_combat_task");
+    expect(outcome.state.currentStep).toBe(source.currentStep);
+    expect(outcome.state.currentCursor).toEqual(source.currentCursor);
+    expect(outcome.state.selectedStep).toBe(source.selectedStep);
+    expect(outcome.state.phaseResolutionCursor).toEqual(source.phaseResolutionCursor);
+    expect(outcome.state.phaseResolutionStatuses).toEqual(source.phaseResolutionStatuses);
+    expect(outcome.state.participants).toEqual(source.participants);
+    expect(outcome.state.events).toEqual(source.events);
+    expect(outcome.command.facts.taskUndo).toMatchObject({ boundary: "declaration", version: 1 });
+    expect(outcome.command.facts).not.toHaveProperty("previousState");
+  });
+
+  it("undoes to byte-equal prior state", () => {
+    const source = declarationState();
+    const outcome = cancelCombatTaskAtDeclarationBoundary({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      state: source,
+      updatedAt: later,
+    });
+    const undone = undoLatestCombatRoundCommand({ state: outcome.state });
+
+    expect(JSON.stringify(undone)).toBe(JSON.stringify(combatRoundStateSchema.parse(source)));
+  });
+
+  it("refuses a task that is not this participant's live Perform Task", () => {
+    for (const overrides of [
+      { status: "cancelled" as const },
+      { status: "completed" as const },
+      { ownerParticipantId: "b" },
+      { declarationKind: undefined },
+    ]) {
+      expect(() =>
+        cancelCombatTaskAtDeclarationBoundary({
+          actionId: task().id,
+          command: { createdAt: later, createdByUserId: "user-gm" },
+          participantId: "a",
+          state: declarationState(overrides),
+          updatedAt: later,
+        }),
+      ).toThrow(/no live Combat Task to cancel/);
+    }
+  });
+
+  it("refuses while the task holds the actor's current action opportunity, where Current action owns the cancel", () => {
+    expect(() =>
+      cancelCombatTaskAtDeclarationBoundary({
+        actionId: task().id,
+        command: { createdAt: later, createdByUserId: "user-gm" },
+        participantId: "a",
+        state: state(),
+        updatedAt: later,
+      }),
+    ).toThrow(/Cancel it from Current action/);
+  });
+
+  it("leaves the opportunity cancel the only path at the opportunity", () => {
+    const outcome = finishCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      kind: "cancel",
+      participantId: "a",
+      phase: "phase1",
+      state: state(),
+      updatedAt: later,
+    });
+
+    expect(outcome.action.status).toBe("cancelled");
+    expect(outcome.command.facts.taskUndo).toMatchObject({ boundary: "opportunity" });
+    expect(outcome.state.phaseResolutionStatuses.a?.phase1?.substep).toBe("done");
   });
 });
