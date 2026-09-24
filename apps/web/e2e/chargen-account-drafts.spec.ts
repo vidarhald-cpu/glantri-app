@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
+import { getApprovedV2RuntimeContent } from "@glantri/content";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const PASSWORD = "Disposable-Chargen-230";
@@ -54,19 +54,30 @@ async function chargenDraftOwners(page: Page): Promise<string[]> {
 async function completeAndFinalizeCharacter(page: Page) {
   await page.locator('input[name="profile"]').first().click();
   await expect(page.getByRole("button", { name: "Swap", exact: true })).toBeVisible();
-  await page.locator('input[name="civilization"]:enabled').first().click();
-  await page.locator('input[name="profession"]:enabled').first().click();
-
-  const otherSkills = page
+  await page.getByRole("radio", { name: /Scythians/ }).click();
+  await page.getByRole("radio", { name: /Courier and Messenger/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your Profession core route", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("radio", { name: /Foot courier practice/ }).click();
+  const footCourierGroup = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: /Other skills/i }) })
+    .filter({ hasText: "Running and athletic field practice" })
     .last();
-  await otherSkills.getByRole("button", { name: "Expand", exact: true }).click();
-  const spoken = fullSkillCatalogueProposal.entries.find(
-    ({ competencyType }) => competencyType === "spoken-language",
+  await footCourierGroup.getByRole("button", { name: "Buy / raise skill group" }).click();
+  await expect(page.getByText(/Selected core route complete/)).toBeVisible();
+
+  const individualSkills = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "7. Individual skills", exact: true }) })
+    .last();
+  await individualSkills.getByRole("button", { name: "Expand", exact: true }).click();
+  const competencyContent = getApprovedV2RuntimeContent();
+  const spoken = competencyContent.skills.find(
+    (skill) => "competencyType" in skill && skill.competencyType === "spoken-language",
   )!;
-  const written = fullSkillCatalogueProposal.entries.find(
-    ({ competencyType }) => competencyType === "written-tradition",
+  const written = competencyContent.skills.find(
+    (skill) => "competencyType" in skill && skill.competencyType === "written-tradition",
   )!;
 
   for (const skillName of ["Surgery", spoken.name, written.name]) {
