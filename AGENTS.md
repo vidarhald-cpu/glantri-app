@@ -121,6 +121,22 @@ The development-stage data policy concerns the **disposability of development re
 - **Every destructive-action confirmation requirement already in force**, including the named-disposable-target and explicit-confirmation requirements in `docs/process/task-contract.md` and `docs/dev-database.md`: "If current-worktree ownership cannot be proved from the task contract and repository preflight, the command does not run."
 - **The production, branch-protection, and credential boundary.** This file: "Never push or merge to `main`, deploy, change production/Azure configuration or secrets, or treat credentials as authority." Branch protection is unchanged.
 
+### Cross-provider handoff preflight
+
+Product Owner process ruling, effective **2026-09-24**. Before producing a dispatch packet for a Builder in a different execution pool — one the Orchestrator cannot dispatch to directly and which cannot ask clarifying questions mid-task — run this preflight. It exists because a cross-pool Builder cannot ask, so every authorization signal must agree before the work leaves:
+
+1. the issue exists;
+2. the issue body is current and self-contained;
+3. lifecycle is `Authorized`;
+4. the authorization label/state agrees with the body;
+5. execution owner/pool is recorded;
+6. the baseline SHA is current and accepted;
+7. hotspots are reserved and uncontested.
+
+On any disagreement, fix it before producing the packet — never issue a packet that papers over it. Check 4 is the sharpest hazard: a label and a body that disagree is a live dispatch hazard, because a worker may act on either. Worked example: Forgejo #307 carried `status/Authorized` while its body still read "Design. NOT dispatchable"; the preflight caught the disagreement and it was corrected before the packet was produced.
+
+Work performed by a different execution pool must be recorded as such in durable execution evidence and never described as a same-substrate Builder session — provider adapters (for example `CLAUDE.md`'s Provenance section) map this to their own substrate; this rule is not restated there.
+
 ## Cost-aware execution
 
 - The Orchestrator owns per-task model/effort selection and fresh-versus-resume, within control-plane policy. Workers may recommend escalation but may not independently spawn workers or expand model budget.
