@@ -11,6 +11,7 @@ export * from "./campaign/scenario";
 export * from "./campaign/campaignManagement";
 export * from "./campaign/map";
 export * from "./campaign/artifact";
+export * from "./campaign/artifactAssociation";
 export * from "./campaign/blackboard";
 export * from "./campaign/scenarioSession";
 export * from "./campaign/playerCampaignHome";
