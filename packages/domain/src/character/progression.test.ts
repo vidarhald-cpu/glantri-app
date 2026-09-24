@@ -22,9 +22,9 @@ const baseBuild = {
       pow: 10,
       siz: 10,
       str: 10,
-      will: 10
+      will: 10,
     },
-    societyLevel: 1
+    societyLevel: 1,
   },
   progression: {
     chargenMode: "standard",
@@ -36,8 +36,8 @@ const baseBuild = {
     secondaryPoolTotal: 0,
     skillGroups: [],
     skills: [],
-    specializations: []
-  }
+    specializations: [],
+  },
 };
 
 describe("character progression compatibility", () => {
@@ -51,10 +51,10 @@ describe("character progression compatibility", () => {
             categoryId: "Court Social",
             groupId: "political_acumen",
             primaryRanks: 1,
-            skillId: "intrigue"
-          }
-        ]
-      }
+            skillId: "intrigue",
+          },
+        ],
+      },
     });
 
     expect(parsed.progression.skills[0]?.categoryId).toBe("social");
@@ -71,22 +71,22 @@ describe("character progression compatibility", () => {
             groupId: "officer_training",
             groupIds: ["officer_training"],
             primaryRanks: 1,
-            skillId: "tactics"
+            skillId: "tactics",
           },
           {
             categoryId: "leadership",
             groupId: "political_acumen",
             groupIds: ["political_acumen"],
             primaryRanks: 1,
-            skillId: "insight"
-          }
-        ]
-      }
+            skillId: "insight",
+          },
+        ],
+      },
     });
 
     expect(parsed.progression.skills.map((skill) => skill.categoryId)).toEqual([
       "military",
-      "social"
+      "social",
     ]);
   });
 
@@ -96,45 +96,49 @@ describe("character progression compatibility", () => {
       progression: {
         ...baseBuild.progression,
         chargenSelections: {
+          selectedCoreRouteId: "profession:courier:core:foot",
           selectedGroupSlots: [
             {
               groupId: "trap_and_intrusion_work",
               selectedSkillIds: ["trap_handling"],
-              slotId: "legacy-slot"
-            }
+              slotId: "legacy-slot",
+            },
           ],
           selectedLanguageIds: [],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
             groupId: "field_soldiering",
-            primaryRanks: 1
-          }
+            primaryRanks: 1,
+          },
         ],
         skills: [
           {
             groupId: "officer_training",
             groupIds: ["officer_training"],
             primaryRanks: 1,
-            skillId: "tactics"
-          }
-        ]
-      }
+            skillId: "tactics",
+          },
+        ],
+      },
     });
 
     expect(parsed.progression.skillGroups[0]?.groupId).toBe("veteran_soldiering");
     expect(parsed.progression.skills[0]?.groupId).toBe("veteran_leadership");
     expect(parsed.progression.skills[0]?.groupIds).toEqual(["veteran_leadership"]);
     expect(parsed.progression.chargenSelections?.selectedGroupSlots[0]?.groupId).toBe(
-      "covert_entry"
+      "covert_entry",
+    );
+    expect(parsed.progression.chargenSelections?.selectedCoreRouteId).toBe(
+      "profession:courier:core:foot",
     );
   });
 
   it("normalizes retired duplicate performer profession ids in persisted character builds", () => {
     const parsed = characterBuildSchema.parse({
       ...baseBuild,
-      professionId: "entertainers_singer_musician"
+      professionId: "entertainers_singer_musician",
     });
 
     expect(parsed.professionId).toBe("musician");
@@ -150,8 +154,8 @@ describe("character progression compatibility", () => {
         id: "chargen-rule-experiment",
         name: "Experimental chargen",
         ordinarySkillPoints: 80,
-        statRollCount: 12
-      }
+        statRollCount: 12,
+      },
     });
 
     expect(legacy.chargenRuleSet).toBeUndefined();
@@ -159,7 +163,7 @@ describe("character progression compatibility", () => {
       availablePoints: 0,
       checks: [],
       history: [],
-      pendingAttempts: []
+      pendingAttempts: [],
     });
     expect(withRuleSet.chargenRuleSet?.name).toBe("Experimental chargen");
     expect(withRuleSet.chargenRuleSet?.flexiblePointFactor).toBe(2);
@@ -176,12 +180,12 @@ describe("character progression compatibility", () => {
             id: "check-legacy",
             targetId: "lore",
             targetLabel: "Lore",
-            targetType: "skill"
-          }
+            targetType: "skill",
+          },
         ],
         history: [],
-        pendingAttempts: []
-      }
+        pendingAttempts: [],
+      },
     });
 
     expect(parsed.progressionState.checks[0]?.status).toBe("approved");

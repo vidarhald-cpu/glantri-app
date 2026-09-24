@@ -79,6 +79,7 @@ export function finalizeChargenDraft(input: FinalizeChargenDraftInput): Finalize
     societyLevel: input.societyLevel,
   });
   progression.chargenSelections = {
+    selectedCoreRouteId: progression.chargenSelections?.selectedCoreRouteId,
     selectedLanguageIds: languageSummary.selectedLanguageIds,
     selectedSkillIds: selectableSkillSummary.selectedSkillIds,
     selectedGroupSlots: progression.chargenSelections?.selectedGroupSlots ?? [],

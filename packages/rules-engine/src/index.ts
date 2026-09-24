@@ -10,6 +10,7 @@ export * from "./chargen/generateProfiles";
 export * from "./chargen/policy";
 export * from "./chargen/primaryAllocation";
 export * from "./chargen/selectionStructure";
+export * from "./chargen/coreRouteSelection";
 export * from "./chargen/selectProfile";
 export * from "./chargen/statResolution";
 export * from "./chargen/summarizeRolledProfile";

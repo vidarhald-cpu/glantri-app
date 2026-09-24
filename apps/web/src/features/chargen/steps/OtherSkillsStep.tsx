@@ -30,7 +30,7 @@ export function OtherSkillsStep({
   skillSearch,
   skillTypeFilter,
   skillVisibilityFilter,
-  visibleOtherSkillRows
+  visibleOtherSkillRows,
 }: OtherSkillsStepProps) {
   return (
     <section
@@ -41,23 +41,26 @@ export function OtherSkillsStep({
         display: "grid",
         gap: "0.75rem",
         order: 7,
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
-      <h2 style={{ margin: 0 }}>7. Other skills</h2>
+      <h2 style={{ margin: 0 }}>7. Individual skills</h2>
       <div style={{ display: "grid", gap: "0.75rem" }}>
         <div
           style={{
             alignItems: "start",
             display: "grid",
             gap: "0.75rem",
-            gridTemplateColumns: "minmax(0, 1fr) auto"
+            gridTemplateColumns: "minmax(0, 1fr) auto",
           }}
         >
           <div style={{ display: "grid", gap: "0.3rem" }}>
-            <div style={{ fontSize: "0.9rem" }}>Other skills use flexible points</div>
+            <div style={{ fontSize: "0.9rem" }}>
+              Eligible purchases use Ordinary points first, then Flexible points; other purchases
+              use Flexible points.
+            </div>
             <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-              {visibleOtherSkillRows.length} other skill
+              {visibleOtherSkillRows.length} individual skill
               {visibleOtherSkillRows.length === 1 ? "" : "s"} visible
             </div>
           </div>
@@ -79,9 +82,8 @@ export function OtherSkillsStep({
               borderRadius: 12,
               display: "grid",
               gap: "0.75rem",
-              gridTemplateColumns:
-                "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 240px)",
-              padding: "1rem"
+              gridTemplateColumns: "minmax(220px, 1fr) minmax(180px, 220px) minmax(180px, 240px)",
+              padding: "1rem",
             }}
           >
             <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -95,7 +97,7 @@ export function OtherSkillsStep({
                   fontFamily: "inherit",
                   fontSize: "1rem",
                   lineHeight: 1.4,
-                  padding: "0.5rem"
+                  padding: "0.5rem",
                 }}
                 type="search"
                 value={skillSearch}
@@ -134,10 +136,10 @@ export function OtherSkillsStep({
           </div>
 
           {renderSkillRowsTable({
-            emptyMessage: "No other skills match the current search or filter.",
+            emptyMessage: "No individual skills match the current search or filter.",
             rows: visibleOtherSkillRows,
             showOutsideNormalAccessBadge: true,
-            showTypeBadge: true
+            showTypeBadge: true,
           })}
         </div>
       ) : null}

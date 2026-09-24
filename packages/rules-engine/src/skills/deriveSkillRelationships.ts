@@ -222,6 +222,21 @@ export function getSkillNonRelationshipBaseLevel(input: {
   return groupContribution + bestOwnedRowTotal;
 }
 
+/** Permanent Skill ranks that may satisfy a prerequisite, independent of access membership. */
+export function getSkillPrerequisiteLevel(input: {
+  content: Pick<RelationshipContentShape, "skillGroups">;
+  progression: CharacterProgression;
+  skill: SkillDefinition;
+}): number {
+  const nonRelationshipBase = getSkillNonRelationshipBaseLevel(input);
+  const relationshipGrantedRanks = getOwnedSkillRows(input.progression, input.skill.id).reduce(
+    (highest, row) => Math.max(highest, row.relationshipGrantedRanks ?? 0),
+    0,
+  );
+
+  return nonRelationshipBase + relationshipGrantedRanks;
+}
+
 function getExistingSkillRelationshipGrantedRanks(
   progression: CharacterProgression,
   skillId: string,

@@ -4,7 +4,10 @@ import type {
   SkillGroupDefinition,
   SkillSpecialization,
 } from "@glantri/domain";
-import { getSkillNonRelationshipBaseLevel } from "./deriveSkillRelationships";
+import {
+  getSkillNonRelationshipBaseLevel,
+  getSkillPrerequisiteLevel,
+} from "./deriveSkillRelationships";
 
 const LITERACY_SKILL_ID = "literacy";
 
@@ -94,7 +97,11 @@ function getEffectiveSkillLevel(input: {
   progression: CharacterProgression;
   skill: SkillDefinition;
 }): number {
-  return getNonDerivedSkillBaseLevel(input);
+  return getSkillPrerequisiteLevel({
+    content: input.content,
+    progression: input.progression,
+    skill: input.skill,
+  });
 }
 
 function getNonDerivedSkillBaseLevel(input: {
@@ -383,10 +390,11 @@ function evaluateSpecializationGate(input: {
     };
   }
 
-  // A nested Specialization checks its immediate parent's acquired ranks. Root Skill
-  // ranks and relationship-granted ranks cannot stand in for owning that parent.
+  // A root Specialization accepts every persisted permanent rank on its parent Skill,
+  // including relationship grants. A nested Specialization still requires acquired ranks on
+  // its immediate Specialization parent; access alone never grants either kind of parent.
   const parentLevel = parentSkill
-    ? getNonDerivedSkillBaseLevel({
+    ? getSkillPrerequisiteLevel({
         content: input.content,
         progression: input.progression,
         skill: parentSkill,

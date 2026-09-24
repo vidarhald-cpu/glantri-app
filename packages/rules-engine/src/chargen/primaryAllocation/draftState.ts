@@ -30,9 +30,12 @@ import {
   getAllowedSecondaryGroupIdsInternal,
 } from "./access";
 import {
+  EXISTING_SPECIALIZATION_COST,
+  NEW_SPECIALIZATION_COST,
   getActiveGroupSkillCost,
   getAvailableFlexiblePoolTotal,
   chooseChargenPool,
+  getOrdinaryPoolTotal,
   getSkillSpendCost,
   getSpecializationSpendCost,
 } from "./costs";
@@ -77,6 +80,82 @@ export interface SpendPointResult {
   progression: CharacterProgression;
   spentCost?: number;
   warnings: string[];
+}
+
+function reallocateTargetChargenPools(input: {
+  access: ReturnType<typeof buildChargenSkillAccessSummaryInternal>;
+  content: CanonicalContentShape;
+  profile?: RolledCharacterProfile;
+  progression: CharacterProgression;
+}): { affordable: boolean; progression: CharacterProgression } {
+  const progression = input.progression;
+  const normalGroupIds = new Set(input.access.normalSkillGroupIds);
+  const normalSkillIds = new Set(input.access.normalSkillIds);
+  let ordinaryEligibleCost = 0;
+  let flexibleOnlyCost = 0;
+
+  for (const group of progression.skillGroups) {
+    const purchasedRanks = group.primaryRanks + group.secondaryRanks;
+    if (purchasedRanks <= 0) continue;
+    const quote = getActiveGroupSkillCost({
+      content: input.content,
+      groupId: group.groupId,
+      progression,
+    });
+    if (quote.cost === undefined || !normalGroupIds.has(group.groupId)) continue;
+    group.primaryRanks = purchasedRanks;
+    group.secondaryRanks = 0;
+    group.ranks = group.grantedRanks + purchasedRanks;
+    ordinaryEligibleCost += purchasedRanks * quote.cost;
+  }
+
+  for (const skill of progression.skills) {
+    if (skill.sourceTag === "mother-tongue") continue;
+    const definition = getSkillById(input.content, skill.skillId);
+    if (!definition) continue;
+    const purchasedRanks = skill.primaryRanks + skill.secondaryRanks;
+    const normalAccess = normalSkillIds.has(skill.skillId);
+    const cost =
+      "catalogueSource" in definition
+        ? getSkillSpendCost(definition, normalAccess ? "ordinary" : "flexible")
+        : getSkillSpendCost(definition);
+
+    if (normalAccess) {
+      skill.primaryRanks = purchasedRanks;
+      skill.secondaryRanks = 0;
+      ordinaryEligibleCost += purchasedRanks * cost;
+    } else {
+      skill.primaryRanks = 0;
+      skill.secondaryRanks = purchasedRanks;
+      flexibleOnlyCost += purchasedRanks * cost;
+    }
+    if ("catalogueSource" in definition) skill.category = normalAccess ? "ordinary" : "secondary";
+    skill.ranks =
+      skill.grantedRanks +
+      skill.primaryRanks +
+      skill.secondaryRanks +
+      (skill.relationshipGrantedRanks ?? 0);
+  }
+
+  for (const specialization of progression.specializations) {
+    if (specialization.secondaryRanks > 0) {
+      flexibleOnlyCost +=
+        NEW_SPECIALIZATION_COST +
+        (specialization.secondaryRanks - 1) * EXISTING_SPECIALIZATION_COST;
+    }
+  }
+
+  const primaryPoolSpent = Math.min(getOrdinaryPoolTotal(progression), ordinaryEligibleCost);
+  const secondaryPoolSpent =
+    flexibleOnlyCost + Math.max(0, ordinaryEligibleCost - primaryPoolSpent);
+  progression.primaryPoolSpent = primaryPoolSpent;
+  progression.secondaryPoolSpent = secondaryPoolSpent;
+
+  return {
+    affordable:
+      secondaryPoolSpent <= getAvailableFlexiblePoolTotal({ profile: input.profile, progression }),
+    progression: recalculateProgression(progression),
+  };
 }
 
 function getGroupName(content: CanonicalContentShape, groupId: string): string {
@@ -406,18 +485,26 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
       );
     }
 
-    if (pool === "primary") {
-      group.primaryRanks += 1;
-      progression.primaryPoolSpent += cost;
-    } else {
-      group.secondaryRanks += 1;
-      progression.secondaryPoolSpent += cost;
-    }
+    group.primaryRanks += 1;
 
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
+    const reallocated = reallocateTargetChargenPools({
+      access,
+      content: input.content,
+      profile: input.profile,
+      progression,
+    });
+
+    if (!reallocated.affordable) {
+      return {
+        error: `Not enough ordinary or flexible points remain for this skill group. Cost: ${cost}.`,
+        progression: structuredClone(input.progression),
+        warnings,
+      };
+    }
 
     return {
-      progression: recalculateProgression(progression),
+      progression: reallocated.progression,
       spentCost: cost,
       warnings,
     };
@@ -485,18 +572,29 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     };
   }
 
-  if (pool === "primary") {
-    skill.primaryRanks += 1;
-    progression.primaryPoolSpent += cost;
-  } else {
-    skill.secondaryRanks += 1;
-    progression.secondaryPoolSpent += cost;
-  }
+  if (normalAccess) skill.primaryRanks += 1;
+  else skill.secondaryRanks += 1;
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
+  const reallocated = reallocateTargetChargenPools({
+    access,
+    content: input.content,
+    profile: input.profile,
+    progression,
+  });
+
+  if (!reallocated.affordable) {
+    return {
+      error: normalAccess
+        ? `No ordinary or flexible points remain for this skill. Cost: ${cost}.`
+        : "No flexible points remain for this other skill.",
+      progression: structuredClone(input.progression),
+      warnings,
+    };
+  }
 
   return {
-    progression: recalculateProgression(progression),
+    progression: reallocated.progression,
     spentCost: cost,
     warnings,
   };
@@ -733,17 +831,23 @@ export function removePrimaryPoint(input: SpendPrimaryPointInput): SpendPointRes
 }
 
 export function removeChargenPoint(input: AllocateChargenPointInput): SpendPointResult {
-  const progression = recalculateProgression(structuredClone(input.progression));
+  let progression = recalculateProgression(structuredClone(input.progression));
   const warnings: string[] = [];
+  const access = buildChargenSkillAccessSummaryInternal({
+    content: input.content,
+    professionId: input.professionId,
+    societyId: input.societyId,
+    societyLevel: input.societyLevel,
+  });
+  progression = reallocateTargetChargenPools({
+    access,
+    content: input.content,
+    profile: input.profile,
+    progression,
+  }).progression;
 
   if (input.targetType === "group") {
     const group = progression.skillGroups.find((item) => item.groupId === input.targetId);
-    const access = buildChargenSkillAccessSummaryInternal({
-      content: input.content,
-      professionId: input.professionId,
-      societyId: input.societyId,
-      societyLevel: input.societyLevel,
-    });
     const error = getChargenGroupRemovalError({
       access,
       content: input.content,
@@ -774,18 +878,18 @@ export function removeChargenPoint(input: AllocateChargenPointInput): SpendPoint
       };
     }
 
-    if (group.secondaryRanks > 0) {
-      group.secondaryRanks -= 1;
-      progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundCost);
-    } else {
-      group.primaryRanks -= 1;
-      progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundCost);
-    }
+    group.primaryRanks -= 1;
 
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
+    const reallocated = reallocateTargetChargenPools({
+      access,
+      content: input.content,
+      profile: input.profile,
+      progression: cleanupProgression(progression),
+    });
 
     return {
-      progression: cleanupProgression(progression),
+      progression: reallocated.progression,
       spentCost: refundCost,
       warnings,
     };
@@ -821,13 +925,10 @@ export function removeChargenPoint(input: AllocateChargenPointInput): SpendPoint
     };
   }
 
-  const usedSecondaryPool = skill.secondaryRanks > 0;
+  const normalAccess = access.normalSkillIds.includes(skillDefinition.id);
 
-  if (usedSecondaryPool) {
-    skill.secondaryRanks -= 1;
-  } else {
-    skill.primaryRanks -= 1;
-  }
+  if (normalAccess) skill.primaryRanks -= 1;
+  else skill.secondaryRanks -= 1;
 
   skill.ranks = skill.grantedRanks + skill.primaryRanks + skill.secondaryRanks;
   const refundedCost =
@@ -835,20 +936,29 @@ export function removeChargenPoint(input: AllocateChargenPointInput): SpendPoint
       ? getSkillSpendCost(skillDefinition, skill.category === "ordinary" ? "ordinary" : "flexible")
       : getSkillSpendCost(skillDefinition);
 
-  if (usedSecondaryPool) {
-    progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
-  } else {
-    progression.primaryPoolSpent = Math.max(0, progression.primaryPoolSpent - refundedCost);
-  }
+  const reallocated = reallocateTargetChargenPools({
+    access,
+    content: input.content,
+    profile: input.profile,
+    progression: cleanupProgression(progression),
+  });
 
   return {
-    progression: cleanupProgression(progression),
+    progression: reallocated.progression,
     spentCost: refundedCost,
     warnings,
   };
 }
 
 export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPointResult {
+  if (input.targetType === "skill" && input.content.competencyV2 && input.professionId) {
+    return removeChargenPoint({
+      ...input,
+      professionId: input.professionId,
+      targetType: "skill",
+    });
+  }
+
   const progression = recalculateProgression(structuredClone(input.progression));
   const warnings: string[] = [];
 
@@ -951,6 +1061,25 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
   specialization.secondaryRanks -= 1;
   specialization.ranks = specialization.secondaryRanks;
   const refundedCost = getSpecializationSpendCost(specialization.secondaryRanks > 0);
+  if (input.content.competencyV2 && input.professionId) {
+    const access = buildChargenSkillAccessSummaryInternal({
+      content: input.content,
+      professionId: input.professionId,
+      societyId: input.societyId,
+      societyLevel: input.societyLevel,
+    });
+    const reallocated = reallocateTargetChargenPools({
+      access,
+      content: input.content,
+      profile: input.profile,
+      progression: cleanupProgression(progression),
+    });
+    return {
+      progression: reallocated.progression,
+      spentCost: refundedCost,
+      warnings,
+    };
+  }
   progression.secondaryPoolSpent = Math.max(0, progression.secondaryPoolSpent - refundedCost);
 
   return {
@@ -961,6 +1090,14 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
 }
 
 export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPointResult {
+  if (input.targetType === "skill" && input.content.competencyV2 && input.professionId) {
+    return allocateChargenPoint({
+      ...input,
+      professionId: input.professionId,
+      targetType: "skill",
+    });
+  }
+
   const progression = recalculateProgression(structuredClone(input.progression));
   const allowedGroupIds = getAllowedSecondaryGroupIdsInternal(
     input.content,
@@ -1167,6 +1304,32 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
   specialization.secondaryRanks += 1;
   specialization.skillId = specializationDefinition.skillId;
   specialization.ranks = specialization.secondaryRanks;
+  if (input.content.competencyV2 && input.professionId) {
+    const access = buildChargenSkillAccessSummaryInternal({
+      content: input.content,
+      professionId: input.professionId,
+      societyId: input.societyId,
+      societyLevel: input.societyLevel,
+    });
+    const reallocated = reallocateTargetChargenPools({
+      access,
+      content: input.content,
+      profile: input.profile,
+      progression,
+    });
+    if (!reallocated.affordable) {
+      return {
+        error: "Not enough flexible points remaining for that specialization purchase.",
+        progression: structuredClone(input.progression),
+        warnings,
+      };
+    }
+    return {
+      progression: reallocated.progression,
+      spentCost: cost,
+      warnings,
+    };
+  }
   progression.secondaryPoolSpent += cost;
 
   return {

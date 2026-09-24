@@ -22,7 +22,27 @@ function finalized(direct = false) {
   };
   let progression = allocateChargenPoint({
     ...context,
-    progression: createChargenProgression(),
+    progression: {
+      ...createChargenProgression(),
+      chargenSelections: {
+        selectedCoreRouteId: "profession:soldier:core:contingent",
+        selectedLanguageIds: [],
+        selectedSkillIds: [],
+        selectedGroupSlots: [
+          {
+            groupId: "M01",
+            slotId: "melee-family",
+            selectedSkillIds: ["one_handed_edged"],
+          },
+        ],
+      },
+    },
+    targetId: "M01",
+    targetType: "group",
+  }).progression;
+  progression = allocateChargenPoint({
+    ...context,
+    progression,
     targetId: "F41",
     targetType: "group",
   }).progression;
@@ -62,7 +82,7 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         });
       }
       expect(JSON.stringify(build)).toBe(before);
-      expect(build.progression.primaryPoolSpent).toBe(direct ? 4 : 2);
+      expect(build.progression.primaryPoolSpent).toBe(direct ? 7 : 5);
     });
   it("rejects forged group/member and source metadata in summary and UI projections", () => {
     for (const mutate of [
@@ -105,7 +125,7 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         ),
       ).toBe(true);
     }
-    expect(build.progression.primaryPoolSpent).toBe(4);
+    expect(build.progression.primaryPoolSpent).toBe(7);
   });
   it("keeps a historical build readable with its original content and spend", () => {
     const build = characterBuildSchema.parse(characterPayload("historical", "Historical").build);

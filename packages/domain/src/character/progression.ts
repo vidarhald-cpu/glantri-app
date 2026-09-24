@@ -222,6 +222,7 @@ export const characterSpecializationSchema = z
   });
 
 export const characterChargenSelectionsSchema = z.object({
+  selectedCoreRouteId: z.string().min(1).optional(),
   selectedLanguageIds: chargenSelectionIdsSchema,
   selectedSkillIds: chargenSelectionIdsSchema,
   selectedGroupSlots: z.array(characterChargenGroupSlotSelectionSchema).default([]),

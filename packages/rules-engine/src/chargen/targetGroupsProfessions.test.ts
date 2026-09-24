@@ -48,7 +48,11 @@ describe("combined target Chargen", () => {
       targetId: "G03",
     });
     expect(group.error).toBeUndefined();
-    expect(group.progression.skillGroups[0].secondaryRanks).toBe(1);
+    expect(group.progression.skillGroups[0]).toMatchObject({
+      primaryRanks: 1,
+      secondaryRanks: 0,
+    });
+    expect(group.progression.primaryPoolSpent).toBe(0);
     expect(group.progression.secondaryPoolSpent).toBe(4);
     const direct = allocateChargenPoint({
       ...context,
