@@ -9,9 +9,14 @@
 > partial-acceptance clarification, the canonical Artifact Association
 > requirement, and the resolution of
 > [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) — and
-> governs where this note and it describe the same model. This note remains
-> authoritative for the #284 record and for the ten `OPEN-PPL-*` decisions that
-> remain open.
+> governs where this note and it describe the same model. It also records the
+> Product Owner's 2026-09-24 rulings: the **V1 representation selection** answer
+> to [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation)
+> and the **deferral** of
+> [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts).
+> This note remains authoritative for the #284 record and for the
+> `OPEN-PPL-*` decisions, of which **seven remain genuinely open** — see
+> [section 15](#15-open-decisions--none-chosen) for the exact state of each.
 
 **Portfolio areas:** #112 Campaign / Persistent Play, #114 Chargen, #119
 Artifact Management, #120/#227 Campaign Management, #122 AI Integration /
@@ -198,7 +203,10 @@ Recording #284 §3.
   a person is not a new person.
 - Both a **generic appearance image** and a **specific portrait** are supported.
   A person **may have several Artifacts and one selected primary
-  representation**.
+  representation**. The 2026-09-24 ruling below makes this precise for V1: it is
+  **two distinct singleton selected roles** — one primary portrait and one
+  general appearance — plus an open set of additional illustrations, not a
+  single "primary" slot.
 
 Identity revelation is a **GM visibility operation**, so it belongs to the
 **Reveal** vocabulary settled by
@@ -257,7 +265,13 @@ Expandable presentation uses the full-viewport inspection pattern established by
 which PPV1 §8.2 already names as the canonical destination. It is not
 reimplemented inside the Inspector.
 
-**Which representation is primary, and at what scope, is not settled.** See
+**Which representation is primary, and at what scope, is settled for V1.** A
+persistent Person may have **at most one selected primary portrait**, **at most
+one selected general appearance**, and **zero or more additional
+illustrations**; those selections are **global to that Person**, and Artifact
+visibility remains independent of them. Context-specific overrides — per
+Campaign, per entitlement tier, per Scenario or per play context — are
+**deferred, not rejected**. See
 [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation).
 
 ---
@@ -383,7 +397,11 @@ decide whether one mechanism serves both. See
 [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) and the
 lane map's treatment of this in [lane C](#lane-c--artifact-association-pc-self-service-and-the-generic-visual-library).
 
-**Player self-service authority is not settled.** See
+**Player self-service authority is not settled, and is deferred.** The Product
+Owner ruled on 2026-09-24 that player self-service Artifact creation and
+management is **future scope** that does **not block** the current
+GM-controlled content-authoring implementation. The decision stays **open** —
+no option is chosen — until player self-service is actually prioritized. See
 [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts).
 
 ---
@@ -785,11 +803,40 @@ and returns it to the Product Owner / control plane rather than deciding it in
 implementation. None of these reopens anything settled by #268 or Player Play
 V1.
 
-> **Exceptions: [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) and
-> [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) are both
-> SETTLED as of 2026-09-23.** Their headings are retained so existing references
-> continue to resolve. **The other nine decisions remain genuinely open and
-> unchanged.**
+> **Exceptions, in three distinct states. Every heading below is retained
+> unchanged so existing references continue to resolve.**
+>
+> - **Settled and closed:**
+>   [OPEN-PPL-4](#open-ppl-4--what-a-persistent-npc-record-is) and
+>   [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded), both
+>   as of 2026-09-23.
+> - **Settled for V1, future scoping deferred — not closed:**
+>   [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation),
+>   as of 2026-09-24. V1 is answered unambiguously; per-Campaign,
+>   per-entitlement-tier and per-context scoping remain deferred, not rejected.
+> - **Open and deferred — no option chosen, and non-blocking for current V1:**
+>   [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts),
+>   as of 2026-09-24. It is **still open**; what changed is only that it no
+>   longer blocks GM-controlled content authoring.
+>
+> **The remaining seven decisions — OPEN-PPL-1, 2, 3, 5, 7, 8 and 11 — remain
+> genuinely open, unranked and unchanged.**
+
+### 15.1 The decision frontier
+
+**PRODUCT OWNER RULING, 2026-09-24**, quoted verbatim, governing how the
+decisions in this section are answered:
+
+> "Decide only what the currently authorized product actually requires. Future
+> or hypothetical behaviour is deferred unless the current implementation
+> materially depends on it, or the current choice would materially foreclose a
+> reasonably foreseeable near-term requirement. **Reasonable extensibility is
+> sufficient; hypothetical completeness is not required.**"
+
+This is why a decision in this section may be answered **for V1** without being
+closed, and why a decision may be recorded as **open and deferred** rather than
+forced to a premature choice. A V1 answer here is binding on the implementing
+lane and is **not** a rejection of the options it did not need to take.
 
 ### OPEN-PPL-1 — How identity revelation is modelled
 
@@ -1082,29 +1129,162 @@ on [#279](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/279), which
 
 ### OPEN-PPL-9 — The scope of a selected primary representation
 
-**Status:** Open. **Raised by:** #284 §3 and §4. **Affects:** lanes B and C.
+**Status:** **SETTLED FOR V1. Future scoping DEFERRED, not rejected. This
+decision is therefore neither "open" nor "closed".**\
+**Settled on:** 2026-09-24\
+**Authority:** PRODUCT OWNER RULING, recorded on
+[#284](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284) and in
+[Content authoring, Scenario preparation and Artifact management §18.9](content-authoring-scenario-preparation-and-artifact-management.md#189-open-ppl-9-answered-for-v1).\
+**Raised by:** #284 §3 and §4. **Affects:** lanes B and C.\
+**Gates:** **Nothing in V1.** It no longer gates lane B or lane C. It remains
+the decision record that a **future** context-specific representation override
+must reopen and extend.
 
-#284 settles that a person may have several Artifacts and **one selected primary
-representation**, and separately that both a generic appearance image and a
-specific portrait are supported. Those two statements together imply at least
-two representation roles, and the scoping of "primary" is not stated.
+**The question as originally recorded**, retained as provenance:
 
-Options, **none chosen**:
+> #284 settles that a person may have several Artifacts and **one selected
+> primary representation**, and separately that both a generic appearance image
+> and a specific portrait are supported. Those two statements together imply at
+> least two representation roles, and the scoping of "primary" is not stated.
+>
+> Options, **none chosen**:
+>
+> 1. **Global per person** — one primary, everywhere.
+> 2. **Per Campaign.**
+> 3. **Per entitlement tier** — a primary generic appearance for viewers who do
+>    not know the identity and a primary portrait for those who do, which is the
+>    reading that makes [section 4](#4-person-representation-and-identity) work
+>    without a second mechanism.
+> 4. **Per Scenario or per play context.**
+>
+> Option 3 couples this decision to
+> [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled).
 
-1. **Global per person** — one primary, everywhere.
-2. **Per Campaign.**
-3. **Per entitlement tier** — a primary generic appearance for viewers who do
-   not know the identity and a primary portrait for those who do, which is the
-   reading that makes [section 4](#4-person-representation-and-identity) work
-   without a second mechanism.
-4. **Per Scenario or per play context.**
+**What was ruled**, quoted verbatim:
 
-Option 3 couples this decision to
-[OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled).
+> "**OPEN-PPL-9 / V1 representation selection**: do not build a generalized
+> Campaign-, Scenario-, entitlement- or play-context-specific primary-selection
+> system now.
+> For current V1:
+>
+> - a persistent Person may have at most one selected primary portrait;
+> - at most one selected general appearance;
+> - zero or more additional illustrations;
+> - those selections are global to that Person;
+> - Artifact visibility remains independent.
+>
+> Future context-specific representation overrides are deferred until an actual
+> product need requires them."
+
+#### What V1 builds
+
+This is **option 1, scoped explicitly to V1**. Read precisely, the ruling
+defines **two distinct singleton selected roles plus an open set** — it is
+**not** "one primary representation":
+
+| V1 selection                    | Multiplicity per Person | Scope                |
+| ------------------------------- | ----------------------- | -------------------- |
+| **Selected primary portrait**   | **At most one**         | Global to the Person |
+| **Selected general appearance** | **At most one**         | Global to the Person |
+| **Additional illustrations**    | **Zero or more**        | Global to the Person |
+
+- The two selected roles are **independent singletons**, not one slot with two
+  possible fillers. A Person may have both, either, or neither.
+- **Artifact visibility remains independent** of selection. Selecting an
+  Artifact as the primary portrait neither reveals it nor publishes it; who may
+  see it is governed by the separate visibility state that
+  [Content authoring §3](content-authoring-scenario-preparation-and-artifact-management.md#3-one-artifact-system)
+  keeps distinct.
+- **No Campaign-, Scenario-, entitlement- or play-context-specific
+  primary-selection system is built in V1.** A lane that finds itself designing
+  one has exceeded this ruling and stops.
+
+#### What is deferred, and is not foreclosed
+
+Options 2, 3 and 4 are **deferred, not rejected**. The ruling defers "future
+context-specific representation overrides ... until an actual product need
+requires them". Applying the Product Owner's
+[decision frontier](#151-the-decision-frontier), the V1 answer is required to be
+**reasonably extensible, not hypothetically complete**:
+
+- A future decision may still scope selection **per Campaign, per entitlement
+  tier, or per Scenario/play context** without contradicting anything recorded
+  here. The V1 answer is stated as the **global default selection**, and a later
+  context-specific selection is the **override** of that default.
+- Nothing in V1 may be built in a way that makes such an override a redesign of
+  Artifact identity or of the association layer. The canonical Artifact
+  Association layer in
+  [Content authoring §4.1](content-authoring-scenario-preparation-and-artifact-management.md#41-the-canonical-artifact-association-layer)
+  already carries a **typed target** and an **association role**, which is the
+  extension point a future scoped override would use.
+- Conversely, **V1 must not speculatively build the override mechanism**, a
+  scope column, or a resolution-order rule for a scope that does not yet exist.
+
+#### The coupling to OPEN-PPL-1, corrected
+
+The original option 3 was coupled to
+[OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled), on the reading
+that entitlement-tier-scoped selection was what made
+[section 4](#4-person-representation-and-identity) work "without a second
+mechanism". **That coupling is discharged for V1 and the reasoning is now
+stale.** V1 satisfies section 4 through the **two distinct global roles** — a
+selected general appearance and a selected primary portrait — combined with
+**independent visibility**, rather than through tier-scoped selection. Which of
+the two a given viewer receives is a **visibility/projection** question, which
+is OPEN-PPL-1's concern and remains entirely open.
+
+**OPEN-PPL-1 is neither answered, narrowed nor pre-empted here.** This ruling
+decides _what may be selected and at what scope_; OPEN-PPL-1 still decides _how
+revealed-ness is represented and which selection therefore projects to whom._
+
+#### No collision with PO-SPW-1 or OPEN-PPL-6
+
+- **[PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)
+  is unaffected.** "At most one selected primary portrait" is a constraint on
+  **selection**, not on **association multiplicity**. A Person still carries
+  zero, one or many Artifact associations, and PO-SPW-1's prohibition on a
+  one-to-one pointer field stands unchanged. **A V1 implementation must not read
+  "at most one" as licence for a one-to-one pointer.**
+- **[OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is
+  unaffected and is the mechanism this ruling selects within.** OPEN-PPL-6
+  already places contextual **role** on the association and intrinsic
+  representation nature on the Artifact. This ruling names which roles V1
+  supports; it does not move where role lives, and readiness remains
+  **derived**.
 
 ### OPEN-PPL-10 — The authority model for player self-service Artifacts
 
-**Status:** Open. **Raised by:** #284 §6. **Affects:** lane C.
+**Status:** **Open — and DEFERRED. Not settled, not closed, no option
+chosen.**\
+**Deferral recorded on:** 2026-09-24\
+**Authority for the deferral:** PRODUCT OWNER RULING, recorded on
+[#284](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/284) and in
+[Content authoring, Scenario preparation and Artifact management §18.10](content-authoring-scenario-preparation-and-artifact-management.md#1810-open-ppl-10-deferred-and-non-blocking).\
+**Raised by:** #284 §6. **Affects:** lane C.\
+**Gates:** **Nothing in current V1.** The deferral finding is that this decision
+is **non-blocking for GM-controlled content authoring**. It still gates any work
+that actually implements player self-service Artifact creation or management.
+
+**What was ruled**, quoted verbatim:
+
+> "**OPEN-PPL-10**: player self-service Artifact creation/management is future
+> scope and does not block the current GM-controlled content-authoring
+> implementation. Keep the future decision open/deferred until player
+> self-service is actually prioritized."
+
+**What this does and does not do.**
+
+- It **does not choose** among the three options below. None is selected, none
+  is ranked, none is rejected. The question is exactly as open as it was.
+- It **does** find that player self-service Artifact creation/management is
+  **future scope**, and that the current **GM-controlled** content-authoring
+  implementation does **not depend on it**. Lane C's GM-controlled half is
+  therefore not blocked by this decision.
+- It **does** direct that the decision stay open and deferred **until player
+  self-service is actually prioritized**, at which point it must be taken by the
+  Product Owner. It is a permission decision and is not a Builder choice.
+- A lane that reaches actual player self-service Artifact creation or management
+  **stops and returns this decision to the Product Owner**, exactly as before.
 
 #284 settles that players **should eventually** be able to upload and manage
 permitted Artifacts for their own Characters. The authority by which they do so
@@ -1112,7 +1292,7 @@ is not settled, and
 [Artifact Management PO-3](../architecture/artifact-management-package-import.md#po-3--player-artifact-creationsubmission)
 deferred player creation from AM1.
 
-Options, **none chosen**:
+Options, **none chosen, and preserved unranked**:
 
 1. **A new ownership scope** — player-owned Artifacts, anticipated without
    redesigning Artifact identity by
@@ -1194,8 +1374,8 @@ exact-path contract**.
 | **Extends, does not duplicate** | [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector) and [§13](../architecture/player-play-v1.md#13-canonical-detail-and-click-through-rule); [#268 §5](../architecture/scenario-play-workspace.md#5-presence-versus-visibility) and [§4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations); [Authority and Information Projection](../architecture/information-authority-and-projection.md#projection-rules); [Campaign Management V2 §8](../architecture/campaign-management-v2.md#8-artifact-and-image-inspection) for expandable presentation; **[#277](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/277) as the GM-private-field precedent** — reuse that pattern rather than inventing a second one. |
 | **Data hotspots**               | Prisma schema and migrations (reserved). `packages/domain/src/campaign/scenario.ts` and `scenarioPlayerProjection`; `packages/domain/src/campaign/scenarioSession.ts`. `packages/database/src/services/campaignManagementService.ts`, `scenarioService.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | **API/UI hotspots**             | `apps/api/src/routes/scenarios/participantRoutes.ts`, `scenarioRoutes.ts`, `access.ts`. `apps/web/app/(app)/campaigns/[campaignId]/CampaignWorkspaceShell.tsx` — shared with PPV1 P1/P2/P4/P5/P7 and #268 S1/S2; **one integration owner required**. `apps/web/src/features/scenarios/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Settled**                     | The Inspector exists and is generic; click-through routes to canonical homes; presence and visibility do not imply known identity; revelation does not replace the person; notes and history survive identification; both a generic appearance and a specific portrait are supported; the authorization tiers in [section 5](#5-person-inspector); the GM dossier is **structurally excluded** from player projections, search and context; shared notes are separate from the dossier; identity reveal is Reveal vocabulary, not Share.                                                                                                                                                                                                                                  |
-| **Still open**                  | [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled), [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives), [OPEN-PPL-7](#open-ppl-7--the-audience-granularity-of-sharedplayer-notes), [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation).                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **Settled**                     | The Inspector exists and is generic; click-through routes to canonical homes; presence and visibility do not imply known identity; revelation does not replace the person; notes and history survive identification; both a generic appearance and a specific portrait are supported, and **V1 selection of each is a global singleton on the Person, with visibility independent** ([OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation)); the authorization tiers in [section 5](#5-person-inspector); the GM dossier is **structurally excluded** from player projections, search and context; shared notes are separate from the dossier; identity reveal is Reveal vocabulary, not Share.                                                       |
+| **Still open**                  | [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled), [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives), [OPEN-PPL-7](#open-ppl-7--the-audience-granularity-of-sharedplayer-notes). [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) is **settled for V1** (two global singleton roles — primary portrait and general appearance — plus zero or more additional illustrations, with visibility independent) and **no longer gates this lane**; only future context-specific overrides remain deferred.                                                                                                                                                                                                        |
 | **QA class**                    | **[Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — privacy projection and persisted-data semantics.** This is the highest-risk lane in the map and the one the #271 defect class most directly threatens.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 ### Lane C — Artifact association, PC self-service and the generic visual library
@@ -1203,15 +1383,15 @@ exact-path contract**.
 **Covers:** #284 §6 (Artifact/representation lifecycle), §7 (generic visual
 library).
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dependencies**                | [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)'s association semantics, already settled and **binding on this lane**. [#278](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/278) should land with or before any widening of `CampaignItemArtifactAttachment`, since widening a link table with a known database-level scoping gap enlarges that gap. #268 S6 is the Item-side slice of the same association. [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) and [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts) before Ready. [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is **settled** and no longer gates this lane. |
-| **Extends, does not duplicate** | [#268 S6](../architecture/scenario-play-workspace.md#slice-s6--item-attached-artifact-representation-and-blackboard-sharing); the [#119 Artifact Management contract](../architecture/artifact-management-package-import.md#1-status-and-scope); #278; [#239](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/239) for the index side. **PO-SPW-1 point 5 requires evaluating `CampaignItemArtifactAttachment` against the association semantics before reusing it**, and point 6 requires a dedicated link entity otherwise. Nothing in this map presumes that evaluation's outcome.                                                                                                                                                                                                                    |
-| **Data hotspots**               | Prisma schema and migrations (reserved): `CampaignItemArtifactAttachment`, `CampaignAsset`, `ScenarioArtifactReference`, `ArtifactRevision`. `packages/database/src/services/artifactService.ts` (~621 lines, holds `listVisible`). `packages/domain/src/campaign/artifact.ts` (`artifactCommonDtoSchema` — the field set PPV1 records as carrying no scenario scope).                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **API/UI hotspots**             | `apps/api/src/routes/artifacts.ts`, `artifactImports.ts`. `apps/web/src/features/artifacts/ArtifactPanel.tsx`, `ArtifactDetails.tsx`, `OrdinaryArtifactUploadPanel.tsx`, `inspection/`. Campaign/Scenario Item routes and UI (reserved hotspot, shared with #268 S4/S5 and PPV1 P2/P7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| **Settled**                     | PO-SPW-1's association semantics, including that a one-to-one pointer field is **not acceptable**; attaching transfers no ownership and an attached Artifact never becomes an Item; consumers reference stable identity; a reference does not grant view rights; **disassociation must not implicitly delete**; attach / edit metadata / replace media / change primary role / disassociate are all first-class; PCs as well as NPCs may carry Artifacts; generic library imagery is visibly distinct, pencil/sketch is the current convention, generic-versus-specific is recorded **as data**, and specific entities may fall back to generic imagery.                                                                                                                                                         |
-| **Still open**                  | [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation), [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts). [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is now settled.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — schema change, and player self-service is an authorization change. PO-SPW-1's [proofs 11 to 14](../architecture/scenario-play-workspace.md#14-verification-expectations-for-authorized-slices) apply directly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dependencies**                | [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)'s association semantics, already settled and **binding on this lane**. [#278](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/278) should land with or before any widening of `CampaignItemArtifactAttachment`, since widening a link table with a known database-level scoping gap enlarges that gap. #268 S6 is the Item-side slice of the same association. **The former conjunctive gate on [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) and [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts) before Ready is DISCHARGED for V1**: OPEN-PPL-9 is settled for V1, and OPEN-PPL-10 is deferred and non-blocking for GM-controlled content authoring. **No `OPEN-PPL-*` decision now blocks this lane's GM-controlled scope.** Two conditions survive as scope boundaries rather than gates: this lane must **not** build a Campaign-, Scenario-, entitlement- or play-context-specific primary-selection system, and it must **not** implement player self-service Artifact creation/management, which still returns [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts) to the Product Owner. [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is **settled** and no longer gates this lane. |
+| **Extends, does not duplicate** | [#268 S6](../architecture/scenario-play-workspace.md#slice-s6--item-attached-artifact-representation-and-blackboard-sharing); the [#119 Artifact Management contract](../architecture/artifact-management-package-import.md#1-status-and-scope); #278; [#239](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/239) for the index side. **PO-SPW-1 point 5 requires evaluating `CampaignItemArtifactAttachment` against the association semantics before reusing it**, and point 6 requires a dedicated link entity otherwise. Nothing in this map presumes that evaluation's outcome.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **Data hotspots**               | Prisma schema and migrations (reserved): `CampaignItemArtifactAttachment`, `CampaignAsset`, `ScenarioArtifactReference`, `ArtifactRevision`. `packages/database/src/services/artifactService.ts` (~621 lines, holds `listVisible`). `packages/domain/src/campaign/artifact.ts` (`artifactCommonDtoSchema` — the field set PPV1 records as carrying no scenario scope).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| **API/UI hotspots**             | `apps/api/src/routes/artifacts.ts`, `artifactImports.ts`. `apps/web/src/features/artifacts/ArtifactPanel.tsx`, `ArtifactDetails.tsx`, `OrdinaryArtifactUploadPanel.tsx`, `inspection/`. Campaign/Scenario Item routes and UI (reserved hotspot, shared with #268 S4/S5 and PPV1 P2/P7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| **Settled**                     | PO-SPW-1's association semantics, including that a one-to-one pointer field is **not acceptable**; attaching transfers no ownership and an attached Artifact never becomes an Item; consumers reference stable identity; a reference does not grant view rights; **disassociation must not implicitly delete**; attach / edit metadata / replace media / change primary role / disassociate are all first-class; the **V1 role vocabulary for a Person** is a single selected primary portrait, a single selected general appearance and zero or more additional illustrations, **global to the Person**, with visibility independent — and **"at most one selected" is a selection constraint, never a licence for a one-to-one pointer**, which PO-SPW-1 still forbids; PCs as well as NPCs may carry Artifacts; generic library imagery is visibly distinct, pencil/sketch is the current convention, generic-versus-specific is recorded **as data**, and specific entities may fall back to generic imagery.                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Still open**                  | **Nothing blocks this lane's GM-controlled V1 scope.** [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) is **settled for V1**, with per-Campaign / per-entitlement-tier / per-context overrides **deferred, not rejected**. [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts) is **still open but deferred**, and is non-blocking here; the **PC self-service** half of this lane's title remains unauthorized and still stops on it. [OPEN-PPL-6](#open-ppl-6--where-generic-versus-specific-is-recorded) is now settled.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **QA class**                    | [Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — schema change, and player self-service is an authorization change. PO-SPW-1's [proofs 11 to 14](../architecture/scenario-play-workspace.md#14-verification-expectations-for-authorized-slices) apply directly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 ### Lane D — AI parity, batch review and trusted bulk authoring
 
@@ -1249,13 +1429,19 @@ Lane A  canonical NPC / Actor authoring
    │        gate: OPEN-PPL-2, OPEN-PPL-5 (OPEN-PPL-4 settled)
    ├── Lane B  representation, identity reveal, Inspector, notes/dossier
    │        also needs: PPV1 P1 + P2 (Inspector host), Lane C (association)
-   │        gate: OPEN-PPL-1, OPEN-PPL-3, OPEN-PPL-7, OPEN-PPL-9   — QA FLOOR
+   │        gate: OPEN-PPL-1, OPEN-PPL-3, OPEN-PPL-7 (OPEN-PPL-9 settled for V1)
+   │                                                               — QA FLOOR
    └── Lane E  GM Campaign Material index + Scenario authoring/history
             extends #239 / #227; gate: OPEN-PPL-11
 
 Lane C  Artifact association + PC self-service + generic visual library
          extends #268 S6 / #119; sequence with #278
-         gate: OPEN-PPL-9, OPEN-PPL-10 (OPEN-PPL-6 settled)        — QA FLOOR
+         gate: NONE for the GM-controlled V1 scope               — QA FLOOR
+               OPEN-PPL-6 settled; OPEN-PPL-9 settled for V1;
+               OPEN-PPL-10 open but DEFERRED and non-blocking.
+               Boundaries, not gates: no context-specific primary
+               selection, and no player self-service Artifact
+               creation/management (that half still stops on PPL-10).
 
 Lane D  AI parity + batch review + trusted bulk
          follows the human path it must have parity with (A, C)
@@ -1339,3 +1525,15 @@ implementation here.**
 11. **Nothing settled elsewhere moved.** No lane narrowed or contradicted a
     #268 or Player Play V1 decision; where one appears to need to, it stops and
     returns to the Product Owner.
+12. **V1 representation selection is exactly what was ruled.** A Person accepts
+    **at most one** selected primary portrait and **at most one** selected
+    general appearance, independently of each other, plus **any number** of
+    additional illustrations; all three are **global to the Person**. Prove that
+    changing a selection changes **no** visibility state and that changing
+    visibility changes **no** selection. Prove additionally that **no
+    Campaign-, Scenario-, entitlement- or play-context-scoped selection exists**
+    — and that the association layer still permits a Person **zero, one or many**
+    Artifact associations, so that "at most one selected" was not implemented as
+    a one-to-one pointer, which
+    [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics)
+    forbids.
