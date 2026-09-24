@@ -2326,6 +2326,30 @@ function dropSubmittedCombatDeclarationTaskId<T extends { taskId?: string }>(
   return rest as T;
 }
 
+/**
+ * The next free Combat Task id for a declaration whose canonical id is already held by this
+ * participant's own terminal declaration-owned Task of this kind (A1b, Forgejo issue #311).
+ *
+ * Derived from the canonical id rather than chosen freely, so identity stays server-owned and the
+ * scheme stays deterministic and inspectable. Terminal siblings are skipped rather than reused,
+ * and a candidate held by anything else is skipped too, because minting over a taken id is exactly
+ * the silent no-op being repaired. The scan terminates: the action list is finite, so at most one
+ * candidate per stored action can be taken.
+ */
+function nextFreeCombatDeclarationTaskId(input: {
+  actions: CombatRoundState["genericActions"];
+  canonicalTaskId: string;
+}): string {
+  const taken = new Set(input.actions.map((action) => action.id));
+  let attempt = 2;
+  let candidate = `${input.canonicalTaskId}:replacement:${attempt}`;
+  while (taken.has(candidate)) {
+    attempt += 1;
+    candidate = `${input.canonicalTaskId}:replacement:${attempt}`;
+  }
+  return candidate;
+}
+
 function materializeCombatDeclarationTasks(input: {
   createdAt: string;
   createdByUserId: string;
@@ -2383,7 +2407,8 @@ function materializeCombatDeclarationTasks(input: {
       requestedExisting && !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(requestedExisting.status)
         ? requestedExisting
         : undefined;
-    const taskId = existing?.id ?? `${declarationId}:${declarationKind}`;
+    const canonicalTaskId = `${declarationId}:${declarationKind}`;
+    let taskId = existing?.id ?? canonicalTaskId;
     if (existing) {
       genericActions = updateCombatGenericActionIntent({
         actionId: taskId,
@@ -2453,8 +2478,7 @@ function materializeCombatDeclarationTasks(input: {
       // participant's own live action of this same declared kind, reached without carry-forward —
       // the persisted intent named a different primary action, or carries no id at all. That is
       // this same task, so its intent is updated exactly as the carry-forward branch above would,
-      // rather than being silently dropped. A terminal occupant is deliberately left alone: its
-      // handling is unchanged from the accepted baseline and is not part of this hardening.
+      // rather than being silently dropped.
       if (
         canonicalIdOccupant &&
         !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(canonicalIdOccupant.status)
@@ -2466,6 +2490,39 @@ function materializeCombatDeclarationTasks(input: {
           updatedAt: input.createdAt,
         });
       } else {
+        // The in-round escape hatch rule decision 0007 ruling 3 ordered (Forgejo issue #311).
+        //
+        // A **terminal** occupant of the canonical id is this participant's own already-finished
+        // declaration-owned Task of this kind — overwhelmingly the task they just cancelled at the
+        // declaration boundary. The canonical id is minted once per round per participant per kind,
+        // so re-declaring in that same round derived the same taken id, and
+        // `declareCombatGenericAction` returns its input unchanged on a taken id: the declaration
+        // answered 200 having created nothing. The GM or player saw their typed intent accepted and
+        // had nothing at their opportunity. The cancel therefore worked only across rounds, and the
+        // declaration-surface escape the ruling requires was unavailable in the round it is needed.
+        //
+        // The replacement is minted under a distinct, still server-owned id derived from the
+        // canonical one. Identity stays server-owned and deterministic, and nothing reads a task id
+        // back apart from carry-forward, which addresses the persisted intent's `taskId` and so
+        // resolves the replacement next round exactly as it resolves a canonical id. The terminal
+        // task keeps its own id, so its command log and compact inverse undo facts stay addressable
+        // and undo is unaffected.
+        //
+        // Rejected alternatives: reusing the terminal action in place would overwrite a task the
+        // cancel command's inverse facts still address, breaking undo; refusing the declaration
+        // outright ("declare next round") is the closed hatch the ruling forbids; and a
+        // client-supplied or random id would reopen the second creation path A1b closed.
+        //
+        // Every guard above still ran against the canonical id, in the same order and with the same
+        // outcomes: a foreign, wrong-kind or `declarationKind`-less occupant was already refused
+        // with zero persistence, and a second live Perform Task was already refused — so the
+        // replacement can only ever be this participant's single live primary action.
+        if (canonicalIdOccupant) {
+          taskId = nextFreeCombatDeclarationTaskId({
+            actions: genericActions,
+            canonicalTaskId,
+          });
+        }
         genericActions = declareCombatGenericAction({
           action: {
             createdAt: input.createdAt,

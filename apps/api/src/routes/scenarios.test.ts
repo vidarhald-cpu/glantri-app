@@ -11116,6 +11116,233 @@ describe("scenarios route contract", () => {
     });
   });
 
+  async function cancelPerformTaskAtDeclarationBoundary(input: { actionId: string }) {
+    const currentEncounter = (await mocks.encounterService.getEncounterById()) as EncounterSession;
+    const declarationTask = buildCombatProgressionProjection(currentEncounter.combatRoundState!)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .find(
+        (task) =>
+          task.expectedCommand === "declare_action" &&
+          (task.identity.participantId === "encounter-participant-1" ||
+            (task.owner?.kind === "combatant" &&
+              task.owner.participantId === "encounter-participant-1")),
+      );
+    expect(
+      declarationTask,
+      "the declaration boundary projects a declare_action task",
+    ).toBeDefined();
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: input.actionId,
+        boundary: "declaration",
+        executionGroupId: declarationTask!.executionGroupId,
+        expectedRevision: currentEncounter.updatedAt,
+        finishKind: "cancel",
+        processId: declarationTask!.processId,
+        scenarioParticipantId: "participant-1",
+        stageId: declarationTask!.stageId,
+        taskId: declarationTask!.id,
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/finish-combat-task",
+    });
+    await app.close();
+    return response;
+  }
+
+  /**
+   * A1b in-round escape hatch — Forgejo issue #311.
+   *
+   * Rule decision 0007 ruling 3 requires a declaration-surface cancellation *"since the current
+   * hard block otherwise leaves no verified declaration-surface escape"*. The cancel worked across
+   * rounds but not inside one: the canonical id
+   * `round:<N>:participant:<pid>:declaration:perform_task` is minted once per round per participant
+   * per kind, so after cancelling the live Task in round N the **terminal** task still held that id.
+   * Re-declaring in round N derived the same taken id and fell through to
+   * `declareCombatGenericAction`, which returns its input unchanged on a taken id — the declaration
+   * answered **200 with no live task**. The submitter saw their typed intent accepted and had
+   * nothing at their opportunity, and the escape the ruling ordered was unavailable in the one
+   * round it is needed.
+   *
+   * The replacement is minted under a distinct server-owned id derived from the canonical one. The
+   * primary opportunity is spent by neither the cancel nor the replacement.
+   */
+  it("lets a participant cancel this round's canonical Combat Task and declare a replacement in the same round", async () => {
+    const fixture = setupA1bTaskIdentityFixture();
+    const baselineState = fixture.encounter.combatRoundState!;
+
+    const firstDeclaration = await declarePerformTask({ description: "Bar the gate." });
+    expect(firstDeclaration.statusCode, JSON.stringify(firstDeclaration.json())).toBe(200);
+    const declaredState =
+      mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session.combatRoundState;
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        state: declaredState,
+      }),
+    ).toMatchObject({ id: fixture.canonicalTaskId, intent: "Bar the gate." });
+
+    const cancelled = await cancelPerformTaskAtDeclarationBoundary({
+      actionId: fixture.canonicalTaskId,
+    });
+    expect(cancelled.statusCode, JSON.stringify(cancelled.json())).toBe(200);
+    const cancelledState = cancelled.json().encounter.combatRoundState;
+    expect(
+      cancelledState.genericActions.find(
+        (action: { id: string }) => action.id === fixture.canonicalTaskId,
+      ),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        state: cancelledState,
+      }),
+      "the cancelled task is no longer projected",
+    ).toBeUndefined();
+
+    const replacement = await declarePerformTask({
+      description: "Haul the cart across the gate.",
+    });
+    expect(replacement.statusCode, JSON.stringify(replacement.json())).toBe(200);
+    const replacementState =
+      mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session.combatRoundState;
+    const live = getCombatRoundOpenPerformTaskForParticipant({
+      participantId: "encounter-participant-1",
+      phase: "phase1",
+      state: replacementState,
+    });
+    expect(
+      live,
+      "the replacement declaration produces a live, canonically projected Perform Task",
+    ).toMatchObject({
+      declarationKind: "perform_task",
+      intent: "Haul the cart across the gate.",
+      ownerParticipantId: "encounter-participant-1",
+      status: "declared",
+    });
+    expect(live!.id).not.toBe(fixture.canonicalTaskId);
+    expect(live!.id.startsWith(`${fixture.canonicalTaskId}:`)).toBe(true);
+
+    // Exactly one live Perform Task: the replacement never doubles the primary action.
+    expect(
+      replacementState.genericActions.filter(
+        (action: { declarationKind?: string; ownerParticipantId: string; status: string }) =>
+          action.declarationKind === "perform_task" &&
+          action.ownerParticipantId === "encounter-participant-1" &&
+          !["cancelled", "completed", "interrupted"].includes(action.status),
+      ),
+    ).toHaveLength(1);
+
+    // The persisted intent addresses the replacement id, so cross-round carry-forward resolves it.
+    const persistedIntent =
+      mocks.encounterService.updateScenarioParticipantState.mock.calls.at(-1)?.[0]?.state.combat
+        .lastDeclarationIntent;
+    expect(persistedIntent.primaryAction.taskId).toBe(live!.id);
+
+    // The primary opportunity is consumed by neither the cancel nor the replacement.
+    for (const state of [declaredState, cancelledState, replacementState]) {
+      expect(state.phaseResolutionStatuses["encounter-participant-1"]?.phase1).toBeUndefined();
+      expect(state.phaseResolutionStatuses["encounter-participant-1"]?.phase2).toBeUndefined();
+      expect(state.phaseResolutionCursor).toEqual(baselineState.phaseResolutionCursor);
+      expect(state.currentStep).toBe(baselineState.currentStep);
+      expect(
+        state.participants.find(
+          (participant: { participantId: string }) =>
+            participant.participantId === "encounter-participant-1",
+        ).stepStatuses.phase_1_actions,
+      ).toEqual(
+        baselineState.participants.find(
+          (participant) => participant.participantId === "encounter-participant-1",
+        )!.stepStatuses.phase_1_actions,
+      );
+    }
+    // The cancel itself is cursor-neutral: it changes the task and nothing else.
+    expect(cancelledState.currentCursor).toEqual(declaredState.currentCursor);
+    expect(cancelledState.selectedStep).toBe(declaredState.selectedStep);
+    expect(cancelledState.selectedParticipantId).toBe(declaredState.selectedParticipantId);
+  });
+
+  /**
+   * The in-round replacement mint sits **behind** the one-live-task refusal, so it can never be
+   * used to obtain two live primary actions: a terminal occupant of the canonical id does not
+   * excuse a different live Perform Task the participant still holds.
+   */
+  it("still refuses a replacement declaration while another live Combat Task is held", async () => {
+    const fixture = setupA1bTaskIdentityFixture({ liveTaskStatus: "declared" });
+    fixture.encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...fixture.encounter.combatRoundState,
+      genericActions: [
+        ...fixture.encounter.combatRoundState!.genericActions,
+        {
+          createdAt: "2026-09-18T07:30:00.000Z",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: fixture.canonicalTaskId,
+          intent: "Already cancelled.",
+          lastUpdatedAt: "2026-09-18T07:30:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          status: "cancelled",
+        },
+      ],
+    });
+
+    const response = await declarePerformTask({ description: "Haul the cart across the gate." });
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+    expect(response.json().error).toMatch(/already has a Combat Task in progress/);
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The collision hardening is unchanged by the in-round replacement: an occupant of the canonical
+   * id that is not this participant's own declaration-owned action **of this kind** is still
+   * refused with zero persistence, terminal or not.
+   */
+  it.each([
+    ["a wrong-declarationKind occupant", { declarationKind: "small_action" as const }],
+    ["a wrong-owner occupant", { ownerParticipantId: "encounter-participant-2" }],
+  ])(
+    "refuses %s of the canonical Combat Task id even when it is terminal",
+    async (_label, overrides) => {
+      const fixture = setupA1bTaskIdentityFixture();
+      fixture.encounter.combatRoundState = combatRoundStateSchema.parse({
+        ...fixture.encounter.combatRoundState,
+        genericActions: [
+          ...fixture.encounter.combatRoundState!.genericActions,
+          {
+            createdAt: "2026-09-18T07:30:00.000Z",
+            declarationKind: "perform_task",
+            duration: { kind: "gm_decided" },
+            id: fixture.canonicalTaskId,
+            intent: "Not this participant's Task of this kind.",
+            lastUpdatedAt: "2026-09-18T07:30:00.000Z",
+            ownerParticipantId: "encounter-participant-1",
+            progress: { completedRounds: 0 },
+            status: "cancelled",
+            ...overrides,
+          },
+        ],
+      });
+
+      const response = await declarePerformTask({ description: "Haul the cart across the gate." });
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+      expect(response.json().error).toMatch(
+        /Combat Task identity for this character is already held by another Combat action/,
+      );
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ["close", 1],
     ["open", 3],

@@ -223,6 +223,13 @@ across the two phases"`. The A1b cancellation requirement is implemented by A1b 
   `"declaration-boundary Combat Task cancellation (A1b)"`, and by
   `apps/api/src/routes/scenarios.test.ts`, test `"lets the GM cancel a live Combat Task from the
 declaration boundary and then declare a new one"`, which proves the full round trip.
+  The escape is available **in the same round**, which is what this ruling requires: a replacement
+  declared after cancelling this round's task is minted under a distinct server-owned id derived
+  from the canonical one, and a `cancel_combat_task` command recording `boundary: "declaration"` is
+  not command-log completion evidence, so it does not spend the primary opportunity it just freed.
+  Protected by `apps/api/src/routes/scenarios.test.ts`, test `"lets a participant cancel this
+round's canonical Combat Task and declare a replacement in the same round"`, and by the two
+  declaration-boundary opportunity tests in `combatTaskLifecycle.test.ts`.
 - Documentation: [Combat task integration matrix](../../architecture/combat-task-integration-matrix.md),
   Perform Task lifecycle row and narrative; [Combat Panel Contract §12.18](../../product/combat-panel-contract.md#1218-phase-2-perform-task-recurrence-versus-expiry--settled)
   now records ruling 3 as settled rather than open.

@@ -7154,7 +7154,10 @@ export function getCombatTaskScheduledPhase(
  *   All of those set `done` with an action step status of `complete`, not `skipped`.
  * - `combatRoundParticipantPhaseActionHasCompletionEvidence` is derived from the immutable command
  *   log rather than from a status the cursor machinery rewrites, and it recognises all four
- *   consuming task command types. It covers the case the `done` substep does not: a participant
+ *   consuming task command types — a `cancel_combat_task` taken at the **declaration** boundary
+ *   excepted, since that command applies with `consumesOpportunity: false` and spends nothing, and
+ *   counting it closed the in-round escape rule decision 0007 ruling 3 requires. It covers the case
+ *   the `done` substep does not: a participant
  *   who is executable through another Phase 1 source — `observe_opponent`, which has no substep of
  *   its own — has their `done` status cleared and re-derived as `perform_task`, which on its own
  *   would reopen the already-spent opportunity.
@@ -7301,6 +7304,28 @@ function combatRoundCommandCancelsPhaseAction(input: {
   );
 }
 
+/**
+ * True when this Combat Task command was taken at the **declaration** boundary rather than at the
+ * actor's action opportunity, read from the command's own compact versioned inverse facts.
+ *
+ * `cancelCombatTaskAtDeclarationBoundary` applies with `consumesOpportunity: false`: it writes no
+ * phase-resolution status, moves no cursor and changes no selected step. It is therefore not
+ * evidence that the actor's primary action for the phase was spent, and treating it as such closed
+ * the in-round escape rule decision 0007 ruling 3 requires — the participant cancelled, re-declared,
+ * and the replacement Task was filtered out of
+ * `getCombatRoundOpenPerformTaskForParticipant` by the very cancel that was supposed to free the
+ * opportunity (A1b, Forgejo issue #311).
+ *
+ * The two boundaries are mutually exclusive and the declaration one refuses while the task holds
+ * the actor's open opportunity with the resolution cursor on it, so a cancel that genuinely spends
+ * the opportunity is taken at the opportunity boundary and still counts. No other command records a
+ * declaration boundary, so no other witness is weakened.
+ */
+function combatTaskCommandTakenAtDeclarationBoundary(command: CombatRoundCommand): boolean {
+  const undo = combatTaskCommandUndoFactsSchema.safeParse(command.facts.taskUndo);
+  return undo.success && undo.data.boundary === "declaration";
+}
+
 function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
   participantId: string;
   phase: CombatRoundPhase;
@@ -7344,7 +7369,8 @@ function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
           command.type === "advance_combat_task" ||
           command.type === "resolve_combat_task" ||
           command.type === "interrupt_combat_task" ||
-          command.type === "cancel_combat_task" ||
+          (command.type === "cancel_combat_task" &&
+            !combatTaskCommandTakenAtDeclarationBoundary(command)) ||
           command.type === "back_out_phase_attack")) ||
         combatRoundCommandCancelsPhaseAction({
           command,

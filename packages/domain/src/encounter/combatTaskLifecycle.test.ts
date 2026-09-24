@@ -1304,6 +1304,83 @@ describe("declaration-boundary Combat Task cancellation (A1b)", () => {
     expect(outcome.command.facts).not.toHaveProperty("previousState");
   });
 
+  /**
+   * The in-round escape hatch (Forgejo issue #311). The declaration-boundary cancel writes a
+   * `cancel_combat_task` command with `consumesOpportunity: false`, and the command-log witness in
+   * `getCombatRoundOpenPerformTaskForParticipant` used to read that command as evidence that the
+   * actor's primary action for the phase had been spent — so a replacement Task declared in the
+   * same round was filtered out by the very cancel meant to free the opportunity. A command
+   * recording a declaration boundary in its compact inverse facts is not that evidence. The
+   * opportunity-boundary cancel, which does spend the opportunity, still is.
+   */
+  it("leaves the actor's opportunity open for a replacement task declared in the same round", () => {
+    const source = declarationState();
+    const cancelled = cancelCombatTaskAtDeclarationBoundary({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      state: source,
+      updatedAt: later,
+    });
+
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "a",
+        phase: "phase1",
+        state: cancelled.state,
+      }),
+    ).toBeUndefined();
+
+    const replacement = task({
+      createdAt: later,
+      id: "round:1:participant:a:declaration:perform_task:replacement:2",
+      intent: "Bar the gate instead.",
+    });
+    const withReplacement = combatRoundStateSchema.parse({
+      ...cancelled.state,
+      genericActions: [...cancelled.state.genericActions, replacement],
+    });
+
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "a",
+        phase: "phase1",
+        state: withReplacement,
+      }),
+    ).toMatchObject({ id: replacement.id, status: "declared" });
+  });
+
+  it("keeps the opportunity-boundary cancel closing the actor's opportunity", () => {
+    const cancelled = finishCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      kind: "cancel",
+      participantId: "a",
+      phase: "phase1",
+      state: state(),
+      updatedAt: later,
+    });
+    const replacement = task({
+      createdAt: later,
+      id: "round:1:participant:a:declaration:perform_task:replacement:2",
+      intent: "Bar the gate instead.",
+    });
+    const withReplacement = combatRoundStateSchema.parse({
+      ...cancelled.state,
+      genericActions: [...cancelled.state.genericActions, replacement],
+    });
+
+    expect(cancelled.command.facts.taskUndo).toMatchObject({ boundary: "opportunity" });
+    expect(
+      getCombatRoundOpenPerformTaskForParticipant({
+        participantId: "a",
+        phase: "phase1",
+        state: withReplacement,
+      }),
+      "an opportunity-boundary cancel spends the primary action for the round",
+    ).toBeUndefined();
+  });
+
   it("undoes to byte-equal prior state", () => {
     const source = declarationState();
     const outcome = cancelCombatTaskAtDeclarationBoundary({

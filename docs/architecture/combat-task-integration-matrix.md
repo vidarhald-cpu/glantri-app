@@ -214,6 +214,20 @@ opportunity, and the opportunity cancel is refused everywhere else. It spends no
 moves no cursor, and its undo removes the command and restores the task's own fields and nothing
 else. Current action owns the control, so no commit control is added inside the Action Selector.
 
+The escape works **within** the round it is needed, not only across rounds. Two things make that
+true. The canonical task id `round:<N>:participant:<pid>:declaration:<kind>` is minted once per
+round per participant per kind, so a cancelled task still holds it; a replacement declared in the
+same round is therefore minted under a distinct server-owned id derived from the canonical one
+(`…:replacement:<n>`), because `declareCombatGenericAction` returns its input unchanged on a taken
+id and the declaration would otherwise answer `200` having created nothing. Identity stays
+server-owned, and carry-forward is unaffected because it addresses the persisted intent's `taskId`
+rather than reconstructing an id. Separately, a `cancel_combat_task` command whose compact inverse
+facts record `boundary: "declaration"` is **not** command-log completion evidence: it applies with
+`consumesOpportunity: false`, so reading it as a spent primary action closed the very opportunity
+the cancel had just freed. The opportunity-boundary cancel, which does spend the opportunity, still
+counts, and no other command records a declaration boundary, so neither witness is weakened
+anywhere else.
+
 One live Perform Task per participant (2026-09-22, Product Owner ruling on Forgejo issue #287):
 `materializeCombatDeclarationTasks` refuses a `perform_task` declaration while the declaring
 participant already holds a live one — any task whose status is not `completed`, `cancelled` or
