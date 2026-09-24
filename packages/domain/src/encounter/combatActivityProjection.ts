@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { CombatLogSummaryFacts } from "./combatLogProjection";
+import { getHitLocationFullLabel, hitLocationSchema } from "./hitLocation";
 import {
   combatStepEventIdentityRoleSchema,
   combatStepEventHiddenIdentityFallbackSchema,
@@ -113,18 +114,68 @@ const combatActivityIdentitySchema = z.object({
 export type CombatActivityIdentity = z.infer<typeof combatActivityIdentitySchema>;
 
 /**
+ * Per-type whitelist of `facts.involvedOutcome` fields carried into the persisted Activity facts.
+ *
+ * Nine emitters in `combatRoundManager` record the **terminal result** of a publicly witnessed
+ * Combat contest under `facts.involvedOutcome` and leave `facts.publicOutcome` empty, so carrying
+ * `publicOutcome` alone left every one of these published outcomes rendered without its result —
+ * a disarm whose success is unstated, a hit with no location, a critical with no grade. §12.13
+ * requires the recap source to become "cleaner without becoming poorer", and §11.2 makes Activity
+ * the exclusive AI session-summary source, so an outcome stripped of its result is a silent hole.
+ *
+ * Each field below is **public in substance**: it is the observable consequence of a contest the
+ * involved audience witnessed, never a roll, a stat, a difficulty, a modifier, a GM note or a
+ * hidden intent. Deliberately **not** whitelisted, even where the same `involvedOutcome` record
+ * carries them: `difference` and `tableRowId` (raw contest margin and rule-table mechanics),
+ * `attackerObModifier` / `defenderDbParryModifier` (mechanical state), `attemptId`,
+ * `noDirectDamage`, `proposedDistance`, `targetLocation` (the attacker's *intended* location,
+ * which is private aim rather than observed result) and every bleed-rate field.
+ *
+ * `facts.gmReview` and `facts.rollerPrivate` remain excluded wholesale and are never whitelisted,
+ * and `facts.involvedOutcome` itself is never carried wholesale — only these named fields, with
+ * only primitive values, so a read-side defect still cannot leak GM-only or roller-private
+ * material. The digest travels inside the same row the audience projection already gates: a row
+ * whose `outcomeScope` is not `public` carries `audienceParticipantIds` and reaches no other
+ * viewer, and `gm_only` reaches no player at all.
+ */
+export const COMBAT_ACTIVITY_INVOLVED_OUTCOME_WHITELIST = {
+  break_off_committed: ["escaped"],
+  break_off_result: ["escaped"],
+  critical: ["criticalGrade"],
+  disarm_committed: ["disarmed", "unbalanced"],
+  disarm_result: ["disarmed", "unbalanced"],
+  distance_control_result: ["outcome", "winnerParticipantId"],
+  health_check: ["success"],
+  hit_location: ["selectedHitLocation"],
+} as const satisfies Partial<Record<CombatStepEventType, readonly string[]>>;
+
+/**
+ * Whitelisted keys holding an encounter participant id. They are mapped onto the scenario
+ * participant id the Activity audience checks already speak, and dropped when unmappable, so no
+ * raw encounter-scoped identifier is persisted into an Activity row.
+ */
+const COMBAT_ACTIVITY_PARTICIPANT_ID_DIGEST_KEYS: ReadonlySet<string> = new Set([
+  "winnerParticipantId",
+]);
+
+const combatActivityDigestValueSchema = z.union([z.boolean(), z.number(), z.string()]);
+
+/**
  * The structured event facts A2 persists so that the player-facing sentence can be produced per
  * viewer at projection time instead of being frozen into one stored string.
  *
- * Deliberately excluded: `facts.gmReview`, `facts.rollerPrivate` and `facts.involvedOutcome`.
- * Only `facts.publicOutcome` is carried, because it is public-scope by construction, so a defect
- * in the read-side projection cannot leak GM-only or roller-private material into a player payload.
- * `summaryFacts` is the Combat Log's own `CombatLogSummaryFacts`, so Activity derives from the same
- * facts the Combat Log uses rather than becoming a second, independently drifting summariser.
+ * Deliberately excluded: `facts.gmReview` and `facts.rollerPrivate`, wholesale and without
+ * exception. `facts.publicOutcome` is carried because it is public-scope by construction, and
+ * `facts.involvedOutcome` is carried **only** through the named per-type whitelist above, never
+ * wholesale. `summaryFacts` is the Combat Log's own `CombatLogSummaryFacts`, so Activity derives
+ * from the same facts the Combat Log uses rather than becoming a second, independently drifting
+ * summariser.
  */
 export const combatActivityFactsSchema = z.object({
   eventType: combatStepEventTypeSchema,
   identities: z.array(combatActivityIdentitySchema).default([]),
+  /** Whitelisted, per-type, primitive-only projection of `facts.involvedOutcome`. */
+  involvedOutcomeDigest: z.record(z.string(), combatActivityDigestValueSchema).default({}),
   outcomeScope: combatStepEventOutcomeScopeSchema,
   publicOutcome: z.record(z.string(), z.unknown()).default({}),
   status: combatStepEventStatusSchema,
@@ -153,6 +204,36 @@ function pushIdentity(
     return;
   }
   identities.push(identity);
+}
+
+/**
+ * Projects the whitelisted `facts.involvedOutcome` fields for one event type. Only primitive
+ * values are carried: a nested object could smuggle an unreviewed field under a whitelisted key.
+ */
+function buildInvolvedOutcomeDigest(input: {
+  event: CombatStepEvent;
+  toScenarioParticipantId: (participantId: string | undefined) => string | undefined;
+}): Record<string, boolean | number | string> {
+  const whitelist = (
+    COMBAT_ACTIVITY_INVOLVED_OUTCOME_WHITELIST as Partial<
+      Record<CombatStepEventType, readonly string[]>
+    >
+  )[input.event.type];
+  if (!whitelist) return {};
+  const digest: Record<string, boolean | number | string> = {};
+  for (const key of whitelist) {
+    const value = input.event.facts.involvedOutcome[key];
+    if (COMBAT_ACTIVITY_PARTICIPANT_ID_DIGEST_KEYS.has(key)) {
+      const scenarioParticipantId =
+        typeof value === "string" ? input.toScenarioParticipantId(value) : undefined;
+      if (scenarioParticipantId) digest[key] = scenarioParticipantId;
+      continue;
+    }
+    if (typeof value === "boolean") digest[key] = value;
+    else if (typeof value === "number" && Number.isFinite(value)) digest[key] = value;
+    else if (typeof value === "string" && value.length > 0) digest[key] = value;
+  }
+  return digest;
 }
 
 /**
@@ -200,6 +281,10 @@ export function buildCombatActivityFacts(input: {
   return combatActivityFactsSchema.parse({
     eventType: input.event.type,
     identities,
+    involvedOutcomeDigest: buildInvolvedOutcomeDigest({
+      event: input.event,
+      toScenarioParticipantId: input.toScenarioParticipantId,
+    }),
     outcomeScope: input.event.visibility.outcomeScope,
     publicOutcome: input.event.facts.publicOutcome,
     status: input.event.status,
@@ -328,57 +413,99 @@ function summaryFactsSentence(input: {
   return undefined;
 }
 
+function hitLocationText(digest: Record<string, unknown>): string | undefined {
+  const parsed = hitLocationSchema.safeParse(stringFact(digest, "selectedHitLocation"));
+  return parsed.success ? getHitLocationFullLabel(parsed.data).toLocaleLowerCase() : undefined;
+}
+
+/**
+ * The sentence for a published outcome the Combat Log does not project. Its result comes from the
+ * whitelisted `involvedOutcomeDigest`, because that is where the emitters in `combatRoundManager`
+ * actually record it; `publicOutcome` is kept as a secondary source so an emitter that does record
+ * a public-scope result keeps working.
+ */
 function eventTypeSentence(input: {
   actor: string;
   facts: CombatActivityFacts;
+  resolveParticipant: (participantId: string) => string;
   target: string | undefined;
 }): string {
   const publicOutcome = input.facts.publicOutcome;
+  const digest = input.facts.involvedOutcomeDigest;
   const targetText = input.target ?? "an opponent";
   switch (input.facts.eventType) {
     case "hit_location": {
       const location =
-        stringFact(publicOutcome, "locationName") ?? stringFact(publicOutcome, "location");
-      return `${capitalize(targetText)} was struck${location ? ` in the ${location}` : ""}.`;
+        hitLocationText(digest) ??
+        stringFact(publicOutcome, "locationName") ??
+        stringFact(publicOutcome, "location");
+      return `${capitalize(targetText)} ${targetText === "you" ? "were" : "was"} struck${
+        location ? ` in the ${location}` : ""
+      }.`;
     }
     case "critical": {
+      const grade = stringFact(digest, "criticalGrade");
       const title =
         stringFact(publicOutcome, "criticalTitle") ?? stringFact(publicOutcome, "title");
-      return `${capitalize(targetText)} suffered a critical result${title ? `: ${title}` : ""}.`;
+      return `${capitalize(targetText)} suffered a${
+        grade ? ` grade ${grade.toLocaleUpperCase()}` : ""
+      } critical result${title ? `: ${title}` : ""}.`;
     }
     case "observation":
       return `${capitalize(input.actor)} observed ${targetText}.`;
     case "health_check": {
-      const survived = booleanFact(publicOutcome, "survived");
+      const succeeded = booleanFact(digest, "success") ?? booleanFact(publicOutcome, "survived");
       return `${capitalize(input.actor)} made a health check${
-        survived === undefined ? "" : survived ? " and held on" : " and collapsed"
+        succeeded === undefined ? "" : succeeded ? " and succeeded" : " and failed"
       }.`;
     }
     case "break_off_result":
     case "break_off_committed": {
-      const succeeded =
-        booleanFact(publicOutcome, "success") ?? booleanFact(publicOutcome, "succeeded");
+      const escaped =
+        booleanFact(digest, "escaped") ??
+        booleanFact(publicOutcome, "success") ??
+        booleanFact(publicOutcome, "succeeded");
       return `${capitalize(input.actor)} ${
-        succeeded === undefined
+        escaped === undefined
           ? "resolved a break-off"
-          : succeeded
+          : escaped
             ? "broke off from"
             : "failed to break off from"
-      }${succeeded === undefined ? "" : ` ${targetText}`}.`;
+      }${escaped === undefined ? "" : ` ${targetText}`}.`;
     }
     case "disarm_result":
     case "disarm_committed": {
-      const succeeded =
-        booleanFact(publicOutcome, "success") ?? booleanFact(publicOutcome, "succeeded");
-      return `${capitalize(input.actor)} ${
-        succeeded === undefined
-          ? "resolved a disarm against"
-          : succeeded
-            ? "disarmed"
-            : "failed to disarm"
-      } ${targetText}.`;
+      const disarmed =
+        booleanFact(digest, "disarmed") ??
+        booleanFact(publicOutcome, "success") ??
+        booleanFact(publicOutcome, "succeeded");
+      const unbalanced = booleanFact(digest, "unbalanced") === true;
+      if (disarmed === undefined) {
+        return `${capitalize(input.actor)} resolved a disarm against ${targetText}.`;
+      }
+      if (disarmed) {
+        return `${capitalize(input.actor)} disarmed ${targetText}${
+          unbalanced ? " and left them unbalanced" : ""
+        }.`;
+      }
+      return `${capitalize(input.actor)} failed to disarm ${targetText}${
+        unbalanced ? " but left them unbalanced" : ""
+      }.`;
     }
     case "distance_control_result": {
+      const winnerParticipantId = stringFact(digest, "winnerParticipantId");
+      if (winnerParticipantId) {
+        return `${capitalize(input.resolveParticipant(winnerParticipantId))} won the distance contest.`;
+      }
+      const outcome = stringFact(digest, "outcome");
+      if (outcome === "tie") return "The distance contest ended in a tie.";
+      if (outcome === "uncontested") {
+        return `${capitalize(input.actor)} set the distance uncontested.`;
+      }
+      if (outcome === "gm_override") return "The GM set the distance.";
+      if (outcome === "controller_choice") {
+        return `${capitalize(input.actor)} chose the distance.`;
+      }
       const won = booleanFact(publicOutcome, "won") ?? booleanFact(publicOutcome, "success");
       return `${capitalize(input.actor)} ${
         won === undefined
@@ -444,8 +571,19 @@ export function renderCombatActivitySummary(input: {
     participantDisplayNames: input.participantDisplayNames,
     viewer: input.viewer,
   });
+  // A participant named only by a whitelisted digest field still resolves through the same
+  // entitlement projection as every other identity: a viewer who may not identify them receives
+  // the neutral fallback, never a display name.
+  const resolveParticipant = (participantId: string): string =>
+    resolveIdentity({
+      identity: input.facts.identities.find(
+        (identity) => identity.participantId === participantId,
+      ) ?? { hiddenIdentityFallback: "omit", participantId, role: "actor" },
+      participantDisplayNames: input.participantDisplayNames,
+      viewer: input.viewer,
+    }) ?? "another combatant";
   return (
     summaryFactsSentence({ actor, facts: input.facts, target }) ??
-    eventTypeSentence({ actor, facts: input.facts, target })
+    eventTypeSentence({ actor, facts: input.facts, resolveParticipant, target })
   );
 }

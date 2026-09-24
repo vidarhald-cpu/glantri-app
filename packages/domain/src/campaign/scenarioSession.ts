@@ -180,7 +180,6 @@ type ObjectiveHistoryContext = {
  * summary — 12.19 forbids rewriting them.
  */
 function projectCombatOutcomeSummary(input: {
-  context: ObjectiveHistoryContext | undefined;
   event: ScenarioEventLog;
   participantDisplayNames: ReadonlyMap<string, string>;
   viewerMode: "gm" | "player";
@@ -209,13 +208,7 @@ function projectCombatOutcomeSummary(input: {
 
 function canViewCurrentItemOutcome(
   event: ScenarioEventLog,
-  context:
-    | {
-        encounters: EncounterSession[];
-        participants: ScenarioParticipant[];
-        userId: string;
-      }
-    | undefined,
+  context: ObjectiveHistoryContext | undefined,
 ): boolean {
   if (!context || !eventAudienceParticipantIds(event)?.length) return false;
   const payload = readEventPayload(event);
@@ -396,7 +389,6 @@ export function projectScenarioObjectiveHistory(input: {
           summary:
             parsedType.data === "encounter_combat_outcome"
               ? projectCombatOutcomeSummary({
-                  context: input.itemOutcomeContext,
                   controlledParticipantIds: input.controlledParticipantIds,
                   event,
                   participantDisplayNames,
