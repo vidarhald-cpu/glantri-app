@@ -1,6 +1,6 @@
 import {
   assertApprovedTargetProgression,
-  getApprovedTargetChargenContent,
+  getApprovedV2RuntimeContent,
   getPilotSkillCharacterBuildInput,
   pilotSkillContentReleaseV1,
   validatePilotSkillContentRelease,
@@ -491,7 +491,7 @@ export function projectRetainedCharacterRevision(
 export function resolveRetainedTargetCharacterContent<T>(build: CharacterBuild, content: T): T {
   if (!build.targetChargen) return content;
   assertApprovedTargetProgression(build.progression);
-  const approved = getApprovedTargetChargenContent();
+  const approved = getApprovedV2RuntimeContent();
   const profession = approved.professions.find((p) => p.id === build.professionId);
   const identity = build.targetChargen;
   if (

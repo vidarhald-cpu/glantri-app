@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultCanonicalContent, getApprovedTargetChargenContent } from "@glantri/content";
+import { defaultCanonicalContent, getApprovedV2RuntimeContent } from "@glantri/content";
 import { characterBuildSchema } from "@glantri/domain";
 import {
   allocateChargenPoint,
@@ -10,19 +10,20 @@ import {
 } from "@glantri/rules-engine";
 import { characterPayload } from "../../../e2e/character-fixture";
 import { buildCharacterSheetSkillRows } from "../../lib/characters/characterSheet";
-const approved = getApprovedTargetChargenContent();
+const approved = getApprovedV2RuntimeContent();
 function finalized(direct = false) {
   const base = characterBuildSchema.parse(characterPayload("synthetic", "Synthetic").build);
   const context = {
     content: approved,
-    professionId: "profession:soldier:military-archer",
+    professionId: "profession:soldier",
     profile: base.profile,
+    societyId: "pastoral_clan_nomadic",
     societyLevel: 1,
   };
   let progression = allocateChargenPoint({
     ...context,
     progression: createChargenProgression(),
-    targetId: "F38",
+    targetId: "F41",
     targetType: "group",
   }).progression;
   if (direct)
@@ -52,7 +53,7 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         content: defaultCanonicalContent,
         sheetSummary: summary,
       }).flatMap((section) => section.rows);
-      for (const id of ["bow", "formation_fighting"]) {
+      for (const id of ["bow", "skill:hunting"]) {
         const match = rows.filter((row) => row.skillId === id);
         expect(match).toHaveLength(1);
         expect(match[0]).toMatchObject({

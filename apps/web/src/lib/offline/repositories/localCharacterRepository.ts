@@ -1,5 +1,5 @@
 import { validateTargetChargenBuild } from "@glantri/rules-engine";
-import { assertApprovedTargetProgression, getApprovedTargetChargenContent } from "@glantri/content";
+import { assertApprovedTargetProgression, getApprovedV2RuntimeContent } from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 
 import { localDb, type LocalCharacterRecord } from "../glantriDexie";
@@ -112,7 +112,7 @@ export class LocalCharacterRepository {
     const now = input.updatedAt ?? new Date().toISOString();
     const existing = await localDb.localCharacters.get(input.build.id);
     const build = parseApprovedBuild(input.build);
-    const targetErrors = validateTargetChargenBuild(build, getApprovedTargetChargenContent());
+    const targetErrors = validateTargetChargenBuild(build, getApprovedV2RuntimeContent());
     if (targetErrors.length) throw new Error(targetErrors.join(" "));
     const syncStatus = input.syncStatus ?? existing?.syncStatus ?? "local";
     const inheritedServerRevision = existing ? getServerCharacterRevision(existing) : undefined;

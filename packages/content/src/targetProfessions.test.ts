@@ -11,6 +11,7 @@ import {
   buildTargetRuntimeContent,
   createTargetCompetencyProjectionSource,
   getTargetProgressionValidationErrors,
+  getApprovedV2RuntimeContent,
 } from "./targetCompetencies";
 import { defaultCanonicalContent } from "./seeds/defaultContent";
 import { characterProgressionSchema } from "@glantri/domain";
@@ -59,18 +60,25 @@ describe("approved target Profession projection", () => {
       soldier.tracks.find((t) => t.name === "Military longbow specialist")!.opportunityIds,
     ).toContain("P22-D-longbow");
   });
-  it("keeps both authenticated competency metadata generations readable", () => {
-    const old = buildTargetRuntimeContent(
-      createTargetCompetencyProjectionSource(defaultCanonicalContent),
+  it("validates target snapshots against V2 and rejects a retained pre-V2 snapshot", () => {
+    const current = getApprovedV2RuntimeContent();
+    const previous = withTargetLearningGroupsAndProfessions(
+      buildTargetRuntimeContent(createTargetCompetencyProjectionSource(defaultCanonicalContent)),
     );
-    const current = withTargetLearningGroupsAndProfessions(old);
-    for (const c of [old, current]) {
-      const s = c.skills.find((s) => s.id === "bow")!;
-      const p = characterProgressionSchema.parse({
+    const progressionFor = (s: (typeof current.skills)[number]) =>
+      characterProgressionSchema.parse({
         skills: [{ skillId: s.id, targetDefinition: s, groupId: s.groupId, groupIds: s.groupIds }],
       });
-      expect(getTargetProgressionValidationErrors(p)).toEqual([]);
-    }
+    expect(
+      getTargetProgressionValidationErrors(
+        progressionFor(current.skills.find((s) => s.id === "bow")!),
+      ),
+    ).toEqual([]);
+    expect(
+      getTargetProgressionValidationErrors(
+        progressionFor(previous.skills.find((s) => s.id === "bow")!),
+      ),
+    ).toContain("Skill bow does not match the approved target definition.");
   });
   it("keeps internal Arch-Society codes out of the game-facing competency reference", () => {
     const gameFacingDocuments = [
