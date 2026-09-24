@@ -2,9 +2,8 @@
  * Competency Content V2 — CANONICAL Product Owner content (#250), accepted 2026-09-23; see
  * `docs/decisions/rules/0008-competency-content-v2-canonical-acceptance.md`.
  *
- * Deliberately not re-exported from `packages/content/src/index.ts`: importing this module must be
- * an explicit, visible choice, and no runtime or Chargen path may depend on it until #251/#252
- * scope that wiring in.
+ * Exported for the runtime projection by #306 under decision 0008's 2026-09-24 amendment.
+ * The authored corpus remains unchanged; presentation work belongs to #252.
  */
 export * from "./competencyContentV2Source";
 export * from "./competencyContentV2";

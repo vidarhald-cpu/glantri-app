@@ -501,7 +501,7 @@ export type SkillGroupDefinition = z.infer<typeof skillGroupDefinitionSchema>;
 // Legacy JSON remains validated by skillDefinitionSchema. Only the explicit target
 // variant permits absent Group identity in a runtime Chargen projection.
 export const targetRuntimeSkillDefinitionSchema = skillDefinitionSchema.innerType().extend({
-  catalogueSource: z.literal("full-target-competencies"),
+  catalogueSource: z.enum(["full-target-competencies", "competency-content-v2"]),
   competencyType: z.enum(["base-skill", "spoken-language", "written-tradition"]),
   groupId: idSchema.optional(),
   groupIds: z.array(idSchema).default([]),

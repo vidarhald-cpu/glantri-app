@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { getApprovedTargetDefinitions, defaultCanonicalContent } from "@glantri/content";
+import {
+  getApprovedTargetDefinitions,
+  defaultCanonicalContent,
+  withCompetencyContentV2,
+} from "@glantri/content";
 import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
 import {
   buildChargenSkillAccessSummary,
@@ -294,13 +298,15 @@ describe("target competency Chargen projection", () => {
       ...defaultCanonicalContent,
       skills: [...defaultCanonicalContent.skills, ...aliases],
     };
-    const content = buildTargetRuntimeContent(createTargetCompetencyChargenSource(legacyContent));
+    const content = withCompetencyContentV2(
+      buildTargetRuntimeContent(createTargetCompetencyChargenSource(legacyContent)),
+    );
     for (const alias of aliases) {
       expect(
         allocateChargenPoint({
           content,
           progression: createChargenProgression(),
-          professionId: defaultCanonicalContent.professions[0].id,
+          professionId: "profession:hunter-trapper",
           societyLevel: 1,
           targetId: alias.id,
           targetType: "skill",
@@ -310,7 +316,7 @@ describe("target competency Chargen projection", () => {
     const bought = allocateChargenPoint({
       content,
       progression: { ...createChargenProgression(), secondaryPoolTotal: 100 },
-      professionId: defaultCanonicalContent.professions[0].id,
+      professionId: "profession:hunter-trapper",
       societyLevel: 1,
       targetId: "skill:surgery",
       targetType: "skill",

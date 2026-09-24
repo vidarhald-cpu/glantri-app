@@ -25,7 +25,7 @@ export function createTargetCompetencyChargenSource(
     acquisitionContext: UNBOUND_GENERAL_CHARGEN_ACQUISITION_CONTEXT,
     catalogue: {
       ...projection.catalogue,
-      identity: { projectionVersion: 1, sourceId: "full-target-competencies" },
+      identity: { projectionVersion: 2, sourceId: "competency-content-v2" },
     },
   };
 }

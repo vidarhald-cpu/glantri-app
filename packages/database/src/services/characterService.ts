@@ -1,4 +1,4 @@
-import { getApprovedTargetDefinitions, getApprovedTargetChargenContent } from "@glantri/content";
+import { getApprovedTargetDefinitions, getApprovedV2RuntimeContent } from "@glantri/content";
 import { isDeepStrictEqual } from "node:util";
 
 import { characterBuildSchema } from "@glantri/domain";
@@ -73,10 +73,10 @@ export class CharacterService {
   async saveCharacter(input: CreateCharacterRecordInput): Promise<CharacterRecord> {
     const build = characterBuildSchema.parse(input.build);
     assertNoLegacyEquipmentWrite(build);
-    const targetErrors = validateTargetChargenBuild(build, getApprovedTargetChargenContent());
+    const targetErrors = validateTargetChargenBuild(build, getApprovedV2RuntimeContent());
     if (targetErrors.length) throw new CharacterValidationError(targetErrors);
     if (build.professionId?.startsWith("profession:")) {
-      const trusted = getApprovedTargetChargenContent();
+      const trusted = getApprovedV2RuntimeContent();
       const profession = trusted.professions.find((p) => p.id === build.professionId)!;
       for (const group of build.progression.skillGroups)
         group.targetDefinition = structuredClone(
@@ -197,10 +197,10 @@ export class CharacterService {
 
     const build = characterBuildSchema.parse(input.build);
     assertNoLegacyEquipmentWrite(build, characterBuildSchema.parse(existingCharacter.build));
-    const targetErrors = validateTargetChargenBuild(build, getApprovedTargetChargenContent());
+    const targetErrors = validateTargetChargenBuild(build, getApprovedV2RuntimeContent());
     if (targetErrors.length) throw new CharacterValidationError(targetErrors);
     if (build.professionId?.startsWith("profession:")) {
-      const trusted = getApprovedTargetChargenContent();
+      const trusted = getApprovedV2RuntimeContent();
       const profession = trusted.professions.find((p) => p.id === build.professionId)!;
       for (const group of build.progression.skillGroups)
         group.targetDefinition = structuredClone(

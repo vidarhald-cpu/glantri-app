@@ -1,6 +1,7 @@
 import { getAccessibleFoundationalSkillIdsForSocietyBand } from "@glantri/domain";
 
 import { resolveEffectiveProfessionPackage } from "../../professions/resolveEffectiveProfessionPackage";
+import { resolveCompetencyV2PathAvailability } from "../../professions/resolveCompetencyV2Path";
 import {
   type CanonicalContentShape,
   getSkillDefinitionGroupIds,
@@ -34,6 +35,15 @@ export function getAllowedSkillGroupIdsInternal(
   societyId: string | undefined,
   societyLevel: number,
 ): string[] {
+  if (content.competencyV2) {
+    const available = resolveCompetencyV2PathAvailability({
+      content,
+      professionId,
+      societyId,
+      socialBand: societyLevel,
+    });
+    return available?.valid ? available.availableGroupIds : [];
+  }
   if (content.chargenCatalogue?.professionIds) {
     if (!content.chargenCatalogue.professionIds.includes(professionId))
       throw new Error("Unknown target Profession.");
@@ -74,10 +84,22 @@ export function buildChargenSkillAccessSummaryInternal(input: {
   );
   const normalGroupIdSet = new Set(normalSkillGroupIds);
   const professionPackage = resolveProfessionPackageInternal(input.content, input.professionId);
-  const professionDirectSkillIds = new Set([
-    ...professionPackage.core.finalEffectiveSkillIds,
-    ...professionPackage.favored.finalEffectiveSkillIds,
-  ]);
+  const v2Available = resolveCompetencyV2PathAvailability({
+    content: input.content,
+    professionId: input.professionId,
+    societyId: input.societyId,
+    socialBand: input.societyLevel,
+  });
+  const professionDirectSkillIds = new Set(
+    v2Available
+      ? v2Available.valid
+        ? v2Available.availableDirectSkillIds
+        : []
+      : [
+          ...professionPackage.core.finalEffectiveSkillIds,
+          ...professionPackage.favored.finalEffectiveSkillIds,
+        ],
+  );
   const societySkillIds = input.content.chargenCatalogue?.professionIds
     ? []
     : (getSocietyAccess(input.content, input.societyLevel, input.societyId)?.skillIds ?? []);
@@ -148,6 +170,19 @@ export function getAllowedSecondaryGroupIdsInternal(
   societyId: string | undefined,
   societyLevel: number,
 ): string[] {
+  if (content.competencyV2) {
+    const actualLevel = content.societies?.find(
+      (society) => society.id === societyId,
+    )?.societyLevel;
+    if (!actualLevel || societyLevel < 1 || societyLevel >= 4) return [];
+    return content.competencyV2.groupBounds
+      .filter(
+        (bound) =>
+          (bound.minSocietyLevel ?? 1) <= actualLevel &&
+          Number((bound.minSocialBand ?? "L1").slice(1)) === societyLevel + 1,
+      )
+      .map((bound) => bound.groupId);
+  }
   const current = getSocietyAccess(content, societyLevel, societyId);
   const next = getNextSocietyAccess(content, societyLevel, societyId);
 

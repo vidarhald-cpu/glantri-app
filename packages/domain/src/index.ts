@@ -17,6 +17,7 @@ export * from "./campaign/scenarioSession";
 export * from "./campaign/playerCampaignHome";
 export * from "./combat/context";
 export * from "./content/skills";
+export * from "./content/competencyV2Runtime";
 export * from "./content/skillSemanticFixtures";
 export * from "./content/skillCatalogueAuthoring";
 export * from "./content/skillContentRelease";

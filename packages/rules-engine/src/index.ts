@@ -46,6 +46,7 @@ export * from "./encounters/roleplayTransitions";
 export * from "./equipment/manageCharacterEquipment";
 export * from "./equipment/projectEquipmentItem";
 export * from "./professions/resolveEffectiveProfessionPackage";
+export * from "./professions/resolveCompetencyV2Path";
 export * from "./sheets/buildCharacterSheetSummary";
 export * from "./skills/calculateGms";
 export * from "./skills/calculateGroupLevel";

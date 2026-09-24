@@ -1,5 +1,6 @@
 import type {
   CharacterChargenSelections,
+  CompetencyV2Runtime,
   CharacterProgression,
   CharacterSkill,
   CharacterSkillGroup,
@@ -35,8 +36,9 @@ export const LITERACY_SKILL_ID = "literacy";
 export const LANGUAGE_SKILL_ID = "language";
 
 export interface CanonicalContentShape {
+  competencyV2?: CompetencyV2Runtime;
   chargenCatalogue?: {
-    sourceId: "full-target-competencies";
+    sourceId: "full-target-competencies" | "competency-content-v2";
     professionSourceDigest?: string;
     groupSourceDigest?: string;
     professionIds?: readonly string[];

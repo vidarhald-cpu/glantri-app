@@ -21,3 +21,5 @@ export * from "./targetCompetencies";
 export * from "./skillContentPlatform/targetLearningGroups";
 
 export * from "./targetProfessions";
+export * from "./proposals/competencyContentV2";
+export * from "./competencyV2Runtime";

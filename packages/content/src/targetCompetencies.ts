@@ -1,4 +1,5 @@
 import { withTargetLearningGroupsAndProfessions } from "./targetProfessions";
+import { withCompetencyContentV2 } from "./competencyV2Runtime";
 import { validateTargetProgressionMetadata } from "@glantri/domain";
 import { defaultCanonicalContent } from "./seeds/defaultContent";
 import type { CharacterProgression } from "@glantri/domain";
@@ -354,14 +355,18 @@ function trustedContent(): CanonicalContent {
     createTargetCompetencyProjectionSource(defaultCanonicalContent),
   ));
 }
+let approvedV2Content: CanonicalContent | undefined;
+export function getApprovedV2RuntimeContent(): CanonicalContent {
+  return (approvedV2Content ??= withCompetencyContentV2(trustedContent()));
+}
 export function getApprovedTargetSkillDefinition(id: string) {
-  const definition = trustedContent().skills.find(
+  const definition = getApprovedV2RuntimeContent().skills.find(
     (skill) => skill.id === id && "catalogueSource" in skill,
   );
   return definition ? structuredClone(definition) : undefined;
 }
 export function getApprovedTargetSpecializationDefinition(id: string) {
-  const definition = trustedContent().specializations.find(
+  const definition = getApprovedV2RuntimeContent().specializations.find(
     (spec) => spec.id === id && "catalogueSource" in spec,
   );
   return definition ? structuredClone(definition) : undefined;
@@ -369,13 +374,10 @@ export function getApprovedTargetSpecializationDefinition(id: string) {
 export function getTargetProgressionValidationErrors(progression: CharacterProgression): string[] {
   const errors = validateTargetProgressionMetadata(
     progression,
-    [
-      ...trustedContent().skills,
-      ...withTargetLearningGroupsAndProfessions(trustedContent()).skills,
-    ],
-    trustedContent().specializations,
+    getApprovedV2RuntimeContent().skills,
+    getApprovedV2RuntimeContent().specializations,
   );
-  const groups = withTargetLearningGroupsAndProfessions(trustedContent()).skillGroups;
+  const groups = getApprovedV2RuntimeContent().skillGroups;
   for (const row of progression.skillGroups) {
     if (
       row.targetDefinition &&
@@ -387,13 +389,9 @@ export function getTargetProgressionValidationErrors(progression: CharacterProgr
   return errors;
 }
 export function getApprovedTargetDefinitions() {
-  const content = trustedContent();
+  const content = getApprovedV2RuntimeContent();
   return {
-    skills: structuredClone(
-      [...content.skills, ...withTargetLearningGroupsAndProfessions(content).skills].filter(
-        (skill) => "catalogueSource" in skill,
-      ),
-    ),
+    skills: structuredClone(content.skills.filter((skill) => "catalogueSource" in skill)),
     specializations: structuredClone(
       content.specializations.filter((spec) => "catalogueSource" in spec),
     ),
@@ -405,5 +403,6 @@ export function assertApprovedTargetProgression(progression: CharacterProgressio
 }
 
 export function getApprovedTargetChargenContent(): CanonicalContent {
+  // Retained solely for /skills until #252. Runtime and Character paths use the V2 accessor.
   return withTargetLearningGroupsAndProfessions(trustedContent());
 }
