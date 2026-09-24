@@ -160,6 +160,7 @@ export function normalizeSpecialization(
 
 export function recalculateProgression(progression: CharacterProgression): CharacterProgression {
   const chargenSelections: CharacterChargenSelections = {
+    selectedCoreRouteId: progression.chargenSelections?.selectedCoreRouteId,
     selectedLanguageIds: [...new Set(progression.chargenSelections?.selectedLanguageIds ?? [])],
     selectedSkillIds: [...new Set(progression.chargenSelections?.selectedSkillIds ?? [])],
     selectedGroupSlots: [

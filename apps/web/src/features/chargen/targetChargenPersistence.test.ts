@@ -24,7 +24,7 @@ describe("synthetic target and historical Chargen drafts", () => {
       characterPayload(legacyId, "Historical synthetic").build,
     );
     const content = getApprovedV2RuntimeContent();
-    const bought = allocateChargenPoint({
+    const archer = allocateChargenPoint({
       content,
       professionId: "profession:soldier",
       societyId: "pastoral_clan_nomadic",
@@ -32,6 +32,31 @@ describe("synthetic target and historical Chargen drafts", () => {
       progression: createChargenProgression(),
       targetType: "group",
       targetId: "F41",
+    });
+    expect(archer.error).toBeUndefined();
+    const bought = allocateChargenPoint({
+      content,
+      professionId: "profession:soldier",
+      societyId: "pastoral_clan_nomadic",
+      societyLevel: 1,
+      progression: {
+        ...archer.progression,
+        chargenSelections: {
+          ...archer.progression.chargenSelections,
+          selectedCoreRouteId: "profession:soldier:core:contingent",
+          selectedLanguageIds: archer.progression.chargenSelections?.selectedLanguageIds ?? [],
+          selectedSkillIds: archer.progression.chargenSelections?.selectedSkillIds ?? [],
+          selectedGroupSlots: [
+            {
+              groupId: "M01",
+              slotId: "melee-family",
+              selectedSkillIds: ["one_handed_edged"],
+            },
+          ],
+        },
+      },
+      targetType: "group",
+      targetId: "M01",
     });
     expect(bought.error).toBeUndefined();
     const finalized = finalizeChargenDraft({

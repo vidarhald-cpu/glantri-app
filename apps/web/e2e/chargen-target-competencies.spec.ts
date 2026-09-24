@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
+import { getApprovedV2RuntimeContent } from "@glantri/content";
 
 // One bounded new Slice2 journey; do not retry the known profile prerequisite failure.
 test("target competencies through existing Chargen and authoritative persistence", async ({
@@ -31,18 +31,35 @@ test("target competencies through existing Chargen and authoritative persistence
       `STOP: new Slice2 journey blocked at profile-selection prerequisite. No retry or diagnostics authorized. ${String(error)}`,
     );
   }
-  await page.locator('input[name="civilization"]:enabled').first().click();
-  await page.locator('input[name="profession"]:enabled').first().click();
-  const other = page
+  await page.getByRole("radio", { name: /Scythians/ }).click();
+  await page.getByRole("radio", { name: /Courier and Messenger/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Choose your Profession core route", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("radio", { name: /Foot courier practice/ }).click();
+  await expect(
+    page.getByText("Mounted travel and animal care", { exact: true }).first(),
+  ).toBeVisible();
+  const footCourierGroup = page
     .locator("section")
-    .filter({ has: page.getByRole("heading", { name: /Other skills/i }) })
+    .filter({ hasText: "Running and athletic field practice" })
     .last();
-  await other.getByRole("button", { name: "Expand", exact: true }).click();
-  const spoken = fullSkillCatalogueProposal.entries.find(
-    ({ competencyType }) => competencyType === "spoken-language",
+  await footCourierGroup.getByRole("button", { name: "Buy / raise skill group" }).click();
+  await expect(page.getByText(/Selected core route complete/)).toBeVisible();
+  const individualSkills = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "7. Individual skills", exact: true }) })
+    .last();
+  await individualSkills.getByRole("button", { name: "Expand", exact: true }).click();
+  await expect(
+    individualSkills.getByRole("button", { name: "Add Brawling", exact: true }),
+  ).toBeVisible();
+  const competencyContent = getApprovedV2RuntimeContent();
+  const spoken = competencyContent.skills.find(
+    (skill) => "competencyType" in skill && skill.competencyType === "spoken-language",
   )!;
-  const written = fullSkillCatalogueProposal.entries.find(
-    ({ competencyType }) => competencyType === "written-tradition",
+  const written = competencyContent.skills.find(
+    (skill) => "competencyType" in skill && skill.competencyType === "written-tradition",
   )!;
   for (const skillName of ["Surgery", spoken.name, written.name]) {
     await page.getByRole("button", { name: `Add ${skillName}`, exact: true }).click();

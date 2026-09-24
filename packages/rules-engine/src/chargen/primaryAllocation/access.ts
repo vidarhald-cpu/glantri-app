@@ -142,14 +142,12 @@ export function buildChargenSkillAccessSummaryInternal(input: {
   const normalSkillIds = input.content.skills
     .filter((skill) => skillSources.has(skill.id))
     .map((skill) => skill.id);
-  const normalSkillIdSet = new Set(normalSkillIds);
-
   return {
     normalSkillGroupIds,
     normalSkillIds,
-    otherSkillIds: input.content.skills
-      .filter((skill) => !normalSkillIdSet.has(skill.id))
-      .map((skill) => skill.id),
+    // Individual-Skill discoverability is deliberately not a partition of normal access.
+    // Eligibility and pool cost are resolved separately when the player buys a rank.
+    otherSkillIds: input.content.skills.map((skill) => skill.id),
     skillSources: Object.fromEntries(
       [...skillSources.entries()].map(([skillId, sources]) => [skillId, [...sources.values()]]),
     ),
@@ -174,12 +172,12 @@ export function getAllowedSecondaryGroupIdsInternal(
     const actualLevel = content.societies?.find(
       (society) => society.id === societyId,
     )?.societyLevel;
-    if (!actualLevel || societyLevel < 1 || societyLevel >= 4) return [];
+    if (!actualLevel || societyLevel < 1 || societyLevel > 4) return [];
     return content.competencyV2.groupBounds
       .filter(
         (bound) =>
           (bound.minSocietyLevel ?? 1) <= actualLevel &&
-          Number((bound.minSocialBand ?? "L1").slice(1)) === societyLevel + 1,
+          Number((bound.minSocialBand ?? "L1").slice(1)) <= societyLevel,
       )
       .map((bound) => bound.groupId);
   }

@@ -2,6 +2,7 @@ import { getExclusiveProfessionGroupErrors } from "../exclusiveProfessionGroups"
 import type { CharacterProgression, RolledCharacterProfile } from "@glantri/domain";
 
 import { evaluateSkillSelection } from "../../skills/evaluateSkillSelection";
+import { buildChargenCoreRouteStatus } from "../coreRouteSelection";
 import {
   buildChargenSelectableSkillSummary,
   syncChargenLanguageSkillRows,
@@ -100,6 +101,13 @@ export function reviewChargenDraft(input: ReviewChargenDraftInput): ReviewCharge
 
   const errorSet = new Set<string>(getExclusiveProfessionGroupErrors({ ...input, progression }));
   const warningSet = new Set<string>();
+  const coreRouteStatus = buildChargenCoreRouteStatus({
+    content: input.content,
+    professionId: input.professionId,
+    progression,
+    societyId: input.societyId,
+    socialBand: input.societyLevel,
+  });
 
   if (!input.profile) {
     errorSet.add("Select a rolled profile before finalizing.");
@@ -111,6 +119,14 @@ export function reviewChargenDraft(input: ReviewChargenDraftInput): ReviewCharge
 
   if (!input.professionId) {
     errorSet.add("Select a profession before finalizing.");
+  }
+
+  if (!coreRouteStatus.isSelectionValid) {
+    errorSet.add("Select one applicable Profession core route before finalizing.");
+  } else if (coreRouteStatus.effectiveRoute && !coreRouteStatus.isComplete) {
+    errorSet.add(
+      `Complete the selected Profession core route: ${coreRouteStatus.effectiveRoute.label}.`,
+    );
   }
 
   if (progression.primaryPoolSpent > getOrdinaryPoolTotal(progression)) {
