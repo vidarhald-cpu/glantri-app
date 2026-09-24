@@ -103,7 +103,7 @@ const EXPECTED_CLASSIFICATION: Readonly<Record<CombatStepEventType, "publish" | 
   initiative: "suppress",
   missile_readiness: "suppress",
   modifier_review: "suppress",
-  observation: "publish",
+  observation: "suppress",
   offensive_parry_brawling: "suppress",
   parry: "publish",
   participant_su_review: "suppress",
@@ -1087,8 +1087,8 @@ describe("combat Activity positive publish list", () => {
 
     const published = members.filter((member) => EXPECTED_CLASSIFICATION[member] === "publish");
     const suppressed = members.filter((member) => EXPECTED_CLASSIFICATION[member] === "suppress");
-    expect(published).toHaveLength(17);
-    expect(suppressed).toHaveLength(24);
+    expect(published).toHaveLength(16);
+    expect(suppressed).toHaveLength(25);
 
     expect([...COMBAT_ACTIVITY_PUBLISHED_EVENT_TYPES].sort()).toEqual([...published].sort());
     expect([...COMBAT_ACTIVITY_SUPPRESSED_EVENT_TYPES].sort()).toEqual([...suppressed].sort());
@@ -1210,12 +1210,23 @@ describe("terminal-outcome coverage for suppressed intermediates", () => {
   );
 
   it("covers every suppressed intermediate by a published terminal event or a recorded return", () => {
+    /**
+     * Suppressed members that owe no terminal counterpart at all, because they record no
+     * Scenario-history outcome to close.
+     *
+     * `observation` joins them under the Product Owner ruling of 2026-09-24: Observe Opponent is
+     * combat-process and information-acquisition state whose result belongs to the private/GM
+     * combat surfaces, not to the shared record. Its guard is discharged by publishing a later
+     * *consequence* through that consequence's own event, never by republishing the observation
+     * bookkeeping — so no terminal-counterpart return is owed here.
+     */
     const bookkeeping = new Set([
       "combat_experience",
       "modifier_review",
       "initiative",
       "action_skipped",
       "missile_readiness",
+      "observation",
       "participant_su_review",
       "effect_review",
       "round_boundary",
@@ -1275,14 +1286,14 @@ describe("persisted structured facts", () => {
 
   it("round-trips through a payloadJson-shaped record", () => {
     const facts = buildCombatActivityFacts({
-      event: buildEvent({ actorParticipantId: "p-1", type: "observation" }),
+      event: buildEvent({ actorParticipantId: "p-1", type: "attack" }),
       toScenarioParticipantId: identity,
     });
     const payload = JSON.parse(
-      JSON.stringify({ [COMBAT_ACTIVITY_FACTS_PAYLOAD_KEY]: facts, eventKind: "observation" }),
+      JSON.stringify({ [COMBAT_ACTIVITY_FACTS_PAYLOAD_KEY]: facts, eventKind: "attack" }),
     );
     expect(readCombatActivityFacts(payload)).toEqual(facts);
-    expect(readCombatActivityFacts({ eventKind: "observation" })).toBeUndefined();
+    expect(readCombatActivityFacts({ eventKind: "attack" })).toBeUndefined();
     expect(readCombatActivityFacts(undefined)).toBeUndefined();
   });
 });

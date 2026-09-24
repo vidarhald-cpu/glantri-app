@@ -35,14 +35,13 @@ import {
  */
 export const COMBAT_ACTIVITY_ITEM_RESOLUTION_EVENT_KIND = "item_resolution";
 
-/** §12.13 publish list — 17 of the 41 `combatStepEventTypeSchema` members. */
+/** §12.13 publish list — 16 of the 41 `combatStepEventTypeSchema` members. */
 export const COMBAT_ACTIVITY_PUBLISHED_EVENT_TYPES = [
   "attack",
   "parry",
   "damage_committed",
   "hit_location",
   "critical",
-  "observation",
   "health_check",
   "task_resolved",
   "feint_result",
@@ -56,7 +55,7 @@ export const COMBAT_ACTIVITY_PUBLISHED_EVENT_TYPES = [
   "distance_control_result",
 ] as const satisfies readonly CombatStepEventType[];
 
-/** §12.13 suppression list — the remaining 24 members. Recorded for the exhaustiveness test. */
+/** §12.13 suppression list — the remaining 25 members. Recorded for the exhaustiveness test. */
 export const COMBAT_ACTIVITY_SUPPRESSED_EVENT_TYPES = [
   "declaration",
   "combat_experience",
@@ -68,6 +67,7 @@ export const COMBAT_ACTIVITY_SUPPRESSED_EVENT_TYPES = [
   "participant_su_review",
   "effect_review",
   "round_boundary",
+  "observation",
   "feint_feasibility",
   "feint_roll",
   "feint_impossible",
@@ -451,6 +451,12 @@ function eventTypeSentence(input: {
         grade ? ` grade ${grade.toLocaleUpperCase()}` : ""
       } critical result${title ? `: ${title}` : ""}.`;
     }
+    /**
+     * `observation` is suppressed for V1 (§12.13, Product Owner ruling 2026-09-24), so no new
+     * Activity row carries it. Rows persisted before the reclassification are still projected to
+     * the GM, whose view is not gated by the publish list, so this branch stays to keep those
+     * historical rows rendering their outcome instead of the generic fallback.
+     */
     case "observation":
       return `${capitalize(input.actor)} observed ${targetText}.`;
     case "health_check": {

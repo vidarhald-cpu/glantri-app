@@ -622,9 +622,9 @@ if (!process.env.DATABASE_URL_TEST) {
         combatEffects,
       });
       // combat-panel-contract.md 12.7/12.13: `declaration` is round and phase bookkeeping and is
-      // suppressed at the data boundary; `observation` is a published, narratively meaningful
-      // outcome. Both are committed in the same write so the assertion proves selection, not
-      // absence of traffic.
+      // suppressed at the data boundary; `attack` is a published, narratively meaningful outcome.
+      // Both are committed in the same write so the assertion proves selection, not absence of
+      // traffic.
       const suppressedCombatEvent = combatStepEventSchema.parse({
         actorParticipantId: participant.id,
         completeness: "complete",
@@ -648,8 +648,8 @@ if (!process.env.DATABASE_URL_TEST) {
         actorParticipantId: participant.id,
         completeness: "complete",
         encounterId: encounter.id,
-        facts: { publicOutcome: { observed: true } },
-        id: "c1-combat-event-observation",
+        facts: { publicOutcome: { hit: true } },
+        id: "c1-combat-event-attack",
         occurredAt: "2026-08-29T10:02:01.000Z",
         roundNumber: 2,
         schemaVersion: 1,
@@ -657,7 +657,7 @@ if (!process.env.DATABASE_URL_TEST) {
         source: { kind: "canonical" },
         status: "recorded",
         step: "phase_1_actions",
-        type: "observation",
+        type: "attack",
         visibility: {
           involvedParticipantIds: [participant.id],
           outcomeScope: "involved",
@@ -709,7 +709,7 @@ if (!process.env.DATABASE_URL_TEST) {
         audienceParticipantIds: [participant.id],
         combatEventId: combatEvent.id,
         encounterId: encounter.id,
-        eventKind: "observation",
+        eventKind: "attack",
       });
       // The suppressed bookkeeping event was never written as an Activity row at all.
       expect(
@@ -722,9 +722,9 @@ if (!process.env.DATABASE_URL_TEST) {
       // Structured facts are persisted so the sentence can be produced per viewer; GM-only and
       // roller-private material is not carried into the player-safe read path.
       expect(combatOutcomePayload?.activityFacts).toMatchObject({
-        eventType: "observation",
+        eventType: "attack",
         outcomeScope: "involved",
-        publicOutcome: { observed: true },
+        publicOutcome: { hit: true },
       });
       await expect(
         service.commitCombatParticipantStateMutation({
