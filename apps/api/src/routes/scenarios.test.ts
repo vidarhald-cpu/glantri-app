@@ -140,6 +140,7 @@ const mocks = vi.hoisted(() => {
   };
   const combatItemInteractionService = {
     commitDisarm: vi.fn(),
+    resolveDeclaration: vi.fn(),
     commitDisarmUndo: vi.fn(),
     commitMissileWeaponAttack: vi.fn(),
     commitMissileWeaponAttackUndo: vi.fn(),
@@ -203,7 +204,13 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("@glantri/database", () => ({
+// `CombatItemUnavailableError` and `ScenarioEquipmentStaleError` are the **real** classes. The M7
+// declaration tests below drive the genuine `CombatItemInteractionService` rather than a hand-built
+// stand-in, so the routes must be able to recognise what it throws with `instanceof`. Nothing else
+// is taken from the real module.
+vi.mock("@glantri/database", async () => ({
+  CombatItemUnavailableError: (await vi.importActual<Record<string, unknown>>("@glantri/database"))
+    .CombatItemUnavailableError,
   ArtifactImportService: vi.fn(() => ({})),
   CampaignCharacterAlreadyRosteredError: mocks.CampaignCharacterAlreadyRosteredError,
   CampaignCharacterRosterCandidateNotFoundError:
@@ -249,7 +256,8 @@ vi.mock("@glantri/database", () => ({
       this.name = "ScenarioSessionWriteError";
     }
   },
-  ScenarioEquipmentStaleError: class ScenarioEquipmentStaleError extends Error {},
+  ScenarioEquipmentStaleError: (await vi.importActual<Record<string, unknown>>("@glantri/database"))
+    .ScenarioEquipmentStaleError,
   ScenarioService: vi.fn(() => mocks.scenarioService),
 }));
 
@@ -10690,6 +10698,321 @@ describe("scenarios route contract", () => {
       mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state.combat
         .lastDeclarationIntent,
     ).toEqual(declaration.intent);
+  });
+
+  // M7 — Forgejo issue #323. A secondary `small_action` that names an Item must reach the
+  // canonical Combat action through the existing Item interaction authority, and must not open a
+  // second Item-action channel. Every test below drives the **real**
+  // `CombatItemInteractionService` over real canonical Item records, so the
+  // `expectedItemRevision` guard, the operation/recipient rules and `CombatItemUnavailableError`
+  // are the production ones rather than a fixture's idea of them.
+  describe("M7 — Item identity on a Small Action declaration", () => {
+    const ITEM_REVISION = "2026-08-16T09:29:00.000Z";
+
+    async function useRealItemInteractionAuthority() {
+      const database =
+        await vi.importActual<typeof import("@glantri/database")>("@glantri/database");
+      const domain = await vi.importActual<typeof import("@glantri/domain")>("@glantri/domain");
+      const item = domain.CanonicalEquipmentItemSchema.parse({
+        campaignContextId: "campaign-1",
+        category: "weapon",
+        characterId: "character-1",
+        conditionState: "intact",
+        displayName: "Silver dagger",
+        holderCharacterId: "character-1",
+        id: "item-1",
+        isEquipped: false,
+        isStackable: false,
+        material: "steel",
+        quality: "standard",
+        quantity: 1,
+        revision: ITEM_REVISION,
+        specificityType: "specific",
+        storageAssignment: { carryMode: "on_person", locationId: "character-1:loc-person" },
+        templateId: "weapon-template-dagger",
+      });
+      const service = new database.CombatItemInteractionService(
+        {
+          getCombatItemInteractionRecords: vi.fn(async () => [
+            { availableInEncounter: true, hidden: false, item },
+          ]),
+        } as never,
+        {
+          encounter: { findUnique: vi.fn(async () => ({ scenarioId: "scenario-1" })) },
+          scenarioParticipant: { findMany: vi.fn(async () => []) },
+        } as never,
+      );
+      mocks.combatItemInteractionService.resolveDeclaration.mockImplementation(
+        async (input: Parameters<typeof service.resolveDeclaration>[0]) =>
+          service.resolveDeclaration(input),
+      );
+      return service;
+    }
+
+    function setupItemDeclarationRoute(encounterOverrides: Record<string, unknown> = {}) {
+      const participants = makeTwoCombatEncounterParticipants().map((participant, index) => ({
+        ...participant,
+        characterId: `character-${index + 1}`,
+      }));
+      setupCombatDeclarationRoute({
+        encounter: { participants, ...encounterOverrides },
+        participants: [
+          makeCombatScenarioParticipant({ characterId: "character-1", id: "participant-1" }),
+          makeCombatScenarioParticipant({
+            characterId: "character-2",
+            controlledByUserId: "other-player",
+            id: "participant-2",
+          }),
+        ],
+      });
+    }
+
+    function declarationPayload(
+      item?: Record<string, unknown>,
+      overrides: { secondaryActionId?: string } = {},
+    ) {
+      return {
+        actionId: "pass",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        intent: {
+          primaryAction: { actionId: "pass" },
+          relativePositions: [],
+          secondaryAction: {
+            actionId: overrides.secondaryActionId ?? "small_action",
+            description: "Drop the dagger and back away.",
+            ...(item ? { item } : {}),
+          },
+        },
+        movementId: "hold",
+        scenarioParticipantId: "participant-1",
+        secondaryActionId: overrides.secondaryActionId ?? "small_action",
+      };
+    }
+
+    it("materializes the declared Item through the Item authority under a server-owned action id", async () => {
+      setupItemDeclarationRoute();
+      await useRealItemInteractionAuthority();
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: declarationPayload({
+          expectedItemRevision: ITEM_REVISION,
+          itemId: "item-1",
+          operation: "drop",
+        }),
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+
+      // Delegation, not duplication: the declaration asked the authority to resolve the Item and
+      // copied what it returned.
+      expect(mocks.combatItemInteractionService.resolveDeclaration).toHaveBeenCalledTimes(1);
+      expect(
+        mocks.combatItemInteractionService.resolveDeclaration.mock.calls[0]?.[0],
+      ).toMatchObject({
+        campaignId: "campaign-1",
+        encounterId: "encounter-1",
+        expectedItemRevision: ITEM_REVISION,
+        itemId: "item-1",
+        operation: "drop",
+        ownerParticipantId: "encounter-participant-1",
+      });
+
+      const updatedEncounter = mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session;
+      const itemAction = updatedEncounter.combatRoundState.genericActions.find(
+        (action: { declarationKind?: string }) => action.declarationKind === "small_action",
+      );
+
+      // **Id ownership.** The action id is the canonical server-derived declaration id. The
+      // client supplied no action id at all, so the `combatItemInteractionRoutes` shape — a fully
+      // client-supplied `actionId` — is not inherited by this path.
+      expect(itemAction.id).toBe(
+        "round:1:participant:encounter-participant-1:declaration:small_action",
+      );
+      expect(JSON.stringify(response.json())).not.toContain('actionId":"item');
+
+      // **Privacy projection.** `preset: "item_interaction"` is what
+      // `canViewCurrentItemOutcome` gates player visibility of the resolved outcome on, and what
+      // `declareCombatGenericAction` pairs with `itemInteraction`.
+      expect(itemAction.preset).toBe("item_interaction");
+      expect(itemAction.itemInteraction).toEqual({
+        itemId: "item-1",
+        itemLabel: "Silver dagger",
+        itemRevision: ITEM_REVISION,
+        operation: "drop",
+        recipientParticipantId: undefined,
+        stateAtDeclaration: "held",
+        visibleToParticipantIds: ["encounter-participant-1"],
+      });
+      expect(itemAction.reference).toEqual({
+        itemId: "item-1",
+        kind: "item",
+        label: "Silver dagger",
+        ownerParticipantId: "encounter-participant-1",
+      });
+      expect(itemAction.declarationKind).toBe("small_action");
+      expect(itemAction.status).toBe("declared");
+
+      // The Item identity survives on the persisted declaration itself, which is the gap #323
+      // names: a `small_action` previously materialized with no Item identity at all.
+      const declaration = updatedEncounter.combatRoundState.participants[0].declaration;
+      expect(declaration.intent.secondaryAction).toEqual({
+        actionId: "small_action",
+        description: "Drop the dagger and back away.",
+        item: {
+          expectedItemRevision: ITEM_REVISION,
+          itemId: "item-1",
+          operation: "drop",
+        },
+        taskId: "round:1:participant:encounter-participant-1:declaration:small_action",
+      });
+    });
+
+    it("rejects a stale Item revision through the authority's own guard and persists nothing", async () => {
+      setupItemDeclarationRoute();
+      await useRealItemInteractionAuthority();
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: declarationPayload({
+          expectedItemRevision: "2026-08-16T08:00:00.000Z",
+          itemId: "item-1",
+          operation: "drop",
+        }),
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(409);
+      expect(response.json()).toMatchObject({ code: "declaration_item_unavailable" });
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+    });
+
+    it("refuses an unavailable Item identically to a stale one", async () => {
+      setupItemDeclarationRoute();
+      await useRealItemInteractionAuthority();
+      const app = await buildScenarioTestApp();
+
+      const responses = [];
+      for (const item of [
+        { expectedItemRevision: ITEM_REVISION, itemId: "item-nonexistent", operation: "drop" },
+        { expectedItemRevision: ITEM_REVISION, itemId: "item-1", operation: "pickup" },
+        {
+          expectedItemRevision: ITEM_REVISION,
+          itemId: "item-1",
+          operation: "drop",
+          recipientParticipantId: "encounter-participant-2",
+        },
+      ]) {
+        responses.push(
+          await app.inject({
+            method: "POST",
+            payload: declarationPayload(item),
+            url: "/encounters/encounter-1/combat-declaration",
+          }),
+        );
+      }
+      await app.close();
+
+      for (const response of responses) {
+        expect(response.statusCode, JSON.stringify(response.json())).toBe(409);
+        expect(response.json()).toMatchObject({
+          code: "declaration_item_unavailable",
+          error: "The selected Item is no longer available. Refresh and select again.",
+        });
+      }
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    });
+
+    // Scope boundary, Product Owner ruling of 2026-09-25: `equip_unequip` is explicitly deferred
+    // and materializes no generic action, so it must not acquire Item identity by any route.
+    it("refuses Item identity on equip_unequip and never consults the Item authority", async () => {
+      setupItemDeclarationRoute();
+      await useRealItemInteractionAuthority();
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          ...declarationPayload(
+            { expectedItemRevision: ITEM_REVISION, itemId: "item-1", operation: "drop" },
+            { secondaryActionId: "equip_unequip" },
+          ),
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+      expect(response.json()).toMatchObject({
+        error: "Only a Small Action can name a canonical Item to interact with.",
+      });
+      expect(mocks.combatItemInteractionService.resolveDeclaration).not.toHaveBeenCalled();
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    });
+
+    it("refuses to adopt a live Small Action whose Item identity differs from the declared one", async () => {
+      const participants = makeTwoCombatEncounterParticipants().map((participant, index) => ({
+        ...participant,
+        characterId: `character-${index + 1}`,
+      }));
+      const encounter = makeCombatEncounterWithResolvedCombatExperience({
+        participants,
+      }) as EncounterSession;
+      const canonicalTaskId =
+        "round:1:participant:encounter-participant-1:declaration:small_action";
+      encounter.combatRoundState = {
+        ...initializeCombatRoundState({ encounter }),
+        genericActions: declareCombatGenericAction({
+          action: {
+            createdAt: "2026-01-01T00:00:00.000Z",
+            createdByUserId: "player-1",
+            declarationKind: "small_action",
+            duration: { kind: "gm_decided" },
+            id: canonicalTaskId,
+            intent: "Kick the torch aside.",
+            ownerParticipantId: "encounter-participant-1",
+          },
+          actions: [],
+        }),
+      } as CombatRoundState;
+      setupCombatDeclarationRoute({
+        encounter,
+        participants: [
+          makeCombatScenarioParticipant({ characterId: "character-1", id: "participant-1" }),
+          makeCombatScenarioParticipant({
+            characterId: "character-2",
+            controlledByUserId: "other-player",
+            id: "participant-2",
+          }),
+        ],
+      });
+      await useRealItemInteractionAuthority();
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        payload: declarationPayload({
+          expectedItemRevision: ITEM_REVISION,
+          itemId: "item-1",
+          operation: "drop",
+        }),
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(400);
+      expect(response.json()).toMatchObject({
+        error:
+          "This character's live Small Action names a different canonical Item interaction. Resolve or cancel it before declaring this one.",
+      });
+      expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+    });
   });
 
   it("continues the participant's nonterminal Combat Task with the same ID across rounds", async () => {

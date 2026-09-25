@@ -38,6 +38,55 @@ describe("combat declaration intent", () => {
     expect(combatDeclarationIntentSchema.parse(intent)).toEqual(intent);
   });
 
+  // M7 — Forgejo issue #323. The secondary declaration can now name an Item and the act to
+  // perform on it. Identification only: label, state and visibility are resolved server-side by
+  // the Item interaction authority and are deliberately absent from the wire shape.
+  it("carries Item identity and operation on a Small Action declaration", () => {
+    const intent = {
+      relativePositions: [],
+      secondaryAction: {
+        actionId: "small_action",
+        description: "Drop the dagger and back away.",
+        item: {
+          expectedItemRevision: "2026-09-25T09:00:00.000Z",
+          itemId: "item-1",
+          operation: "drop" as const,
+        },
+      },
+    };
+    expect(combatDeclarationIntentSchema.parse(intent)).toEqual(intent);
+
+    const passed = combatDeclarationIntentSchema.parse({
+      relativePositions: [],
+      secondaryAction: {
+        actionId: "small_action",
+        description: "Hand the dagger over.",
+        item: {
+          expectedItemRevision: "2026-09-25T09:00:00.000Z",
+          itemId: "item-1",
+          operation: "pass",
+          recipientParticipantId: "participant-2",
+        },
+      },
+    });
+    expect(passed.secondaryAction?.item?.recipientParticipantId).toBe("participant-2");
+  });
+
+  it("refuses an Item operation or revision the canonical Item authority never emits", () => {
+    for (const item of [
+      { expectedItemRevision: "2026-09-25T09:00:00.000Z", itemId: "item-1", operation: "equip" },
+      { expectedItemRevision: "not-a-timestamp", itemId: "item-1", operation: "drop" },
+      { expectedItemRevision: "2026-09-25T09:00:00.000Z", itemId: "", operation: "drop" },
+    ]) {
+      expect(() =>
+        combatDeclarationIntentSchema.parse({
+          relativePositions: [],
+          secondaryAction: { actionId: "small_action", description: "Try it.", item },
+        }),
+      ).toThrow();
+    }
+  });
+
   it("keeps an omitted primary action blank rather than converting it to Pass", () => {
     expect(normalizeCombatDeclarationIntent({ relativePositions: [] })).toEqual({
       relativePositions: [],

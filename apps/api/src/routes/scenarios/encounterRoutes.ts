@@ -16,10 +16,12 @@ import {
   CharacterEquipmentReadModelService,
   CombatStateReadService,
   CombatItemInteractionService,
+  CombatItemUnavailableError,
   EncounterCombatWriteError,
   EncounterService,
   EncounterWriteError,
   ScenarioService,
+  ScenarioEquipmentStaleError,
   type CombatThrownWeaponAttackUndo,
   type CombatMissileAmmoUndo,
 } from "@glantri/database";
@@ -278,6 +280,7 @@ import {
   type CombatRoundEndDistanceCalculationReadiness,
   type CombatGenericActionDuration,
   type CombatGenericActionReference,
+  type CombatItemInteraction,
   type CombatGenericActionRollRequest,
   type CombatDeclarationIntent,
   type CombatNpcDeclarationProposal,
@@ -2350,10 +2353,48 @@ function nextFreeCombatDeclarationTaskId(input: {
   return candidate;
 }
 
+/**
+ * Item identity settlement for a declared `small_action`, Forgejo issue #323 (M7).
+ *
+ * The declaration path never trusts a client-supplied Item shape. `resolveDeclaration` on
+ * `CombatItemInteractionService` is the sole authority: it re-reads the canonical options, rejects
+ * a stale `expectedItemRevision` with `CombatItemUnavailableError`, and returns the exact
+ * `CombatItemInteraction` and `CombatGenericActionReference` the materialized action carries. The
+ * declaration copies those two values verbatim and adds nothing of its own.
+ *
+ * Identity of the **action** stays server-owned: the canonical `<round>:<participant>:declaration:
+ * small_action` id (or A1b's derived replacement id) is minted exactly as for any other declared
+ * task. The client-supplied `actionId` shape used by `combatItemInteractionRoutes` is deliberately
+ * **not** inherited here — that is the shape the comment below records as having caused a permanent
+ * silent-failure defect, and which A1b closed for this path.
+ */
+function declaredItemIdentityMatches(input: {
+  action: CombatRoundState["genericActions"][number];
+  interaction?: CombatItemInteraction;
+}): boolean {
+  if (!input.interaction) {
+    return input.action.preset !== "item_interaction" && !input.action.itemInteraction;
+  }
+  // Mirrors `sameItemInteraction` in `combatItemInteractionService`, including `itemRevision`: an
+  // adopted action keeps the revision it was declared against, and that revision is what the Item
+  // authority later guards the commit with.
+  return (
+    input.action.preset === "item_interaction" &&
+    input.action.itemInteraction?.itemId === input.interaction.itemId &&
+    input.action.itemInteraction.itemRevision === input.interaction.itemRevision &&
+    input.action.itemInteraction.operation === input.interaction.operation &&
+    input.action.itemInteraction.recipientParticipantId === input.interaction.recipientParticipantId
+  );
+}
+
 function materializeCombatDeclarationTasks(input: {
   createdAt: string;
   createdByUserId: string;
   intent?: CombatDeclarationIntent;
+  itemInteraction?: {
+    interaction: CombatItemInteraction;
+    reference: CombatGenericActionReference;
+  };
   ownerParticipantId: string;
   previousIntent?: CombatDeclarationIntent;
   roundNumber: number;
@@ -2375,6 +2416,26 @@ function materializeCombatDeclarationTasks(input: {
   ) => {
     const selection = input.intent?.[slot];
     if (!selection || selection.actionId !== declarationKind) return selection;
+    // Item identity is carried by the secondary `small_action` only — Product Owner ruling of
+    // 2026-09-25 on Forgejo issue #323. `equip_unequip` is explicitly deferred and materializes no
+    // generic action at all, so it never reaches here.
+    const declaredItem = declarationKind === "small_action" ? input.itemInteraction : undefined;
+    // An action is adopted (carry-forward, or this participant's live action already holding the
+    // canonical id) only when its Item identity is exactly the one being declared. Neither
+    // `updateCombatGenericActionIntent` nor any other in-memory helper can add, change or remove
+    // `preset`/`itemInteraction` after declaration, so adopting a mismatched action would either
+    // silently drop the declared Item or silently resolve a different one — the same class of
+    // silent failure A1b closed. The refusal happens before anything is persisted.
+    const requireDeclaredItemIdentity = (
+      action: CombatRoundState["genericActions"][number],
+    ): void => {
+      if (declaredItemIdentityMatches({ action, interaction: declaredItem?.interaction })) return;
+      throw new Error(
+        declaredItem
+          ? "This character's live Small Action names a different canonical Item interaction. Resolve or cancel it before declaring this one."
+          : "This character's live Small Action is a canonical Item action. Resolve or cancel it before declaring a Small Action without an Item.",
+      );
+    };
     const description = selection.description?.trim();
     if (!description) {
       throw new Error(
@@ -2410,6 +2471,7 @@ function materializeCombatDeclarationTasks(input: {
     const canonicalTaskId = `${declarationId}:${declarationKind}`;
     let taskId = existing?.id ?? canonicalTaskId;
     if (existing) {
+      requireDeclaredItemIdentity(existing);
       genericActions = updateCombatGenericActionIntent({
         actionId: taskId,
         actions: genericActions,
@@ -2483,6 +2545,7 @@ function materializeCombatDeclarationTasks(input: {
         canonicalIdOccupant &&
         !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(canonicalIdOccupant.status)
       ) {
+        requireDeclaredItemIdentity(canonicalIdOccupant);
         genericActions = updateCombatGenericActionIntent({
           actionId: taskId,
           actions: genericActions,
@@ -2531,7 +2594,18 @@ function materializeCombatDeclarationTasks(input: {
             duration: { kind: "gm_decided" },
             id: taskId,
             intent: description,
+            // M7 — the declared Item reaches the canonical Combat action through the Item
+            // authority's own resolved shapes, unmodified. `preset: "item_interaction"` is
+            // load-bearing twice over: `declareCombatGenericAction` enforces
+            // `(preset === "item_interaction") === Boolean(itemInteraction)`, and
+            // `canViewCurrentItemOutcome` (A2) gates player visibility of the resolved outcome on
+            // exactly this preset. Without it the Item outcome would be invisible to every player.
+            itemInteraction: declaredItem?.interaction,
             ownerParticipantId: input.ownerParticipantId,
+            preset: declaredItem ? "item_interaction" : undefined,
+            // `reviewCombatGenericAction` refuses an Item action that does not retain its declared
+            // Item reference, so the authority's reference travels with the interaction.
+            reference: declaredItem?.reference,
           },
           actions: genericActions,
         });
@@ -2601,6 +2675,13 @@ function normalizeCombatDeclarationIntentForRequest(input: {
         ? "Describe the intended equipment change."
         : "Describe the Small Action the character intends to attempt.",
     );
+  }
+  // M7 scope boundary, Product Owner ruling of 2026-09-25 on Forgejo issue #323. Item identity is
+  // carried by the secondary `small_action` alone. `equip_unequip` materializes no generic action
+  // today and is explicitly deferred, so an Item named against any other secondary action has no
+  // canonical action to reach and is refused rather than silently ignored.
+  if (secondary?.item && secondary.actionId !== "small_action") {
+    throw new Error("Only a Small Action can name a canonical Item to interact with.");
   }
 
   const hasVisibilityRows = Object.keys(input.encounter.roleplayState?.visibility ?? {}).length > 0;
@@ -9786,11 +9867,68 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      // M7 — Forgejo issue #323. A secondary `small_action` that names an Item is resolved by the
+      // existing Item interaction authority before anything is materialized or persisted. The
+      // declaration path duplicates none of it: `resolveDeclaration` re-reads the canonical
+      // options, enforces `expectedItemRevision` and the operation/recipient rules, and throws
+      // `CombatItemUnavailableError` on a stale or unavailable Item. The viewer is built exactly as
+      // the Disarm declaration above builds it, so a player can only ever name an Item their own
+      // participant may act on.
+      let declarationItemInteraction:
+        | { interaction: CombatItemInteraction; reference: CombatGenericActionReference }
+        | undefined;
+      const declaredSecondaryItem =
+        submittedDeclarationIntent?.secondaryAction?.actionId === "small_action"
+          ? submittedDeclarationIntent.secondaryAction.item
+          : undefined;
+      if (declaredSecondaryItem) {
+        try {
+          declarationItemInteraction = await combatItemInteractionService.resolveDeclaration({
+            campaignId: access.campaignId,
+            encounterId: encounter.id,
+            expectedItemRevision: declaredSecondaryItem.expectedItemRevision,
+            itemId: declaredSecondaryItem.itemId,
+            operation: declaredSecondaryItem.operation,
+            ownerParticipantId: encounterParticipant.id,
+            participants: membership.participants.map((participant) => ({
+              characterId: participant.characterId,
+              label: participant.label,
+              participantId: participant.id,
+            })),
+            recipientParticipantId: declaredSecondaryItem.recipientParticipantId,
+            viewer:
+              access.mode === "gm"
+                ? { kind: "gm" }
+                : {
+                    controlledParticipantIds: new Set([encounterParticipant.id]),
+                    kind: "player",
+                    visibleParticipantIds: buildPlayerSafeCombatScopeForUser({
+                      encounter,
+                      scenarioParticipants,
+                      userId: user.id,
+                    }).visibleParticipantIds,
+                  },
+          });
+        } catch (error) {
+          if (
+            error instanceof CombatItemUnavailableError ||
+            error instanceof ScenarioEquipmentStaleError
+          ) {
+            return reply.code(409).send({
+              code: "declaration_item_unavailable",
+              error: "The selected Item is no longer available. Refresh and select again.",
+            });
+          }
+          throw error;
+        }
+      }
+
       const submittedAt = new Date().toISOString();
       const declarationTasks = materializeCombatDeclarationTasks({
         createdAt: submittedAt,
         createdByUserId: user.id,
         intent: submittedDeclarationIntent,
+        itemInteraction: declarationItemInteraction,
         ownerParticipantId: encounterParticipant.id,
         previousIntent: scenarioParticipant.state.combat.lastDeclarationIntent,
         roundNumber: roundState.roundNumber,
