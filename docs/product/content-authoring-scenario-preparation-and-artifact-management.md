@@ -1068,8 +1068,10 @@ previously left to the building lane. **Gates:** the
 [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for the lane that
 persists the event kind.
 
-**A mid-play party recognition or reveal produces a distinct player-safe
-state-transition Activity event.** It is **not** a `scenario_announcement`
+**A mid-play party recognition or reveal produces the distinct player-safe
+state-transition Activity event `person_identity_revealed`.** It records a
+**shared-party transition from unidentified to identified** during play. It is
+**not** a `scenario_announcement`
 ([Campaign Material and Scenario Builder §8.1](campaign-material-and-scenario-builder-ui.md#81-publication-creates-a-scenario_announcement-activity-event)):
 publishing a prepared GM message and the party learning who someone is are
 different things that happened, and durable history
@@ -1079,6 +1081,13 @@ different things that happened, and durable history
 initial recognition state while preparing a Scenario is preparation, not an
 event. The asymmetry is unchanged: a change during play is history, a change
 during preparation is not.
+
+**The event's payload snapshots the player-safe text label immediately before and
+immediately after recognition**, together with the player-safe references needed
+to render the entry. **V1 snapshots no speaker or Person images and no Artifact
+revisions for this event**, consistent with the text-identity-only rule for
+prepared-message speaker history in
+[section 18.16](#1816-prepared-message-speaker-history-is-text-identity-in-v1).
 
 **Implementing a new persisted Activity kind is floor-class**, on exactly the
 basis already recorded for `scenario_announcement` — it changes persisted
@@ -1127,9 +1136,16 @@ could reveal what the GM meant to withhold.
 a **derived** report in the sense of
 [section 15](#15-representation-readiness), not a stored flag.
 
-**Where a player rendering is nevertheless required, players see a neutral
-missing-representation state** until the GM **explicitly repairs or resets** the
-override. A neutral state reveals nothing. The product/UI form of both is
+**Where a player rendering is nevertheless required for a currently visible
+entity, players see a neutral missing-representation placeholder** until the GM
+**explicitly repairs the override or resets to the canonical default**. **If the
+entity is not visible, nothing is rendered.**
+
+**That placeholder is UI chrome. It is not an Artifact, and it is explicitly not
+the [`generic fallback`](#15-representation-readiness) readiness value.** It
+conveys **no identity-specific content**, it is **not persisted and not
+shareable**, and it **does not satisfy readiness**. The product/UI form of both
+is
 [Campaign Material and Scenario Builder §7.5](campaign-material-and-scenario-builder-ui.md#75-override-lifecycle).
 
 ---

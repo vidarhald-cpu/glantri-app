@@ -314,12 +314,20 @@ recognition a redesign rather than an extension.
 player-safe state-transition Activity event.** The party learned who someone is,
 and that learning is part of what happened.
 
-**That event is not a `scenario_announcement`.** Publishing a prepared GM message
+**That event kind is `person_identity_revealed`, and it is not a
+`scenario_announcement`.** Publishing a prepared GM message
 ([section 8.1](#81-publication-creates-a-scenario_announcement-activity-event))
 and the party recognizing a Person are different things that happened, and they
-are recorded as different event kinds. The recognition event carries only the
-player-safe references and presentation needed to render it and its history; no
-GM-only preparation context travels with it.
+are recorded as different event kinds. `person_identity_revealed` records a
+mid-play **shared-party transition from unidentified to identified**.
+
+**Its payload snapshots the player-safe text label immediately before and
+immediately after recognition**, together with the player-safe references needed
+to render the entry and its history. No GM-only preparation context travels with
+it. **V1 snapshots no speaker or Person images and no Artifact revisions for this
+event** — the same text-identity-only rule already recorded for prepared-message
+speaker history in
+[section 8.2](#82-speaker-identity-in-a-published-announcement).
 
 **Preparation edits produce no Activity.** Setting or changing the initial
 recognition state while preparing the Scenario is preparation, not an event, and
@@ -357,11 +365,17 @@ surfaced as a concrete readiness issue per
 **The same rule holds during play, not only during preparation.** A broken
 override discovered mid-play **never silently falls back to the canonical
 presentation**. It surfaces as a **GM-visible error/readiness condition**, and
-where a player rendering is nevertheless required, players see a **neutral
-missing-representation state** — not the canonical image or description — until
-the GM **explicitly repairs or resets** the override. A neutral state reveals
-nothing; the canonical presentation may reveal precisely what the GM meant to
-withhold.
+where a player rendering is nevertheless required for a **currently visible**
+entity, players see a **neutral missing-representation placeholder** — not the
+canonical image or description — until the GM **explicitly repairs the override
+or resets to the canonical default**. **If the entity is not visible, nothing is
+rendered.**
+
+**That placeholder is UI chrome. It is not an Artifact, and it is explicitly not
+a `generic fallback`.** It conveys **no identity-specific content**, it is **not
+persisted and not shareable**, and it **does not satisfy readiness**. A neutral
+placeholder reveals nothing; the canonical presentation may reveal precisely what
+the GM meant to withhold.
 
 ---
 
