@@ -5,7 +5,38 @@ const optionalTrimmedText = z.string().trim().max(4000).optional();
 
 export const artifactKindSchema = z.enum(["map", "image", "portrait", "document", "handout"]);
 export const artifactLifecycleSchema = z.enum(["active", "archived", "deleted"]);
-export const artifactAudienceSchema = z.enum(["gm_private", "campaign", "scenario"]);
+/**
+ * The writable V1 Artifact access model: exactly two canonical states.
+ *
+ * Content authoring §18.24 and Campaign Material §2.4 settle this — `GM only`
+ * and `shared with Campaign players`. There is no third state, and no code
+ * path may newly write one.
+ */
+export const artifactAudienceSchema = z.enum(["gm_private", "campaign"]);
+
+/**
+ * Fail-closed resolution of a *persisted* audience column onto the two
+ * canonical states. Used only where persisted rows are read.
+ *
+ * This is a **closed default**, not a special case for the retired legacy
+ * `scenario` value: exactly `"campaign"` resolves to player-visible access and
+ * **everything else** — `"gm_private"`, the legacy `"scenario"`, any
+ * unrecognised string, `null`, `undefined` — resolves to `"gm_private"`.
+ * Content authoring §18.24: residual legacy state "must never be treated as,
+ * or widened into, player access".
+ */
+export function resolvePersistedArtifactAudience(value: unknown): ArtifactAudience {
+  return value === "campaign" ? "campaign" : "gm_private";
+}
+
+/**
+ * Legacy-tolerant parse of a persisted audience value. Separately named from
+ * {@link artifactAudienceSchema} on purpose: the writable model stays two
+ * states, and only reads of persisted rows tolerate anything else.
+ */
+export const persistedArtifactAudienceSchema = z
+  .unknown()
+  .transform(resolvePersistedArtifactAudience);
 export const artifactStorageStateSchema = z.enum([
   "pending",
   "ready",

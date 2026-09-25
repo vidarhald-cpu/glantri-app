@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  artifactAudienceSchema,
+  artifactAudienceUpdateSchema,
   artifactCommonDtoSchema,
   artifactUploadMetadataSchema,
+  persistedArtifactAudienceSchema,
+  resolvePersistedArtifactAudience,
   scenarioArtifactReferenceMutationSchema,
 } from "./artifact";
 
@@ -53,6 +57,41 @@ describe("Artifact contracts", () => {
     expect(dto).not.toHaveProperty("digest");
     expect(dto).not.toHaveProperty("originalFilename");
     expect(dto).not.toHaveProperty("sourceUri");
+  });
+
+  it("models Artifact access as exactly two writable states", () => {
+    // Content authoring §18.24 / Campaign Material §2.4.
+    expect(artifactAudienceSchema.options).toEqual(["gm_private", "campaign"]);
+    expect(() => artifactAudienceSchema.parse("scenario")).toThrow();
+    expect(() =>
+      artifactAudienceUpdateSchema.parse({ audience: "scenario", expectedMetadataVersion: 1 }),
+    ).toThrow();
+  });
+
+  it("SYNTHETIC: resolves any persisted audience that is not `campaign` closed to GM only", () => {
+    // Acceptance criterion 8. These inputs are **synthetic by construction**:
+    // no writable V1 path can produce them. The point is that the resolver is
+    // a closed default rather than a `scenario`-specific special case.
+    expect(resolvePersistedArtifactAudience("campaign")).toBe("campaign");
+    for (const value of [
+      "gm_private",
+      "scenario",
+      "players",
+      "public",
+      "Campaign",
+      "campaign ",
+      "",
+      null,
+      undefined,
+      0,
+      1,
+      true,
+      {},
+      ["campaign"],
+    ]) {
+      expect(resolvePersistedArtifactAudience(value), String(value)).toBe("gm_private");
+      expect(persistedArtifactAudienceSchema.parse(value), String(value)).toBe("gm_private");
+    }
   });
 
   it("requires optimistic versions for Scenario publication mutations", () => {

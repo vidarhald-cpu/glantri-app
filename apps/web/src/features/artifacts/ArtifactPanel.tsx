@@ -27,11 +27,22 @@ import { ArtifactInspectionDialog, type InspectedArtifact } from "./ArtifactInsp
 import { OrdinaryArtifactUploadPanel } from "./OrdinaryArtifactUploadPanel";
 import { AiIntakePanel } from "./intake/AiIntakePanel";
 
+/**
+ * Artifact access has exactly two states (Campaign Material §2.4, Content
+ * authoring §18.24). A residual legacy row has already been resolved to
+ * `gm_private` at the persistence boundary, so it renders as Private to GM.
+ */
 function audienceLabel(artifact: ArtifactGmDto): string {
-  if (artifact.audience === "campaign") return "Shared with Campaign";
-  if (artifact.audience === "scenario") return "Scenario sharing";
-  return "Private to GM";
+  return artifact.audience === "campaign" ? "Shared with Campaign" : "Private to GM";
 }
+
+/** The two canonical access filter values, per Campaign Material §2.1/§2.4. */
+const accessFilterOptions = [
+  { label: "GM only", value: "gm_private" },
+  { label: "Shared with Campaign players", value: "campaign" },
+] as const;
+
+type AccessFilter = "" | (typeof accessFilterOptions)[number]["value"];
 
 export function ArtifactPanel({
   campaignId,
@@ -46,6 +57,7 @@ export function ArtifactPanel({
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState("active");
+  const [accessFilter, setAccessFilter] = useState<AccessFilter>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
@@ -103,6 +115,8 @@ export function ArtifactPanel({
     setEditAltText(artifact.altText ?? "");
   }
 
+  const activeAccessFilter = accessFilterOptions.find((option) => option.value === accessFilter);
+
   if (loading) return <section aria-busy="true">Loading Artifacts…</section>;
 
   return (
@@ -134,7 +148,42 @@ export function ArtifactPanel({
             </select>
           </label>
         ) : null}
+        {mode === "gm" ? (
+          <label>
+            Access{" "}
+            <select
+              onChange={(event) => setAccessFilter(event.target.value as AccessFilter)}
+              value={accessFilter}
+            >
+              <option value="">All access</option>
+              {accessFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
+      {activeAccessFilter ? (
+        <ul
+          aria-label="Active filters"
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 8,
+            listStyle: "none",
+            margin: 0,
+            padding: 0,
+          }}
+        >
+          <li>
+            <button onClick={() => setAccessFilter("")} type="button">
+              Access: {activeAccessFilter.label} — remove filter
+            </button>
+          </li>
+        </ul>
+      ) : null}
       <div>
         <h2 style={{ marginBottom: "0.25rem" }}>Artifacts</h2>
         <p style={{ color: "#5e5a50", margin: 0 }}>
@@ -169,7 +218,9 @@ export function ArtifactPanel({
               (!kindFilter || artifact.artifactKind === kindFilter) &&
               (!isManagedArtifact(artifact) ||
                 !lifecycleFilter ||
-                artifact.lifecycle === lifecycleFilter),
+                artifact.lifecycle === lifecycleFilter) &&
+              (!accessFilter ||
+                (isManagedArtifact(artifact) && artifact.audience === accessFilter)),
           )
           .map((artifact) => {
             const managed = isManagedArtifact(artifact) ? artifact : undefined;
