@@ -310,9 +310,24 @@ recognition a redesign rather than an extension.
 
 #### 7.4.1 Only a change during play is history
 
-**A player-visible recognition or reveal during play produces the appropriate
-meaningful player-safe Activity history.** The party learned who someone is, and
-that learning is part of what happened.
+**A player-visible recognition or reveal during play produces a distinct
+player-safe state-transition Activity event.** The party learned who someone is,
+and that learning is part of what happened.
+
+**That event kind is `person_identity_revealed`, and it is not a
+`scenario_announcement`.** Publishing a prepared GM message
+([section 8.1](#81-publication-creates-a-scenario_announcement-activity-event))
+and the party recognizing a Person are different things that happened, and they
+are recorded as different event kinds. `person_identity_revealed` records a
+mid-play **shared-party transition from unidentified to identified**.
+
+**Its payload snapshots the player-safe text label immediately before and
+immediately after recognition**, together with the player-safe references needed
+to render the entry and its history. No GM-only preparation context travels with
+it. **V1 snapshots no speaker or Person images and no Artifact revisions for this
+event** — the same text-identity-only rule already recorded for prepared-message
+speaker history in
+[section 8.2](#82-speaker-identity-in-a-published-announcement).
 
 **Preparation edits produce no Activity.** Setting or changing the initial
 recognition state while preparing the Scenario is preparation, not an event, and
@@ -322,8 +337,14 @@ draws for a prepared but unpublished message.
 That asymmetry is the rule: **a change during play is history; a change during
 preparation is not.** What a player-visible reveal renders in Activity is
 projected under
-[PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules);
-this document settles the product decision and authorizes no implementation.
+[PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules).
+
+> **Implementing this persisted Activity kind is floor-class**, on the same basis
+> as [section 8.1](#81-publication-creates-a-scenario_announcement-activity-event):
+> it changes persisted player-safe/privacy-projected semantics, so the lane that
+> builds it carries the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor).
+> **This document settles the product decision; it authorizes no
+> implementation.**
 
 ### 7.5 Override lifecycle
 
@@ -340,6 +361,21 @@ presentation is the thing being withheld, so quietly substituting the canonical
 representation could change what players learn. The failure is therefore
 surfaced as a concrete readiness issue per
 [section 10](#10-preparation-readiness) and resolved by an explicit GM decision.
+
+**The same rule holds during play, not only during preparation.** A broken
+override discovered mid-play **never silently falls back to the canonical
+presentation**. It surfaces as a **GM-visible error/readiness condition**, and
+where a player rendering is nevertheless required for a **currently visible**
+entity, players see a **neutral missing-representation placeholder** — not the
+canonical image or description — until the GM **explicitly repairs the override
+or resets to the canonical default**. **If the entity is not visible, nothing is
+rendered.**
+
+**That placeholder is UI chrome. It is not an Artifact, and it is explicitly not
+a `generic fallback`.** It conveys **no identity-specific content**, it is **not
+persisted and not shareable**, and it **does not satisfy readiness**. A neutral
+placeholder reveals nothing; the canonical presentation may reveal precisely what
+the GM meant to withhold.
 
 ---
 
@@ -391,11 +427,17 @@ Scenario overlay and canonical fallback of
 projection.** The canonical Person relation carried by the event may remain
 **GM/history-side only**; it is not part of what the player projection carries.
 
-**The player-safe speaker presentation needed to render the published entry is
-persisted with the event.** Later recognition changes what players see from that
-point onward; it does **not** silently rewrite historical Activity. An
-announcement made by an unidentified stranger remains, in the players' history,
-an announcement made by an unidentified stranger.
+**In V1, the player-safe speaker label/text identity used at publication is
+snapshotted and persisted with the event.** Later recognition changes what
+players see from that point onward; it does **not** silently rewrite historical
+Activity. An announcement made by an unidentified stranger remains, in the
+players' history, an announcement made by an unidentified stranger — which is
+the whole reason the snapshot exists.
+
+**The snapshot is text identity only.** An **image snapshot is not required**,
+and **historical Artifact-revision semantics are not required** for Activity
+messages: an Activity entry is a record of what was said and by whom it appeared
+to be said, not a versioned rendering of an Artifact.
 
 This is the same restraint as the event carrying only the safe references it
 needs ([section 8.1](#81-publication-creates-a-scenario_announcement-activity-event)),
