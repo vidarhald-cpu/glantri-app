@@ -1046,7 +1046,9 @@ re-resolves an override already set for a Scenario.
 
 **If an override's Artifact becomes unavailable or retired, readiness reports an
 error and explicit GM repair or reset is required. Silent fallback to the
-canonical representation is forbidden.** The reason is player-facing, not
+canonical representation is forbidden.** This holds during preparation and
+during play alike; the play-time behaviour is
+[section 18.17](#1817-a-broken-scenario-override-during-play). The reason is player-facing, not
 cosmetic: an unidentified-layer override exists because the canonical
 presentation is the thing being withheld, so quietly resolving to it could
 change what players learn.
@@ -1055,6 +1057,79 @@ This stays a **derived** report in the sense of
 [section 15](#15-representation-readiness) — a concrete, actionable preparation
 issue, not a fourth stored readiness flag — and it surfaces on the Scenario
 Builder readiness list at
+[Campaign Material and Scenario Builder §7.5](campaign-material-and-scenario-builder-ui.md#75-override-lifecycle).
+
+### 18.15 Scenario recognition is a distinct Activity event kind
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Amends, narrowly:** nothing. It settles the event kind that
+[Campaign Material and Scenario Builder §7.4.1](campaign-material-and-scenario-builder-ui.md#741-only-a-change-during-play-is-history)
+previously left to the building lane. **Gates:** the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for the lane that
+persists the event kind.
+
+**A mid-play party recognition or reveal produces a distinct player-safe
+state-transition Activity event.** It is **not** a `scenario_announcement`
+([Campaign Material and Scenario Builder §8.1](campaign-material-and-scenario-builder-ui.md#81-publication-creates-a-scenario_announcement-activity-event)):
+publishing a prepared GM message and the party learning who someone is are
+different things that happened, and durable history
+([section 9](#9-durable-history)) records them as different kinds.
+
+**Preparation-state edits produce no Activity.** Establishing or changing the
+initial recognition state while preparing a Scenario is preparation, not an
+event. The asymmetry is unchanged: a change during play is history, a change
+during preparation is not.
+
+**Implementing a new persisted Activity kind is floor-class**, on exactly the
+basis already recorded for `scenario_announcement` — it changes persisted
+player-safe/privacy-projected semantics, the classification
+[PPV1 §9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)
+applies to adding an announcement event type. **This section settles the product
+decision; it authorizes no implementation.**
+
+### 18.16 Prepared-message speaker history is text identity in V1
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Amends, narrowly:** the speaker-snapshot requirement in
+[Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement),
+by fixing what is snapshotted. **Gates:** Nothing beyond the lane that builds
+it, which is already floor-class under
+[section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind)
+and §8.1 of that document.
+
+**In V1, publication snapshots and persists the player-safe speaker label/text
+identity used at publication time.**
+
+**An image snapshot is not required**, and **historical Artifact-revision
+semantics are not required** for Activity messages. An Activity entry is a
+record of what was said and by whom it appeared to be said; it is not a
+versioned rendering of an Artifact.
+
+**The reason the snapshot exists is unchanged:** later recognition must not
+silently rewrite historical Activity. An announcement made by an unidentified
+stranger stays, in the players' history, an announcement made by an unidentified
+stranger.
+
+### 18.17 A broken Scenario override during play
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends:** [section 18.14](#1814-scenario-override-lifecycle), which recorded
+the preparation-time behaviour. **Gates:** Nothing beyond the lane that builds
+it.
+
+**A broken or unavailable override never silently falls back to the canonical
+presentation — during play as well as during preparation.** The reason is the
+one already recorded: an unidentified-layer override exists because the
+canonical presentation is the thing being withheld, so resolving to it quietly
+could reveal what the GM meant to withhold.
+
+**The condition surfaces as a GM-visible error/readiness condition.** It remains
+a **derived** report in the sense of
+[section 15](#15-representation-readiness), not a stored flag.
+
+**Where a player rendering is nevertheless required, players see a neutral
+missing-representation state** until the GM **explicitly repairs or resets** the
+override. A neutral state reveals nothing. The product/UI form of both is
 [Campaign Material and Scenario Builder §7.5](campaign-material-and-scenario-builder-ui.md#75-override-lifecycle).
 
 ---
