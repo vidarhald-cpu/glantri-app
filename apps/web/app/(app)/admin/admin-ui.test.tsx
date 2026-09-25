@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { adminNavItems } from "./admin-ui";
-import { skillsWorkspaceTabs } from "./skills/SkillsWorkspaceTabs";
 
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/admin/skills",
+  usePathname: () => "/admin/skills/reference",
 }));
 
 describe("admin navigation", () => {
@@ -27,12 +26,12 @@ describe("admin navigation", () => {
     );
   });
 
-  it("labels the legacy skill workspace distinctly", () => {
+  it("routes competency navigation to the V2 reference", () => {
     expect(adminNavItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          href: "/admin/skills",
-          label: "Legacy Catalogue",
+          href: "/admin/skills/reference",
+          label: "Competency Reference",
         }),
       ]),
     );
@@ -40,18 +39,6 @@ describe("admin navigation", () => {
       expect.arrayContaining([
         expect.objectContaining({
           href: "/admin/skills",
-          label: "Skills",
-        }),
-      ]),
-    );
-  });
-
-  it("shows Skill Reference in the skills workspace tabs", () => {
-    expect(skillsWorkspaceTabs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          href: "/admin/skills/reference",
-          label: "Skill Reference",
         }),
       ]),
     );

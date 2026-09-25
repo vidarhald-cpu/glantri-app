@@ -1,56 +1,13 @@
 import {
-  buildSkillContentRelease,
   defaultCanonicalContent,
+  getCompetencyV2ReferenceSource,
   type CanonicalContent,
-  pilotSkillContentReleaseProposalInput,
-  projectSkillContentReleaseForReference,
   validateCanonicalContent,
-  targetLearningGroupCatalogue,
 } from "@glantri/content";
-import { fullSkillCatalogueProposal } from "@glantri/content/full-skill-catalogue-proposal";
 import { ContentService } from "@glantri/database";
-import type {
-  AdminSkillReferenceResponse,
-  AdminSkillReferenceSnapshot,
-  RevisionedContentSnapshot,
-} from "@glantri/shared";
+import type { RevisionedContentSnapshot } from "@glantri/shared";
 
 const CANONICAL_CONTENT_SNAPSHOT_KEY = "canonical-content";
-
-function buildCandidateSkillReferenceSnapshot(): AdminSkillReferenceSnapshot {
-  const projection = projectSkillContentReleaseForReference(
-    buildSkillContentRelease(pilotSkillContentReleaseProposalInput),
-  );
-
-  return {
-    ...projection,
-    records: {
-      accessExceptions: projection.records.accessExceptions,
-      competencies: projection.records.competencies.map((competency) => ({
-        ...competency,
-        provenance: [
-          competency.metadata.provenance.reference,
-          ...(competency.metadata.provenance.note ? [competency.metadata.provenance.note] : []),
-        ],
-        recordVersion: competency.metadata.recordVersion,
-        status: competency.metadata.status === "canonical" ? "canonical" : "proposal",
-        writtenLanguageBinding:
-          competency.kind === "written-tradition"
-            ? {
-                scriptId: competency.scriptId,
-                spokenLanguageId: competency.spokenLanguageId,
-              }
-            : undefined,
-      })),
-      domains: projection.records.domains,
-      histories: projection.records.histories,
-      profiles: projection.records.profiles,
-      relationships: projection.records.relationships,
-      scripts: projection.records.scripts,
-    },
-    referenceMetadata: projection.referenceMetadata,
-  };
-}
 
 export class CanonicalContentValidationError extends Error {}
 
@@ -85,13 +42,8 @@ export class CanonicalContentService {
     };
   }
 
-  async getSkillReference(): Promise<AdminSkillReferenceResponse> {
-    return {
-      candidate: buildCandidateSkillReferenceSnapshot(),
-      canonical: null,
-      fullCatalogue: fullSkillCatalogueProposal,
-      targetLearningGroups: targetLearningGroupCatalogue,
-    };
+  async getSkillReference() {
+    return getCompetencyV2ReferenceSource();
   }
 
   async saveCanonicalContent(input: {

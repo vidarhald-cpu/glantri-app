@@ -68,7 +68,7 @@ function legacyMetadata(recordId: string) {
   };
 }
 
-function archSocieties(): SkillReferenceArchSociety[] {
+export function archSocieties(): SkillReferenceArchSociety[] {
   return defaultCanonicalContent.societies.map((society) => ({
     description: society.shortDescription,
     id: `arch-society:${society.id}`,

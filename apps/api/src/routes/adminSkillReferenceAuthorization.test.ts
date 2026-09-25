@@ -34,12 +34,13 @@ describe("Skill Reference strict Admin payload boundary", () => {
         if (roles?.includes("admin")) {
           expect(response.statusCode).toBe(200);
           expect(projection).toHaveBeenCalledOnce();
-          expect(response.json().candidate.status).toBe("proposal");
-          expect(response.json().candidate.referenceMetadata.schemaVersion).toBe(
-            "skill-reference-metadata/v1",
-          );
-          expect(response.json().fullCatalogue.manifest.competencies).toBe(172);
-          expect(response.json().canonical).toBeNull();
+          expect(response.json().groups).toHaveLength(95);
+          expect(response.json().paths).toHaveLength(86);
+          expect(response.json().relationships.grants).toContainEqual({
+            sourceId: "skill:medicine",
+            targetId: "skill:first-aid",
+            factor: 1,
+          });
         } else {
           expect(response.statusCode).toBe(roles ? 403 : 401);
           expect(response.json()).toEqual({
@@ -47,7 +48,7 @@ describe("Skill Reference strict Admin payload boundary", () => {
           });
           expect(projection).not.toHaveBeenCalled();
           expect(response.body).not.toMatch(
-            /referenceMetadata|fullCatalogue|archSkills|learningHistories|professionReferences|competencies|packageDigest/,
+            /sourceDigest|relationships|groups|paths|specializations/,
           );
         }
         expect(session).toHaveBeenCalledTimes(roles ? 1 : 0);

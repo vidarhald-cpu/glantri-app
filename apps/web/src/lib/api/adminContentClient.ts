@@ -1,8 +1,7 @@
-import type { CanonicalContent } from "@glantri/content";
+import type { CanonicalContent, CompetencyV2ReferenceSource } from "@glantri/content";
 import type {
   AdminContentConflictResponse,
   AdminContentGetResponse,
-  AdminSkillReferenceResponse,
   AdminContentPutRequest,
   AdminContentPutResponse,
 } from "@glantri/shared";
@@ -26,8 +25,8 @@ export async function saveAdminCanonicalContentToServer(
   });
 }
 
-export async function loadAdminSkillReferenceFromServer(): Promise<AdminSkillReferenceResponse> {
-  return sendJson<AdminSkillReferenceResponse>("/api/admin/content/reference", {
+export async function loadAdminSkillReferenceFromServer(): Promise<CompetencyV2ReferenceSource> {
+  return sendJson<CompetencyV2ReferenceSource>("/api/admin/content/reference", {
     method: "GET",
   });
 }
