@@ -192,11 +192,15 @@ expanded note field.
 
 > **This is not a generic Note system and must not be broadened into one.**
 
-**The semantics and the prohibition are settled** at
+**The semantics, the prohibition and the storage are settled** at
 [Content authoring §18.21](content-authoring-scenario-preparation-and-artifact-management.md#1821-gm-only-notes-on-items-and-artifacts).
-**Physical storage is not settled there and is not settled here**; no field,
-table or record is prescribed. The separate open question of where the
-Campaign-scoped GM-only Person dossier lives —
+An **Artifact** GM note is surfaced by the existing Artifact `gmNotes`
+capability (`packages/domain/src/campaign/artifact.ts:75`); an **Item** GM note
+is surfaced by a canonical GM-only field owned by the Item domain/service. **No
+generic Note entity or table backs this surface.**
+
+That closes storage **for Items and Artifacts only**. The separate open question
+of where the Campaign-scoped GM-only Person dossier lives —
 [OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) — **remains open and is not resolved by this contract.**
 
 ### 2.6 Unattached and exception material

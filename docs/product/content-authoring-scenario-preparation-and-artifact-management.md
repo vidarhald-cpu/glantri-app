@@ -1232,8 +1232,9 @@ and
 
 ### 18.21 GM-only notes on Items and Artifacts
 
-**Status:** **SETTLED FOR V1, 2026-09-25**, for semantics and prohibition.
-**Authority:** Product Owner. **Amends:** nothing. It records domain state the
+**Status:** **SETTLED FOR V1, 2026-09-25**, for semantics, prohibition and
+storage. **Authority:** Product Owner. **Amends:** nothing. It records domain
+state the
 association vocabulary of
 [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) does not
 cover. **Gates:** Nothing beyond the lane that builds it.
@@ -1251,9 +1252,17 @@ belongs to the canonical object and is permanently GM-only.
 
 > **This is not a generic Note system and must not be broadened into one.**
 
-**This section settles the semantics and the prohibition. It does not settle
-physical storage**, and no table, column or record is prescribed here. The
-separate question of where the Campaign-scoped GM-only Person dossier lives —
+**Storage for Items and Artifacts is settled here.**
+
+- **Artifact GM notes use the existing Artifact `gmNotes` capability**, already
+  carried on the canonical Artifact as `gmNotes: z.string().optional()` in
+  `packages/domain/src/campaign/artifact.ts:75`.
+- **Item GM notes are a canonical GM-only field owned by the Item
+  domain/service.**
+- **No generic Note entity or table is created for this.**
+
+This closes storage **for Items and Artifacts only**. The separate question of
+where the Campaign-scoped GM-only Person dossier lives —
 [OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) — **remains open and is not resolved here.**
 
 ### 18.22 No universal presence state
