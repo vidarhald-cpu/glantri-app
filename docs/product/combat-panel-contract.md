@@ -434,9 +434,10 @@ Proposed only. Not authorized and not dispatched by this section.
 - **Hotspots,** per [reserved integration hotspots](../architecture/ownership.md#reserved-integration-hotspots):
   none of the reserved hotspots are written. `ScenarioPlayerCombatPageContent.tsx` and
   `CombatRoundManagerPanel.tsx` are not reserved but are heavily contended Combat experience
-  surfaces; issues #180 and #182 both claim `CombatRoundManagerPanel.tsx`, and #180 is under an
-  explicit stop. This slice must therefore be serialized against those lanes, and must not
-  touch `CombatRoundManagerPanel.tsx` beyond removing one render.
+  surfaces; #180 claims `CombatRoundManagerPanel.tsx` explicitly and is under an explicit stop,
+  while #182 claims no file — its body names no path — but its scope may touch the same file.
+  This slice must therefore be serialized against both lanes, and must not touch
+  `CombatRoundManagerPanel.tsx` beyond removing one render.
 - **Persistence or schema changes:** none. No migration, no stored-data semantics, no
   authorization change.
 - **Character:** composition and thin adaptation. It requires no subsystem redesign.
@@ -482,12 +483,12 @@ Combat architecture, and [12.8's exclusions](#128-exclusions) govern all four: n
 Inspector replacement, no Action Selector, Phase 1/2 or Combat Situation redesign, no Round
 Manager replacement, no new Combat rules.
 
-| Contract                                          | Character                        | QA class        | Depends on                           |
-| ------------------------------------------------- | -------------------------------- | --------------- | ------------------------------------ |
-| [A1](#1212-a1--combat-task-lifecycle-convergence) | Combat domain subsystem change   | **Floor class** | none of M5-M8                        |
-| [A2](#1213-a2--player-safe-activity-projection)   | Data-boundary and privacy change | **Floor class** | A1 (for `task_resolved`)             |
-| [M7](#1214-m7--item-interaction-authority)        | Declaration/service seam         | **Floor class** | A1                                   |
-| [A3](#1215-a3--ui-consolidation)                  | Composition and routing          | Ordinary        | A1, A2, M7, parity matrix, M8 access |
+| Contract                                          | Character                        | QA class        | Depends on               |
+| ------------------------------------------------- | -------------------------------- | --------------- | ------------------------ |
+| [A1](#1212-a1--combat-task-lifecycle-convergence) | Combat domain subsystem change   | **Floor class** | none of M5-M8            |
+| [A2](#1213-a2--player-safe-activity-projection)   | Data-boundary and privacy change | **Floor class** | A1 (for `task_resolved`) |
+| [M7](#1214-m7--item-interaction-authority)        | Declaration/service seam         | **Floor class** | A1                       |
+| [A3](#1215-a3--ui-consolidation)                  | Composition and routing          | Ordinary        | A1, A2, M7, M8 access    |
 
 **Relationship to [12.10's slice 287-1](#1210-proposed-bounded-implementation-slice).** That
 slice relocates the existing read-only player component verbatim and therefore keeps
@@ -1002,7 +1003,9 @@ domain change (A1, A2, M7 own those); Player Play navigation or composition.
   declarations. **A3's removal of the old Combat embedding is gated on appropriate
   Encounter-management access existing.** A3 does not build that access and does not define that
   surface.
-- **Blocked on the nine-check parity matrix below.**
+- **The nine-check parity matrix below is A3's own acceptance gate, not an entry dependency.**
+  It does not block A3 being contracted or dispatched; it is mandatory on the way out, and
+  **any unticked row blocks the deletion commit**.
 
 #### Reused, by path
 
@@ -1030,9 +1033,11 @@ positively.
 
 #### Hotspots
 
-`CombatRoundManagerPanel.tsx` is not reserved but is heavily contended and is claimed by **#180,
-under an explicit STOP**, and by **#182**. A3 touches it for **exactly one render removal** and
-nothing else. `apps/api/src/routes/scenarios/encounterRoutes.ts` is reserved.
+`CombatRoundManagerPanel.tsx` is not reserved but is heavily contended. It is claimed explicitly
+by **#180, under an explicit STOP**; **#182 claims no file** — its body names no path — but its
+scope may touch the same file, so A3 serializes against both lanes. A3 touches the file for
+**exactly one render removal** and nothing else.
+`apps/api/src/routes/scenarios/encounterRoutes.ts` is reserved.
 
 #### QA level
 
@@ -1102,8 +1107,11 @@ assertion made **on API payloads, not the DOM** — the #271 lesson.
   at a time.
 - A1 and A3 both touch
   `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx` if A1 cannot prove
-  Current-action invocation from the player surface. That file is **also claimed by #180, which
-  is under an explicit STOP, and by #182**. All four contracts serialize against those lanes too.
+  Current-action invocation from the player surface. That file is **also claimed by #180**, which
+  names it explicitly and is under an explicit STOP. **#182 claims no file**: its body names no
+  path, and it holds no Builder and no lease, but its scope — GM/player layout convergence,
+  Combat log placement and autoscroll — may touch the same file. All four contracts serialize
+  against #180's lane, and against #182 as a precaution.
 - A1 and A2 both touch package root exports.
 - A2's projection changes are **consumed by A3's parity proof**, so they cannot be in flight
   together.
