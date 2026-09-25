@@ -1,56 +1,26 @@
 import { describe, expect, it } from "vitest";
-
 import { CanonicalContentService } from "./adminContentService";
 
-describe("admin content service", () => {
-  it("projects the integrated authored proposal without fabricating a canonical release", async () => {
-    const service = new CanonicalContentService();
-    const snapshot = await service.getSkillReference();
-
-    expect(snapshot.canonical).toBeNull();
-    expect(snapshot.targetLearningGroups?.manifest).toMatchObject({
-      groups: 59,
-      totalMemberships: 160,
-      pilotLinks: 46,
+describe("admin competency reference service", () => {
+  it("returns the canonical V2 reference projection with approved mechanics", async () => {
+    const source = await new CanonicalContentService().getSkillReference();
+    expect(source.sourceDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    expect(source.groups).toHaveLength(95);
+    expect(source.paths).toHaveLength(86);
+    expect(source.families).toHaveLength(84);
+    expect(source.relationships.grants).toContainEqual({
+      sourceId: "skill:medicine",
+      targetId: "skill:first-aid",
+      factor: 1,
     });
-    expect(snapshot.candidate).toMatchObject({
-      contentVersion: "pilot-skills-content/2.0.0-candidate.4",
-      id: "content-release:pilot-skills:2-candidate-4",
-      schemaVersion: "skill-content-release/v2",
-      status: "proposal",
-    });
-    expect(snapshot.candidate?.records.competencies.length).toBeGreaterThan(0);
-    expect(snapshot.candidate?.records.scripts.length).toBeGreaterThan(0);
-    expect(snapshot.candidate?.records.relationships.length).toBeGreaterThan(0);
-    expect(snapshot.candidate?.records.domains.length).toBeGreaterThan(0);
-    expect(snapshot.fullCatalogue).toMatchObject({
-      manifest: {
-        baseSkills: 131,
-        competencies: 172,
-        specializations: 26,
-        spokenLanguages: 12,
-        writtenTraditions: 3,
-      },
-      status: "proposal",
-    });
-  });
-
-  it("retains authored envelopes, provenance, and both deterministic proposal digests", async () => {
-    const service = new CanonicalContentService();
-    const snapshot = await service.getSkillReference();
-    const medicine = snapshot.candidate?.records.competencies.find(
-      ({ id }) => id === "skill:medicine",
+    expect(source.relationships.bridges.map((row) => row.specializationId)).toEqual(
+      expect.arrayContaining(["longbow", "fencing"]),
     );
-
-    expect(snapshot.candidate?.compatibility.classification).toBe("presentation-only");
-    expect(snapshot.candidate?.manifest.packageDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(snapshot.candidate?.manifest.semanticDigest).toMatch(/^sha256:[0-9a-f]{64}$/);
-    expect(snapshot.candidate?.manifest.packageDigest).not.toBe(
-      snapshot.candidate?.manifest.semanticDigest,
+    expect(source.skills.some((row) => row.id === "medicine" || row.id === "first_aid")).toBe(
+      false,
     );
-    expect(snapshot.candidate?.provenance.length).toBeGreaterThan(0);
-    expect(medicine?.taskEnvelope.coreTasks.length).toBeGreaterThan(0);
-    expect(medicine?.taskEnvelope.limits.length).toBeGreaterThan(0);
-    expect(medicine?.provenance[0]).toContain("pilotSkillContentReleaseProposal.ts");
+    expect(JSON.stringify(source)).not.toMatch(
+      /"(?:sourceId|targetId|skillId|specializationId)":"(?:medicine|first_aid)"/,
+    );
   });
 });

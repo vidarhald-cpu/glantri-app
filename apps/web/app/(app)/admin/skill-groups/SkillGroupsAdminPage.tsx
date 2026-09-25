@@ -8,7 +8,7 @@ import { downloadCsv } from "@/lib/admin/exporters";
 import {
   buildProfessionFamilyFilterOptions,
   buildSkillGroupAdminRows,
-  getProfessionFamilyName
+  getProfessionFamilyName,
 } from "@/lib/admin/viewModels";
 import {
   AdminButton,
@@ -17,7 +17,7 @@ import {
   AdminPageIntro,
   AdminPanel,
   AdminSelect,
-  AdminTagList
+  AdminTagList,
 } from "../admin-ui";
 import SkillGroupsWorkspaceTabs from "./SkillGroupsWorkspaceTabs";
 
@@ -42,7 +42,7 @@ function renderClampedCell(text: string, lines = 2) {
         lineHeight: 1.45,
         overflow: "hidden",
         WebkitBoxOrient: "vertical",
-        WebkitLineClamp: lines
+        WebkitLineClamp: lines,
       }}
       title={text}
     >
@@ -84,7 +84,7 @@ function SkillGroupsReviewTable(props: {
         borderRadius: 18,
         maxHeight: "70vh",
         overflow: "auto",
-        position: "relative"
+        position: "relative",
       }}
     >
       <div style={{ minWidth: 980 }}>
@@ -96,7 +96,7 @@ function SkillGroupsReviewTable(props: {
             gridTemplateColumns: skillGroupsReviewGridTemplate,
             position: "sticky",
             top: 0,
-            zIndex: 2
+            zIndex: 2,
           }}
         >
           {["Group", "Description", "Fixed", "Slots", "Points", "Professions", "Inspect"].map(
@@ -110,12 +110,12 @@ function SkillGroupsReviewTable(props: {
                   letterSpacing: "0.08em",
                   padding: "0.8rem",
                   textTransform: "uppercase",
-                  whiteSpace: "nowrap"
+                  whiteSpace: "nowrap",
                 }}
               >
                 {header}
               </div>
-            )
+            ),
           )}
         </div>
 
@@ -135,18 +135,28 @@ function SkillGroupsReviewTable(props: {
                 borderTop: "1px solid rgba(85, 73, 48, 0.1)",
                 cursor: "pointer",
                 display: "grid",
-                gridTemplateColumns: skillGroupsReviewGridTemplate
+                gridTemplateColumns: skillGroupsReviewGridTemplate,
               }}
             >
               <div style={{ padding: "0.9rem 0.8rem" }}>
                 <div style={{ color: "#2e2619", fontWeight: 700 }}>{row.name}</div>
               </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
-                {row.notes ? renderClampedCell(row.notes, 2) : <span style={{ color: "#8a7e63" }}>None</span>}
+                {row.notes ? (
+                  renderClampedCell(row.notes, 2)
+                ) : (
+                  <span style={{ color: "#8a7e63" }}>None</span>
+                )}
               </div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.fixedSkills.length}</div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.selectionSlotCount}</div>
-              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>{row.weightedContentPoints} pts</div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.fixedSkills.length}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.selectionSlotCount}
+              </div>
+              <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
+                {row.weightedContentPoints} pts
+              </div>
               <div style={{ color: "#2e2619", padding: "0.9rem 0.8rem" }}>
                 <div style={{ alignItems: "center", display: "grid", gap: "0.25rem" }}>
                   <span>
@@ -154,10 +164,16 @@ function SkillGroupsReviewTable(props: {
                       row.selectionSlotCount > 0
                         ? `${summarizeList(row.allowedProfessions, 2)} • ${row.selectionSlotCount} slot${row.selectionSlotCount === 1 ? "" : "s"}`
                         : summarizeList(row.allowedProfessions, 3),
-                      2
+                      2,
                     )}
                   </span>
-                  <span style={{ color: row.warningDetails.length ? "#8a3b2f" : "#46613a", fontSize: "0.82rem", fontWeight: 700 }}>
+                  <span
+                    style={{
+                      color: row.warningDetails.length ? "#8a3b2f" : "#46613a",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                    }}
+                  >
                     {warningText}
                   </span>
                 </div>
@@ -185,7 +201,7 @@ export default function SkillGroupsAdminPage() {
   const [selectedGroupId, setSelectedGroupId] = useState<string>();
   const familyOptions = buildProfessionFamilyFilterOptions(
     content,
-    allRows.flatMap((row) => row.visibleProfessionFamilyIds)
+    allRows.flatMap((row) => row.visibleProfessionFamilyIds),
   );
   const rows = allRows.filter((row) => {
     if (familyFilter !== "all" && !row.visibleProfessionFamilyIds.includes(familyFilter)) {
@@ -200,7 +216,7 @@ export default function SkillGroupsAdminPage() {
     content.skillGroups.slice().sort((left, right) => left.name.localeCompare(right.name))[0];
   const selectedRow = selectedVisibleRow ?? allRows.find((row) => row.id === selectedGroup?.id);
   const visibleProfessionLinks = (selectedRow?.associatedProfessionLinks ?? []).filter((link) =>
-    familyFilter === "all" ? true : link.familyId === familyFilter
+    familyFilter === "all" ? true : link.familyId === familyFilter,
   );
 
   useEffect(() => {
@@ -230,16 +246,19 @@ export default function SkillGroupsAdminPage() {
                   { header: "Fixed Skills", value: (row) => row.fixedSkillNames.join(" | ") },
                   {
                     header: "Selection Slots",
-                    value: (row) => row.selectionSlots.map((slot) => `${slot.label} [${slot.chooseCount}]`).join(" | ")
+                    value: (row) =>
+                      row.selectionSlots
+                        .map((slot) => `${slot.label} [${slot.chooseCount}]`)
+                        .join(" | "),
                   },
                   {
                     header: "Allowed Professions",
-                    value: (row) => row.allowedProfessions.join(" | ")
+                    value: (row) => row.allowedProfessions.join(" | "),
                   },
-                  { header: "Notes", value: (row) => row.notes }
+                  { header: "Notes", value: (row) => row.notes },
                 ],
                 filename: "glantri-skill-groups.csv",
-                rows
+                rows,
               })
             }
             variant="secondary"
@@ -259,7 +278,7 @@ export default function SkillGroupsAdminPage() {
           style={{
             display: "grid",
             gap: "0.9rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))"
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 280px))",
           }}
         >
           <AdminField label="Profession family">
@@ -277,159 +296,228 @@ export default function SkillGroupsAdminPage() {
         </div>
       </AdminPanel>
 
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)" }}>
+      <div
+        style={{
+          display: "grid",
+          gap: "1rem",
+          gridTemplateColumns: "minmax(0, 2.2fr) minmax(340px, 1fr)",
+        }}
+      >
         <AdminPanel title="Group Catalog">
-          <SkillGroupsReviewTable onInspect={setSelectedGroupId} rows={rows} selectedId={selectedGroup?.id} />
+          <SkillGroupsReviewTable
+            onInspect={setSelectedGroupId}
+            rows={rows}
+            selectedId={selectedGroup?.id}
+          />
         </AdminPanel>
 
         <div style={{ display: "grid", gap: "1rem" }}>
           {selectedGroup && selectedRow ? (
-          <AdminPanel
-            subtitle={selectedGroup.description?.trim() || "No canonical skill-group description recorded."}
-            title={selectedGroup.name}
-          >
-            <div style={{ display: "grid", gap: "0.85rem" }}>
-              <div style={{ display: "grid", gap: "0.75rem", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
-                <AdminMetric label="Fixed skills" value={selectedRow?.fixedSkills.length ?? 0} />
-                <AdminMetric label="Selection slots" value={selectedRow?.selectionSlotCount ?? 0} />
-                <AdminMetric label="Weighted size" value={`${selectedRow?.weightedContentPoints ?? 0} pts`} />
-              </div>
-
-              <div
-                style={{
-                  background: "rgba(126, 93, 42, 0.07)",
-                  border: "1px solid rgba(85, 73, 48, 0.12)",
-                  borderRadius: 16,
-                  color: "#5b5036",
-                  fontSize: "0.92rem",
-                  lineHeight: 1.5,
-                  padding: "0.85rem 1rem"
-                }}
-              >
-                {(selectedRow?.fixedSkills.length ?? 0) === 0
-                  ? "No fixed skills are attached to this group."
-                  : `${selectedRow?.fixedSkills.length ?? 0} fixed skill${(selectedRow?.fixedSkills.length ?? 0) === 1 ? "" : "s"} contribute `}
-                {(selectedRow?.fixedSkills.length ?? 0) > 0 ? <strong>{selectedRow?.weightedContentPoints ?? 0} weighted points</strong> : null}
-                {(selectedRow?.selectionSlotCount ?? 0) > 0
-                  ? `, with ${selectedRow?.selectionSlotCount ?? 0} selection slot${(selectedRow?.selectionSlotCount ?? 0) === 1 ? "" : "s"} layered on top.`
-                  : (selectedRow?.fixedSkills.length ?? 0) > 0
-                    ? "."
-                    : ""}
-              </div>
-
-              {selectedRow?.warningDetails.length ? (
-                <div
-                  style={{
-                    background: "rgba(139, 59, 47, 0.08)",
-                    border: "1px solid rgba(139, 59, 47, 0.16)",
-                    borderRadius: 16,
-                    color: "#6b3429",
-                    display: "grid",
-                    gap: "0.45rem",
-                    padding: "0.9rem 1rem"
-                  }}
-                >
-                  <strong>Validation warnings</strong>
-                  {selectedRow.warningDetails.map((warning) => (
-                    <div key={warning}>{warning}</div>
-                  ))}
-                </div>
-              ) : (
-                <div
-                  style={{
-                    background: "rgba(86, 112, 67, 0.08)",
-                    border: "1px solid rgba(86, 112, 67, 0.16)",
-                    borderRadius: 16,
-                    color: "#46613a",
-                    padding: "0.9rem 1rem"
-                  }}
-                >
-                  No audit warnings for this skill group.
-                </div>
-              )}
-
+            <AdminPanel
+              subtitle={
+                selectedGroup.description?.trim() ||
+                "No canonical skill-group description recorded."
+              }
+              title={selectedGroup.name}
+            >
               <div style={{ display: "grid", gap: "0.85rem" }}>
-                <div>
-                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Fixed skills
-                  </div>
-                  {selectedRow?.fixedSkills.length ? (
-                    <AdminTagList values={selectedRow.fixedSkills.map(renderMembershipLabel)} />
-                  ) : (
-                    <div style={{ color: "#8a7e63" }}>No fixed skills in this group.</div>
-                  )}
+                <div
+                  style={{
+                    display: "grid",
+                    gap: "0.75rem",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  }}
+                >
+                  <AdminMetric label="Fixed skills" value={selectedRow?.fixedSkills.length ?? 0} />
+                  <AdminMetric
+                    label="Selection slots"
+                    value={selectedRow?.selectionSlotCount ?? 0}
+                  />
+                  <AdminMetric
+                    label="Weighted size"
+                    value={`${selectedRow?.weightedContentPoints ?? 0} pts`}
+                  />
                 </div>
 
-                <div>
-                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Selection slots
-                  </div>
-                  {selectedRow?.selectionSlots.length ? (
-                    <div style={{ display: "grid", gap: "0.75rem" }}>
-                      {selectedRow.selectionSlots.map((slot) => (
-                        <div
-                          key={slot.id}
-                          style={{
-                            background: "rgba(126, 93, 42, 0.06)",
-                            border: "1px solid rgba(85, 73, 48, 0.12)",
-                            borderRadius: 14,
-                            display: "grid",
-                            gap: "0.45rem",
-                            padding: "0.75rem 0.9rem"
-                          }}
-                        >
-                          <div style={{ color: "#2e2619", fontWeight: 700 }}>{renderSlotSummary(slot)}</div>
-                          <div style={{ color: "#5b5036", fontSize: "0.92rem", lineHeight: 1.5 }}>
-                            Candidates: {slot.candidateSkills.join(", ")}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ color: "#8a7e63" }}>No selection slots in this group.</div>
-                  )}
+                <div
+                  style={{
+                    background: "rgba(126, 93, 42, 0.07)",
+                    border: "1px solid rgba(85, 73, 48, 0.12)",
+                    borderRadius: 16,
+                    color: "#5b5036",
+                    fontSize: "0.92rem",
+                    lineHeight: 1.5,
+                    padding: "0.85rem 1rem",
+                  }}
+                >
+                  {(selectedRow?.fixedSkills.length ?? 0) === 0
+                    ? "No fixed skills are attached to this group."
+                    : `${selectedRow?.fixedSkills.length ?? 0} fixed skill${(selectedRow?.fixedSkills.length ?? 0) === 1 ? "" : "s"} contribute `}
+                  {(selectedRow?.fixedSkills.length ?? 0) > 0 ? (
+                    <strong>{selectedRow?.weightedContentPoints ?? 0} weighted points</strong>
+                  ) : null}
+                  {(selectedRow?.selectionSlotCount ?? 0) > 0
+                    ? `, with ${selectedRow?.selectionSlotCount ?? 0} selection slot${(selectedRow?.selectionSlotCount ?? 0) === 1 ? "" : "s"} layered on top.`
+                    : (selectedRow?.fixedSkills.length ?? 0) > 0
+                      ? "."
+                      : ""}
                 </div>
 
-                {selectedRow?.optionalSkills.length ? (
+                {selectedRow?.warningDetails.length ? (
+                  <div
+                    style={{
+                      background: "rgba(139, 59, 47, 0.08)",
+                      border: "1px solid rgba(139, 59, 47, 0.16)",
+                      borderRadius: 16,
+                      color: "#6b3429",
+                      display: "grid",
+                      gap: "0.45rem",
+                      padding: "0.9rem 1rem",
+                    }}
+                  >
+                    <strong>Validation warnings</strong>
+                    {selectedRow.warningDetails.map((warning) => (
+                      <div key={warning}>{warning}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      background: "rgba(86, 112, 67, 0.08)",
+                      border: "1px solid rgba(86, 112, 67, 0.16)",
+                      borderRadius: 16,
+                      color: "#46613a",
+                      padding: "0.9rem 1rem",
+                    }}
+                  >
+                    No audit warnings for this skill group.
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gap: "0.85rem" }}>
                   <div>
-                    <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      Secondary fixed memberships
+                    <div
+                      style={{
+                        color: "#5f543a",
+                        fontSize: "0.85rem",
+                        fontWeight: 700,
+                        marginBottom: "0.35rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      Fixed skills
                     </div>
-                    <AdminTagList values={selectedRow.optionalSkills} />
+                    {selectedRow?.fixedSkills.length ? (
+                      <AdminTagList values={selectedRow.fixedSkills.map(renderMembershipLabel)} />
+                    ) : (
+                      <div style={{ color: "#8a7e63" }}>No fixed skills in this group.</div>
+                    )}
                   </div>
-                ) : null}
 
-                <div>
-                  <div style={{ color: "#5f543a", fontSize: "0.85rem", fontWeight: 700, marginBottom: "0.35rem", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    Professions using this group
-                  </div>
-                  {visibleProfessionLinks.length ? (
-                    <AdminTagList
-                      values={visibleProfessionLinks.map((link) =>
-                        familyFilter === "all"
-                          ? `${link.professionName} (${link.familyName})`
-                          : link.professionName
-                      )}
-                    />
-                  ) : selectedRow.allowedProfessions.length ? (
-                    <div style={{ color: "#8a7e63" }}>
-                      No professions from the selected family currently grant this group.
+                  <div>
+                    <div
+                      style={{
+                        color: "#5f543a",
+                        fontSize: "0.85rem",
+                        fontWeight: 700,
+                        marginBottom: "0.35rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      Selection slots
                     </div>
-                  ) : (
-                    <div style={{ color: "#8a7e63" }}>No profession currently grants this group.</div>
-                  )}
-                </div>
+                    {selectedRow?.selectionSlots.length ? (
+                      <div style={{ display: "grid", gap: "0.75rem" }}>
+                        {selectedRow.selectionSlots.map((slot) => (
+                          <div
+                            key={slot.id}
+                            style={{
+                              background: "rgba(126, 93, 42, 0.06)",
+                              border: "1px solid rgba(85, 73, 48, 0.12)",
+                              borderRadius: 14,
+                              display: "grid",
+                              gap: "0.45rem",
+                              padding: "0.75rem 0.9rem",
+                            }}
+                          >
+                            <div style={{ color: "#2e2619", fontWeight: 700 }}>
+                              {renderSlotSummary(slot)}
+                            </div>
+                            <div style={{ color: "#5b5036", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                              Candidates: {slot.candidateSkills.join(", ")}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: "#8a7e63" }}>No selection slots in this group.</div>
+                    )}
+                  </div>
 
-                <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
-                  <Link href="/admin/skills" style={{ color: "#7e5d2a", fontWeight: 700 }}>
-                    Open skills inspector
-                  </Link>
-                  {" "}
-                  to review the linked skills in the broader skill catalog.
+                  {selectedRow?.optionalSkills.length ? (
+                    <div>
+                      <div
+                        style={{
+                          color: "#5f543a",
+                          fontSize: "0.85rem",
+                          fontWeight: 700,
+                          marginBottom: "0.35rem",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.08em",
+                        }}
+                      >
+                        Secondary fixed memberships
+                      </div>
+                      <AdminTagList values={selectedRow.optionalSkills} />
+                    </div>
+                  ) : null}
+
+                  <div>
+                    <div
+                      style={{
+                        color: "#5f543a",
+                        fontSize: "0.85rem",
+                        fontWeight: 700,
+                        marginBottom: "0.35rem",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}
+                    >
+                      Professions using this group
+                    </div>
+                    {visibleProfessionLinks.length ? (
+                      <AdminTagList
+                        values={visibleProfessionLinks.map((link) =>
+                          familyFilter === "all"
+                            ? `${link.professionName} (${link.familyName})`
+                            : link.professionName,
+                        )}
+                      />
+                    ) : selectedRow.allowedProfessions.length ? (
+                      <div style={{ color: "#8a7e63" }}>
+                        No professions from the selected family currently grant this group.
+                      </div>
+                    ) : (
+                      <div style={{ color: "#8a7e63" }}>
+                        No profession currently grants this group.
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ color: "#5f543a", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                    <Link
+                      href="/admin/skills/reference"
+                      style={{ color: "#7e5d2a", fontWeight: 700 }}
+                    >
+                      Open competency reference
+                    </Link>{" "}
+                    to review the linked skills in the broader skill catalog.
+                  </div>
                 </div>
               </div>
-            </div>
-          </AdminPanel>
+            </AdminPanel>
           ) : (
             <AdminPanel title="Skill group details">
               <div style={{ color: "#6d624d" }}>

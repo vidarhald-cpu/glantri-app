@@ -7,11 +7,10 @@ import {
 import type {
   AdminContentConflictResponse,
   AdminContentGetResponse,
-  AdminSkillReferenceResponse,
   AdminContentPutRequest,
   AdminContentPutResponse,
 } from "@glantri/shared";
-import type { CanonicalContent } from "@glantri/content";
+import type { CanonicalContent, CompetencyV2ReferenceSource } from "@glantri/content";
 
 import { CanonicalContentService } from "../lib/adminContentService";
 import { requireAuthenticatedUser, requireStrictAdminUser } from "../lib/sessionAuth";
@@ -109,6 +108,6 @@ export const adminContentRoutes: FastifyPluginAsync = async (app) => {
 
     return {
       ...snapshot,
-    } satisfies AdminSkillReferenceResponse;
+    } satisfies CompetencyV2ReferenceSource;
   });
 };

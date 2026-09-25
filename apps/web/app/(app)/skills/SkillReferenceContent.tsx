@@ -2,11 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  ReferenceBound,
+  ReferenceLink,
+  ReferenceRelationship,
   SkillReferenceGroup,
   SkillReferenceModel,
   SkillReferenceProfession,
   SkillReferenceSkill,
   SkillReferenceTab,
+  WithdrawnGroup,
 } from "@/lib/skills/skillReferenceModel";
 import styles from "./skillsReference.module.css";
 
@@ -15,57 +19,167 @@ const tabs: { id: SkillReferenceTab; label: string }[] = [
   { id: "groups", label: "Learning Groups" },
   { id: "professions", label: "Professions" },
   { id: "societies", label: "Societies" },
+  { id: "rules", label: "How it works" },
 ];
-
 type Destination = { tab: SkillReferenceTab; key?: string };
 
 function destinationFromHash(): Destination | undefined {
   if (typeof window === "undefined") return undefined;
-  const bareTab = window.location.hash.match(/^#(skills|groups|professions|societies)$/)?.[1];
-  if (bareTab) return { tab: bareTab as SkillReferenceTab };
-  const match = window.location.hash.match(/^#(skill|group|profession|society)-(.+)$/);
-  if (!match) return undefined;
-  const detailTab =
-    match[1] === "skill"
-      ? "skills"
-      : match[1] === "group"
-        ? "groups"
-        : match[1] === "profession"
-          ? "professions"
-          : "societies";
-  return { tab: detailTab, key: decodeURIComponent(match[2]!) };
+  const value = decodeURIComponent(window.location.hash.slice(1));
+  if (tabs.some((tab) => tab.id === value)) return { tab: value as SkillReferenceTab };
+  const match = /^(skill|group|profession|society)-(.+)$/.exec(value);
+  if (match)
+    return {
+      tab:
+        match[1] === "skill"
+          ? "skills"
+          : match[1] === "group"
+            ? "groups"
+            : match[1] === "profession"
+              ? "professions"
+              : "societies",
+      key: match[2],
+    };
+  if (value.startsWith("competency-"))
+    return { tab: "skills", key: value.slice("competency-".length) };
+  return undefined;
+}
+function hashFor(destination: Destination): string {
+  if (!destination.key) return `#${destination.tab}`;
+  const singular =
+    destination.tab === "skills"
+      ? "skill"
+      : destination.tab === "groups"
+        ? "group"
+        : destination.tab === "professions"
+          ? "profession"
+          : "society";
+  return `#${singular}-${encodeURIComponent(destination.key)}`;
+}
+function linkDestination(tab: SkillReferenceTab, item: ReferenceLink): Destination {
+  return { tab, key: item.key };
 }
 
-function paragraphs(value: string) {
-  return value.split(/\n\n+/).map((paragraph) => <p key={paragraph}>{paragraph}</p>);
-}
-
-function pointLabel(value: number): string {
-  return `${value} ${value === 1 ? "point" : "points"}`;
-}
-
-function RelationshipLink(input: {
-  children: React.ReactNode;
-  destination: Destination;
+function ReferenceLinkView({
+  item,
+  tab,
+  navigate,
+}: {
+  item: ReferenceLink;
+  tab: SkillReferenceTab;
   navigate: (destination: Destination) => void;
 }) {
-  const prefix = input.destination.tab === "groups" ? "group" : input.destination.tab.slice(0, -1);
+  const destination = linkDestination(tab, item);
   return (
     <a
-      href={`#${prefix}-${encodeURIComponent(input.destination.key!)}`}
+      href={hashFor(destination)}
       onClick={(event) => {
         event.preventDefault();
-        input.navigate(input.destination);
+        navigate(destination);
       }}
     >
-      {input.children}
+      {item.name}
     </a>
   );
 }
+function BoundText({ bound }: { bound?: ReferenceBound }) {
+  if (!bound) return null;
+  return (
+    <span>
+      {" "}
+      · From Society Level {bound.minSocietyLevel}
+      {bound.minSocialBand !== "L1" ? `, Social Band ${bound.minSocialBand}` : ""}
+      {bound.reasons.length ? ` — ${bound.reasons.join(" ")}` : ""}
+    </span>
+  );
+}
+function Section({
+  title,
+  children,
+  empty,
+}: {
+  title: string;
+  children: React.ReactNode;
+  empty: string;
+}) {
+  const items = Array.isArray(children) ? children.filter(Boolean) : children;
+  return (
+    <section className={styles.relationships}>
+      <h3>{title}</h3>
+      {Array.isArray(items) && items.length === 0 ? <p>{empty}</p> : <ul>{items}</ul>}
+    </section>
+  );
+}
+function BrowserLayout({
+  count,
+  label,
+  list,
+  query,
+  onQuery,
+  selectedKey,
+  onSelect,
+  children,
+}: {
+  count: number;
+  label: string;
+  list: { key: string; name: string; meta: string }[];
+  query: string;
+  onQuery: (value: string) => void;
+  selectedKey?: string;
+  onSelect: (key: string) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={styles.browser}>
+      <aside className={styles.browserList}>
+        <label>
+          <span>{label}</span>
+          <input
+            aria-label={label}
+            type="search"
+            value={query}
+            onChange={(event) => onQuery(event.target.value)}
+          />
+        </label>
+        <p className={styles.resultCount}>{count} results</p>
+        {list.length ? (
+          <ul>
+            {list.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  aria-current={selectedKey === item.key ? "true" : undefined}
+                  onClick={() => onSelect(item.key)}
+                >
+                  <strong>{item.name}</strong>
+                  <span>{item.meta}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>No entries match this search.</p>
+        )}
+      </aside>
+      <div className={styles.detailPanel}>{children}</div>
+    </div>
+  );
+}
+function factorLabel(factor: number): string {
+  return factor === 1 ? "1.0" : String(factor);
+}
 
-export function SkillReferenceContent({ model }: { model: SkillReferenceModel }) {
+export function SkillReferenceContent({
+  model,
+  admin = false,
+  initialTab = "skills",
+}: {
+  model: SkillReferenceModel;
+  admin?: boolean;
+  initialTab?: SkillReferenceTab;
+}) {
   const initial = destinationFromHash();
-  const [activeTab, setActiveTab] = useState<SkillReferenceTab>(initial?.tab ?? "skills");
+  const [activeTab, setActiveTab] = useState<SkillReferenceTab>(initial?.tab ?? initialTab);
   const [selectedSkill, setSelectedSkill] = useState(
     initial?.tab === "skills" ? initial.key : model.skills[0]?.key,
   );
@@ -78,703 +192,739 @@ export function SkillReferenceContent({ model }: { model: SkillReferenceModel })
   const [skillSearch, setSkillSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [professionSearch, setProfessionSearch] = useState("");
+  const [skillType, setSkillType] = useState("all");
+  const [skillCategory, setSkillCategory] = useState("all");
   const detailHeading = useRef<HTMLHeadingElement>(null);
-  const tabList = useRef<HTMLDivElement>(null);
   const focusDetail = useRef(false);
+  const tabList = useRef<HTMLDivElement>(null);
 
-  function navigate(destination: Destination, focus = true) {
+  function applyDestination(destination: Destination, focus: boolean) {
     setActiveTab(destination.tab);
-    if (destination.tab === "skills" && destination.key) {
-      setSkillSearch("");
-      setSelectedSkill(destination.key);
-    }
-    if (destination.tab === "groups" && destination.key) {
-      setGroupSearch("");
-      setSelectedGroup(destination.key);
-    }
-    if (destination.tab === "professions" && destination.key) {
-      setProfessionSearch("");
-      setSelectedProfession(destination.key);
+    if (destination.key) {
+      if (destination.tab === "skills") {
+        setSelectedSkill(destination.key);
+        setSkillSearch("");
+        setSkillType("all");
+        setSkillCategory("all");
+      }
+      if (destination.tab === "groups") {
+        setSelectedGroup(destination.key);
+        setGroupSearch("");
+      }
+      if (destination.tab === "professions") {
+        setSelectedProfession(destination.key);
+        setProfessionSearch("");
+      }
     }
     focusDetail.current = focus;
-    const singular =
-      destination.tab === "skills"
-        ? "skill"
-        : destination.tab === "groups"
-          ? "group"
-          : destination.tab === "professions"
-            ? "profession"
-            : "society";
-    window.history.replaceState(
-      null,
-      "",
-      destination.key
-        ? `#${singular}-${encodeURIComponent(destination.key)}`
-        : `#${destination.tab}`,
-    );
   }
-
+  function navigate(destination: Destination, focus = true) {
+    applyDestination(destination, focus);
+    const hash = hashFor(destination);
+    if (window.location.hash !== hash) window.location.hash = hash;
+  }
   useEffect(() => {
     const restore = () => {
       const destination = destinationFromHash();
-      if (destination) navigate(destination, false);
+      if (destination) applyDestination(destination, false);
     };
     window.addEventListener("hashchange", restore);
     return () => window.removeEventListener("hashchange", restore);
-  });
-
+  }, []);
   useEffect(() => {
     if (focusDetail.current) {
       focusDetail.current = false;
       detailHeading.current?.focus();
     }
-  }, [activeTab, selectedGroup, selectedProfession, selectedSkill]);
+  }, [activeTab, selectedSkill, selectedGroup, selectedProfession]);
+
+  const categories = useMemo(
+    () => [...new Set(model.skills.map((skill) => skill.category))].sort(),
+    [model.skills],
+  );
+  const filteredSkills = useMemo(
+    () =>
+      model.skills.filter(
+        (skill) =>
+          (skillType === "all" || skill.type === skillType) &&
+          (skillCategory === "all" || skill.category === skillCategory) &&
+          [skill.name, skill.description, skill.type, skill.category, ...skill.linkedStats]
+            .join(" ")
+            .toLowerCase()
+            .includes(skillSearch.trim().toLowerCase()),
+      ),
+    [model.skills, skillType, skillCategory, skillSearch],
+  );
+  const filteredGroups = useMemo(
+    () =>
+      model.learningGroups.filter((group) =>
+        [
+          group.name,
+          group.description,
+          ...group.fixedSkills.map((item) => item.name),
+          ...group.selectionSlots.flatMap((slot) => slot.candidates.map((item) => item.name)),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(groupSearch.trim().toLowerCase()),
+      ),
+    [model.learningGroups, groupSearch],
+  );
+  const filteredProfessions = useMemo(
+    () =>
+      model.professions.filter((profession) =>
+        [
+          profession.name,
+          ...profession.routes.map((route) => route.label),
+          ...profession.coreAlternatives.map((route) => route.label),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(professionSearch.trim().toLowerCase()),
+      ),
+    [model.professions, professionSearch],
+  );
+  const selectedSkillModel =
+    filteredSkills.find((skill) => skill.key === selectedSkill || skill.id === selectedSkill) ??
+    filteredSkills[0];
+  const withdrawn = model.withdrawnGroups.find((group) => group.id === selectedGroup);
+  const selectedGroupModel =
+    filteredGroups.find((group) => group.key === selectedGroup || group.id === selectedGroup) ??
+    filteredGroups[0];
+  const selectedProfessionModel =
+    filteredProfessions.find(
+      (profession) => profession.key === selectedProfession || profession.id === selectedProfession,
+    ) ?? filteredProfessions[0];
 
   return (
-    <section className={styles.page}>
+    <section className={`${styles.page} ${admin ? styles.adminPage : ""}`}>
       <header className={styles.intro}>
-        <p className={styles.eyebrow}>Player and Game Master reference</p>
+        <p className={styles.eyebrow}>
+          {admin ? "Admin competency reference" : "Player and Game Master reference"}
+        </p>
         <h1>Skills and training</h1>
         <p>
-          Browse the competencies, Learning Groups, Professions, and societies used by current
-          character creation. This reference explains access and cost; it does not grant ranks or
-          spend points.
+          Explore the Skills, Learning Groups, Professions, and societies of Glantri, and the routes
+          through which training becomes available.
         </p>
       </header>
-
-      <details className={styles.guide} open>
-        <summary>How the Skill system works</summary>
-        <div className={styles.guideGrid}>
-          <GuideCard title="Points and direct learning">
-            <p>
-              Standard character creation begins with {model.guide.ordinaryPointTotal} ordinary
-              Skill Points. The flexible pool is (INT + LCK) × the active ruleset factor.
-            </p>
-            <p>
-              An individual Skill costs {model.guide.individualOrdinaryCost} points through an
-              ordinary training path, or {model.guide.individualFlexibleCost} flexible point when
-              that direct purchase is permitted.
-            </p>
-          </GuideCard>
-          <GuideCard title="Skills and Specializations">
-            <p>
-              Skills are competencies linked to Stats. Purchased ranks record learned ability;
-              simply having access never adds a rank.
-            </p>
-            <p>
-              A Specialization costs {model.guide.specializationFirstCost} points when first learned
-              and {model.guide.specializationIncreaseCost} for each increase. Its immediate parent
-              must meet the listed level, including for a nested Specialization.
-            </p>
-          </GuideCard>
-          <GuideCard title="Learning Groups">
-            <p>
-              A Learning Group is a coherent Profession-supported training opportunity. Its price is
-              60% of its member Skills&apos; ordinary individual cost, rounded down, with a minimum
-              of 1.
-            </p>
-            <p>
-              When ordinary points are unavailable, flexible points may fund a group you can already
-              access, but cannot independently unlock one. Listed Specializations supply access
-              only, are bought separately, and do not affect the group price. Groups may overlap,
-              and {model.inventory.grouplessBaseSkills} Skills deliberately belong to none.
-            </p>
-          </GuideCard>
-          <GuideCard title="Professions">
-            <p>
-              A Profession provides a menu of Learning Groups and direct competencies. It grants no
-              ranks, points, Skills, Specializations, or groups automatically. Family-wide and
-              track-specific opportunities are marked below.
-            </p>
-          </GuideCard>
-          <GuideCard title="Society and context">
-            <p>
-              Society and context describe where training and Professions are plausible. The path is
-              Society and context → Profession → Learning Groups or direct competencies → Skills and
-              Specializations.
-            </p>
-            <p>
-              Generic Chargen currently shows the approved Profession list without applying
-              unfinished Society, Arch Society, Social Band, Setting, geography, or period
-              restrictions. Context-sensitive Profession availability is future work.
-            </p>
-          </GuideCard>
-          <GuideCard title="Unique competency identities">
-            <p>
-              Spoken languages and written traditions are first-class competencies. A written
-              tradition is not automatically granted by its spoken language. Each named competency
-              is learned and advanced on its own terms.
-            </p>
-          </GuideCard>
-        </div>
-      </details>
-
       <div
         aria-label="Skill reference sections"
         className={styles.tabs}
         ref={tabList}
         role="tablist"
       >
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <button
+            key={tab.id}
+            id={`tab-${tab.id}`}
+            role="tab"
             aria-controls={`panel-${tab.id}`}
             aria-selected={activeTab === tab.id}
-            id={`tab-${tab.id}`}
-            key={tab.id}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            type="button"
             onClick={() => navigate({ tab: tab.id }, false)}
             onKeyDown={(event) => {
               if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
               event.preventDefault();
-              const current = tabs.findIndex((candidate) => candidate.id === tab.id);
               const next =
                 event.key === "Home"
                   ? 0
                   : event.key === "End"
                     ? tabs.length - 1
-                    : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+                    : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
               navigate({ tab: tabs[next]!.id }, false);
               tabList.current?.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
             }}
-            role="tab"
-            tabIndex={activeTab === tab.id ? 0 : -1}
-            type="button"
           >
             {tab.label}
           </button>
         ))}
       </div>
-
-      {activeTab === "skills" ? (
-        <SkillsPanel
-          detailHeading={detailHeading}
-          model={model}
-          navigate={navigate}
-          query={skillSearch}
-          selectedKey={selectedSkill}
-          setQuery={setSkillSearch}
-          setSelected={(key) => navigate({ tab: "skills", key })}
-        />
-      ) : null}
-      {activeTab === "groups" ? (
-        <GroupsPanel
-          detailHeading={detailHeading}
-          model={model}
-          navigate={navigate}
-          query={groupSearch}
-          selectedKey={selectedGroup}
-          setQuery={setGroupSearch}
-          setSelected={(key) => navigate({ tab: "groups", key })}
-        />
-      ) : null}
-      {activeTab === "professions" ? (
-        <ProfessionsPanel
-          detailHeading={detailHeading}
-          model={model}
-          navigate={navigate}
-          query={professionSearch}
-          selectedKey={selectedProfession}
-          setQuery={setProfessionSearch}
-          setSelected={(key) => navigate({ tab: "professions", key })}
-        />
-      ) : null}
-      {activeTab === "societies" ? (
-        <SocietiesPanel detailHeading={detailHeading} model={model} />
-      ) : null}
+      {activeTab === "skills" && (
+        <div id="panel-skills" role="tabpanel" aria-labelledby="tab-skills">
+          <div className={styles.filters}>
+            <label>
+              Type{" "}
+              <select
+                aria-label="Competency type"
+                value={skillType}
+                onChange={(event) => setSkillType(event.target.value)}
+              >
+                <option value="all">All types</option>
+                {["Skill", "Specialization", "Spoken language", "Written tradition"].map((type) => (
+                  <option key={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Category{" "}
+              <select
+                aria-label="Competency category"
+                value={skillCategory}
+                onChange={(event) => setSkillCategory(event.target.value)}
+              >
+                <option value="all">All categories</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {category.replace(/-/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <BrowserLayout
+            count={filteredSkills.length}
+            label="Search Skills, languages, and writing"
+            list={filteredSkills.map((skill) => ({
+              key: skill.key,
+              name: skill.name,
+              meta: `${skill.type} · ${skill.linkedStats.join(" / ")}`,
+            }))}
+            query={skillSearch}
+            onQuery={setSkillSearch}
+            selectedKey={selectedSkillModel?.key}
+            onSelect={(key) => navigate({ tab: "skills", key })}
+          >
+            {selectedSkillModel && (
+              <SkillDetail
+                skill={selectedSkillModel}
+                model={model}
+                navigate={navigate}
+                heading={detailHeading}
+              />
+            )}
+          </BrowserLayout>
+        </div>
+      )}
+      {activeTab === "groups" && (
+        <div id="panel-groups" role="tabpanel" aria-labelledby="tab-groups">
+          <BrowserLayout
+            count={filteredGroups.length}
+            label="Search Learning Groups or members"
+            list={filteredGroups.map((group) => ({
+              key: group.key,
+              name: group.name,
+              meta: `${group.fixedSkills.length} fixed Skills · ${group.selectionSlots.length} choice slots`,
+            }))}
+            query={groupSearch}
+            onQuery={setGroupSearch}
+            selectedKey={withdrawn ? undefined : selectedGroupModel?.key}
+            onSelect={(key) => navigate({ tab: "groups", key })}
+          >
+            {withdrawn ? (
+              <WithdrawnGroupDetail
+                group={withdrawn}
+                model={model}
+                navigate={navigate}
+                heading={detailHeading}
+              />
+            ) : (
+              selectedGroupModel && (
+                <GroupDetail
+                  group={selectedGroupModel}
+                  navigate={navigate}
+                  heading={detailHeading}
+                />
+              )
+            )}
+          </BrowserLayout>
+          <details className={styles.groupless}>
+            <summary>Retired Learning Groups ({model.withdrawnGroups.length})</summary>
+            <ul>
+              {model.withdrawnGroups.map((group) => (
+                <li key={group.id}>
+                  <a
+                    href={`#group-${group.id}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      navigate({ tab: "groups", key: group.id });
+                    }}
+                  >
+                    {group.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </details>
+          <details className={styles.groupless}>
+            <summary>Skills without a Learning Group ({model.grouplessSkills.length})</summary>
+            <ul>
+              {model.grouplessSkills.map((skill) => (
+                <li key={skill.id}>
+                  <ReferenceLinkView item={skill} tab="skills" navigate={navigate} />
+                </li>
+              ))}
+            </ul>
+          </details>
+        </div>
+      )}
+      {activeTab === "professions" && (
+        <div id="panel-professions" role="tabpanel" aria-labelledby="tab-professions">
+          <BrowserLayout
+            count={filteredProfessions.length}
+            label="Search Professions, tracks, or training"
+            list={filteredProfessions.map((profession) => ({
+              key: profession.key,
+              name: profession.name,
+              meta: `${profession.coreAlternatives.length} core routes · ${profession.routes.length} training routes`,
+            }))}
+            query={professionSearch}
+            onQuery={setProfessionSearch}
+            selectedKey={selectedProfessionModel?.key}
+            onSelect={(key) => navigate({ tab: "professions", key })}
+          >
+            {selectedProfessionModel && (
+              <ProfessionDetail
+                profession={selectedProfessionModel}
+                navigate={navigate}
+                heading={detailHeading}
+              />
+            )}
+          </BrowserLayout>
+        </div>
+      )}
+      {activeTab === "societies" && (
+        <div id="panel-societies" role="tabpanel" aria-labelledby="tab-societies">
+          <section className={styles.societyBoundary}>
+            <h2 ref={detailHeading} tabIndex={-1}>
+              Societies and civilizations
+            </h2>
+            <p>
+              These identities describe Glantri's setting. Arch Society is setting context; it is
+              not a rule for competency access.
+            </p>
+          </section>
+          <div className={styles.societies}>
+            {model.societies.map((society) => (
+              <article id={`society-${society.key}`} key={society.id}>
+                <p className={styles.kind}>Society Level {society.level}</p>
+                <h2>{society.name}</h2>
+                <p>{society.description}</p>
+                {society.archSociety && (
+                  <p>
+                    <strong>Arch Society:</strong> {society.archSociety.name} —{" "}
+                    {society.archSociety.description}
+                  </p>
+                )}
+                <h3>Civilization examples</h3>
+                <ul>
+                  {society.civilizations.map((example) => (
+                    <li key={example.name}>
+                      <strong>{example.name}</strong> — {example.description}. Spoken:{" "}
+                      {example.spokenLanguage}
+                      {example.writtenLanguage ? `; written: ${example.writtenLanguage}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
+      {activeTab === "rules" && (
+        <div id="panel-rules" role="tabpanel" aria-labelledby="tab-rules">
+          <RulesContent ceiling={model.authoredCeiling} heading={detailHeading} />
+        </div>
+      )}
     </section>
   );
 }
 
-function GuideCard({ children, title }: { children: React.ReactNode; title: string }) {
-  return (
-    <section>
-      <h2>{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-interface BrowserPanelProps {
-  detailHeading: React.RefObject<HTMLHeadingElement | null>;
+function SkillDetail({
+  skill,
+  model,
+  navigate,
+  heading,
+}: {
+  skill: SkillReferenceSkill;
   model: SkillReferenceModel;
   navigate: (destination: Destination) => void;
-  query: string;
-  selectedKey?: string;
-  setQuery: (value: string) => void;
-  setSelected: (key: string) => void;
-}
-
-function SkillsPanel(props: BrowserPanelProps) {
-  const filtered = useMemo(() => {
-    const query = props.query.trim().toLowerCase();
-    return props.model.skills.filter((skill) =>
-      [skill.name, skill.description, skill.type, ...skill.linkedStats]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [props.model.skills, props.query]);
-  const selected = filtered.find((skill) => skill.key === props.selectedKey) ?? filtered[0];
-
-  return (
-    <div aria-labelledby="tab-skills" id="panel-skills" role="tabpanel">
-      <BrowserLayout
-        count={filtered.length}
-        empty="No Skills match this search."
-        label="Search Skills, languages, and writing"
-        list={filtered.map((skill) => ({
-          key: skill.key,
-          name: skill.name,
-          meta: `${skill.type} · ${skill.linkedStats.join(" / ")}`,
-        }))}
-        onQuery={props.setQuery}
-        query={props.query}
-        selectedKey={selected?.key}
-        setSelected={props.setSelected}
-      >
-        {selected ? (
-          <SkillDetail
-            detailHeading={props.detailHeading}
-            navigate={props.navigate}
-            skill={selected}
-          />
-        ) : null}
-      </BrowserLayout>
-    </div>
-  );
-}
-
-function SkillDetail(props: {
-  detailHeading: BrowserPanelProps["detailHeading"];
-  navigate: BrowserPanelProps["navigate"];
-  skill: SkillReferenceSkill;
+  heading: React.RefObject<HTMLHeadingElement | null>;
 }) {
-  const skill = props.skill;
   return (
     <article className={styles.detail} id={`skill-${skill.key}`}>
-      <p className={styles.kind}>{skill.type}</p>
-      <h2 ref={props.detailHeading} tabIndex={-1}>
+      <p className={styles.kind}>
+        {skill.type} · {skill.category.replace(/-/g, " ")}
+      </p>
+      <h2 ref={heading} tabIndex={-1}>
         {skill.name}
       </h2>
-      <p className={styles.lede}>{skill.shortDescription}</p>
-      <div className={styles.prose}>{paragraphs(skill.description)}</div>
+      <p className={styles.lede}>{skill.description}</p>
       <dl className={styles.facts}>
         <div>
           <dt>Linked Stats</dt>
           <dd>{skill.linkedStats.join(" / ")}</dd>
         </div>
-        <div>
-          <dt>Current cost</dt>
-          <dd>
-            {skill.type === "Specialization"
-              ? `${skill.firstCost} to learn; ${skill.increaseCost} per increase`
-              : `${skill.ordinaryCost} ordinary; ${skill.flexibleCost} flexible when permitted`}
-          </dd>
-        </div>
-        {skill.parent ? (
+        {skill.parent && (
           <div>
             <dt>Immediate parent</dt>
             <dd>
-              <RelationshipLink
-                destination={{ tab: "skills", key: skill.parent.key }}
-                navigate={props.navigate}
-              >
-                {skill.parent.name}
-              </RelationshipLink>{" "}
-              level {skill.parent.minimumLevel} required
+              <ReferenceLinkView item={skill.parent} tab="skills" navigate={navigate} /> · level{" "}
+              {skill.parent.minimumLevel} required
             </dd>
           </div>
-        ) : null}
+        )}
+        {skill.writtenFloor && (
+          <div>
+            <dt>Written tradition</dt>
+            <dd>From Society Level {skill.writtenFloor}</dd>
+          </div>
+        )}
       </dl>
-      <RelationshipSection title="Typical uses" empty="No additional examples are listed.">
-        {skill.typicalUses.map((use) => (
-          <li key={use}>{use}</li>
-        ))}
-      </RelationshipSection>
-      <RelationshipSection
-        title="Learning Groups"
-        empty="No Learning Group teaches this competency."
-      >
-        {skill.learningGroups.map((group) => (
-          <li key={group.key}>
-            <RelationshipLink
-              destination={{ tab: "groups", key: group.key }}
-              navigate={props.navigate}
-            >
-              {group.name}
-            </RelationshipLink>
+      <Section title="Learning Groups" empty="No Learning Group teaches this competency.">
+        {skill.groups.map((group) => (
+          <li key={`${group.id}-${group.membership}`}>
+            <ReferenceLinkView item={group} tab="groups" navigate={navigate} /> —{" "}
+            {group.membership === "fixed"
+              ? "fixed Skill"
+              : group.membership === "choice"
+                ? "choice candidate"
+                : "Specialization access"}
           </li>
         ))}
-      </RelationshipSection>
-      <RelationshipSection
-        title="Child Specializations"
-        empty="No child Specializations are listed."
-      >
+      </Section>
+      <Section title="Child Specializations" empty="No child Specialization is listed.">
         {skill.children.map((child) => (
-          <li key={child.key}>
-            <RelationshipLink
-              destination={{ tab: "skills", key: child.key }}
-              navigate={props.navigate}
-            >
-              {child.name}
-            </RelationshipLink>
+          <li key={child.id}>
+            <ReferenceLinkView item={child} tab="skills" navigate={navigate} />
           </li>
         ))}
-      </RelationshipSection>
-      <RelationshipSection
-        title="Direct Profession access"
-        empty="No Profession offers this competency directly."
-      >
-        {skill.directProfessionAccess.map((profession) => (
-          <li key={`${profession.key}-${profession.name}`}>
-            <RelationshipLink
-              destination={{ tab: "professions", key: profession.key }}
-              navigate={props.navigate}
-            >
-              {profession.name}
-            </RelationshipLink>{" "}
-            — {profession.route}
+      </Section>
+      <Section title="Direct Profession routes" empty="No direct Profession route is listed.">
+        {skill.directRoutes.map((route, index) => (
+          <li key={`${route.id}-${index}`}>
+            <ReferenceLinkView item={route} tab="professions" navigate={navigate} /> — {route.label}
+            <BoundText bound={route.bound} />
           </li>
         ))}
-      </RelationshipSection>
-    </article>
-  );
-}
-
-function GroupsPanel(props: BrowserPanelProps) {
-  const filtered = useMemo(() => {
-    const query = props.query.trim().toLowerCase();
-    return props.model.learningGroups.filter((group) =>
-      [
-        group.name,
-        group.description,
-        ...group.skills.map((skill) => skill.name),
-        ...group.specializations.map((skill) => skill.name),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [props.model.learningGroups, props.query]);
-  const selected = filtered.find((group) => group.key === props.selectedKey) ?? filtered[0];
-  return (
-    <div aria-labelledby="tab-groups" id="panel-groups" role="tabpanel">
-      <BrowserLayout
-        count={filtered.length}
-        empty="No Learning Groups match this search."
-        label="Search Learning Groups or members"
-        list={filtered.map((group) => ({
-          key: group.key,
-          name: group.name,
-          meta: `${pointLabel(group.price)} · ${group.skills.length} Skills${
-            group.specializations.length ? ` · ${group.specializations.length} Specializations` : ""
-          }`,
-        }))}
-        onQuery={props.setQuery}
-        query={props.query}
-        selectedKey={selected?.key}
-        setSelected={props.setSelected}
-      >
-        {selected ? (
-          <GroupDetail
-            detailHeading={props.detailHeading}
-            group={selected}
-            navigate={props.navigate}
-          />
-        ) : null}
-      </BrowserLayout>
-      <details className={styles.groupless}>
-        <summary>Skills without a Learning Group ({props.model.grouplessSkills.length})</summary>
-        <p>These are valid Skills and may be available directly. No group is invented for them.</p>
-        <ul className={styles.linkColumns}>
-          {props.model.grouplessSkills.map((skill) => (
-            <li key={skill.key}>
-              <RelationshipLink
-                destination={{ tab: "skills", key: skill.key }}
-                navigate={props.navigate}
-              >
-                {skill.name}
-              </RelationshipLink>
+      </Section>
+      {skill.languageContexts.length > 0 && (
+        <Section title="Language and civilization" empty="No civilization context is listed.">
+          {skill.languageContexts.map((row) => (
+            <li key={`${row.civilization}-${row.spoken}`}>
+              {row.civilization} · Society Level {row.societyLevel} ·{" "}
+              {row.spoken ? "spoken language" : "written tradition"}
+            </li>
+          ))}
+        </Section>
+      )}
+      <section className={styles.relationships}>
+        <h3>Society Level and Social Band routes</h3>
+        <ul>
+          {skill.availableBands.map((row) => (
+            <li key={row.level}>
+              Society Level {row.level}:{" "}
+              {row.bands.length ? row.bands.join(" / ") : "No authored route"}
             </li>
           ))}
         </ul>
-      </details>
-    </div>
+        <p>Above Society Level {model.authoredCeiling}, route availability is unauthored.</p>
+        {skill.routeGaps.map((gap) => (
+          <p key={gap.level}>
+            <strong>Recorded route gap at Society Level {gap.level}:</strong> {gap.plausibility}
+          </p>
+        ))}
+      </section>
+      <Section
+        title="Mechanical relationships"
+        empty="No current mechanical relationship is recorded."
+      >
+        {skill.relationships.map((relationship, index) => (
+          <RelationshipRow
+            key={`${relationship.mechanism}-${relationship.source.id}-${relationship.target.id}-${index}`}
+            relationship={relationship}
+            navigate={navigate}
+          />
+        ))}
+      </Section>
+    </article>
   );
 }
-
-function GroupDetail(props: {
-  detailHeading: BrowserPanelProps["detailHeading"];
-  group: SkillReferenceGroup;
-  navigate: BrowserPanelProps["navigate"];
+function RelationshipRow({
+  relationship,
+  navigate,
+}: {
+  relationship: ReferenceRelationship;
+  navigate: (destination: Destination) => void;
 }) {
-  const group = props.group;
+  return (
+    <li>
+      <ReferenceLinkView item={relationship.source} tab="skills" navigate={navigate} /> →{" "}
+      <ReferenceLinkView item={relationship.target} tab="skills" navigate={navigate} /> ·{" "}
+      <strong>{relationship.mechanism}</strong>.{" "}
+      {relationship.bridge
+        ? `Parent threshold ${relationship.bridge.threshold}; parent excess offset ${relationship.bridge.parentExcessOffset}; reverse factor ${factorLabel(relationship.bridge.reverseFactor)} from the Specialization to its parent.`
+        : `Factor ${factorLabel(relationship.factor!)}.`}
+    </li>
+  );
+}
+function GroupDetail({
+  group,
+  navigate,
+  heading,
+}: {
+  group: SkillReferenceGroup;
+  navigate: (destination: Destination) => void;
+  heading: React.RefObject<HTMLHeadingElement | null>;
+}) {
   return (
     <article className={styles.detail} id={`group-${group.key}`}>
-      <p className={styles.kind}>Learning Group · {pointLabel(group.price)}</p>
-      <h2 ref={props.detailHeading} tabIndex={-1}>
+      <p className={styles.kind}>Learning Group</p>
+      <h2 ref={heading} tabIndex={-1}>
         {group.name}
       </h2>
-      <p className={styles.lede}>{group.shortDescription}</p>
-      <div className={styles.prose}>{paragraphs(group.description)}</div>
-      {group.equipment ? (
+      <p className={styles.lede}>{group.description}</p>
+      {group.bound && (
         <p>
-          <strong>Equipment and practice:</strong> {group.equipment}
+          <strong>Context:</strong> From Society Level {group.bound.minSocietyLevel}
+          {group.bound.minSocialBand !== "L1"
+            ? `, Social Band ${group.bound.minSocialBand}`
+            : ""}. {group.bound.reasons.join(" ")}
         </p>
-      ) : null}
-      <RelationshipSection title="Member Skills" empty="No member Skills are listed.">
-        {group.skills.map((skill) => (
-          <li key={skill.key}>
-            <RelationshipLink
-              destination={{ tab: "skills", key: skill.key }}
-              navigate={props.navigate}
-            >
-              {skill.name}
-            </RelationshipLink>
+      )}
+      <Section title="Fixed Skills" empty="No fixed Skill is listed.">
+        {group.fixedSkills.map((skill) => (
+          <li key={skill.id}>
+            <ReferenceLinkView item={skill} tab="skills" navigate={navigate} />
           </li>
         ))}
-      </RelationshipSection>
-      <RelationshipSection
-        title="Listed Specializations"
-        empty="No Specializations are listed for access."
-      >
+      </Section>
+      {group.selectionSlots.map((slot) => (
+        <Section
+          key={slot.id}
+          title={`${slot.label} — choose ${slot.chooseCount}`}
+          empty="No choices are listed."
+        >
+          {slot.candidates.map((skill) => (
+            <li key={skill.id}>
+              <ReferenceLinkView item={skill} tab="skills" navigate={navigate} />
+            </li>
+          ))}
+        </Section>
+      ))}
+      <Section title="Listed Specializations" empty="No Specialization is listed.">
         {group.specializations.map((skill) => (
-          <li key={skill.key}>
-            <RelationshipLink
-              destination={{ tab: "skills", key: skill.key }}
-              navigate={props.navigate}
-            >
-              {skill.name}
-            </RelationshipLink>{" "}
-            — parent: {skill.parentName}. Access only; bought separately.
+          <li key={skill.id}>
+            <ReferenceLinkView item={skill} tab="skills" navigate={navigate} /> · parent
+            requirements apply
           </li>
         ))}
-      </RelationshipSection>
-      <RelationshipSection title="Profession access" empty="No Profession access is listed.">
-        {group.professionAccess.map((profession) => (
-          <li key={`${profession.key}-${profession.name}`}>
-            <RelationshipLink
-              destination={{ tab: "professions", key: profession.key }}
-              navigate={props.navigate}
-            >
-              {profession.name}
-            </RelationshipLink>{" "}
-            — {profession.route}
+      </Section>
+      <Section title="Profession routes" empty="No Profession route is listed.">
+        {group.professionRoutes.map((route, index) => (
+          <li key={`${route.id}-${index}`}>
+            <ReferenceLinkView item={route} tab="professions" navigate={navigate} /> — {route.label}
+            <BoundText bound={route.bound} />
           </li>
         ))}
-      </RelationshipSection>
+      </Section>
     </article>
   );
 }
-
-function ProfessionsPanel(props: BrowserPanelProps) {
-  const filtered = useMemo(() => {
-    const query = props.query.trim().toLowerCase();
-    return props.model.professions.filter((profession) =>
-      [
-        profession.name,
-        profession.description,
-        ...profession.tracks.map((track) => track.name),
-        ...profession.opportunities.map((opportunity) => opportunity.name),
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [props.model.professions, props.query]);
-  const selected =
-    filtered.find((profession) => profession.key === props.selectedKey) ?? filtered[0];
-  return (
-    <div aria-labelledby="tab-professions" id="panel-professions" role="tabpanel">
-      <BrowserLayout
-        count={filtered.length}
-        empty="No Professions match this search."
-        label="Search Professions, tracks, or training"
-        list={filtered.map((profession) => ({
-          key: profession.key,
-          name: profession.name,
-          meta: `${profession.opportunities.length} opportunities${
-            profession.tracks.length ? ` · ${profession.tracks.length} tracks` : ""
-          }`,
-        }))}
-        onQuery={props.setQuery}
-        query={props.query}
-        selectedKey={selected?.key}
-        setSelected={props.setSelected}
-      >
-        {selected ? (
-          <ProfessionDetail
-            detailHeading={props.detailHeading}
-            navigate={props.navigate}
-            profession={selected}
-          />
-        ) : null}
-      </BrowserLayout>
-    </div>
-  );
-}
-
-function ProfessionDetail(props: {
-  detailHeading: BrowserPanelProps["detailHeading"];
-  navigate: BrowserPanelProps["navigate"];
-  profession: SkillReferenceProfession;
+function WithdrawnGroupDetail({
+  group,
+  model,
+  navigate,
+  heading,
+}: {
+  group: WithdrawnGroup;
+  model: SkillReferenceModel;
+  navigate: (destination: Destination) => void;
+  heading: React.RefObject<HTMLHeadingElement | null>;
 }) {
-  const profession = props.profession;
+  const soleSuccessor =
+    group.successors.length === 1
+      ? model.learningGroups.find((row) => row.id === group.successors[0]?.id)
+      : undefined;
   return (
-    <article className={styles.detail} id={`profession-${profession.key}`}>
-      <p className={styles.kind}>Profession</p>
-      <h2 ref={props.detailHeading} tabIndex={-1}>
-        {profession.name}
+    <article className={styles.detail} id={`group-${group.id}`}>
+      <p className={styles.kind}>Retired Learning Group</p>
+      <h2 ref={heading} tabIndex={-1}>
+        {group.name}
       </h2>
-      <p className={styles.lede}>{profession.description}</p>
-      <p className={styles.ruleCallout}>
-        This is a menu of training access. It grants no ranks, points, competencies, or Learning
-        Groups automatically.
+      <p className={styles.lede}>
+        {group.successors.length === 0
+          ? "Retired — no direct replacement"
+          : `Replaced by ${group.successors.map((row) => row.id).join(" / ")}`}
       </p>
-      {profession.exclusivityNote ? (
-        <p className={styles.exclusive}>{profession.exclusivityNote}</p>
-      ) : null}
-      {profession.tracks.length ? (
-        <section className={styles.relationships}>
-          <h3>Explicit tracks</h3>
-          <ul>
-            {profession.tracks.map((track) => (
-              <li key={track.name}>{track.name}</li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      <section className={styles.relationships}>
-        <h3>Training opportunities ({profession.opportunities.length})</h3>
-        <ul className={styles.opportunities}>
-          {profession.opportunities.map((opportunity) => (
-            <li key={opportunity.key}>
-              <div>
-                <span className={styles.scope}>{opportunity.scope}</span>
-                <strong>
-                  <RelationshipLink
-                    destination={{
-                      tab: opportunity.kind === "Learning Group" ? "groups" : "skills",
-                      key: opportunity.targetKey,
-                    }}
-                    navigate={props.navigate}
-                  >
-                    {opportunity.name}
-                  </RelationshipLink>
-                </strong>
-                <span>
-                  {opportunity.kind} · {opportunity.route}
-                </span>
-              </div>
-              <p>{opportunity.description}</p>
+      {group.successors.length > 0 && (
+        <ul>
+          {group.successors.map((successor) => (
+            <li key={successor.id}>
+              <ReferenceLinkView item={successor} tab="groups" navigate={navigate} />
             </li>
           ))}
         </ul>
-      </section>
+      )}
+      {soleSuccessor && (
+        <p>
+          Current practice:{" "}
+          <ReferenceLinkView item={soleSuccessor} tab="groups" navigate={navigate} /> —{" "}
+          {soleSuccessor.description}
+        </p>
+      )}
     </article>
   );
 }
-
-function SocietiesPanel(props: {
-  detailHeading: BrowserPanelProps["detailHeading"];
-  model: SkillReferenceModel;
+function ProfessionDetail({
+  profession,
+  navigate,
+  heading,
+}: {
+  profession: SkillReferenceProfession;
+  navigate: (destination: Destination) => void;
+  heading: React.RefObject<HTMLHeadingElement | null>;
 }) {
   return (
-    <div aria-labelledby="tab-societies" id="panel-societies" role="tabpanel">
-      <section className={styles.societyBoundary}>
-        <h2 ref={props.detailHeading} tabIndex={-1}>
-          Society and training context
-        </h2>
-        <p>
-          These society models and civilization examples describe the setting around plausible
-          training. Generic Chargen does not yet filter Professions by Society, Arch Society, Social
-          Band, Setting, geography, or period.
-        </p>
-      </section>
-      <div className={styles.societies}>
-        {props.model.societies.map((society) => (
-          <article id={`society-${society.key}`} key={society.key}>
-            <p className={styles.kind}>Society Level {society.level}</p>
-            <h2>{society.name}</h2>
-            <p>{society.description}</p>
-            <h3>Civilization examples</h3>
-            {society.examples.length ? (
-              <ul>
-                {society.examples.map((example) => (
-                  <li key={example.name}>
-                    <strong>{example.name}</strong>
-                    <span>{example.description}</span>
-                    <span>
-                      {example.period} · Spoken: {example.spokenLanguage} · Written:{" "}
-                      {example.writtenTradition ?? "No named written tradition"}
-                    </span>
-                  </li>
+    <article className={styles.detail} id={`profession-${profession.key}`}>
+      <p className={styles.kind}>Profession path</p>
+      <h2 ref={heading} tabIndex={-1}>
+        {profession.name}
+      </h2>
+      <p className={styles.lede}>
+        This Profession has {profession.coreAlternatives.length} defining{" "}
+        {profession.coreAlternatives.length === 1 ? "route" : "route alternatives"} and{" "}
+        {profession.routes.length} training routes.
+      </p>
+      <Section title="Core alternatives" empty="No core route is listed.">
+        {profession.coreAlternatives.map((core) => (
+          <li key={core.id}>
+            <strong>{core.label}</strong>
+            {core.groups.length > 0 && (
+              <>
+                {" "}
+                · Groups:{" "}
+                {core.groups.map((group, index) => (
+                  <span key={group.id}>
+                    {index > 0 ? " / " : ""}
+                    <ReferenceLinkView item={group} tab="groups" navigate={navigate} />
+                  </span>
                 ))}
-              </ul>
-            ) : (
-              <p>No current civilization example is listed.</p>
+              </>
             )}
-          </article>
+            {core.skills.length > 0 && (
+              <>
+                {" "}
+                · Skills:{" "}
+                {core.skills.map((skill, index) => (
+                  <span key={skill.id}>
+                    {index > 0 ? " / " : ""}
+                    <ReferenceLinkView item={skill} tab="skills" navigate={navigate} />
+                  </span>
+                ))}
+              </>
+            )}
+            {core.writtenChoiceCount > 0 &&
+              ` · Choose ${core.writtenChoiceCount} written tradition`}
+          </li>
         ))}
-      </div>
-    </div>
+      </Section>
+      <Section title="Choice slots" empty="No Learning Group choice slot is listed for this path.">
+        {profession.choiceSlots.map((slot) => (
+          <li key={`${slot.group.id}-${slot.label}`}>
+            <ReferenceLinkView item={slot.group} tab="groups" navigate={navigate} /> · {slot.label}:
+            choose {slot.chooseCount} from{" "}
+            {slot.candidates.map((skill, index) => (
+              <span key={skill.id}>
+                {index > 0 ? " / " : ""}
+                <ReferenceLinkView item={skill} tab="skills" navigate={navigate} />
+              </span>
+            ))}
+          </li>
+        ))}
+      </Section>
+      <Section title="Training routes" empty="No training route is listed.">
+        {profession.routes.map((route) => (
+          <li key={route.id}>
+            <strong>{route.label}</strong> ·{" "}
+            {route.group ? (
+              <ReferenceLinkView item={route.group} tab="groups" navigate={navigate} />
+            ) : (
+              [...route.skills, ...route.specializations].map((skill, index) => (
+                <span key={skill.id}>
+                  {index > 0 ? " / " : ""}
+                  <ReferenceLinkView item={skill} tab="skills" navigate={navigate} />
+                </span>
+              ))
+            )}
+            <BoundText bound={route.bound} />
+          </li>
+        ))}
+      </Section>
+    </article>
   );
 }
-
-function BrowserLayout(props: {
-  children: React.ReactNode;
-  count: number;
-  empty: string;
-  label: string;
-  list: { key: string; name: string; meta: string }[];
-  onQuery: (value: string) => void;
-  query: string;
-  selectedKey?: string;
-  setSelected: (key: string) => void;
+function RulesContent({
+  ceiling,
+  heading,
+}: {
+  ceiling: number;
+  heading: React.RefObject<HTMLHeadingElement | null>;
 }) {
   return (
-    <div className={styles.browser}>
-      <aside className={styles.browserList}>
-        <label>
-          <span>{props.label}</span>
-          <input
-            aria-label={props.label}
-            onChange={(event) => props.onQuery(event.target.value)}
-            type="search"
-            value={props.query}
-          />
-        </label>
-        <p className={styles.resultCount}>{props.count} results</p>
-        {props.list.length ? (
-          <ul>
-            {props.list.map((item) => (
-              <li key={item.key}>
-                <button
-                  aria-current={item.key === props.selectedKey ? "true" : undefined}
-                  onClick={() => props.setSelected(item.key)}
-                  type="button"
-                >
-                  <strong>{item.name}</strong>
-                  <span>{item.meta}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>{props.empty}</p>
-        )}
-      </aside>
-      <div className={styles.detailPanel}>{props.children}</div>
-    </div>
-  );
-}
-
-function RelationshipSection(props: { children: React.ReactNode; empty: string; title: string }) {
-  const children = Array.isArray(props.children) ? props.children.filter(Boolean) : props.children;
-  const empty = Array.isArray(children) ? children.length === 0 : !children;
-  return (
-    <section className={styles.relationships}>
-      <h3>{props.title}</h3>
-      {empty ? <p>{props.empty}</p> : <ul>{children}</ul>}
+    <section className={styles.guide}>
+      <h2 ref={heading} tabIndex={-1}>
+        How competency works in Glantri
+      </h2>
+      <div className={styles.guideGrid}>
+        <section>
+          <h3>Skills</h3>
+          <p>
+            A Skill represents learned ability. A Specialization focuses its immediate parent Skill
+            and requires the listed parent level. Spoken languages and written traditions are
+            distinct competencies.
+          </p>
+        </section>
+        <section>
+          <h3>Learning Groups</h3>
+          <p>
+            A Learning Group brings related Skills into one taught practice. Fixed Skills belong to
+            every route through that group; a choice slot teaches only its stated number of
+            candidates. Listed Specializations keep their own parent requirements.
+          </p>
+        </section>
+        <section>
+          <h3>Professions</h3>
+          <p>
+            A Profession makes Learning Groups and direct competencies available through named
+            routes. Several core routes are alternatives: any one may define the Profession.
+            Training access alone does not confer mastery.
+          </p>
+        </section>
+        <section>
+          <h3>Related competencies</h3>
+          <p>
+            An authored derived grant and a melee cross-training relationship show their own
+            directional factors. A Specialization bridge follows its parent threshold, parent excess
+            offset, and reverse factor. It is a bridge, not a transfer percentage. Only
+            relationships listed on a competency are in this reference.
+          </p>
+        </section>
+        <section>
+          <h3>Society and Social Band</h3>
+          <p>
+            Society Level and Social Band can set the earliest context for a training route. A
+            competency may be reached by another open route when one route is closed. Above Society
+            Level {ceiling}, route availability has not yet been authored.
+          </p>
+        </section>
+        <section>
+          <h3>Arch Society</h3>
+          <p>
+            Arch Societies describe the setting and its societies. They do not determine competency
+            access.
+          </p>
+        </section>
+        <section>
+          <h3>Character creation</h3>
+          <p>
+            A Character's Profession, society context, and chosen training together determine which
+            Learning Groups and direct competencies can be learned. A written tradition is learned
+            separately from its spoken language.
+          </p>
+        </section>
+      </div>
     </section>
   );
 }

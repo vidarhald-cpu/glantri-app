@@ -1,138 +1,184 @@
 import { describe, expect, it } from "vitest";
 import {
-  getApprovedTargetChargenContent,
-  targetLearningGroupCatalogue,
-  targetProfessionCatalogue,
+  defaultCanonicalContent,
+  getCompetencyV2ReferenceSource,
+  competencyV2RelationshipIdentityMap,
+  projectCompetencyV2ReferenceRelationships,
 } from "@glantri/content";
-import { createChargenProgression, getActiveGroupSkillCost } from "@glantri/rules-engine";
+import { getMeleeCrossTrainingFactor } from "@glantri/rules-engine";
 import { buildSkillReferenceModel } from "./skillReferenceModel";
 
-const model = buildSkillReferenceModel();
+const source = getCompetencyV2ReferenceSource();
+const model = buildSkillReferenceModel(source);
 
-function readerText(): string {
-  return [
-    ...model.skills.flatMap((skill) => [
-      skill.name,
-      skill.description,
-      skill.shortDescription,
-      ...skill.typicalUses,
-    ]),
-    ...model.learningGroups.flatMap((group) => [
-      group.name,
-      group.description,
-      group.shortDescription,
-      group.equipment ?? "",
-    ]),
-    ...model.professions.flatMap((profession) => [
-      profession.name,
-      profession.description,
-      profession.exclusivityNote ?? "",
-      ...profession.opportunities.flatMap((opportunity) => [
-        opportunity.name,
-        opportunity.route,
-        opportunity.description,
-      ]),
-    ]),
-    ...model.societies.flatMap((society) => [
-      society.name,
-      society.description,
-      ...society.examples.flatMap((example) => [example.name, example.description, example.period]),
-    ]),
-  ].join(" ");
-}
-
-describe("player and GM Skill reference model", () => {
-  it("projects every current inventory and relationship without a copied catalogue", () => {
+describe("canonical V2 competency reference", () => {
+  it("uses only canonical V2 identities and preserves the complete approved inventory", () => {
     expect(model.inventory).toEqual({
-      competencies: 172,
-      baseSkills: 131,
-      specializations: 26,
-      spokenLanguages: 12,
-      writtenTraditions: 3,
-      learningGroups: 59,
-      baseMemberships: 151,
-      specializationMemberships: 9,
-      grouplessBaseSkills: 41,
+      learningGroups: 95,
+      professionPaths: 86,
       professionFamilies: 84,
-      explicitTracks: 21,
-      groupOpportunities: 115,
-      directOpportunities: 88,
-      societyModels: 11,
-      civilizationExamples: 16,
     });
-    expect(model.skills.flatMap((skill) => skill.learningGroups)).toHaveLength(160);
-    expect(model.professions.flatMap((profession) => profession.opportunities)).toHaveLength(203);
-    expect(model.professions.flatMap((profession) => profession.tracks)).toHaveLength(21);
+    expect(model.withdrawnGroups).toHaveLength(13);
+    const ids = new Set([...source.skills, ...source.specializations].map((row) => row.id));
+    expect(model.skills.map((row) => row.id).sort()).toEqual([...ids].sort());
+    expect(ids.has("medicine")).toBe(false);
+    expect(ids.has("first_aid")).toBe(false);
+    expect(ids.has("skill:medicine")).toBe(true);
+    expect(ids.has("skill:first-aid")).toBe(true);
+    expect(
+      model.relationships.every((row) => ids.has(row.source.id) && ids.has(row.target.id)),
+    ).toBe(true);
   });
 
-  it("uses the current Chargen calculation for every displayed group price", () => {
-    const content = getApprovedTargetChargenContent();
-    const progression = createChargenProgression();
-    const names = new Map(model.learningGroups.map((group) => [group.name, group]));
-
-    for (const group of targetLearningGroupCatalogue.groups) {
-      expect(names.get(group.name)?.price).toBe(
-        getActiveGroupSkillCost({ content, groupId: group.id, progression }).cost,
+  it("projects explicit approved mechanics onto V2 endpoints without flattening bridges", () => {
+    expect(competencyV2RelationshipIdentityMap.medicine).toBe("skill:medicine");
+    expect(competencyV2RelationshipIdentityMap.first_aid).toBe("skill:first-aid");
+    expect(source.relationships.grants).toContainEqual({
+      sourceId: "skill:medicine",
+      targetId: "skill:first-aid",
+      factor: 1,
+    });
+    expect(model.relationships).toContainEqual(
+      expect.objectContaining({
+        source: expect.objectContaining({ id: "skill:medicine" }),
+        target: expect.objectContaining({ id: "skill:first-aid" }),
+        mechanism: "Derived grant",
+        factor: 1,
+      }),
+    );
+    for (const [parentId, specializationId] of [
+      ["bow", "longbow"],
+      ["one_handed_edged", "fencing"],
+    ]) {
+      expect(model.relationships).toContainEqual(
+        expect.objectContaining({
+          source: expect.objectContaining({ id: parentId }),
+          target: expect.objectContaining({ id: specializationId }),
+          mechanism: "Specialization bridge",
+          bridge: { threshold: 6, parentExcessOffset: 5, reverseFactor: 1 },
+        }),
       );
     }
+    expect(model.relationships.some((row) => row.mechanism === "Melee cross-training")).toBe(true);
+    expect(model.relationships.every((row) => row.factor !== 0.25)).toBe(true);
+    const mapped = (id: string) => competencyV2RelationshipIdentityMap[id]!;
+    const expected = [
+      ...defaultCanonicalContent.skills.flatMap((skill) =>
+        (skill.derivedGrants ?? []).map((grant) => [
+          "Derived grant",
+          mapped(skill.id),
+          mapped(grant.skillId),
+          grant.factor,
+        ]),
+      ),
+      ...defaultCanonicalContent.skills.flatMap((from) =>
+        from.meleeCrossTraining
+          ? defaultCanonicalContent.skills.flatMap((to) => {
+              if (!to.meleeCrossTraining || from.id === to.id) return [];
+              const factor = getMeleeCrossTrainingFactor({
+                source: from.meleeCrossTraining!,
+                target: to.meleeCrossTraining,
+              });
+              return factor > 0
+                ? [["Melee cross-training", mapped(from.id), mapped(to.id), factor]]
+                : [];
+            })
+          : [],
+      ),
+      ...defaultCanonicalContent.specializations.flatMap((specialization) =>
+        specialization.specializationBridge
+          ? [
+              [
+                "Specialization bridge",
+                mapped(specialization.specializationBridge.parentSkillId),
+                mapped(specialization.id),
+                specialization.specializationBridge.threshold,
+                specialization.specializationBridge.parentExcessOffset,
+                specialization.specializationBridge.reverseFactor,
+              ],
+            ]
+          : [],
+      ),
+    ]
+      .map((row) => JSON.stringify(row))
+      .sort();
+    const actual = model.relationships
+      .map((row) =>
+        JSON.stringify(
+          row.bridge
+            ? [
+                row.mechanism,
+                row.source.id,
+                row.target.id,
+                row.bridge.threshold,
+                row.bridge.parentExcessOffset,
+                row.bridge.reverseFactor,
+              ]
+            : [row.mechanism, row.source.id, row.target.id, row.factor],
+        ),
+      )
+      .sort();
+    expect(actual).toEqual(expected);
+    expect(actual).toHaveLength(33);
   });
 
-  it("keeps Specialization parentage, access-only membership, and Profession scope explicit", () => {
-    const nested = model.skills.filter(
-      (skill) =>
-        skill.type === "Specialization" &&
-        model.skills.find((parent) => parent.key === skill.parent?.key)?.type === "Specialization",
+  it("names an unmapped endpoint and withholds the reference projection", () => {
+    const canonicalIds = new Set(
+      [...source.skills, ...source.specializations].map((row) => row.id),
     );
-    expect(nested.length).toBeGreaterThan(0);
-    expect(model.skills.filter((skill) => skill.type === "Specialization")).toHaveLength(26);
-    expect(model.learningGroups.flatMap((group) => group.specializations)).toHaveLength(9);
+    const medicine = defaultCanonicalContent.skills.find((row) => row.id === "medicine")!;
+    expect(() =>
+      projectCompetencyV2ReferenceRelationships(
+        {
+          skills: [{ ...medicine, derivedGrants: [{ skillId: "unmapped-test", factor: 0.5 }] }],
+          specializations: [],
+        },
+        canonicalIds,
+      ),
+    ).toThrow("Unmapped canonical V2 relationship endpoints: unmapped-test");
+  });
+
+  it("retains authored route choices, gaps, writing floor, and removed-group replacements", () => {
+    expect(
+      model.professions.find((row) => row.id === "profession:courier")?.coreAlternatives,
+    ).toHaveLength(3);
     expect(
       model.professions
-        .flatMap((profession) => profession.opportunities)
-        .filter((opportunity) => opportunity.kind !== "Learning Group"),
-    ).toHaveLength(88);
-  });
-
-  it("records only the two approved Profession exclusivity cases", () => {
-    const exclusive = model.professions.filter((profession) => profession.exclusivityNote);
-    expect(exclusive.map((profession) => profession.name)).toEqual([
-      "Guard, Watcher and Escort",
-      "Sailor and Boat Worker",
+        .find((row) => row.id === "profession:soldier")
+        ?.choiceSlots.map((row) => row.chooseCount),
+    ).toEqual([1, 2, 1]);
+    expect(
+      model.withdrawnGroups.find((row) => row.id === "G06")?.successors.map((row) => row.id),
+    ).toEqual(["N01"]);
+    expect(model.withdrawnGroups.find((row) => row.id === "F16")?.successors).toEqual([]);
+    expect(model.withdrawnGroups.some((row) => row.successors.length > 1)).toBe(true);
+    expect(source.availability.routeGaps).toHaveLength(8);
+    expect(source.availability.accessGridDivergences.map((row) => row.id)).toEqual([
+      "sl1-learned-access",
+      "writing-below-society-level-3",
     ]);
+    expect(model.skills.find((row) => row.id === "camouflage")?.routeGaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ level: 1, plausibility: expect.any(String) }),
+      ]),
+    );
+    expect(model.authoredCeiling).toBe(3);
+    const written = model.skills.filter((row) => row.type === "Written tradition");
+    expect(written).toHaveLength(11);
+    expect(written.every((row) => row.linkedStats.join("/") === "INT/INT")).toBe(true);
+    expect(Math.min(...written.map((row) => row.writtenFloor ?? Infinity))).toBe(2);
+    expect(model.societies.some((row) => row.archSociety)).toBe(true);
     expect(
-      exclusive.find((profession) => profession.name.startsWith("Sailor"))?.exclusivityNote,
-    ).toContain("alternative training routes");
-    expect(
-      exclusive.find((profession) => profession.name.startsWith("Guard"))?.exclusivityNote,
-    ).toContain("mutually exclusive");
-    expect(targetProfessionCatalogue.families.flatMap((family) => family.tracks)).toHaveLength(21);
+      model.professions.some((row) =>
+        row.routes.some((route) => route.bound?.minSocialBand === "L2"),
+      ),
+    ).toBe(true);
   });
 
-  it("keeps internal development language out of reader text", () => {
-    for (const term of [
-      "target catalogue",
-      "legacy catalogue",
-      "migration",
-      "compatibility seam",
-      "membership rows",
-      "provenance",
-      "slice 2",
-      "slice 3",
-      "slice 4",
-      "implementation id",
-      "database",
-      "candidate",
-      "proposal",
-      "digest",
-      "audit",
-    ]) {
-      const text = readerText().toLowerCase();
-      const index = text.indexOf(term);
-      expect(
-        index < 0 ? "" : text.slice(Math.max(0, index - 80), index + term.length + 80),
-        term,
-      ).toBe("");
-    }
-    expect(readerText()).not.toMatch(/\b[GF]\d{2}\b|(?:skill|spec|profession|written):/i);
+  it("retains the unchanged V2 source digest", () => {
+    expect(model.sourceDigest).toBe(source.sourceDigest);
+    expect(source.sourceDigest).toBe(
+      "sha256:3ba5d13ae4f423d6646d5e4ed2013f1367e94e05dfd7be4e4355a3a454ffcb39",
+    );
   });
 });

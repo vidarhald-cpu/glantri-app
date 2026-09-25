@@ -1,113 +1,99 @@
-import {
-  createTargetCompetencyProjectionSource,
-  defaultCanonicalContent,
-  getApprovedTargetChargenContent,
-  targetLearningGroupCatalogue,
-  targetProfessionCatalogue,
-} from "@glantri/content";
-import {
-  createChargenProgression,
-  getActiveGroupSkillCost,
-  getSkillSpendCost,
-  getSpecializationSpendCost,
-} from "@glantri/rules-engine";
+import { getCompetencyV2ReferenceSource, type CompetencyV2ReferenceSource } from "@glantri/content";
+import { getMeleeCrossTrainingFactor } from "@glantri/rules-engine";
 
-export type SkillReferenceTab = "skills" | "groups" | "professions" | "societies";
+export type SkillReferenceTab = "skills" | "groups" | "professions" | "societies" | "rules";
+export type ReferenceLink = { id: string; key: string; name: string };
+export type ReferenceBound = { minSocietyLevel: number; minSocialBand: string; reasons: string[] };
+export type ReferenceRelationship = {
+  source: ReferenceLink;
+  target: ReferenceLink;
+  mechanism: "Derived grant" | "Melee cross-training" | "Specialization bridge";
+  factor?: number;
+  bridge?: { threshold: number; parentExcessOffset: number; reverseFactor: number };
+};
 
-export interface SkillReferenceSkill {
-  key: string;
-  name: string;
+export type SkillReferenceSkill = ReferenceLink & {
   description: string;
-  shortDescription: string;
   type: "Skill" | "Specialization" | "Spoken language" | "Written tradition";
+  category: string;
   linkedStats: string[];
-  ordinaryCost?: number;
-  flexibleCost?: number;
-  firstCost?: number;
-  increaseCost?: number;
-  parent?: { key: string; name: string; minimumLevel: number };
-  children: { key: string; name: string }[];
-  learningGroups: { key: string; name: string }[];
-  directProfessionAccess: { key: string; name: string; route: string }[];
-  typicalUses: string[];
-}
-
-export interface SkillReferenceGroup {
-  key: string;
-  name: string;
-  shortDescription: string;
+  parent?: ReferenceLink & { minimumLevel: number };
+  children: ReferenceLink[];
+  groups: (ReferenceLink & { membership: "fixed" | "choice" | "specialization" })[];
+  directRoutes: (ReferenceLink & { label: string; bound?: ReferenceBound })[];
+  writtenFloor?: number;
+  languageContexts: {
+    civilization: string;
+    societyLevel: number;
+    spoken: boolean;
+    written: boolean;
+  }[];
+  routeGaps: { level: number; plausibility: string }[];
+  availableBands: { level: number; bands: string[] }[];
+  relationships: ReferenceRelationship[];
+};
+export type SkillReferenceGroup = ReferenceLink & {
   description: string;
-  equipment?: string;
-  price: number;
-  skills: { key: string; name: string }[];
-  specializations: { key: string; name: string; parentName: string }[];
-  professionAccess: { key: string; name: string; route: string }[];
-}
-
-export interface SkillReferenceOpportunity {
-  key: string;
-  kind: "Learning Group" | "Skill" | "Specialization";
-  name: string;
-  targetKey: string;
-  route: string;
-  description: string;
-  scope: string;
-}
-
-export interface SkillReferenceProfession {
-  key: string;
-  name: string;
-  description: string;
-  tracks: { name: string }[];
-  opportunities: SkillReferenceOpportunity[];
-  exclusivityNote?: string;
-}
-
-export interface SkillReferenceSociety {
-  key: string;
-  name: string;
+  fixedSkills: ReferenceLink[];
+  selectionSlots: { id: string; label: string; chooseCount: number; candidates: ReferenceLink[] }[];
+  specializations: ReferenceLink[];
+  professionRoutes: (ReferenceLink & { label: string; bound?: ReferenceBound })[];
+  bound?: ReferenceBound;
+};
+export type SkillReferenceProfession = ReferenceLink & {
+  familyId: string;
+  coreAlternatives: {
+    id: string;
+    label: string;
+    groups: ReferenceLink[];
+    skills: ReferenceLink[];
+    writtenChoiceCount: number;
+  }[];
+  choiceSlots: {
+    group: ReferenceLink;
+    label: string;
+    chooseCount: number;
+    candidates: ReferenceLink[];
+  }[];
+  routes: {
+    id: string;
+    label: string;
+    kind: "group" | "direct";
+    group?: ReferenceLink;
+    skills: ReferenceLink[];
+    specializations: ReferenceLink[];
+    bound?: ReferenceBound;
+  }[];
+};
+export type SkillReferenceSociety = ReferenceLink & {
   level: number;
   description: string;
-  examples: {
+  civilizations: {
     name: string;
     description: string;
-    period: string;
     spokenLanguage: string;
-    writtenTradition?: string;
+    writtenLanguage?: string;
   }[];
-}
-
-export interface SkillReferenceModel {
+  archSociety?: { name: string; description: string };
+};
+export type WithdrawnGroup = {
+  id: string;
+  name: string;
+  reason: string;
+  successors: ReferenceLink[];
+};
+export type SkillReferenceModel = {
   skills: SkillReferenceSkill[];
   learningGroups: SkillReferenceGroup[];
   professions: SkillReferenceProfession[];
   societies: SkillReferenceSociety[];
-  grouplessSkills: { key: string; name: string }[];
-  guide: {
-    ordinaryPointTotal: number;
-    individualOrdinaryCost: number;
-    individualFlexibleCost: number;
-    specializationFirstCost: number;
-    specializationIncreaseCost: number;
-  };
-  inventory: {
-    competencies: number;
-    baseSkills: number;
-    specializations: number;
-    spokenLanguages: number;
-    writtenTraditions: number;
-    learningGroups: number;
-    baseMemberships: number;
-    specializationMemberships: number;
-    grouplessBaseSkills: number;
-    professionFamilies: number;
-    explicitTracks: number;
-    groupOpportunities: number;
-    directOpportunities: number;
-    societyModels: number;
-    civilizationExamples: number;
-  };
-}
+  withdrawnGroups: WithdrawnGroup[];
+  grouplessSkills: ReferenceLink[];
+  relationships: ReferenceRelationship[];
+  authoredCeiling: number;
+  sourceDigest: string;
+  inventory: { learningGroups: number; professionPaths: number; professionFamilies: number };
+};
 
 function slug(value: string): string {
   return value
@@ -117,330 +103,344 @@ function slug(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
-
-function publicKeys(values: readonly { id: string; name: string }[]): Map<string, string> {
+function publicLinks<T extends { id: string; name: string }>(
+  values: readonly T[],
+): Map<string, ReferenceLink> {
   const counts = new Map<string, number>();
   return new Map(
     values.map((value) => {
       const base = slug(value.name) || "entry";
       const next = (counts.get(base) ?? 0) + 1;
       counts.set(base, next);
-      return [value.id, next === 1 ? base : `${base}-${next}`];
+      return [
+        value.id,
+        { id: value.id, key: next === 1 ? base : `${base}-${next}`, name: value.name },
+      ];
     }),
   );
 }
-
-function byName<T extends { name: string }>(left: T, right: T): number {
-  return left.name.localeCompare(right.name);
+function required(map: Map<string, ReferenceLink>, id: string): ReferenceLink {
+  const found = map.get(id);
+  if (!found) throw new Error(`Missing canonical V2 reference destination ${id}.`);
+  return found;
+}
+function byName<T extends { name: string }>(a: T, b: T): number {
+  return a.name.localeCompare(b.name);
 }
 
-function competencyTypeLabel(
-  value: "base-skill" | "specialization" | "spoken-language" | "written-tradition",
-): SkillReferenceSkill["type"] {
-  if (value === "base-skill") return "Skill";
-  if (value === "spoken-language") return "Spoken language";
-  if (value === "written-tradition") return "Written tradition";
-  return "Specialization";
-}
-
-function readerFacingText(value: string, groupNames?: ReadonlyMap<string, string>): string {
-  let result = value.replace(/\*\*/g, "");
-  for (const [code, name] of groupNames ?? []) {
-    result = result.replace(new RegExp(`\\b${code}\\b`, "g"), name);
-  }
-  return result
-    .replace(/\bproposals\b/gi, "offers")
-    .replace(/\bproposal\b/gi, "plan")
-    .replace(/\bcandidates\b/gi, "options")
-    .replace(/\bcandidate\b/gi, "option")
-    .replace(/\bprovenance\b/gi, "history")
-    .replace(/\bmigration\b/gi, "transition")
-    .replace(/\baudit\b/gi, "review")
-    .replace(/\bdigest\b/gi, "summary");
-}
-
-function professionProviderNames(input: {
-  family: (typeof targetProfessionCatalogue.families)[number];
-  opportunityId: string;
-}): string[] {
-  if (input.family.tracks.length === 0) return [input.family.name];
-  const tracks = input.family.tracks.filter((track) =>
-    track.opportunityIds.includes(input.opportunityId),
+export function buildSkillReferenceModel(
+  source: CompetencyV2ReferenceSource = getCompetencyV2ReferenceSource(),
+): SkillReferenceModel {
+  const competencyLinks = publicLinks([...source.skills, ...source.specializations]);
+  const groupLinks = publicLinks(source.groups);
+  const professionLinks = publicLinks(source.professions);
+  const societyLinks = publicLinks(source.societies);
+  const skillById = new Map(source.skills.map((row) => [row.id, row]));
+  const specializationById = new Map(source.specializations.map((row) => [row.id, row]));
+  const groupById = new Map(source.groups.map((row) => [row.id, row]));
+  const familyById = new Map(source.families.map((row) => [row.id, row]));
+  const professionById = new Map(source.professions.map((row) => [row.id, row]));
+  const categoryById = new Map(source.categories.map((row) => [row.competencyId, row.categoryId]));
+  const groupDescriptionById = new Map(
+    source.groupDescriptions.map((row) => [row.id, row.description]),
   );
-  if (tracks.length === input.family.tracks.length) return [`${input.family.name} — all tracks`];
-  return tracks.length > 0
-    ? tracks.map((track) => `${input.family.name} — ${track.name}`)
-    : [`${input.family.name} — family opportunity`];
-}
-
-export function buildSkillReferenceModel(): SkillReferenceModel {
-  const competencies =
-    createTargetCompetencyProjectionSource(defaultCanonicalContent).catalogue.content.entries;
-  const groups = targetLearningGroupCatalogue.groups;
-  const families = targetProfessionCatalogue.families;
-  const chargenContent = getApprovedTargetChargenContent();
-  const progression = createChargenProgression();
-
-  const competencyKeys = publicKeys(competencies);
-  const groupKeys = publicKeys(groups);
-  const professionKeys = publicKeys(families);
-  const societyKeys = publicKeys(defaultCanonicalContent.societies);
-  const competencyNames = new Map(competencies.map((entry) => [entry.id, entry.name]));
-  const groupNames = new Map(groups.map((group) => [group.id, group.name]));
-  const competencyById = new Map(competencies.map((entry) => [entry.id, entry]));
-  const runtimeSkills = new Map(chargenContent.skills.map((skill) => [skill.id, skill]));
-  const runtimeSpecializations = new Map(
-    chargenContent.specializations.map((specialization) => [specialization.id, specialization]),
+  const writtenFloorById = new Map(
+    source.availability.writtenCompetencyFloors.map((row) => [row.competencyId, row]),
   );
-  function linkedStatsForCompetency(id: string, visited = new Set<string>()): string[] {
-    const skill = runtimeSkills.get(id);
-    if (skill) return skill.linkedStats.map((stat) => stat.toUpperCase());
-    if (visited.has(id)) throw new Error("A Specialization parent cycle prevents display.");
-    visited.add(id);
-    const specialization = runtimeSpecializations.get(id);
-    if (!specialization) throw new Error("A Specialization parent is unavailable.");
-    return linkedStatsForCompetency(specialization.skillId, visited);
-  }
+  const groupBoundById = new Map(source.availability.groupBounds.map((row) => [row.groupId, row]));
+  const civilizationById = new Map(source.civilizations.map((row) => [row.id, row]));
+  const societyById = new Map(source.societies.map((row) => [row.id, row]));
+  const linkSkill = (id: string) => required(competencyLinks, id);
+  const linkGroup = (id: string) => required(groupLinks, id);
+  const linkProfession = (id: string) => required(professionLinks, id);
 
-  const directProfessionAccess = new Map<string, { key: string; name: string; route: string }[]>();
-  const groupProfessionAccess = new Map<string, { key: string; name: string; route: string }[]>();
-  for (const family of families) {
-    for (const opportunity of family.opportunities) {
-      const destination =
-        opportunity.kind === "group" ? groupProfessionAccess : directProfessionAccess;
-      const providers = professionProviderNames({ family, opportunityId: opportunity.id });
-      const existing = destination.get(opportunity.targetId) ?? [];
-      existing.push(
-        ...providers.map((name) => ({
-          key: professionKeys.get(family.id)!,
-          name,
-          route: readerFacingText(opportunity.route, groupNames),
+  const boundFor = (
+    route: (typeof source.paths)[number]["routes"][number],
+    path: (typeof source.paths)[number],
+  ): ReferenceBound | undefined => {
+    const sources =
+      route.kind === "group"
+        ? [
+            route.groupId ? groupBoundById.get(route.groupId) : undefined,
+            source.availability.professionRouteBounds.find(
+              (row) =>
+                row.professionCode === path.familyCode &&
+                row.trackId === path.trackId &&
+                row.groupId === route.groupId,
+            ),
+          ]
+        : [
+            source.availability.directRouteBounds.find(
+              (row) => row.professionCode === path.familyCode && row.trackId === path.trackId,
+            ),
+          ];
+    const reasons = sources.flatMap((row) => (row?.reason ? [row.reason] : []));
+    if (!route.minSocietyLevel && !route.minSocialBand && reasons.length === 0) return undefined;
+    return {
+      minSocietyLevel: route.minSocietyLevel ?? 1,
+      minSocialBand: route.minSocialBand ?? "L1",
+      reasons,
+    };
+  };
+
+  const professions: SkillReferenceProfession[] = source.paths
+    .map((path) => {
+      const definition = professionById.get(path.id);
+      if (!definition || !familyById.has(path.familyId))
+        throw new Error(`Missing V2 Profession ${path.id}.`);
+      const routes = path.routes.map((route) => ({
+        id: route.id,
+        label: route.label,
+        kind: route.kind,
+        group: route.groupId ? linkGroup(route.groupId) : undefined,
+        skills: route.skillIds.map(linkSkill),
+        specializations: route.specializationIds.map(linkSkill),
+        bound: boundFor(route, path),
+      }));
+      const usedGroupIds = [
+        ...new Set(path.routes.flatMap((route) => (route.groupId ? [route.groupId] : []))),
+      ];
+      return {
+        ...linkProfession(path.id),
+        familyId: path.familyId,
+        coreAlternatives: path.coreRoutes.map((core) => ({
+          id: core.id,
+          label: core.label,
+          groups: core.groupIds.map(linkGroup),
+          skills: core.skillIds.map(linkSkill),
+          writtenChoiceCount: core.writtenLanguageChoiceCount,
         })),
-      );
-      destination.set(opportunity.targetId, existing);
+        choiceSlots: usedGroupIds.flatMap((groupId) =>
+          (groupById.get(groupId)?.selectionSlots ?? []).map((slot) => ({
+            group: linkGroup(groupId),
+            label: slot.label,
+            chooseCount: slot.chooseCount,
+            candidates: slot.candidateSkillIds.map(linkSkill),
+          })),
+        ),
+        routes,
+      };
+    })
+    .sort(byName);
+
+  const groups: SkillReferenceGroup[] = source.groups
+    .map((group) => {
+      const bound = groupBoundById.get(group.id);
+      return {
+        ...linkGroup(group.id),
+        description: groupDescriptionById.get(group.id) ?? group.description ?? "",
+        fixedSkills: group.fixedSkillIds.map(linkSkill).sort(byName),
+        selectionSlots: group.selectionSlots.map((slot) => ({
+          id: slot.id,
+          label: slot.label,
+          chooseCount: slot.chooseCount,
+          candidates: slot.candidateSkillIds.map(linkSkill).sort(byName),
+        })),
+        specializations: group.specializationIds.map(linkSkill).sort(byName),
+        professionRoutes: professions.flatMap((profession) =>
+          profession.routes
+            .filter((route) => route.group?.id === group.id)
+            .map((route) => ({
+              ...linkProfession(profession.id),
+              label: route.label,
+              bound: route.bound,
+            })),
+        ),
+        bound: bound
+          ? {
+              minSocietyLevel: bound.minSocietyLevel,
+              minSocialBand: bound.minSocialBand,
+              reasons: [bound.reason],
+            }
+          : undefined,
+      };
+    })
+    .sort(byName);
+
+  const relationships: ReferenceRelationship[] = [
+    ...source.relationships.grants.map((grant) => ({
+      source: linkSkill(grant.sourceId),
+      target: linkSkill(grant.targetId),
+      mechanism: "Derived grant" as const,
+      factor: grant.factor,
+    })),
+    ...source.relationships.meleeSources.flatMap((from) =>
+      source.relationships.meleeSources.flatMap((to) => {
+        if (from.skillId === to.skillId) return [];
+        const factor = getMeleeCrossTrainingFactor({ source: from, target: to });
+        return factor > 0
+          ? [
+              {
+                source: linkSkill(from.skillId),
+                target: linkSkill(to.skillId),
+                mechanism: "Melee cross-training" as const,
+                factor,
+              },
+            ]
+          : [];
+      }),
+    ),
+    ...source.relationships.bridges.map((bridge) => ({
+      source: linkSkill(bridge.parentSkillId),
+      target: linkSkill(bridge.specializationId),
+      mechanism: "Specialization bridge" as const,
+      bridge: {
+        threshold: bridge.threshold,
+        parentExcessOffset: bridge.parentExcessOffset,
+        reverseFactor: bridge.reverseFactor,
+      },
+    })),
+  ];
+  const languageContextById = new Map<string, SkillReferenceSkill["languageContexts"]>();
+  for (const row of source.civilizationLanguages) {
+    const civilization = civilizationById.get(row.civilizationId);
+    const level = civilization
+      ? societyById.get(civilization.linkedSocietyId)?.societyLevel
+      : undefined;
+    if (!civilization || !level)
+      throw new Error(`Missing V2 language context ${row.civilizationId}.`);
+    for (const [id, spoken, written] of [
+      [row.spokenCompetencyId, true, false],
+      [row.writtenCompetencyId, false, true],
+    ] as const) {
+      if (!id) continue;
+      const entries = languageContextById.get(id) ?? [];
+      entries.push({ civilization: civilization.name, societyLevel: level, spoken, written });
+      languageContextById.set(id, entries);
     }
   }
-
-  const skillModels = competencies
-    .map((entry): SkillReferenceSkill => {
-      const key = competencyKeys.get(entry.id)!;
-      const memberships = groups
-        .filter((group) => group.members.some((member) => member.competencyId === entry.id))
-        .map((group) => ({ key: groupKeys.get(group.id)!, name: group.name }))
-        .sort(byName);
-      const children = competencies
-        .filter((candidate) => candidate.parent?.id === entry.id)
-        .map((candidate) => ({ key: competencyKeys.get(candidate.id)!, name: candidate.name }))
-        .sort(byName);
-
-      if (entry.competencyType === "specialization") {
-        const runtime = runtimeSpecializations.get(entry.id);
-        if (!runtime)
-          throw new Error(`Missing current Specialization definition for ${entry.name}.`);
-        return {
-          key,
-          name: entry.name,
-          description: readerFacingText(entry.description),
-          shortDescription: readerFacingText(entry.shortDescription),
-          type: "Specialization",
-          linkedStats: linkedStatsForCompetency(entry.id),
-          firstCost: getSpecializationSpendCost(false),
-          increaseCost: getSpecializationSpendCost(true),
-          parent: {
-            key: competencyKeys.get(entry.parent.id)!,
-            name: entry.parent.name,
-            minimumLevel: entry.minimumParentLevel,
-          },
-          children,
-          learningGroups: memberships,
-          directProfessionAccess: (directProfessionAccess.get(entry.id) ?? []).sort(byName),
-          typicalUses: entry.typicalUses.map((value) => readerFacingText(value)),
-        };
-      }
-
-      const runtime = runtimeSkills.get(entry.id);
-      if (!runtime) throw new Error(`Missing current Skill definition for ${entry.name}.`);
+  const linkedStats = (id: string, seen = new Set<string>()): string[] => {
+    const skill = skillById.get(id);
+    if (skill) return skill.linkedStats.map((stat) => stat.toUpperCase());
+    if (seen.has(id)) throw new Error(`Cyclic V2 Specialization parent ${id}.`);
+    seen.add(id);
+    const specialization = specializationById.get(id);
+    if (!specialization) throw new Error(`Missing V2 Specialization parent ${id}.`);
+    return linkedStats(specialization.parentId, seen);
+  };
+  const skills: SkillReferenceSkill[] = [...source.skills, ...source.specializations]
+    .map((entry) => {
+      const specialization = specializationById.get(entry.id);
+      const runtimeSkill = skillById.get(entry.id);
+      const kind = runtimeSkill?.competencyType;
+      const floor = writtenFloorById.get(entry.id);
+      const id = entry.id;
       return {
-        key,
-        name: entry.name,
-        description: readerFacingText(entry.description),
-        shortDescription: readerFacingText(entry.shortDescription),
-        type: competencyTypeLabel(entry.competencyType),
-        linkedStats: runtime.linkedStats.map((stat) => stat.toUpperCase()),
-        ordinaryCost: getSkillSpendCost(runtime, "ordinary"),
-        flexibleCost: getSkillSpendCost(runtime, "flexible"),
-        children,
-        learningGroups: memberships,
-        directProfessionAccess: (directProfessionAccess.get(entry.id) ?? []).sort(byName),
-        typicalUses: entry.typicalUses.map((value) => readerFacingText(value)),
+        ...linkSkill(id),
+        description: entry.description ?? runtimeSkill?.shortDescription ?? "",
+        type: (specialization
+          ? "Specialization"
+          : kind === "spoken-language"
+            ? "Spoken language"
+            : kind === "written-tradition"
+              ? "Written tradition"
+              : "Skill") as SkillReferenceSkill["type"],
+        category: categoryById.get(id) ?? "other",
+        linkedStats: linkedStats(id),
+        parent: specialization
+          ? {
+              ...linkSkill(specialization.parentId),
+              minimumLevel: specialization.minimumParentLevel,
+            }
+          : undefined,
+        children: source.specializations
+          .filter((row) => row.parentId === id)
+          .map((row) => linkSkill(row.id))
+          .sort(byName),
+        groups: groups.flatMap((group) => [
+          ...group.fixedSkills
+            .filter((row) => row.id === id)
+            .map(() => ({ ...linkGroup(group.id), membership: "fixed" as const })),
+          ...group.selectionSlots
+            .filter((slot) => slot.candidates.some((row) => row.id === id))
+            .map(() => ({ ...linkGroup(group.id), membership: "choice" as const })),
+          ...group.specializations
+            .filter((row) => row.id === id)
+            .map(() => ({ ...linkGroup(group.id), membership: "specialization" as const })),
+        ]),
+        directRoutes: professions.flatMap((profession) =>
+          profession.routes
+            .filter(
+              (route) =>
+                route.kind === "direct" &&
+                [...route.skills, ...route.specializations].some((row) => row.id === id),
+            )
+            .map((route) => ({
+              ...linkProfession(profession.id),
+              label: route.label,
+              bound: route.bound,
+            })),
+        ),
+        writtenFloor: floor?.minSocietyLevel,
+        languageContexts: languageContextById.get(id) ?? [],
+        routeGaps: source.availability.routeGaps
+          .filter((row) => row.skillId === id)
+          .map((row) => ({ level: row.unreachableAtSocietyLevel, plausibility: row.plausibility })),
+        availableBands: source.availability.cells
+          .filter((cell) => cell.societyLevel <= source.availability.authoredCeiling)
+          .reduce<{ level: number; bands: string[] }[]>((rows, cell) => {
+            if (!rows.some((row) => row.level === cell.societyLevel))
+              rows.push({ level: cell.societyLevel, bands: [] });
+            if (
+              [
+                ...cell.reachableBaseSkillIds,
+                ...cell.reachableSpecializationIds,
+                ...cell.reachableWrittenCompetencyIds,
+              ].includes(id)
+            )
+              rows.find((row) => row.level === cell.societyLevel)!.bands.push(cell.socialBand);
+            return rows;
+          }, []),
+        relationships: relationships.filter((row) => row.source.id === id || row.target.id === id),
       };
     })
     .sort(byName);
-
-  const groupModels = groups
-    .map((group): SkillReferenceGroup => {
-      const price = getActiveGroupSkillCost({
-        content: chargenContent,
-        groupId: group.id,
-        progression,
-      });
-      if (price.cost === undefined) {
-        throw new Error(`Unable to price ${group.name}: ${price.error ?? "unknown reason"}`);
-      }
-      return {
-        key: groupKeys.get(group.id)!,
-        name: group.name,
-        shortDescription: readerFacingText(group.shortDescription),
-        description: readerFacingText(group.description),
-        equipment: group.equipment ? readerFacingText(group.equipment) : undefined,
-        price: price.cost,
-        skills: group.members
-          .filter((member) => member.kind === "base-skill")
-          .map((member) => ({
-            key: competencyKeys.get(member.competencyId)!,
-            name: member.name,
-          }))
-          .sort(byName),
-        specializations: group.members
-          .filter((member) => member.kind === "specialization")
-          .map((member) => ({
-            key: competencyKeys.get(member.competencyId)!,
-            name: member.name,
-            parentName: competencyNames.get(member.parentId!)!,
-          }))
-          .sort(byName),
-        professionAccess: (groupProfessionAccess.get(group.id) ?? []).sort(byName),
-      };
-    })
-    .sort(byName);
-
-  const professionModels = families
-    .map((family): SkillReferenceProfession => {
-      const commonOpportunityIds = new Set(
-        family.opportunities
-          .filter(
-            (opportunity) =>
-              family.tracks.length === 0 ||
-              family.tracks.every((track) => track.opportunityIds.includes(opportunity.id)),
-          )
-          .map((opportunity) => opportunity.id),
-      );
-      return {
-        key: professionKeys.get(family.id)!,
-        name: family.name,
-        description: readerFacingText(family.description),
-        tracks: family.tracks.map((track) => ({ name: track.name })),
-        opportunities: family.opportunities.map((opportunity, index) => {
-          const target =
-            opportunity.kind === "group"
-              ? groupNames.get(opportunity.targetId)
-              : competencyNames.get(opportunity.targetId);
-          if (!target) throw new Error(`Missing reference destination for ${family.name}.`);
-          const trackNames = family.tracks
-            .filter((track) => track.opportunityIds.includes(opportunity.id))
-            .map((track) => track.name);
-          return {
-            key: `${slug(`${opportunity.kind}-${target}-${opportunity.route}`)}-${index + 1}`,
-            kind:
-              opportunity.kind === "group"
-                ? "Learning Group"
-                : competencyById.get(opportunity.targetId)?.competencyType === "specialization"
-                  ? "Specialization"
-                  : "Skill",
-            name: target,
-            targetKey:
-              opportunity.kind === "group"
-                ? groupKeys.get(opportunity.targetId)!
-                : competencyKeys.get(opportunity.targetId)!,
-            route: readerFacingText(opportunity.route, groupNames),
-            description: readerFacingText(opportunity.description, groupNames),
-            scope: commonOpportunityIds.has(opportunity.id)
-              ? family.tracks.length > 0
-                ? "Every track"
-                : "Family-wide"
-              : trackNames.length > 0
-                ? trackNames.join(", ")
-                : "Family opportunity",
-          };
-        }),
-        exclusivityNote:
-          family.code === "P09"
-            ? "Rigged-vessel deck apprenticeship and Working a boat are alternative training routes here; choosing one replaces the other for this Profession."
-            : family.code === "P14"
-              ? "Swashbuckling fencing instruction and One-handed edged close-combat practice are mutually exclusive here. This does not prevent One-handed edged close-combat practice from accompanying Guard and rough-fighting drill when both are taught."
-              : undefined,
-      };
-    })
-    .sort(byName);
-
-  const societyModels = defaultCanonicalContent.societies
-    .map(
-      (society): SkillReferenceSociety => ({
-        key: societyKeys.get(society.id)!,
-        name: society.name,
-        level: society.societyLevel,
-        description: readerFacingText(society.shortDescription),
-        examples: defaultCanonicalContent.civilizations
-          .filter((civilization) => civilization.linkedSocietyId === society.id)
-          .map((civilization) => ({
-            name: civilization.name,
-            description: readerFacingText(civilization.shortDescription),
-            period: civilization.period,
-            spokenLanguage: civilization.spokenLanguageName,
-            writtenTradition: civilization.writtenLanguageName ?? undefined,
-          }))
-          .sort(byName),
-      }),
-    )
-    .sort((left, right) => left.level - right.level || byName(left, right));
-
-  const grouplessSkills = targetLearningGroupCatalogue.grouplessBaseSkillIds
-    .map((id) => ({ key: competencyKeys.get(id)!, name: competencyNames.get(id)! }))
-    .sort(byName);
-  const guideSkill = chargenContent.skills.find((skill) => "catalogueSource" in skill);
-  if (!guideSkill) throw new Error("Current Skill costs are unavailable.");
-
+  const societies: SkillReferenceSociety[] = source.societies
+    .map((society) => ({
+      ...required(societyLinks, society.id),
+      level: society.societyLevel,
+      description: society.description,
+      civilizations: source.civilizations
+        .filter((row) => row.linkedSocietyId === society.id)
+        .map((row) => ({
+          name: row.name,
+          description: row.description,
+          spokenLanguage: row.spokenLanguageName,
+          writtenLanguage: row.writtenLanguageName ?? undefined,
+        }))
+        .sort(byName),
+      archSociety: source.archSocieties.find((row) => row.id === `arch-society:${society.id}`),
+    }))
+    .sort((a, b) => a.level - b.level || byName(a, b));
+  const groupMembershipIds = new Set(
+    groups
+      .flatMap((group) => [
+        ...group.fixedSkills,
+        ...group.selectionSlots.flatMap((slot) => slot.candidates),
+      ])
+      .map((row) => row.id),
+  );
   return {
-    skills: skillModels,
-    learningGroups: groupModels,
-    professions: professionModels,
-    societies: societyModels,
-    grouplessSkills,
-    guide: {
-      ordinaryPointTotal: progression.primaryPoolTotal,
-      individualOrdinaryCost: getSkillSpendCost(guideSkill, "ordinary"),
-      individualFlexibleCost: getSkillSpendCost(guideSkill, "flexible"),
-      specializationFirstCost: getSpecializationSpendCost(false),
-      specializationIncreaseCost: getSpecializationSpendCost(true),
-    },
+    skills,
+    learningGroups: groups,
+    professions,
+    societies,
+    relationships,
+    withdrawnGroups: source.removedGroups.map((row) => ({
+      id: row.id,
+      name: row.name,
+      reason: row.reason,
+      successors: row.replacedBy.map(linkGroup),
+    })),
+    grouplessSkills: skills
+      .filter((row) => row.type === "Skill" && !groupMembershipIds.has(row.id))
+      .map((row) => ({ id: row.id, key: row.key, name: row.name })),
+    authoredCeiling: source.availability.authoredCeiling,
+    sourceDigest: source.sourceDigest,
     inventory: {
-      competencies: skillModels.length,
-      baseSkills: competencies.filter((entry) => entry.competencyType === "base-skill").length,
-      specializations: competencies.filter((entry) => entry.competencyType === "specialization")
-        .length,
-      spokenLanguages: competencies.filter((entry) => entry.competencyType === "spoken-language")
-        .length,
-      writtenTraditions: competencies.filter(
-        (entry) => entry.competencyType === "written-tradition",
-      ).length,
-      learningGroups: groupModels.length,
-      baseMemberships: groups
-        .flatMap((group) => group.members)
-        .filter((member) => member.kind === "base-skill").length,
-      specializationMemberships: groups
-        .flatMap((group) => group.members)
-        .filter((member) => member.kind === "specialization").length,
-      grouplessBaseSkills: grouplessSkills.length,
-      professionFamilies: professionModels.length,
-      explicitTracks: families.flatMap((family) => family.tracks).length,
-      groupOpportunities: families
-        .flatMap((family) => family.opportunities)
-        .filter((opportunity) => opportunity.kind === "group").length,
-      directOpportunities: families
-        .flatMap((family) => family.opportunities)
-        .filter((opportunity) => opportunity.kind !== "group").length,
-      societyModels: societyModels.length,
-      civilizationExamples: societyModels.flatMap((society) => society.examples).length,
+      learningGroups: groups.length,
+      professionPaths: professions.length,
+      professionFamilies: source.families.length,
     },
   };
 }
