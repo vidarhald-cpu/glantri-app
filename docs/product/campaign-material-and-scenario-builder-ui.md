@@ -136,6 +136,13 @@ and not the GM-only dossier.
 | **general/unidentified description** | while the Person is visible but **unidentified**                                                  |
 | **identified description**           | once the Person is **recognized** ([section 7.4](#74-recognition-is-shared-scenario-party-state)) |
 
+These two texts are also **distinct from Artifact metadata**: an Artifact's own
+title, caption or description describes the Artifact, not the Person, and does
+not stand in for either presentation text. **An existing field may carry one of
+these texts only where its semantics genuinely match**; where they do not, the
+text is its own. Which existing fields, if any, qualify is an implementation
+finding, not a claim this contract makes.
+
 **The GM-only dossier remains private and is neither of these texts.** Its
 structural-exclusion standard in
 [People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier)
@@ -251,6 +258,16 @@ controlling contract records the amendment at
 general/unidentified image and/or description, and may optionally override the
 inherited identified image and/or description.
 
+The authorized shape is a **narrow typed Scenario-to-Person presentation
+overlay** carrying exactly four optional slots — general/unidentified image
+override, general/unidentified description override, identified image override,
+identified description override — and nothing else. Where an appropriate
+Scenario-Person relation already exists the overlay reuses it; otherwise a
+**dedicated referentially sound relation** is acceptable. **No physical
+representation is chosen here**; the shape of the overlay in the domain contract
+is
+[Content authoring §18.12](content-authoring-scenario-preparation-and-artifact-management.md#1812-the-scenario-presentation-overlay-shape).
+
 **Not authorized — none of the following may be built:**
 
 | Not authorized                                                                      |
@@ -261,6 +278,7 @@ inherited identified image and/or description.
 | A **per-player override**                                                           |
 | **Scenario-scoped primary roles**                                                   |
 | **Modification of the Person's canonical Artifact selections**                      |
+| A general **override-resolution framework**                                         |
 
 The Person's canonical selections stay global and untouched, per
 [Content authoring §4.2](content-authoring-scenario-preparation-and-artifact-management.md#42-the-v1-association-role-vocabulary-for-a-person).
@@ -275,17 +293,53 @@ and must not be collapsed into one another or into a single flag.
 
 ### 7.4 Recognition is shared Scenario-party state
 
-**For V1, recognition is shared Scenario-party state, not per-player state.**
+**For V1, recognition is persistent Scenario-Person, party-wide play state, not
+per-player state.** It persists for that Scenario rather than lasting only for a
+session or a view.
 
 - **Scenario preparation establishes the initial unidentified/identified
   state.**
-- **The GM may change that state during play.**
+- **An explicit mid-play GM reveal/recognition action changes it.** It changes in
+  no other way.
 - **Presentation resolves from that shared state**, plus the optional Scenario
   override and the canonical fallback of [section 7.1](#71-the-resolution-rule).
 
 **Per-player recognition is deferred, not rejected.** V1 builds no per-player
 visibility or recognition controls, and nothing built for V1 may make per-player
 recognition a redesign rather than an extension.
+
+#### 7.4.1 Only a change during play is history
+
+**A player-visible recognition or reveal during play produces the appropriate
+meaningful player-safe Activity history.** The party learned who someone is, and
+that learning is part of what happened.
+
+**Preparation edits produce no Activity.** Setting or changing the initial
+recognition state while preparing the Scenario is preparation, not an event, and
+nothing enters Activity — the same boundary [section 8](#8-prepared-gm-messages)
+draws for a prepared but unpublished message.
+
+That asymmetry is the rule: **a change during play is history; a change during
+preparation is not.** What a player-visible reveal renders in Activity is
+projected under
+[PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules);
+this document settles the product decision and authorizes no implementation.
+
+### 7.5 Override lifecycle
+
+**An explicit Scenario override survives later canonical presentation changes.**
+Editing the Person's canonical image or description does not clear, rewrite or
+re-resolve an override a GM set for a Scenario. The override is a deliberate
+Scenario decision and it stands.
+
+**If an override's Artifact becomes unavailable or retired, preparation flags a
+readiness error and the GM must explicitly repair or reset the override. There
+is no silent fallback to the canonical presentation.** The reasoning is the
+point: an unidentified-layer override exists precisely because the canonical
+presentation is the thing being withheld, so quietly substituting the canonical
+representation could change what players learn. The failure is therefore
+surfaced as a concrete readiness issue per
+[section 10](#10-preparation-readiness) and resolved by an explicit GM decision.
 
 ---
 
@@ -325,6 +379,28 @@ rendering and history** — no GM-only preparation context travels with it.
 > already applies to adding an announcement event type. **This document settles
 > the design; it authorizes no implementation.**
 
+### 8.2 Speaker identity in a published announcement
+
+**A published `scenario_announcement` renders its speaker according to the
+party's recognition state at publication time**
+([section 7.4](#74-recognition-is-shared-scenario-party-state)), with the
+Scenario overlay and canonical fallback of
+[section 7.1](#71-the-resolution-rule) applied to that state.
+
+**An unidentified Person must not expose canonical identity through the Activity
+projection.** The canonical Person relation carried by the event may remain
+**GM/history-side only**; it is not part of what the player projection carries.
+
+**The player-safe speaker presentation needed to render the published entry is
+persisted with the event.** Later recognition changes what players see from that
+point onward; it does **not** silently rewrite historical Activity. An
+announcement made by an unidentified stranger remains, in the players' history,
+an announcement made by an unidentified stranger.
+
+This is the same restraint as the event carrying only the safe references it
+needs ([section 8.1](#81-publication-creates-a-scenario_announcement-activity-event)),
+and it is part of why that lane is floor-class.
+
 An unpublished prepared message is not recap-eligible: it is excluded from the
 session-summary source by
 [People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source),
@@ -362,7 +438,9 @@ completeness score**. Reported issues are concrete, for example:
 - missing description;
 - unresolved imported material;
 - missing map;
-- prepared Encounters or messages present.
+- prepared Encounters or messages present;
+- an override whose Artifact is unavailable or retired
+  ([section 7.5](#75-override-lifecycle)).
 
 **Selecting a readiness issue leads directly to the affected resource or
 action.** Representation readiness itself remains **derived**, per

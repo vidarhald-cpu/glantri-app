@@ -976,6 +976,87 @@ stands. The product/UI shape of the override is recorded in
 [Campaign Material and Scenario Builder §7](campaign-material-and-scenario-builder-ui.md#7-scenario-overlays);
 **this section authorizes the mechanism, not its implementation.**
 
+### 18.12 The Scenario presentation overlay shape
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends, narrowly:**
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1).
+**Gates:** Nothing beyond the lane that builds it.
+
+The override authorized in section 18.11 takes the shape of a **narrow typed
+Scenario-to-Person presentation overlay** carrying exactly four optional slots:
+
+- optional general/unidentified **image** override;
+- optional general/unidentified **description** override;
+- optional identified **image** override;
+- optional identified **description** override.
+
+**This is not a generalized context override system.** No **generic scope
+column**, no **entitlement hierarchy** and no **override-resolution framework**
+is authorized. Resolution stays the single rule of section 18.11 — Scenario
+override if present, otherwise canonical Person default — applied independently
+per slot.
+
+**Where an appropriate Scenario-Person relation already exists, the overlay
+reuses it.** Otherwise a **dedicated referentially sound relation** is
+acceptable, in the sense already established in
+[Campaign Storylines §2.1](campaign-storylines.md#21-relationships-must-be-referentially-sound):
+the target type is known, the target exists, and a deleted or moved target
+cannot leave a dangling or mistyped reference.
+
+**No physical representation is chosen here.** No table, column, join or storage
+shape is prescribed; the implementing lane selects one that satisfies the
+requirement above, subject to
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) clause 3,
+which the overlay does not widen.
+
+### 18.13 The two canonical Person presentation texts
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Amends:** nothing. It records domain state the association vocabulary of
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) does not
+cover. **Gates:** Nothing beyond the lane that builds it.
+
+A Person owns **two canonical presentation texts**: a **general/unidentified
+description** and an **identified description**. They are Person domain state.
+
+They are **distinct from Artifact metadata** — an Artifact's own title, caption
+or description describes the Artifact — and **distinct from the GM-only
+dossier**, whose structural exclusion in
+[People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier)
+is unchanged and no part of which may be surfaced as a presentation text.
+
+**Existing fields may be reused only if their semantics genuinely match.**
+Whether any particular existing field qualifies is an implementation finding for
+the building lane, not a claim settled here. The player-safety of each text is
+recorded in
+[Campaign Material and Scenario Builder §3.1](campaign-material-and-scenario-builder-ui.md#31-the-two-canonical-presentation-texts).
+
+### 18.14 Scenario override lifecycle
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends:**
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)
+and [section 15](#15-representation-readiness). **Gates:** Nothing beyond the
+lane that builds it.
+
+**An explicit Scenario override survives later canonical presentation changes.**
+Editing the Person's canonical image or description neither clears nor
+re-resolves an override already set for a Scenario.
+
+**If an override's Artifact becomes unavailable or retired, readiness reports an
+error and explicit GM repair or reset is required. Silent fallback to the
+canonical representation is forbidden.** The reason is player-facing, not
+cosmetic: an unidentified-layer override exists because the canonical
+presentation is the thing being withheld, so quietly resolving to it could
+change what players learn.
+
+This stays a **derived** report in the sense of
+[section 15](#15-representation-readiness) — a concrete, actionable preparation
+issue, not a fourth stored readiness flag — and it surfaces on the Scenario
+Builder readiness list at
+[Campaign Material and Scenario Builder §7.5](campaign-material-and-scenario-builder-ui.md#75-override-lifecycle).
+
 ---
 
 ## 19. Future target: Content Production Interface
