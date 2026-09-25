@@ -1193,6 +1193,96 @@ section authorizes one operation to create both where one implies the other; it
 does not merge them. The product/UI form is
 [Live GM Scenario Play §3.3](live-gm-scenario-play.md#33-add-and-improvisation).
 
+### 18.20 Item presentation layers and Scenario overrides
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends, narrowly:**
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1),
+[section 18.12](#1812-the-scenario-presentation-overlay-shape) and
+[section 18.13](#1813-the-two-canonical-person-presentation-texts), by applying
+the same model to Items. **Gates:** Nothing beyond the lane that builds it.
+
+**An Item has the same two canonical presentation layers as a Person:**
+
+- **general/unidentified** — canonical image and canonical description;
+- **identified/examined** — canonical image and canonical identified
+  description.
+
+An Item may additionally carry **optional additional representations**, as a
+Person may carry additional illustrations.
+
+**Scenario overrides and live identification select or override these layers
+under the already-approved narrow Scenario-presentation rules** of
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)
+and [section 18.12](#1812-the-scenario-presentation-overlay-shape). Resolution
+stays that single rule — Scenario override if present, otherwise the canonical
+Item default — applied independently per slot.
+
+> **No new generalized presentation system is introduced.** This is the Person
+> model applied to Items, not a parallel mechanism: no generic scope column, no
+> entitlement hierarchy, no override-resolution framework and no per-player
+> override is authorized.
+
+**No physical representation is chosen here**, on the same terms as
+[section 18.12](#1812-the-scenario-presentation-overlay-shape). The product/UI
+form is
+[Campaign Material and Scenario Builder §3.3](campaign-material-and-scenario-builder-ui.md#33-the-item-inspector-in-campaign-material)
+and
+[§7.6](campaign-material-and-scenario-builder-ui.md#76-the-item-scenario-overlay).
+
+### 18.21 GM-only notes on Items and Artifacts
+
+**Status:** **SETTLED FOR V1, 2026-09-25**, for semantics and prohibition.
+**Authority:** Product Owner. **Amends:** nothing. It records domain state the
+association vocabulary of
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) does not
+cover. **Gates:** Nothing beyond the lane that builds it.
+
+**Items and Artifacts support lightweight canonical GM-only notes.** The note
+belongs to the canonical object and is permanently GM-only.
+
+- It has **no visibility, share or reveal state**, and no operation exposes it.
+- It is **structurally excluded from all player projections, Activity, the
+  Blackboard and player-facing AI context**, to the same standard as the GM-only
+  dossier in
+  [People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier).
+- **Longer cross-object narrative belongs in Storylines**, not in an expanded
+  note field.
+
+> **This is not a generic Note system and must not be broadened into one.**
+
+**This section settles the semantics and the prohibition. It does not settle
+physical storage**, and no table, column or record is prescribed here. The
+separate question of where the Campaign-scoped GM-only Person dossier lives —
+[OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) — **remains open and is not resolved here.**
+
+### 18.22 No universal presence state
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Amends:** nothing; it records a prohibition and the typed cases it protects.
+**Gates:** Nothing beyond the lanes that build the live surfaces.
+
+> **No universal `present` state exists across resource types.**
+
+| Resource     | What presence means                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Person**   | contextual **Situation/Encounter presence**; **leaving changes presence, hiding changes visibility**                                                                    |
+| **Item**     | physical presence and location **remain owned by the Item lifecycle/service**; **pickup, drop and movement change location/possession, concealment changes visibility** |
+| **Artifact** | live state is **access/share**, not physical presence                                                                                                                   |
+
+**Encounter participation remains distinct from Situation presence.**
+
+> **Live UI may use common verbs where useful, but they dispatch typed domain
+> operations rather than one generic presence/reveal flag.**
+
+This is the same principle as the `Reveal` family of
+[Live GM Scenario Play §8](live-gm-scenario-play.md#8-reveal-is-a-family-of-gm-ux-actions),
+applied a second time: one shared verb in the UI, typed domain operations
+underneath, never a single stored boolean. The live-play form is
+[Live GM Scenario Play §4.3](live-gm-scenario-play.md#43-presence-is-typed-per-resource),
+and the preparation-side independence it protects is
+[Campaign Material and Scenario Builder §7.6](campaign-material-and-scenario-builder-ui.md#76-the-item-scenario-overlay).
+
 ---
 
 ## 19. Future target: Content Production Interface

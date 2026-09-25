@@ -190,6 +190,15 @@ and the Storyline privacy invariant in
 **Longer cross-object narrative belongs in Storylines instead**, not in an
 expanded note field.
 
+> **This is not a generic Note system and must not be broadened into one.**
+
+**The semantics and the prohibition are settled** at
+[Content authoring §18.21](content-authoring-scenario-preparation-and-artifact-management.md#1821-gm-only-notes-on-items-and-artifacts).
+**Physical storage is not settled there and is not settled here**; no field,
+table or record is prescribed. The separate open question of where the
+Campaign-scoped GM-only Person dossier lives —
+[OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) — **remains open and is not resolved by this contract.**
+
 ### 2.6 Unattached and exception material
 
 **Unattached canonical material is valid and may remain unattached
@@ -278,6 +287,17 @@ The Campaign Material **Person Inspector**:
 | -------------------------- | ------------------------------------------------- |
 | **General / unidentified** | canonical image; canonical description            |
 | **Identified / examined**  | canonical image; canonical identified description |
+
+An Item may additionally have **zero or more optional additional
+representations**.
+
+**Scenario overrides and live identification select or override these layers**
+under the same already-approved narrow Scenario-presentation rules that govern a
+Person ([section 7](#7-scenario-overlays),
+[Content authoring §18.20](content-authoring-scenario-preparation-and-artifact-management.md#1820-item-presentation-layers-and-scenario-overrides)).
+
+> **No new generalized presentation system is introduced.** Items reuse the
+> Person model; they do not get a parallel mechanism.
 
 The Campaign Material **Item Inspector** may show:
 
@@ -553,6 +573,11 @@ independently of the others:
 > from what has been disclosed.
 
 > **Do not collapse these into a single `revealed` flag.**
+
+**Current presence and location remain owned by the Item lifecycle/service.**
+Pickup, drop and movement change location or possession; concealment changes
+visibility. **There is no universal `present` state across resource types** —
+[Content authoring §18.22](content-authoring-scenario-preparation-and-artifact-management.md#1822-no-universal-presence-state).
 
 The same independence governs live play, where the corresponding GM actions are
 a family rather than one boolean —

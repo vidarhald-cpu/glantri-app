@@ -230,6 +230,28 @@ Presence and visibility remain the independent axes of
 presence gates usability, visibility gates knowledge, and revealing something
 does not move it.
 
+### 4.3 Presence is typed per resource
+
+> **No universal `present` state exists across resource types.**
+
+| Resource     | What presence means live                                                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Person**   | contextual **Situation/Encounter presence**; **leaving changes presence, hiding changes visibility**                                                                    |
+| **Item**     | physical presence and location **remain owned by the Item lifecycle/service**; **pickup, drop and movement change location/possession, concealment changes visibility** |
+| **Artifact** | live state is **access/share**, not physical presence                                                                                                                   |
+
+**Encounter participation remains distinct from Situation presence.**
+
+> **The live UI may use common verbs where useful, but they dispatch typed
+> domain operations rather than one generic presence/reveal flag.**
+
+**This is the same idea as [section 8](#8-reveal-is-a-family-of-gm-ux-actions),
+applied a second time.** `Reveal` is a family of GM UX actions rather than a
+domain boolean; presence is likewise a family of typed domain operations rather
+than one stored flag. One shared verb in the UI, typed domain operations
+underneath. The domain form is
+[Content authoring §18.22](content-authoring-scenario-preparation-and-artifact-management.md#1822-no-universal-presence-state).
+
 ---
 
 ## 5. Durable player access and the Blackboard relationship
@@ -313,7 +335,8 @@ where full information lives.
 Possible live actions:
 
 - **Reveal identity**;
-- **show / hide**, where relevant;
+- **show / hide** — the **visibility** operation, distinct from presence
+  ([section 4.3](#43-presence-is-typed-per-resource));
 - **add to / remove from the active Encounter**;
 - **publish a prepared speaker message**;
 - **create an ad-hoc speaker message**.
@@ -441,6 +464,11 @@ and it is consistent with — not a widening of — the reserved vocabulary in
 where `reveal` names the GM visibility operation and never the Blackboard
 operations.
 
+**The same principle governs presence**
+([section 4.3](#43-presence-is-typed-per-resource)): a common live verb
+dispatches typed domain operations, and never a single generic
+presence/reveal flag.
+
 ---
 
 ## 9. Historical Activity
@@ -470,9 +498,10 @@ Two rules bear repeating because they govern this surface directly:
   not images.**
 
 **The main GM Activity view remains the shared player-safe narrative history** —
-the same history the players have, seen from the GM's seat. A **richer GM audit
-may be accessible separately**; it is not the primary Activity view and is not
-designed here.
+the same history the players have, seen from the GM's seat.
+
+> **A richer GM audit is deferred. It is not a V1 requirement**, is not designed
+> here and is not authorized here.
 
 What any viewer receives is projected under
 [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules).
