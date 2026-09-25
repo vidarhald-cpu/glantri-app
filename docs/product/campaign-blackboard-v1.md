@@ -91,15 +91,23 @@ The rule governs private inspection ([section 11](#11-private-inspection)), boar
 
 ## 4. Eligible Blackboard material
 
-V1 supports:
+> **Any canonical material that has been made player-accessible and has a player-safe
+> representation may be shared to the Campaign Blackboard, unless its owning domain explicitly
+> prohibits Blackboard sharing.**
+
+That rule governs. The **current examples** are:
 
 1. **Person**
 2. **Item**
-3. **Artifact**
-4. **Map**, through the appropriate player-safe Artifact/map representation
-5. **Standalone player note**
+3. **Artifact**, including the player-safe Artifact/map representation through which a **Map**
+   reaches the board
+4. **Blackboard-native player notes**
 
-Person, Item and Artifact/Map cards **refer to canonical material but contain only information
+**This is not a permanently closed type enumeration.** Further material becomes eligible as soon as
+its owning domain gives it a player-accessible, player-safe representation, and admitting it
+requires no amendment here.
+
+Person, Item and Artifact cards **refer to canonical material but contain only information
 deliberately shared to the Blackboard**.
 
 A standalone player note is **Blackboard-native content**. It does not create a canonical Artifact,
@@ -107,6 +115,55 @@ Story Note or other Campaign object.
 
 That a Person is valid Blackboard material is already recorded at
 [Live GM Scenario Play §5.2](live-gm-scenario-play.md#52-people-are-valid-blackboard-material).
+
+### 4.1 Owning-domain semantics
+
+The Blackboard selects material through the owning domains and introduces no parallel object model
+of its own. Those domains mean:
+
+- **Item** represents a **physical in-world object**.
+- **Artifact** represents **authored or presentational content**.
+- **A physical document, scroll or map is normally an Item**, whose readable text or viewable image
+  is an **associated Artifact**.
+- **An Artifact may exist independently** where there is no meaningful physical Item.
+
+### 4.2 The shipped entry categories are legacy implementation categories
+
+The shipped surface persists Blackboard entries under four categories — `clue_fact`,
+`document_text`, `image_map` and a GM-approved `recap`. **They are legacy implementation categories,
+not canonical product taxonomy**, and this contract does not adopt them.
+
+- **`document_text` and `image_map` normally map to Artifact content or representation** rather than
+  remaining independent canonical Blackboard object types.
+- **No generic canonical `clue_fact` object exists.** A physical clue may be an **Item** (with an
+  associated Artifact where appropriate); authored clue material may be an **Artifact**; player
+  interpretation or remembered information is a **player note**
+  ([section 6.4](#64-unstructured-information), [section 16](#16-player-notes)).
+
+**No controlling product contract requires the four categories.**
+[Shared Campaign Blackboard](campaign-scenario-encounter-workflows.md#shared-campaign-blackboard)
+_describes_ as-built search behavior keyed on them and defers to
+[Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md)
+as the controlling contract for that domain;
+[the strategic future register](2026-09-03-strategic-future-register.md#blackboard-boundary)
+_describes_ them in order to bound them; and
+[Artifact storage](../decisions/architecture/artifact-storage.md#consequences) constrains **which
+Artifacts the Blackboard may select**, not the existence of an entry taxonomy.
+
+The GM-approved `recap` category is **not placed** by this framing. Nothing here creates a canonical
+recap object or a GM-only board layer, which remains a [non-goal](#24-v1-non-goals); where GM-approved
+recap material belongs is **not settled** and stays open.
+
+### 4.3 GM visibility does not confer eligibility
+
+> **A GM-private object is not Blackboard-eligible merely because the GM can see it.**
+
+The GM must **explicitly perform the owning domain's share or reveal action** first; the resulting
+**player-safe** material is then eligible. A combined **`Share and add to Blackboard`** action is
+permitted as UX, provided it performs the owning domain's share step rather than bypassing it.
+
+This is a **privacy boundary**, not a UI preference
+([section 22](#22-privacy-and-disclosure-invariants)).
 
 ---
 
@@ -474,6 +531,9 @@ after its originating Scenario is finished. Presence is typed per resource and t
 > governs.
 
 - **Private knowledge does not leak onto the Blackboard automatically.**
+- **A GM-private object is not Blackboard-eligible merely because the GM can see it.** The owning
+  domain's explicit share or reveal action comes first
+  ([section 4.3](#43-gm-visibility-does-not-confer-eligibility)).
 - **A player can post only information they are authorized to access.**
 - **A player may deliberately choose a less revealing presentation.**
 - **Posting richer information is an explicit sharing action.**
@@ -553,15 +613,15 @@ A conforming implementation must support at least these behaviors.
 
 ## 26. Relationship to existing contracts
 
-| Document                                                                                                                                                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Scenario Play Workspace §8](../architecture/scenario-play-workspace.md#8-blackboard-boundary) and [PO-SPW-2](../architecture/scenario-play-workspace.md#po-spw-2--settled-the-blackboard-is-meta-level-player-collaboration) | **Controlling** for the Blackboard's architectural boundary: discussion state rather than game-world state, who may act, non-mutation, and the durable catalogue/placement separation. This contract is the product/UI design **inside** that boundary and changes none of it.                                                                                                                                                           |
-| [Campaign Management V2 §9](../architecture/campaign-management-v2.md#9-blackboard-boundary) and [#268 §8.4](../architecture/scenario-play-workspace.md#84-not-a-blackboard-redesign)                                         | Record that broader Blackboard product work was deferred **until actual use establishes a need**, and that the boundary statements are not themselves the design pass. This contract is that later product design; it authorizes no implementation.                                                                                                                                                                                      |
-| [Live GM Scenario Play §5](live-gm-scenario-play.md#5-durable-player-access-and-the-blackboard-relationship)                                                                                                                  | **Controlling** for the Situation / player-accessible / Blackboard three-way distinction and for the rule that Blackboard removal revokes no access and alters no history. Its §5.2 permission for a card to carry the identified presentation is exercised **only** through the explicit posting of [section 8](#8-existing-cards-and-incremental-disclosure); [section 9](#9-no-silent-blackboard-updates) admits no automatic update. |
-| [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md)                                                                                          | **Controlling** for the Person and Item presentation layers (§18.12, §18.13, §18.20, §18.25), typed presence (§18.22) and the realtime architecture decision (§18.26). This contract adds no presentation layer and no override mechanism.                                                                                                                                                                                               |
-| [Campaign Material and Scenario Builder](campaign-material-and-scenario-builder-ui.md)                                                                                                                                        | **Controlling** for the Person and Item presentation layers as authored and inspected, and for the two settled Activity event kinds. Campaign Material editing remains a [non-goal](#24-v1-non-goals) of this surface.                                                                                                                                                                                                                   |
-| [Player Play V1 §12.2](../architecture/player-play-v1.md#122-blackboard)                                                                                                                                                      | Places the Blackboard as one of the five Play views and adds no board semantic. Unchanged.                                                                                                                                                                                                                                                                                                                                               |
-| [Shared Campaign Blackboard](campaign-scenario-encounter-workflows.md#shared-campaign-blackboard)                                                                                                                             | Describes the **currently implemented** shared surface — its entry categories, shared search, revision state and pinning. This contract defines the V1 target and does not restate, extend or retire that description; reconciling the two is implementation-lane work under the controlling-sources rule.                                                                                                                               |
-| [Authority and Information Projection](../architecture/information-authority-and-projection.md)                                                                                                                               | Server-side projection authority for [section 22](#22-privacy-and-disclosure-invariants). A viewer never receives GM-private material through the Blackboard.                                                                                                                                                                                                                                                                            |
-| [Maps / Spatial Play](../architecture/maps-spatial-play.md)                                                                                                                                                                   | The Map view's own authority. A Map reaches the Blackboard only through its player-safe Artifact/map representation.                                                                                                                                                                                                                                                                                                                     |
-| [Product & Presentation Principles](product-presentation-principles.md)                                                                                                                                                       | Presentation and privacy principles this surface inherits.                                                                                                                                                                                                                                                                                                                                                                               |
+| Document                                                                                                                                                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Scenario Play Workspace §8](../architecture/scenario-play-workspace.md#8-blackboard-boundary) and [PO-SPW-2](../architecture/scenario-play-workspace.md#po-spw-2--settled-the-blackboard-is-meta-level-player-collaboration) | **Controlling** for the Blackboard's architectural boundary: discussion state rather than game-world state, who may act, non-mutation, and the durable catalogue/placement separation. This contract is the product/UI design **inside** that boundary and changes none of it.                                                                                                                                                                                                                                                                                                                                   |
+| [Campaign Management V2 §9](../architecture/campaign-management-v2.md#9-blackboard-boundary) and [#268 §8.4](../architecture/scenario-play-workspace.md#84-not-a-blackboard-redesign)                                         | Record that broader Blackboard product work was deferred **until actual use establishes a need**, and that the boundary statements are not themselves the design pass. This contract is that later product design; it authorizes no implementation.                                                                                                                                                                                                                                                                                                                                                              |
+| [Live GM Scenario Play §5](live-gm-scenario-play.md#5-durable-player-access-and-the-blackboard-relationship)                                                                                                                  | **Controlling** for the Situation / player-accessible / Blackboard three-way distinction and for the rule that Blackboard removal revokes no access and alters no history. Its §5.2 permission for a card to carry the identified presentation is exercised **only** through the explicit posting of [section 8](#8-existing-cards-and-incremental-disclosure); [section 9](#9-no-silent-blackboard-updates) admits no automatic update.                                                                                                                                                                         |
+| [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md)                                                                                          | **Controlling** for the Person and Item presentation layers (§18.12, §18.13, §18.20, §18.25), typed presence (§18.22) and the realtime architecture decision (§18.26). This contract adds no presentation layer and no override mechanism.                                                                                                                                                                                                                                                                                                                                                                       |
+| [Campaign Material and Scenario Builder](campaign-material-and-scenario-builder-ui.md)                                                                                                                                        | **Controlling** for the Person and Item presentation layers as authored and inspected, and for the two settled Activity event kinds. Campaign Material editing remains a [non-goal](#24-v1-non-goals) of this surface.                                                                                                                                                                                                                                                                                                                                                                                           |
+| [Player Play V1 §12.2](../architecture/player-play-v1.md#122-blackboard)                                                                                                                                                      | Places the Blackboard as one of the five Play views and adds no board semantic. Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| [Shared Campaign Blackboard](campaign-scenario-encounter-workflows.md#shared-campaign-blackboard)                                                                                                                             | **Descriptive**, not controlling: it records the **currently implemented** shared surface — its entry categories, shared search, revision state and pinning — and defers to the content-authoring contract for this domain. Its four entry categories are **legacy implementation categories** and are **not** canonical product taxonomy ([section 4.2](#42-the-shipped-entry-categories-are-legacy-implementation-categories)); that question is settled and is no longer an open product decision. Aligning the implementation with [section 4](#4-eligible-blackboard-material) is implementation-lane work. |
+| [Authority and Information Projection](../architecture/information-authority-and-projection.md)                                                                                                                               | Server-side projection authority for [section 22](#22-privacy-and-disclosure-invariants). A viewer never receives GM-private material through the Blackboard.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| [Maps / Spatial Play](../architecture/maps-spatial-play.md)                                                                                                                                                                   | The Map view's own authority. A Map reaches the Blackboard only through its player-safe Artifact/map representation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| [Product & Presentation Principles](product-presentation-principles.md)                                                                                                                                                       | Presentation and privacy principles this surface inherits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
