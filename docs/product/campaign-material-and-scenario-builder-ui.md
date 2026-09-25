@@ -151,15 +151,34 @@ continues to govern this surface unchanged.
 ### 2.4 Artifact access is Campaign-level and current
 
 Campaign Material manages the Artifact's **current Campaign-level access**.
-V1 is deliberately simple — two states:
+V1 has **exactly two canonical states**:
 
 - **GM only**;
 - **shared with Campaign players**.
 
+There is no third. The controlling record is
+[Content authoring §18.24](content-authoring-scenario-preparation-and-artifact-management.md#1824-artifact-access-states-and-the-legacy-scenario-audience).
+
+**The persisted `scenario` audience carried by the existing draft implementation
+is not one of these states.** It is legacy draft implementation, retired from
+writable V1 semantics by the smallest safe cleanup: **no surface offers it and
+no path newly writes it**, draft data may be reset or rebuilt under the existing
+draft-data policy, and **no generalized migration machinery is built for it**.
+
+> **Any temporary handling of residual legacy state fails closed — it resolves
+> to `GM only`, never to player access.**
+
+**Finding where that legacy audience is persisted is implementation work, not a
+contract gap**, and the implementing Builder reports the paths it finds, removes
+writable V1 use, keeps the fail-closed handling and adds regression coverage —
+[Content authoring §18.24](content-authoring-scenario-preparation-and-artifact-management.md#1824-artifact-access-states-and-the-legacy-scenario-audience).
+**That readiness gap is A3 (Artifact access) and is unrelated to Combat A3 (UI
+consolidation).**
+
 **This is distinct from Scenario preparation and from reveal.**
 
-- **Associating an Artifact with a Scenario or Encounter does not grant player
-  access.** Association is assembly, per
+- **Scenario association never grants access.** Associating an Artifact with a
+  Scenario or Encounter is assembly, per
   [Content authoring §8.2](content-authoring-scenario-preparation-and-artifact-management.md#82-scenario-resource-assembly).
 - **Sharing from Campaign Material means share now**, not "prepare a future
   reveal". Prepared intent lives in Scenario Builder
@@ -227,12 +246,13 @@ other homogeneous association or material operations.
 
 ## 3. Person and Item presentation in Campaign Material
 
-A persistent Person has **two canonical presentation layers**:
+A persistent Person has **two canonical presentation layers**, and **each layer
+carries a label, an image and a description**:
 
-| Layer                                 | Carries                                              |
-| ------------------------------------- | ---------------------------------------------------- |
-| **General appearance / unidentified** | canonical image; canonical description               |
-| **Identified / recognized**           | canonical portrait; canonical identified description |
+| Layer                                 | Label                | Image              | Description                      |
+| ------------------------------------- | -------------------- | ------------------ | -------------------------------- |
+| **General appearance / unidentified** | e.g. `The officer`   | canonical image    | canonical description            |
+| **Identified / recognized**           | e.g. `Captain Varro` | canonical portrait | canonical identified description |
 
 A Person may additionally have **zero or more additional illustrations**.
 
@@ -242,17 +262,37 @@ information. The Artifact-role half of this model is the V1 vocabulary in
 — selected primary portrait, selected general appearance, additional
 illustration — and selection remains independent of visibility.
 
-### 3.1 The two canonical presentation texts
+### 3.1 The canonical presentation label and texts
 
-The **general/unidentified description** and the **identified description** are
-**two canonical texts on the Person presentation model**. They are not Artifact
-content, not a Story Note ([Campaign Storylines §2](campaign-storylines.md#2-model)),
-and not the GM-only dossier.
+Each layer's **label** and **description** are **canonical texts on the Person
+presentation model**. They are not Artifact content, not a Story Note
+([Campaign Storylines §2](campaign-storylines.md#2-model)), and not the GM-only
+dossier.
 
 | Text                                 | Player-safe                                                                                       |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| **general/unidentified label**       | while the Person is visible but **unidentified**                                                  |
 | **general/unidentified description** | while the Person is visible but **unidentified**                                                  |
+| **identified label**                 | once the Person is **recognized** ([section 7.4](#74-recognition-is-shared-scenario-party-state)) |
 | **identified description**           | once the Person is **recognized** ([section 7.4](#74-recognition-is-shared-scenario-party-state)) |
+
+**The label is presentation metadata, not another identity level.** It is the
+short player-facing name a layer presents; it introduces no partial-identity
+state and no extra resolution step.
+
+**The resolved player-safe label is what player-facing surfaces render as the
+Person's name** — the `Players see:` row
+([Live GM Scenario Play §4.1](live-gm-scenario-play.md#41-gm-rows)), the
+published speaker label ([section 8.2](#82-speaker-identity-in-a-published-announcement)),
+the speaker on a `scenario_announcement`, and the before/after snapshots in
+`person_identity_revealed` ([section 7.4.1](#741-only-a-change-during-play-is-history)).
+
+**Labels are never sourced from the GM dossier**, and they have safe fallbacks:
+
+| Layer                    | Fallback when no label is set           |
+| ------------------------ | --------------------------------------- |
+| **general/unidentified** | the neutral **`Unidentified person`**   |
+| **identified**           | the canonical player-facing Person name |
 
 These two texts are also **distinct from Artifact metadata**: an Artifact's own
 title, caption or description describes the Artifact, not the Person, and does
@@ -277,23 +317,33 @@ The Campaign Material **Person Inspector**:
 
 > **Which layer applies is decided by shared Scenario-party recognition state**
 > ([section 7.4](#74-recognition-is-shared-scenario-party-state)), not on the
-> Person. The general modelling of identity revelation —
+> Person. How identity revelation is modelled is **settled for V1** —
 > [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
-> — remains open, and per-player recognition remains deferred.
+> — as party-wide Scenario-Person state; per-player recognition remains
+> deferred.
 
 > **The Person Inspector must not become the Character editor.**
 
 ### 3.3 The Item Inspector in Campaign Material
 
-**An Item uses the same two canonical presentation layers as a Person:**
+**An Item uses the same two canonical presentation layers as a Person, each
+carrying a label, an image and a description:**
 
-| Layer                      | Carries                                           |
-| -------------------------- | ------------------------------------------------- |
-| **General / unidentified** | canonical image; canonical description            |
-| **Identified / examined**  | canonical image; canonical identified description |
+| Layer                      | Label         | Image           | Description                      |
+| -------------------------- | ------------- | --------------- | -------------------------------- |
+| **General / unidentified** | player-facing | canonical image | canonical description            |
+| **Identified / examined**  | player-facing | canonical image | canonical identified description |
 
 An Item may additionally have **zero or more optional additional
 representations**.
+
+**The representation Artifacts are selected by typed association roles** — a
+singleton general/unidentified representation, a singleton identified/examined
+representation, and zero or more additional illustrations — reusing the Person
+role conventions and naming at
+[Content authoring §4.3](content-authoring-scenario-preparation-and-artifact-management.md#43-the-v1-association-role-vocabulary-for-an-item).
+**The Item's label and descriptions are Item domain state and are not generic
+associations.**
 
 **Scenario overrides and live identification select or override these layers**
 under the same already-approved narrow Scenario-presentation rules that govern a
@@ -408,24 +458,30 @@ lightweight under
 
 - Scenario Builder **normally inherits canonical presentation** from
   [section 3](#3-person-and-item-presentation-in-campaign-material).
-- It may **optionally override the image and/or the description, for either
-  presentation layer, for this Scenario**.
+- It may **optionally override the label, the image and/or the description, for
+  either presentation layer, for this Scenario**. The three are independent.
 - **Removing an override returns to the Campaign default.** Defaults are
   **never copied into Scenario state**; absence of an override is inheritance,
   not a stored copy.
 
-Worked example: the canonical unidentified presentation is a generic officer;
-the Scenario override is a customs-officer disguise; the canonical identified
-presentation is the Captain Varro portrait.
+Worked example: the canonical unidentified presentation is a generic officer
+labelled `The officer`; the Scenario override is a customs-officer disguise
+labelled `The customs inspector`; the canonical identified presentation is
+`Captain Varro` and the Captain Varro portrait.
 
 ### 7.1 The resolution rule
 
 > **Scenario override if present → otherwise canonical Person default.**
 
-That is the entire rule. It is applied independently to each of the four
-presentation slots — unidentified image, unidentified description, identified
-image, identified description — and there is **no third layer and no further
-ordering**.
+That is the entire rule. It is applied independently to each of the **six**
+presentation slots — unidentified label, unidentified image, unidentified
+description, identified label, identified image, identified description — and
+there is **no third layer and no further ordering**.
+
+**A resolved label that is still empty takes the safe fallback of
+[section 3.1](#31-the-canonical-presentation-label-and-texts)**: `Unidentified
+person` at the unidentified layer, the canonical player-facing Person name at
+the identified layer.
 
 ### 7.2 What the override is and is not
 
@@ -434,13 +490,14 @@ controlling contract records the amendment at
 [Content authoring §18.11](content-authoring-scenario-preparation-and-artifact-management.md#1811-narrow-scenario-presentation-override-authorized-for-v1).
 
 **Authorized:** a Scenario may optionally override the inherited
-general/unidentified image and/or description, and may optionally override the
-inherited identified image and/or description.
+general/unidentified label, image and/or description, and may optionally
+override the inherited identified label, image and/or description.
 
 The authorized shape is a **narrow typed Scenario-to-Person presentation
-overlay** carrying exactly four optional slots — general/unidentified image
-override, general/unidentified description override, identified image override,
-identified description override — and nothing else. Where an appropriate
+overlay** carrying **exactly six optional slots** — general/unidentified label,
+image and description overrides, and identified label, image and description
+overrides — and nothing else. **Six is the closed shape**, settled at
+[Content authoring §18.12](content-authoring-scenario-preparation-and-artifact-management.md#1812-the-scenario-presentation-overlay-shape). Where an appropriate
 Scenario-Person relation already exists the overlay reuses it; otherwise a
 **dedicated referentially sound relation** is acceptable. **No physical
 representation is chosen here**; the shape of the overlay in the domain contract
@@ -474,12 +531,17 @@ and must not be collapsed into one another or into a single flag.
 
 **For V1, recognition is persistent Scenario-Person, party-wide play state, not
 per-player state.** It persists for that Scenario rather than lasting only for a
-session or a view.
+session or a view. This is the settled answer to
+[OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled),
+recorded at
+[Content authoring §18.23](content-authoring-scenario-preparation-and-artifact-management.md#1823-open-ppl-1-settled-for-v1--recognition-is-party-wide-scenario-person-state);
+**a lane implementing recognition no longer stops and returns it to the Product
+Owner.**
 
 - **Scenario preparation establishes the initial unidentified/identified
   state.**
 - **An explicit mid-play GM reveal/recognition action changes it.** It changes in
-  no other way.
+  no other way, and **preparation edits emit no recognition events**.
 - **Presentation resolves from that shared state**, plus the optional Scenario
   override and the canonical fallback of [section 7.1](#71-the-resolution-rule).
 
@@ -500,8 +562,9 @@ and the party recognizing a Person are different things that happened, and they
 are recorded as different event kinds. `person_identity_revealed` records a
 mid-play **shared-party transition from unidentified to identified**.
 
-**Its payload snapshots the player-safe text label immediately before and
-immediately after recognition**, together with the player-safe references needed
+**Its payload snapshots the resolved player-safe label
+([section 3.1](#31-the-canonical-presentation-label-and-texts)) immediately
+before and immediately after recognition**, together with the player-safe references needed
 to render the entry and its history. No GM-only preparation context travels with
 it. **V1 snapshots no speaker or Person images and no Artifact revisions for this
 event** — the same text-identity-only rule already recorded for prepared-message
@@ -659,8 +722,9 @@ Scenario overlay and canonical fallback of
 projection.** The canonical Person relation carried by the event may remain
 **GM/history-side only**; it is not part of what the player projection carries.
 
-**In V1, the player-safe speaker label/text identity used at publication is
-snapshotted and persisted with the event.** Later recognition changes what
+**In V1, the resolved player-safe label used at publication
+([section 3.1](#31-the-canonical-presentation-label-and-texts)) is snapshotted
+and persisted with the event as the speaker's text identity.** Later recognition changes what
 players see from that point onward; it does **not** silently rewrite historical
 Activity. An announcement made by an unidentified stranger remains, in the
 players' history, an announcement made by an unidentified stranger — which is

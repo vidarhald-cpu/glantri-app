@@ -238,6 +238,42 @@ on the association, intrinsic representation nature remains on the Artifact, and
 representation readiness remains **derived** from both
 ([section 15](#15-representation-readiness)).
 
+### 4.3 The V1 association-role vocabulary for an Item
+
+**PRODUCT OWNER RULING, 2026-09-25.** Full text and boundary are in
+[section 18.25](#1825-item-representation-roles). This section records what the
+association layer of [section 4.1](#41-the-canonical-artifact-association-layer)
+must support **for an Item in V1**, and nothing more. It is the same vocabulary
+shape as [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person),
+reusing the same roles, conventions and naming rather than a parallel one.
+
+| V1 role                                          | Multiplicity per Item | Selection scope        |
+| ------------------------------------------------ | --------------------- | ---------------------- |
+| **selected general/unidentified representation** | **at most one**       | **global to the Item** |
+| **selected identified/examined representation**  | **at most one**       | **global to the Item** |
+| **additional illustration**                      | **zero or more**      | **global to the Item** |
+
+Binding on the implementing lane, on the same terms as
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person):
+
+1. The two selected roles are **independent singletons**. An Item may hold both,
+   either, or neither. They are not two values of one "primary" slot.
+2. Additional illustrations are an **open set** with no selection semantics.
+3. **Selections are global to the Item.** The single exception is the narrow
+   Scenario **presentation** overlay of
+   [section 18.20](#1820-item-presentation-layers-and-scenario-overrides), which
+   creates no Scenario-scoped roles and alters no global selection.
+4. **Artifact visibility is independent of selection**, per
+   [section 3](#3-one-artifact-system).
+5. **"At most one selected" constrains selection, not association
+   multiplicity**, and a one-to-one pointer field remains unacceptable under
+   [PO-SPW-1](../architecture/scenario-play-workspace.md#po-spw-1--settled-item-to-artifact-representation-requires-association-semantics).
+
+**These roles select representation Artifacts.** The Item's **textual**
+presentation — its label and its two presentation descriptions
+([section 18.20](#1820-item-presentation-layers-and-scenario-overrides)) — is
+Item domain state and **must not be modelled as a generic association**.
+
 ---
 
 ## 5. Reuse first
@@ -978,18 +1014,31 @@ stands. The product/UI shape of the override is recorded in
 
 ### 18.12 The Scenario presentation overlay shape
 
-**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Status:** **SETTLED FOR V1, 2026-09-25**; the slot shape **re-settled
+2026-09-25** to carry the presentation label. **Authority:** Product Owner.
 **Extends, narrowly:**
 [section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1).
-**Gates:** Nothing beyond the lane that builds it.
+**Amends:** its own earlier four-slot closure, which is superseded by the six
+slots below. **Gates:** Nothing beyond the lane that builds it.
 
 The override authorized in section 18.11 takes the shape of a **narrow typed
-Scenario-to-Person presentation overlay** carrying exactly four optional slots:
+Scenario-to-Person presentation overlay** carrying **exactly six optional
+slots** — the label, image and description of each of the two layers of
+[section 18.13](#1813-the-canonical-person-presentation-layers):
 
+- optional general/unidentified **label** override;
 - optional general/unidentified **image** override;
 - optional general/unidentified **description** override;
+- optional identified **label** override;
 - optional identified **image** override;
 - optional identified **description** override.
+
+**A Scenario may override the label, the image and/or the description, for
+either layer, independently.** Overriding one slot neither implies nor requires
+overriding another.
+
+**Six is the closed shape.** No seventh slot, and no further layer, is
+authorized.
 
 **This is not a generalized context override system.** No **generic scope
 column**, no **entitlement hierarchy** and no **override-resolution framework**
@@ -1010,15 +1059,47 @@ requirement above, subject to
 [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) clause 3,
 which the overlay does not widen.
 
-### 18.13 The two canonical Person presentation texts
+### 18.13 The canonical Person presentation layers
 
-**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
-**Amends:** nothing. It records domain state the association vocabulary of
+**Status:** **SETTLED FOR V1, 2026-09-25**; **re-settled 2026-09-25** to carry
+the presentation label. **Authority:** Product Owner. **Amends:** its own
+earlier two-text shape, which is superseded by the three fields per layer below.
+It records domain state the association vocabulary of
 [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) does not
 cover. **Gates:** Nothing beyond the lane that builds it.
 
-A Person owns **two canonical presentation texts**: a **general/unidentified
-description** and an **identified description**. They are Person domain state.
+**Each of a Person's two presentation layers — general/unidentified and
+identified/recognized — consists of a `label`, an `image` and a
+`description`.** The label and the description are Person domain state; the
+image is the selected representation Artifact of
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person).
+
+**The label is presentation metadata, not another identity level.** It is the
+short player-facing name the layer presents — `The officer` at the
+general/unidentified layer, `Captain Varro` at the identified layer. It adds no
+third layer, no partial-identity state and no resolution step beyond the single
+rule of
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1).
+
+**The resolved player-safe label is what player-facing surfaces render as the
+Person's name.** It drives the GM row's `Players see:` line
+([Live GM Scenario Play §4.1](live-gm-scenario-play.md#41-gm-rows)), the
+published speaker label of
+[section 18.16](#1816-prepared-message-speaker-history-is-text-identity-in-v1),
+the speaker on a `scenario_announcement`, and the before/after text snapshots
+carried by `person_identity_revealed`
+([section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind)).
+
+**Labels are never sourced from the GM dossier.** Where no explicit label
+exists, resolution falls back safely:
+
+| Layer                    | Fallback when no label is set           |
+| ------------------------ | --------------------------------------- |
+| **general/unidentified** | the neutral **`Unidentified person`**   |
+| **identified**           | the canonical player-facing Person name |
+
+The two descriptions are a **general/unidentified description** and an
+**identified description**.
 
 They are **distinct from Artifact metadata** — an Artifact's own title, caption
 or description describes the Artifact — and **distinct from the GM-only
@@ -1028,9 +1109,9 @@ is unchanged and no part of which may be surfaced as a presentation text.
 
 **Existing fields may be reused only if their semantics genuinely match.**
 Whether any particular existing field qualifies is an implementation finding for
-the building lane, not a claim settled here. The player-safety of each text is
-recorded in
-[Campaign Material and Scenario Builder §3.1](campaign-material-and-scenario-builder-ui.md#31-the-two-canonical-presentation-texts).
+the building lane, not a claim settled here. The player-safety of each label and
+text is recorded in
+[Campaign Material and Scenario Builder §3.1](campaign-material-and-scenario-builder-ui.md#31-the-canonical-presentation-label-and-texts).
 
 ### 18.14 Scenario override lifecycle
 
@@ -1199,7 +1280,7 @@ does not merge them. The product/UI form is
 **Extends, narrowly:**
 [section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1),
 [section 18.12](#1812-the-scenario-presentation-overlay-shape) and
-[section 18.13](#1813-the-two-canonical-person-presentation-texts), by applying
+[section 18.13](#1813-the-canonical-person-presentation-layers), by applying
 the same model to Items. **Gates:** Nothing beyond the lane that builds it.
 
 **An Item has the same two canonical presentation layers as a Person:**
@@ -1291,6 +1372,146 @@ underneath, never a single stored boolean. The live-play form is
 [Live GM Scenario Play §4.3](live-gm-scenario-play.md#43-presence-is-typed-per-resource),
 and the preparation-side independence it protects is
 [Campaign Material and Scenario Builder §7.6](campaign-material-and-scenario-builder-ui.md#76-the-item-scenario-overlay).
+
+### 18.23 OPEN-PPL-1 settled for V1 — recognition is party-wide Scenario-Person state
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Settles:**
+[OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled),
+whose entry carries the same settlement. **Gates:** **Nothing.** It no longer
+gates lane B.
+
+**Recognition is party-wide Scenario-Person state.** It is persistent state of
+the Scenario-Person pair, held once for the whole party, not per player and not
+per session or view.
+
+- **Scenario preparation establishes the initial unidentified/identified
+  state.**
+- **An explicit live GM reveal changes it**, and nothing else does.
+- **Preparation edits emit no recognition events.** Only a change during play is
+  history, per
+  [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+- **Per-player recognition remains deferred, not rejected.** V1 builds no
+  per-player recognition or visibility control, and nothing built for V1 may
+  make per-player recognition a redesign rather than an extension.
+
+**None of the four options originally recorded under OPEN-PPL-1 was
+Scenario-scoped party state.** This settles the decision by a fifth answer
+rather than by selecting one of them, and the deferred options are neither
+ranked nor rejected.
+
+**A lane implementing recognition no longer stops and returns to the Product
+Owner.** The product/UI form is
+[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state);
+the persisted event kind remains floor-class under
+[section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+
+### 18.24 Artifact access states and the legacy `scenario` audience
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends:** [section 3](#3-one-artifact-system) and
+[section 8.2](#82-scenario-resource-assembly). **Gates:** the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for the lane that
+changes persisted audience semantics, which is security-relevant.
+
+**V1 has exactly two canonical Artifact access states:**
+
+- **`GM only`**;
+- **`Shared with Campaign players`**.
+
+**Scenario association never grants access.** Associating an Artifact with a
+Scenario or an Encounter is assembly, not visibility, consistent with
+[Artifact Management §9.2](../architecture/artifact-management-package-import.md#92-references-do-not-grant-view-rights).
+
+**The existing persisted `scenario` audience is legacy draft implementation, not
+a V1 product state.** It is **retired from writable V1 semantics** by the
+**smallest safe cleanup**: no code path may newly write it, and the product
+surfaces offer only the two canonical states.
+
+- **Draft data may be reset or rebuilt** under the existing draft-data policy.
+- **No generalized migration machinery is authorized** for this — no backfill
+  framework, no audience-mapping layer, no versioned audience model.
+
+> **Safety rule: any temporary handling of residual legacy `scenario` state must
+> fail closed.** Where the state is encountered and cannot be resolved to one of
+> the two canonical states, it resolves to **`GM only`**. It must never be
+> treated as, or widened into, player access.
+
+The product/UI form is
+[Campaign Material and Scenario Builder §2.4](campaign-material-and-scenario-builder-ui.md#24-artifact-access-is-campaign-level-and-current)
+and the live form is
+[Live GM Scenario Play §6.3](live-gm-scenario-play.md#63-artifact).
+
+**Locating the legacy audience's persisted read and write paths is authorized
+implementation-finding work.** This contract deliberately does not name file
+locations, and a lane must not treat their absence as a contract omission or
+stop for a ruling on it.
+
+**The implementing Builder:**
+
+- **locates and reports** every persisted read and write path for the legacy
+  `scenario` audience;
+- **eliminates or neutralizes writable V1 use** of it;
+- **preserves fail-closed handling** for any surviving legacy state, per the
+  safety rule above;
+- **adds regression coverage** for both the removal and the fail-closed
+  resolution.
+
+> **Naming: this is readiness-gap A3 (Artifact access).** It is **unrelated to
+> Combat A3 (UI consolidation)**, recorded at
+> [Combat Panel §12.15](combat-panel-contract.md#1215-a3--ui-consolidation).
+> The two share a label only. A reader encountering "A3" resolves it from the
+> document it appears in, and the two must never be conflated.
+
+### 18.25 Item representation roles
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends:** [section 4.2](#42-the-v1-association-role-vocabulary-for-a-person)
+and [section 18.20](#1820-item-presentation-layers-and-scenario-overrides), by
+giving the Item layers a typed association-role vocabulary. **Gates:** Nothing
+beyond the lane that builds it.
+
+**The V1 association-role vocabulary for an Item is recorded at
+[section 4.3](#43-the-v1-association-role-vocabulary-for-an-item):** a singleton
+**general/unidentified representation**, a singleton
+**identified/examined representation**, and **zero or more additional
+illustrations**.
+
+**It reuses the existing association-role conventions and naming** of
+[section 4.1](#41-the-canonical-artifact-association-layer) and
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person). **No
+parallel Item-only association mechanism is authorized.**
+
+**These roles select representation Artifacts.** **Item textual presentation
+fields must not become generic associations** — the Item's label and its two
+presentation descriptions are Item domain state, on the same footing as the
+Person presentation fields of
+[section 18.13](#1813-the-canonical-person-presentation-layers).
+
+### 18.26 Realtime synchronization is an explicit architecture decision
+
+**Status:** **RECORDED AS REQUIRED, 2026-09-25.** **Authority:** Product Owner.
+**Amends:** nothing. **Gates:** the **first strongly synchronized multiplayer
+live-play slice**, and nothing earlier.
+
+**An explicit realtime architecture decision is required before the first
+strongly synchronized multiplayer live-play slice is built.** Strong
+synchronization means players and GM observing the same live state without a
+manual refresh, at an interaction latency the surface promises.
+
+**No transport is chosen here.** WebSocket, SSE, long polling and any other
+mechanism are equally unselected; selecting one is the decision this section
+requires, not a Builder choice.
+
+**Current state, recorded as fact:** the repository carries **no realtime
+transport**, and liveness is **client polling**.
+
+**This gates nothing already authorized.** It does **not** block Campaign
+Material authoring, the Scenario GM Plan
+([section 8.1](#81-the-scenario-gm-plan)) or Combat A3 preparation. Those
+surfaces are GM-side preparation and operate correctly on the existing model.
+The live-play form is
+[Live GM Scenario Play §10.1](live-gm-scenario-play.md#101-strongly-synchronized-multiplayer-liveness).
 
 ---
 
