@@ -28,6 +28,28 @@ Material (the Campaign-level content factory and library) and Scenario Builder
   [People/Artifact/GM authoring model](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen).
 - The GM-only Storylines surface is governed by its own contract,
   [Campaign Storylines](campaign-storylines.md).
+- It does **not** govern live play. The GM's live operating surface is
+  [Live GM Scenario Play](live-gm-scenario-play.md).
+
+### 1.3 The governing UX principle
+
+One principle governs Campaign Material, Scenario Builder and
+[Live GM Scenario Play](live-gm-scenario-play.md) together:
+
+> **Author once, operate in context.**
+
+| Surface                                       | Is                                             |
+| --------------------------------------------- | ---------------------------------------------- |
+| **Campaign Material**                         | the canonical material factory and library     |
+| **Scenario Builder**                          | the Scenario-specific preparation/staging desk |
+| **[Scenario Play](live-gm-scenario-play.md)** | the live operating surface                     |
+
+Two consequences are binding on all three:
+
+> **The GM must not need to navigate back into design or management screens to
+> perform ordinary actions during play.**
+
+> **Preparation helps play but never constrains improvisation.**
 
 ---
 
@@ -43,7 +65,14 @@ It is where the GM:
 - manages Artifact metadata, provenance, associations and representations;
 - finds reusable Campaign resources;
 - sees usage and history across Scenarios;
-- handles unattached, fallback, missing or unresolved material;
+- manages the **canonical Person and Item representations**
+  ([section 3](#3-person-and-item-presentation-in-campaign-material));
+- manages the Artifact's **current Campaign-level access**
+  ([section 2.4](#24-artifact-access-is-campaign-level-and-current));
+- keeps lightweight **GM-only notes** on Items and Artifacts
+  ([section 2.5](#25-gm-only-notes-on-items-and-artifacts));
+- handles unattached, fallback, missing or unresolved material
+  ([section 2.6](#26-unattached-and-exception-material));
 - **reuses existing canonical content rather than recreating it**, per
   [Content authoring §5](content-authoring-scenario-preparation-and-artifact-management.md#5-reuse-first).
 
@@ -66,6 +95,17 @@ The surface itself extends
 - **No overloaded permanent filter bar.** Search plus the important context/job
   views may stay visible; less common filters are collapsed, and **active
   filters remain visible as chips or an equivalent**.
+
+Suggested always-visible controls: **Search**; **View**; **Scenario**;
+**Filters**; **removable active-filter chips**.
+
+The views are **job-oriented**, for example: `All material`;
+`Scenario material`; `Preparation gaps`; `Needs attention`; `Unattached`;
+`Recent imports`; `Player-shared material`.
+
+**Category filtering such as People / Items / Artifacts / Maps is acceptable as
+a compact filter, not as separate applications.** A category is never a
+navigation destination with its own screen.
 
 The Inspector is the existing one, specialized — never a second Inspector — per
 [Content authoring §7](content-authoring-scenario-preparation-and-artifact-management.md#7-central-campaign-material-surface).
@@ -91,23 +131,101 @@ appropriate:
 
 These negative boundaries carry the same weight as the scope above.
 
-| Campaign Material must not become                             | Canonical home instead               |
-| ------------------------------------------------------------- | ------------------------------------ |
-| A duplicate **Character** editor                              | The canonical Character screens      |
-| A duplicate **Item**, **inventory** or **progression** editor | The canonical Item/Character screens |
-| A duplicate **Combat** editor                                 | The Combat surfaces                  |
-| An **image editor** or **drawing tool**                       | Out of scope                         |
-| A **map editor**                                              | Out of scope                         |
-| A **rich page-layout system**                                 | Out of scope                         |
+| Campaign Material must not become                             | Canonical home instead                                              |
+| ------------------------------------------------------------- | ------------------------------------------------------------------- |
+| A duplicate **Character** editor                              | The canonical Character screens                                     |
+| A duplicate **Item**, **inventory** or **progression** editor | The canonical Item/Character screens                                |
+| A duplicate **Combat** editor                                 | The Combat surfaces                                                 |
+| An **image editor** or **drawing tool**                       | Out of scope                                                        |
+| A **map editor**                                              | Out of scope                                                        |
+| A **rich page-layout system**                                 | Out of scope                                                        |
+| A **Scenario reveal-planning** surface                        | [Scenario Builder §7.7](#77-reveal-planning-prepares-play-executes) |
+| An **Encounter operation** surface                            | [Live GM Scenario Play](live-gm-scenario-play.md)                   |
+| A **Storyline editor**                                        | [Campaign Storylines](campaign-storylines.md)                       |
 
 The standing prohibition **"do not build a general-purpose knowledge-management
 system"**
 ([People/Artifact model §10](people-artifact-and-gm-authoring-model.md#10-gm-campaign-material))
 continues to govern this surface unchanged.
 
+### 2.4 Artifact access is Campaign-level and current
+
+Campaign Material manages the Artifact's **current Campaign-level access**.
+V1 is deliberately simple — two states:
+
+- **GM only**;
+- **shared with Campaign players**.
+
+**This is distinct from Scenario preparation and from reveal.**
+
+- **Associating an Artifact with a Scenario or Encounter does not grant player
+  access.** Association is assembly, per
+  [Content authoring §8.2](content-authoring-scenario-preparation-and-artifact-management.md#82-scenario-resource-assembly).
+- **Sharing from Campaign Material means share now**, not "prepare a future
+  reveal". Prepared intent lives in Scenario Builder
+  ([section 7.7](#77-reveal-planning-prepares-play-executes)).
+- **Removing current access does not rewrite Activity or history and does not
+  make players "forget"** —
+  [Live GM Scenario Play §5.1](live-gm-scenario-play.md#51-glantri-does-not-model-forgetting-in-v1).
+- **Person recognition is not an Artifact-access state.** Recognition is shared
+  Scenario-party state ([section 7.4](#74-recognition-is-shared-scenario-party-state)).
+
+### 2.5 GM-only notes on Items and Artifacts
+
+Items and Artifacts may carry a **lightweight GM-only note**. The note:
+
+- **belongs to the canonical object**;
+- is **permanently GM-only**;
+- has **no visibility, share or reveal action** — there is no control to expose
+  it, in preparation or in play;
+- is **excluded structurally** from player projections, player-facing search,
+  Activity, the Blackboard and player-facing AI context.
+
+This is the same structural-exclusion standard the GM-only dossier already
+carries in
+[People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier)
+and the Storyline privacy invariant in
+[Campaign Storylines §4.2](campaign-storylines.md#42-structural-exclusion).
+
+**Longer cross-object narrative belongs in Storylines instead**, not in an
+expanded note field.
+
+> **This is not a generic Note system and must not be broadened into one.**
+
+**The semantics, the prohibition and the storage are settled** at
+[Content authoring §18.21](content-authoring-scenario-preparation-and-artifact-management.md#1821-gm-only-notes-on-items-and-artifacts).
+An **Artifact** GM note is surfaced by the existing Artifact `gmNotes`
+capability (`packages/domain/src/campaign/artifact.ts:75`); an **Item** GM note
+is surfaced by a canonical GM-only field owned by the Item domain/service. **No
+generic Note entity or table backs this surface.**
+
+That closes storage **for Items and Artifacts only**. The separate open question
+of where the Campaign-scoped GM-only Person dossier lives —
+[OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) — **remains open and is not resolved by this contract.**
+
+### 2.6 Unattached and exception material
+
+**Unattached canonical material is valid and may remain unattached
+intentionally.** It is not an error and must not be presented as one.
+
+**Staged or import exceptions are not the same thing as canonical unattached
+material.** A `Needs attention` view may expose both kinds of GM work, but it
+must **clearly distinguish staged state from canonical state**. The staged half
+belongs to the intake pipeline of
+[Content authoring §12](content-authoring-scenario-preparation-and-artifact-management.md#12-bulk-intake-and-review).
+
+### 2.7 Bulk actions
+
+Support **limited, meaningful multi-select operations** over homogeneous
+selections, for example: use the selected resources in a Scenario; apply tags;
+other homogeneous association or material operations.
+
+> **Do not create a heterogeneous generic bulk editor, and do not create a broad
+> bulk-delete workflow.**
+
 ---
 
-## 3. Person presentation in Campaign Material
+## 3. Person and Item presentation in Campaign Material
 
 A persistent Person has **two canonical presentation layers**:
 
@@ -163,6 +281,40 @@ The Campaign Material **Person Inspector**:
 > [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
 > — remains open, and per-player recognition remains deferred.
 
+> **The Person Inspector must not become the Character editor.**
+
+### 3.3 The Item Inspector in Campaign Material
+
+**An Item uses the same two canonical presentation layers as a Person:**
+
+| Layer                      | Carries                                           |
+| -------------------------- | ------------------------------------------------- |
+| **General / unidentified** | canonical image; canonical description            |
+| **Identified / examined**  | canonical image; canonical identified description |
+
+An Item may additionally have **zero or more optional additional
+representations**.
+
+**Scenario overrides and live identification select or override these layers**
+under the same already-approved narrow Scenario-presentation rules that govern a
+Person ([section 7](#7-scenario-overlays),
+[Content authoring §18.20](content-authoring-scenario-preparation-and-artifact-management.md#1820-item-presentation-layers-and-scenario-overrides)).
+
+> **No new generalized presentation system is introduced.** Items reuse the
+> Person model; they do not get a parallel mechanism.
+
+The Campaign Material **Item Inspector** may show:
+
+- the Item's representations and their associations;
+- usage and history across Scenarios;
+- representation readiness ([section 10](#10-preparation-readiness));
+- the private GM note ([section 2.5](#25-gm-only-notes-on-items-and-artifacts)).
+
+> **It must not edit possession, inventory location, equip state, quantities,
+> combat mechanics or current Encounter state.** Those remain in the canonical
+> Item/Character screens and in play, per
+> [section 2.3](#23-scope-boundaries--what-campaign-material-must-not-become).
+
 ---
 
 ## 4. Native text Artifacts
@@ -201,6 +353,20 @@ It owns:
 remain in their canonical editors and in Campaign Material as described in
 [section 2.2](#22-domain-objects-versus-artifacts).
 
+### 5.1 Reuse and improvisation
+
+Scenario resources may be **added from existing Campaign material or created
+contextually**, per
+[Content authoring §5](content-authoring-scenario-preparation-and-artifact-management.md#5-reuse-first).
+
+> **Preparation is not a prerequisite for play.**
+
+**The GM must be able to add or create resources later, during live play,
+through the same canonical services** — see
+[Live GM Scenario Play §3.3](live-gm-scenario-play.md#33-add-and-improvisation).
+Nothing in Scenario Builder may become a step the GM is required to complete
+before improvising.
+
 ---
 
 ## 6. Scenario Builder screen structure
@@ -221,6 +387,19 @@ Encounters; Messages; and preparation gaps where useful.
 Builder are the two surfaces; nothing between them needs its own navigation
 spine.
 
+### 6.1 The Scenario GM Plan
+
+The Scenario GM Plan is **GM-only, collapsible, simple long-form text or
+Markdown**.
+
+> **It is Scenario-owned domain content, not an Artifact.**
+
+Its storage is settled by
+[Content authoring §8.1](content-authoring-scenario-preparation-and-artifact-management.md#81-the-scenario-gm-plan),
+and it is the long-form primary planning document that keeps Encounter
+lightweight under
+[Content authoring §13](content-authoring-scenario-preparation-and-artifact-management.md#13-encounter-stays-lightweight).
+
 ---
 
 ## 7. Scenario overlays
@@ -228,7 +407,7 @@ spine.
 **Scenario-specific information does not live on the canonical Person or Item.**
 
 - Scenario Builder **normally inherits canonical presentation** from
-  [section 3](#3-person-presentation-in-campaign-material).
+  [section 3](#3-person-and-item-presentation-in-campaign-material).
 - It may **optionally override the image and/or the description, for either
   presentation layer, for this Scenario**.
 - **Removing an override returns to the Campaign default.** Defaults are
@@ -377,6 +556,59 @@ persisted and not shareable**, and it **does not satisfy readiness**. A neutral
 placeholder reveals nothing; the canonical presentation may reveal precisely what
 the GM meant to withhold.
 
+### 7.6 The Item Scenario overlay
+
+An Item's Scenario overlay keeps the following concepts **deliberately
+independent**. Each is its own concept, and each may hold any value
+independently of the others:
+
+| Concept                           | Answers                                    |
+| --------------------------------- | ------------------------------------------ |
+| **Scenario membership**           | Is this Item part of this Scenario at all? |
+| **Current presence**              | Is it here now?                            |
+| **Current visibility**            | Can players see it now?                    |
+| **Identification**                | Do players know what it is?                |
+| **Possession / usability**        | Who holds it, and can it be used?          |
+| **Canonical mechanical effects**  | What does it actually do under the rules?  |
+| **Disclosure of those mechanics** | Do players know what it does?              |
+
+> **Hidden mechanical modifiers continue to affect the rules even when players
+> do not know about them.** Mechanical effect resolves from canonical state, not
+> from what has been disclosed.
+
+> **Do not collapse these into a single `revealed` flag.**
+
+**Current presence and location remain owned by the Item lifecycle/service.**
+Pickup, drop and movement change location or possession; concealment changes
+visibility. **There is no universal `present` state across resource types** —
+[Content authoring §18.22](content-authoring-scenario-preparation-and-artifact-management.md#1822-no-universal-presence-state).
+
+The same independence governs live play, where the corresponding GM actions are
+a family rather than one boolean —
+[Live GM Scenario Play §8](live-gm-scenario-play.md#8-reveal-is-a-family-of-gm-ux-actions).
+Presence and visibility remain the independent axes of
+[#268 §5](../architecture/scenario-play-workspace.md#5-presence-versus-visibility).
+
+### 7.7 Reveal planning prepares; play executes
+
+**Scenario Builder may prepare intended reveals and identification. It does not
+execute live reveal actions.**
+
+Prepared intent, for example:
+
+- a Person **starts unidentified**;
+- an Item **starts hidden**;
+- an Artifact **remains GM-only**;
+- a **prepared message exists**.
+
+> **Actual state-changing actions happen in live Scenario Play**
+> ([Live GM Scenario Play §6](live-gm-scenario-play.md#6-the-live-gm-inspector)).
+
+This is the same boundary [section 7.4](#74-recognition-is-shared-scenario-party-state)
+draws for recognition and [section 8](#8-prepared-gm-messages) draws for
+messages: **a change during play is history; a change during preparation is
+not.**
+
 ---
 
 ## 8. Prepared GM messages
@@ -457,10 +689,15 @@ and eligibility is earned by publication.
 Scenario Builder lets the GM:
 
 - create a prepared Encounter;
-- select participants and resources **primarily from the Scenario pool**;
+- select participants and resources **primarily from the Scenario pool**, with
+  **easy access to Campaign resources when something is missing**;
 - add a **short GM-only Encounter note**;
 - associate relevant Items, Artifacts, Maps and messages;
-- later **activate** the Encounter in Scenario Play.
+- later **activate** the Encounter in Scenario Play
+  ([Live GM Scenario Play §3.2](live-gm-scenario-play.md#32-encounter-lifecycle)).
+
+**Encounter preparation stays lightweight** — the list above is its whole
+scope.
 
 **Encounter remains contextual state inside Scenario Play, not a separate
 player-facing play surface**, per
@@ -472,8 +709,12 @@ and
 
 ## 10. Preparation readiness
 
-Scenario Builder gives **actionable preparation state, not a generic
-completeness score**. Reported issues are concrete, for example:
+Scenario Builder gives **actionable preparation state**.
+
+> **There is no percentage or completeness score.** Readiness reports concrete,
+> derived, actionable problems and nothing else.
+
+Reported issues are concrete, for example:
 
 - missing representation;
 - generic fallback;
@@ -488,6 +729,39 @@ completeness score**. Reported issues are concrete, for example:
 action.** Representation readiness itself remains **derived**, per
 [Content authoring §15](content-authoring-scenario-preparation-and-artifact-management.md#15-representation-readiness);
 this surface presents it and does not store a second readiness state.
+
+> **Readiness is advisory and never blocks live improvisation.** An unresolved
+> readiness issue must never prevent the GM from running the Scenario
+> ([section 5.1](#51-reuse-and-improvisation)).
+
+### 10.1 Storyline integration
+
+Scenario Builder **shows related Storylines and Story Notes and allows links and
+click-through** to them.
+
+> **Do not embed the Storyline editor.**
+
+Storylines remain governed by [Campaign Storylines](campaign-storylines.md),
+including its privacy invariant: a Story Note is GM-only, has no visibility
+control, and is never revealed
+([§4](campaign-storylines.md#4-the-privacy-invariant)).
+
+### 10.2 Planned versus historical membership
+
+**Planned Scenario and Encounter membership may be freely edited during
+preparation.**
+
+> **Actual historical participation and use after play remains durable.**
+
+> **Do not expose casual controls that erase campaign history.** Removing a
+> Person from a Scenario's planned roster must not delete the record that they
+> took part in it.
+
+This is the durable-history rule of
+[Content authoring §9](content-authoring-scenario-preparation-and-artifact-management.md#9-durable-history)
+and the Encounter durable-association rule of
+[Content authoring §10](content-authoring-scenario-preparation-and-artifact-management.md#10-encounter-and-artifact-ownership-versus-durable-association),
+applied to this surface.
 
 ---
 
@@ -519,6 +793,7 @@ and
 | [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md) | **Controlling** for the domain model, the Artifact pipeline, associations, provenance and Scenario preparation mechanics. |
 | [People, Artifacts and GM authoring](people-artifact-and-gm-authoring-model.md)                                                      | Records the #284 rulings and the open decisions; this contract reopens none of them.                                      |
 | [Campaign Storylines](campaign-storylines.md)                                                                                        | The GM-only Campaign narrative authoring surface at the head of [section 11](#11-the-authoring-level-progression).        |
+| [Live GM Scenario Play](live-gm-scenario-play.md)                                                                                    | The GM's live operating surface. Preparation prepares; play executes.                                                     |
 | [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                                                                | Play authority. Scenario Builder is preparation, not play.                                                                |
 | [Player Play V1](../architecture/player-play-v1.md)                                                                                  | Player play and Activity authority, including what publication may produce.                                               |
 | [Campaign, Scenario and Encounter workflows](campaign-scenario-encounter-workflows.md)                                               | Workspace responsibilities; the authoring model remains governed by the Content authoring contract.                       |

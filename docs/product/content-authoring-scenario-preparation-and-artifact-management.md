@@ -1148,6 +1148,150 @@ shareable**, and it **does not satisfy readiness**. The product/UI form of both
 is
 [Campaign Material and Scenario Builder §7.5](campaign-material-and-scenario-builder-ui.md#75-override-lifecycle).
 
+### 18.18 One active Encounter per Character
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends, narrowly:** [section 8.3](#83-encounter-preparation) and
+[section 13](#13-encounter-stays-lightweight), by fixing the one participation
+rule live play enforces. **Gates:** Nothing beyond the lane that builds it.
+
+**A Character may not participate in more than one _active_ Encounter
+simultaneously.** This is a hard V1 invariant.
+
+- **Arbitrary planned or historical associations with other Encounters remain
+  valid.** The invariant constrains **active** participation only, and it does
+  not narrow the durable association rule of
+  [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).
+- An Encounter may be **prepared**, **active**, **paused** or **completed**, and
+  **paused state is resumable**.
+- **No timeline-branching and no snapshot semantics are authorized.** There is
+  one current state per Encounter.
+
+**This is the only Encounter-participation rule the live surface enforces.** The
+product/UI form is
+[Live GM Scenario Play §3.2](live-gm-scenario-play.md#32-encounter-lifecycle),
+and it does not disturb
+[PO-SPW-3](../architecture/scenario-play-workspace.md#po-spw-3--settled-the-existing-encounter-workspace-is-retained-as-transitional-gm-only-management-tooling).
+
+### 18.19 Live improvisation may establish the Scenario membership it implies
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends, narrowly:** [section 8.2](#82-scenario-resource-assembly), by
+allowing one GM live operation to create the association it implies. **Gates:**
+Nothing beyond the lane that builds it.
+
+**When an Encounter is active, adding a resource directly to that Encounter may
+establish the missing Scenario membership automatically, as part of the same GM
+operation.**
+
+**The GM is not sent back through management screens merely to satisfy
+bookkeeping.** Resources created or added during play go through **the same
+canonical services** as preparation; no parallel live-only creation path exists.
+
+**Scenario membership and Encounter membership remain distinct concepts.** This
+section authorizes one operation to create both where one implies the other; it
+does not merge them. The product/UI form is
+[Live GM Scenario Play §3.3](live-gm-scenario-play.md#33-add-and-improvisation).
+
+### 18.20 Item presentation layers and Scenario overrides
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Extends, narrowly:**
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1),
+[section 18.12](#1812-the-scenario-presentation-overlay-shape) and
+[section 18.13](#1813-the-two-canonical-person-presentation-texts), by applying
+the same model to Items. **Gates:** Nothing beyond the lane that builds it.
+
+**An Item has the same two canonical presentation layers as a Person:**
+
+- **general/unidentified** — canonical image and canonical description;
+- **identified/examined** — canonical image and canonical identified
+  description.
+
+An Item may additionally carry **optional additional representations**, as a
+Person may carry additional illustrations.
+
+**Scenario overrides and live identification select or override these layers
+under the already-approved narrow Scenario-presentation rules** of
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)
+and [section 18.12](#1812-the-scenario-presentation-overlay-shape). Resolution
+stays that single rule — Scenario override if present, otherwise the canonical
+Item default — applied independently per slot.
+
+> **No new generalized presentation system is introduced.** This is the Person
+> model applied to Items, not a parallel mechanism: no generic scope column, no
+> entitlement hierarchy, no override-resolution framework and no per-player
+> override is authorized.
+
+**No physical representation is chosen here**, on the same terms as
+[section 18.12](#1812-the-scenario-presentation-overlay-shape). The product/UI
+form is
+[Campaign Material and Scenario Builder §3.3](campaign-material-and-scenario-builder-ui.md#33-the-item-inspector-in-campaign-material)
+and
+[§7.6](campaign-material-and-scenario-builder-ui.md#76-the-item-scenario-overlay).
+
+### 18.21 GM-only notes on Items and Artifacts
+
+**Status:** **SETTLED FOR V1, 2026-09-25**, for semantics, prohibition and
+storage. **Authority:** Product Owner. **Amends:** nothing. It records domain
+state the
+association vocabulary of
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person) does not
+cover. **Gates:** Nothing beyond the lane that builds it.
+
+**Items and Artifacts support lightweight canonical GM-only notes.** The note
+belongs to the canonical object and is permanently GM-only.
+
+- It has **no visibility, share or reveal state**, and no operation exposes it.
+- It is **structurally excluded from all player projections, Activity, the
+  Blackboard and player-facing AI context**, to the same standard as the GM-only
+  dossier in
+  [People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier).
+- **Longer cross-object narrative belongs in Storylines**, not in an expanded
+  note field.
+
+> **This is not a generic Note system and must not be broadened into one.**
+
+**Storage for Items and Artifacts is settled here.**
+
+- **Artifact GM notes use the existing Artifact `gmNotes` capability**, already
+  carried on the canonical Artifact as `gmNotes: z.string().optional()` in
+  `packages/domain/src/campaign/artifact.ts:75`.
+- **Item GM notes are a canonical GM-only field owned by the Item
+  domain/service.**
+- **No generic Note entity or table is created for this.**
+
+This closes storage **for Items and Artifacts only**. The separate question of
+where the Campaign-scoped GM-only Person dossier lives —
+[OPEN-PPL-3](people-artifact-and-gm-authoring-model.md#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) — **remains open and is not resolved here.**
+
+### 18.22 No universal presence state
+
+**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
+**Amends:** nothing; it records a prohibition and the typed cases it protects.
+**Gates:** Nothing beyond the lanes that build the live surfaces.
+
+> **No universal `present` state exists across resource types.**
+
+| Resource     | What presence means                                                                                                                                                     |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Person**   | contextual **Situation/Encounter presence**; **leaving changes presence, hiding changes visibility**                                                                    |
+| **Item**     | physical presence and location **remain owned by the Item lifecycle/service**; **pickup, drop and movement change location/possession, concealment changes visibility** |
+| **Artifact** | live state is **access/share**, not physical presence                                                                                                                   |
+
+**Encounter participation remains distinct from Situation presence.**
+
+> **Live UI may use common verbs where useful, but they dispatch typed domain
+> operations rather than one generic presence/reveal flag.**
+
+This is the same principle as the `Reveal` family of
+[Live GM Scenario Play §8](live-gm-scenario-play.md#8-reveal-is-a-family-of-gm-ux-actions),
+applied a second time: one shared verb in the UI, typed domain operations
+underneath, never a single stored boolean. The live-play form is
+[Live GM Scenario Play §4.3](live-gm-scenario-play.md#43-presence-is-typed-per-resource),
+and the preparation-side independence it protects is
+[Campaign Material and Scenario Builder §7.6](campaign-material-and-scenario-builder-ui.md#76-the-item-scenario-overlay).
+
 ---
 
 ## 19. Future target: Content Production Interface
@@ -1245,16 +1389,17 @@ narrowed here.
 This contract is controlling for the model it describes. The documents below
 retain their own authority for everything else and point here for this model.
 
-| Document                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                                                                                                                                                                                                                                                                      |
-| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                                                                                                                                                                                                                                                                 |
-| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                                                                                                                                                                                                                                                                   |
-| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                                                                                                                                                                                                                                                                        |
-| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); OPEN-PPL-9 answered **for V1** by [section 18.9](#189-open-ppl-9-answered-for-v1) with future scoping deferred; OPEN-PPL-10 **still open but deferred and non-blocking** per [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). The other seven remain open. |
-| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                                                                                                                                                                                                                                                                    |
-| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                                                                                                                                                                                                                                                                          |
-| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                                                                                                                                                                                                                                                                    |
-| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                                                                                                                                                                                                                                                                          |
-| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                                                                                                                                                                                                                                                                        |
-| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                                                                                                                                                                                                                                                                         |
+| Document                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                                                                                                                                                                                                                                                                                                                |
+| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                                                                                                                                                                                                                                                                                                           |
+| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                                                                                                                                                                                                                                                                                                             |
+| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                                                                                                                                                                                                                                                                                                                  |
+| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); OPEN-PPL-9 answered **for V1** by [section 18.9](#189-open-ppl-9-answered-for-v1) with future scoping deferred; OPEN-PPL-10 **still open but deferred and non-blocking** per [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). The other seven remain open.                                           |
+| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                                                                                                                                                                                                                                                                                                              |
+| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| [Live GM Scenario Play](live-gm-scenario-play.md)                                             | The GM's live operating surface. It operates over this model and produces the Activity kinds settled in [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind) and [section 18.16](#1816-prepared-message-speaker-history-is-text-identity-in-v1); the Encounter rules it enforces are [section 18.18](#1818-one-active-encounter-per-character) and [section 18.19](#1819-live-improvisation-may-establish-the-scenario-membership-it-implies). |
+| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                                                                                                                                                                                                                                                                                                                    |
+| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
