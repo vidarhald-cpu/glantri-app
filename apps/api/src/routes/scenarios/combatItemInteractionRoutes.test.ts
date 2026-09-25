@@ -510,6 +510,69 @@ describe("canonical Combat Item interaction routes", () => {
     await app.close();
   });
 
+  // M7 — Forgejo issue #323. An Item action materialized by a `small_action` declaration carries
+  // the server-owned canonical declaration id rather than a client-supplied one. It must reach the
+  // same Item authority through the same route, with no second channel and no duplicated guard.
+  it("resolves a declaration-materialized Item action through the same canonical authority", async () => {
+    auth.requireAuthenticatedUser.mockResolvedValue(gm);
+    const declarationTaskId = "round:1:participant:participant-1:declaration:small_action";
+    const declared: CombatGenericAction = {
+      ...itemAction("declared"),
+      declarationKind: "small_action",
+      id: declarationTaskId,
+      intent: "Hand the dagger to Bram and step back.",
+    };
+    const routeServices = services(encounterWithActions([declared]));
+    const app = await appWith(routeServices);
+
+    for (const operation of ["review", "activate"] as const) {
+      const step = await app.inject({
+        method: "POST",
+        payload: { actionId: declarationTaskId, expectedRevision: revision, operation },
+        url: "/encounters/encounter-1/combat-round/item-interactions",
+      });
+      expect(step.statusCode, JSON.stringify(step.json())).toBe(200);
+      const saved = vi
+        .mocked(routeServices.encounterService.updateCombatEncounter)
+        .mock.calls.at(-1)?.[0].session.combatRoundState?.genericActions[0];
+      // The declaration's own identity survives the Item lifecycle untouched.
+      expect(saved).toMatchObject({
+        declarationKind: "small_action",
+        id: declarationTaskId,
+        preset: "item_interaction",
+        reference: { itemId: "item-1", kind: "item" },
+      });
+      routeServices.encounterService.getEncounterById = vi.fn(async () =>
+        encounterWithActions([
+          { ...declared, status: operation === "review" ? "reviewed" : "active" },
+        ]),
+      ) as never;
+    }
+
+    const resolved = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: declarationTaskId,
+        expectedRevision: revision,
+        operation: "resolve",
+        resultText: "Bram receives the same Silver dagger.",
+        visibleToParticipantIds: ["participant-1", "participant-2"],
+      },
+      url: "/encounters/encounter-1/combat-round/item-interactions",
+    });
+    expect(resolved.statusCode, JSON.stringify(resolved.json())).toBe(200);
+    // One canonical mutation, through the Item authority, addressed by the declaration's id.
+    expect(routeServices.itemService.commitResolution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionId: declarationTaskId,
+        interaction: declared.itemInteraction,
+        ownerCharacterId: "character-1",
+        recipientCharacterId: "character-2",
+      }),
+    );
+    await app.close();
+  });
+
   it("rejects an early fixed-duration resolve before any canonical Item or Encounter mutation", async () => {
     auth.requireAuthenticatedUser.mockResolvedValue(gm);
     const earlyAction: CombatGenericAction = {

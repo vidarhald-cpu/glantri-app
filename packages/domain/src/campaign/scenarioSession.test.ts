@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  activateCombatGenericAction,
   combatGenericActionSchema,
+  declareCombatGenericAction,
+  finishCombatGenericAction,
   projectCombatGenericActionsForPlayer,
+  reviewCombatGenericAction,
 } from "../encounter/combatGenericAction";
 import { initializeCombatRoundState } from "../encounter/combatRoundManager";
 import { encounterSessionSchema } from "../encounter/session";
@@ -141,6 +145,100 @@ function itemHistoryFixture() {
 }
 
 describe("Scenario session privacy projection", () => {
+  // M7 — Forgejo issue #323. A `small_action` declaration that names an Item materializes a
+  // canonical Combat action carrying `preset: "item_interaction"`. This drives that action through
+  // the real lifecycle helpers, with exactly the field set the declaration path supplies, rather
+  // than hand-building a completed action: `canViewCurrentItemOutcome` gates player visibility of
+  // the `item_resolution` outcome on that preset, so an action materialized without it would make
+  // the outcome invisible to every player.
+  it("keeps a declaration-materialized Item outcome player-visible through canViewCurrentItemOutcome", () => {
+    const declarationTaskId =
+      "round:1:participant:encounter-participant-b:declaration:small_action";
+    let actions = declareCombatGenericAction({
+      action: {
+        createdAt: now,
+        createdByUserId: "user-b",
+        declarationKind: "small_action",
+        duration: { kind: "gm_decided" },
+        id: declarationTaskId,
+        intent: "Drop the dagger.",
+        itemInteraction: {
+          itemId: "item-1",
+          itemLabel: "Dagger",
+          itemRevision: now,
+          operation: "drop",
+          stateAtDeclaration: "held",
+          visibleToParticipantIds: ["encounter-participant-a", "encounter-participant-b"],
+        },
+        ownerParticipantId: "encounter-participant-b",
+        preset: "item_interaction",
+        reference: {
+          itemId: "item-1",
+          kind: "item",
+          label: "Dagger",
+          ownerParticipantId: "encounter-participant-b",
+        },
+      },
+      actions: [],
+    });
+    actions = reviewCombatGenericAction({
+      actionId: declarationTaskId,
+      actions,
+      duration: { kind: "gm_decided" },
+      reference: actions[0]!.reference,
+      reviewedAt: now,
+    });
+    actions = activateCombatGenericAction({
+      actionId: declarationTaskId,
+      activatedAt: now,
+      actions,
+      roundNumber: 1,
+      step: "phase_1_actions",
+    });
+    actions = finishCombatGenericAction({
+      actionId: declarationTaskId,
+      actions,
+      at: now,
+      resolution: {
+        resolvedAt: now,
+        text: "Player B dropped the dagger.",
+        visibleToParticipantIds: ["encounter-participant-a", "encounter-participant-b"],
+      },
+      roundNumber: 1,
+      status: "completed",
+      step: "phase_1_actions",
+    });
+    const materialized = actions[0]!;
+    expect(materialized.preset).toBe("item_interaction");
+    expect(materialized.declarationKind).toBe("small_action");
+
+    const fixture = itemHistoryFixture();
+    fixture.currentEncounter.combatRoundState!.genericActions = [materialized];
+    fixture.eventLogs[0]!.payload.actionId = materialized.id;
+
+    const view = (encounters: (typeof fixture.currentEncounter)[]) =>
+      buildScenarioSessionView({
+        availableObjects: [],
+        encounters,
+        eventLogs: fixture.eventLogs,
+        participants: fixture.participants,
+        scenario: fixture.scenario,
+        userId: "user-a",
+        viewerMode: "player",
+      });
+    expect(view([fixture.currentEncounter]).history).toHaveLength(1);
+
+    // The same action without the preset — the pre-M7 `small_action` shape — is invisible.
+    const withoutPreset = {
+      ...fixture.currentEncounter,
+      combatRoundState: {
+        ...fixture.currentEncounter.combatRoundState!,
+        genericActions: [{ ...materialized, itemInteraction: undefined, preset: undefined }],
+      },
+    };
+    expect(view([withoutPreset]).history).toHaveLength(0);
+  });
+
   it("withholds an Item outcome when its owner becomes hidden in the Encounter visibility grid", () => {
     const { scenario, participants, action, eventLogs, currentEncounter } = itemHistoryFixture();
     for (const ownerVisible of [true, false, true]) {
