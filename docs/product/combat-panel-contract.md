@@ -434,9 +434,10 @@ Proposed only. Not authorized and not dispatched by this section.
 - **Hotspots,** per [reserved integration hotspots](../architecture/ownership.md#reserved-integration-hotspots):
   none of the reserved hotspots are written. `ScenarioPlayerCombatPageContent.tsx` and
   `CombatRoundManagerPanel.tsx` are not reserved but are heavily contended Combat experience
-  surfaces; issues #180 and #182 both claim `CombatRoundManagerPanel.tsx`, and #180 is under an
-  explicit stop. This slice must therefore be serialized against those lanes, and must not
-  touch `CombatRoundManagerPanel.tsx` beyond removing one render.
+  surfaces; #180 claims `CombatRoundManagerPanel.tsx` explicitly and is under an explicit stop,
+  while #182 claims no file — its body names no path — but its scope may touch the same file.
+  This slice must therefore be serialized against both lanes, and must not touch
+  `CombatRoundManagerPanel.tsx` beyond removing one render.
 - **Persistence or schema changes:** none. No migration, no stored-data semantics, no
   authorization change.
 - **Character:** composition and thin adaptation. It requires no subsystem redesign.
@@ -1032,9 +1033,11 @@ positively.
 
 #### Hotspots
 
-`CombatRoundManagerPanel.tsx` is not reserved but is heavily contended and is claimed by **#180,
-under an explicit STOP**, and by **#182**. A3 touches it for **exactly one render removal** and
-nothing else. `apps/api/src/routes/scenarios/encounterRoutes.ts` is reserved.
+`CombatRoundManagerPanel.tsx` is not reserved but is heavily contended. It is claimed explicitly
+by **#180, under an explicit STOP**; **#182 claims no file** — its body names no path — but its
+scope may touch the same file, so A3 serializes against both lanes. A3 touches the file for
+**exactly one render removal** and nothing else.
+`apps/api/src/routes/scenarios/encounterRoutes.ts` is reserved.
 
 #### QA level
 
