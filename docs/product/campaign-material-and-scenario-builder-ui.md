@@ -168,6 +168,13 @@ draft-data policy, and **no generalized migration machinery is built for it**.
 > **Any temporary handling of residual legacy state fails closed — it resolves
 > to `GM only`, never to player access.**
 
+**Finding where that legacy audience is persisted is implementation work, not a
+contract gap**, and the implementing Builder reports the paths it finds, removes
+writable V1 use, keeps the fail-closed handling and adds regression coverage —
+[Content authoring §18.24](content-authoring-scenario-preparation-and-artifact-management.md#1824-artifact-access-states-and-the-legacy-scenario-audience).
+**That readiness gap is A3 (Artifact access) and is unrelated to Combat A3 (UI
+consolidation).**
+
 **This is distinct from Scenario preparation and from reveal.**
 
 - **Scenario association never grants access.** Associating an Artifact with a

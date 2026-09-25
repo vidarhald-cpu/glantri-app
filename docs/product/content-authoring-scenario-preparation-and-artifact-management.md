@@ -1442,6 +1442,27 @@ The product/UI form is
 and the live form is
 [Live GM Scenario Play §6.3](live-gm-scenario-play.md#63-artifact).
 
+**Locating the legacy audience's persisted read and write paths is authorized
+implementation-finding work.** This contract deliberately does not name file
+locations, and a lane must not treat their absence as a contract omission or
+stop for a ruling on it.
+
+**The implementing Builder:**
+
+- **locates and reports** every persisted read and write path for the legacy
+  `scenario` audience;
+- **eliminates or neutralizes writable V1 use** of it;
+- **preserves fail-closed handling** for any surviving legacy state, per the
+  safety rule above;
+- **adds regression coverage** for both the removal and the fail-closed
+  resolution.
+
+> **Naming: this is readiness-gap A3 (Artifact access).** It is **unrelated to
+> Combat A3 (UI consolidation)**, recorded at
+> [Combat Panel §12.15](combat-panel-contract.md#1215-a3--ui-consolidation).
+> The two share a label only. A reader encountering "A3" resolves it from the
+> document it appears in, and the two must never be conflated.
+
 ### 18.25 Item representation roles
 
 **Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
