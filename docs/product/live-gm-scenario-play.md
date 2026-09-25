@@ -201,11 +201,15 @@ Captain Varro
 Players see: The officer
 ```
 
-The player-facing half resolves through shared Scenario recognition state and
-the Scenario overlay, per
-[Campaign Material and Scenario Builder §7.1](campaign-material-and-scenario-builder-ui.md#71-the-resolution-rule)
-and
+**The `Players see:` value is the resolved player-safe label** of the layer the
+party's shared Scenario recognition state selects, after the Scenario overlay,
+per
+[Campaign Material and Scenario Builder §3.1](campaign-material-and-scenario-builder-ui.md#31-the-canonical-presentation-label-and-texts),
+[§7.1](campaign-material-and-scenario-builder-ui.md#71-the-resolution-rule) and
 [§7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state).
+Where no label is set it takes that section's fallback — `Unidentified person`
+at the unidentified layer, the canonical player-facing Person name at the
+identified layer. **It is never sourced from the GM dossier.**
 
 - **Hidden resources remain visible to the GM.** Hidden means hidden from
   players, never hidden from the GM.
@@ -314,7 +318,9 @@ is unchanged.
 
 **One structural pattern, reused for every resource type:**
 
-1. **current player-facing preview** — `Players currently see…`;
+1. **current player-facing preview** — `Players currently see…`, rendering the
+   resolved player-safe label and presentation of
+   [Campaign Material and Scenario Builder §3.1](campaign-material-and-scenario-builder-ui.md#31-the-canonical-presentation-label-and-texts);
 2. **current state**;
 3. a **small set of state-relevant primary actions**;
 4. **GM-only context**;
@@ -385,8 +391,12 @@ Possible live action:
 > [Authority and Information Projection](../architecture/information-authority-and-projection.md#projection-rules)
 > govern what any viewer receives.
 
-Artifact access itself is the simple current Campaign-level state of
-[Campaign Material and Scenario Builder §2.4](campaign-material-and-scenario-builder-ui.md#24-artifact-access-is-campaign-level-and-current).
+Artifact access itself is the current Campaign-level state of
+[Campaign Material and Scenario Builder §2.4](campaign-material-and-scenario-builder-ui.md#24-artifact-access-is-campaign-level-and-current)
+— **exactly `GM only` or `Shared with Campaign players`**. **Scenario or
+Encounter membership never grants access**, and any residual legacy audience
+state **fails closed to `GM only`**
+([Content authoring §18.24](content-authoring-scenario-preparation-and-artifact-management.md#1824-artifact-access-states-and-the-legacy-scenario-audience)).
 
 ### 6.4 Encounter
 
@@ -419,7 +429,9 @@ ad-hoc GM announcements.** It is one control, not two.
 The V1 quick composer carries:
 
 - **text**;
-- an **optional speaker Person**;
+- an **optional speaker Person**, published under that Person's **resolved
+  player-safe label**
+  ([Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement));
 - an **optional relation** to the current Person, Item, Artifact or Encounter;
 - **`Publish now`**;
 - an optional **`Save as prepared`**.
@@ -533,6 +545,22 @@ and nothing in this contract may be read as authorizing them.
 Per-player recognition remains **deferred, not rejected**
 ([Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state)):
 nothing built for V1 may make it a redesign rather than an extension.
+
+### 10.1 Strongly synchronized multiplayer liveness
+
+**The realtime architecture is an explicit decision required before the first
+strongly synchronized multiplayer live-play slice**, recorded at
+[Content authoring §18.26](content-authoring-scenario-preparation-and-artifact-management.md#1826-realtime-synchronization-is-an-explicit-architecture-decision).
+Strong synchronization means players and GM observing the same live state
+without a manual refresh, at an interaction latency the surface promises.
+
+**No transport is chosen.** Selecting one is that decision, not a Builder
+choice. The repository carries **no realtime transport today** and liveness is
+**client polling**.
+
+**It blocks nothing already authorized** — not Campaign Material authoring, not
+the Scenario GM Plan, not Combat A3 preparation. It gates the synchronized
+multiplayer slice and nothing earlier.
 
 ---
 

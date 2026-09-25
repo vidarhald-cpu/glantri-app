@@ -14,8 +14,11 @@
 > to [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation)
 > and the **deferral** of
 > [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts).
+> It also records the Product Owner's 2026-09-25 rulings, including the
+> **V1 recognition** answer to
+> [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled).
 > This note remains authoritative for the #284 record and for the
-> `OPEN-PPL-*` decisions, of which **seven remain genuinely open** — see
+> `OPEN-PPL-*` decisions, of which **six remain genuinely open** — see
 > [section 15](#15-open-decisions--none-chosen) for the exact state of each.
 
 **Portfolio areas:** #112 Campaign / Persistent Play, #114 Chargen, #119
@@ -215,7 +218,9 @@ and must not be named with Blackboard vocabulary (`share`, `place`,
 `placement`), nor may `reveal` be reused for those. That prohibition is #268's
 and is restated here only as the pointer that governs naming in this area.
 
-**How identity reveal is modelled is not settled.** See
+**How identity reveal is modelled is settled for V1**: recognition is
+**party-wide Scenario-Person state**, changed only by an explicit live GM
+reveal, with per-player recognition deferred. See
 [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled).
 
 ---
@@ -797,8 +802,8 @@ Recorded in the style of
 and
 [PPV1 §18](../architecture/player-play-v1.md#18-open-decisions-and-recorded-mismatches).
 
-**Every decision below is genuinely open, with two exceptions. Options are
-stated neutrally and none is chosen.** A lane that reaches one of these stops
+**Every decision below is genuinely open, with the exceptions listed below.
+Options are stated neutrally and none is chosen.** A lane that reaches one of these stops
 and returns it to the Product Owner / control plane rather than deciding it in
 implementation. None of these reopens anything settled by #268 or Player Play
 V1.
@@ -814,12 +819,15 @@ V1.
 >   [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation),
 >   as of 2026-09-24. V1 is answered unambiguously; per-Campaign,
 >   per-entitlement-tier and per-context scoping remain deferred, not rejected.
+>   [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled), as of
+>   2026-09-25. Recognition is party-wide Scenario-Person state; per-player
+>   recognition remains deferred, not rejected.
 > - **Open and deferred — no option chosen, and non-blocking for current V1:**
 >   [OPEN-PPL-10](#open-ppl-10--the-authority-model-for-player-self-service-artifacts),
 >   as of 2026-09-24. It is **still open**; what changed is only that it no
 >   longer blocks GM-controlled content authoring.
 >
-> **The remaining seven decisions — OPEN-PPL-1, 2, 3, 5, 7, 8 and 11 — remain
+> **The remaining six decisions — OPEN-PPL-2, 3, 5, 7, 8 and 11 — remain
 > genuinely open, unranked and unchanged.**
 
 ### 15.1 The decision frontier
@@ -840,29 +848,63 @@ lane and is **not** a rejection of the options it did not need to take.
 
 ### OPEN-PPL-1 — How identity revelation is modelled
 
-**Status:** Open. **Raised by:** #284 §3. **Affects:** lane B.
+**Status:** **SETTLED FOR V1. Per-player recognition DEFERRED, not rejected.
+This decision is therefore neither "open" nor "closed".**\
+**Settled on:** 2026-09-25\
+**Authority:** PRODUCT OWNER RULING, recorded in
+[Content authoring, Scenario preparation and Artifact management §18.23](content-authoring-scenario-preparation-and-artifact-management.md#1823-open-ppl-1-settled-for-v1--recognition-is-party-wide-scenario-person-state).\
+**Raised by:** #284 §3. **Affects:** lane B.\
+**Gates:** **Nothing.** It no longer gates lane B. **A lane that implements
+recognition proceeds; it does not stop and return this decision to the Product
+Owner.**
 
-#284 settles that presence does not imply known identity, that presentation may
-begin generic, that revelation exposes canonical name, specific portrait and a
-detailed description, and that the underlying Actor/person is **not** replaced.
-It does not say how revealed-ness is represented.
+**The question as originally recorded**, retained as provenance:
 
-Options, **none chosen**:
+> #284 settles that presence does not imply known identity, that presentation
+> may begin generic, that revelation exposes canonical name, specific portrait
+> and a detailed description, and that the underlying Actor/person is **not**
+> replaced. It does not say how revealed-ness is represented.
+>
+> Options, **none chosen**:
+>
+> 1. **A reveal state on the existing person-in-campaign association** —
+>    revealed or not, per person per Campaign, for all players at once.
+> 2. **A per-viewer knowledge record** — revealed-ness held per player, allowing
+>    one player to know an identity another does not.
+> 3. **A separate revealed-presentation record** — the generic presentation and
+>    the identified presentation are two records, and revelation switches which
+>    one projects.
+> 4. **Reuse of the existing Artifact/Scenario reveal state** — model person
+>    revelation on `ScenarioArtifactReference`'s `attached` / `published` /
+>    `withdrawn` shape rather than introducing a second vocabulary.
+>
+> Any option must satisfy #284's preservation requirement: notes and history
+> survive identification. Options 1 and 2 differ materially in privacy blast
+> radius and in QA cost.
 
-1. **A reveal state on the existing person-in-campaign association** — revealed
-   or not, per person per Campaign, for all players at once.
-2. **A per-viewer knowledge record** — revealed-ness held per player, allowing
-   one player to know an identity another does not.
-3. **A separate revealed-presentation record** — the generic presentation and
-   the identified presentation are two records, and revelation switches which
-   one projects.
-4. **Reuse of the existing Artifact/Scenario reveal state** — model person
-   revelation on `ScenarioArtifactReference`'s `attached` / `published` /
-   `withdrawn` shape rather than introducing a second vocabulary.
+**What was ruled.** **Recognition is party-wide Scenario-Person state** —
+persistent state of the Scenario-Person pair, held once for the whole party.
 
-Any option must satisfy #284's preservation requirement: notes and history
-survive identification. Options 1 and 2 differ materially in privacy blast
-radius and in QA cost.
+- **Scenario preparation establishes the initial unidentified/identified
+  state.**
+- **An explicit live GM reveal changes it**, and nothing else does.
+- **Preparation edits emit no recognition events.** Only a change during play
+  enters Activity.
+- **Per-player recognition remains deferred, not rejected.** V1 builds no
+  per-player recognition control, and nothing built for V1 may make per-player
+  recognition a redesign rather than an extension.
+
+**None of the four options above was Scenario-scoped party state.** The decision
+is settled by a **fifth answer**, not by selecting one of them; option 1 is
+Campaign-scoped rather than Scenario-scoped, and the deferred options are
+neither ranked nor rejected. #284's preservation requirement is satisfied
+unchanged: notes and history survive identification, because recognition is
+state on the Scenario-Person pair and is not a replacement of the Person.
+
+The product/UI form is
+[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state),
+and the persisted mid-play event kind is `person_identity_revealed`, which is
+floor-class.
 
 ### OPEN-PPL-2 — Whether Actor is a new domain entity
 
@@ -1231,11 +1273,12 @@ stale.** V1 satisfies section 4 through the **two distinct global roles** — a
 selected general appearance and a selected primary portrait — combined with
 **independent visibility**, rather than through tier-scoped selection. Which of
 the two a given viewer receives is a **visibility/projection** question, which
-is OPEN-PPL-1's concern and remains entirely open.
+is OPEN-PPL-1's concern.
 
-**OPEN-PPL-1 is neither answered, narrowed nor pre-empted here.** This ruling
-decides _what may be selected and at what scope_; OPEN-PPL-1 still decides _how
-revealed-ness is represented and which selection therefore projects to whom._
+**OPEN-PPL-1 is not answered, narrowed or pre-empted by this ruling.** This
+ruling decides _what may be selected and at what scope_; OPEN-PPL-1 decides
+_how revealed-ness is represented and which selection therefore projects to
+whom_, and is settled separately for V1 as party-wide Scenario-Person state.
 
 #### No collision with PO-SPW-1 or OPEN-PPL-6
 
@@ -1368,15 +1411,15 @@ exact-path contract**.
 **Covers:** #284 §3 (representation and identity), §4 (Person Inspector),
 §5 (notes).
 
-|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Dependencies**                | **Lane A** for a person record to attach to. **PPV1 P1 and P2** for the Inspector host surface — the Person Inspector is a specialization of [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector) and **must not create a second Inspector**. **Lane C** for the representation association if a person's Artifacts use one mechanism with Items. [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled) and [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) must be settled before Ready.                                                                                                                                                                                                                                      |
-| **Extends, does not duplicate** | [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector) and [§13](../architecture/player-play-v1.md#13-canonical-detail-and-click-through-rule); [#268 §5](../architecture/scenario-play-workspace.md#5-presence-versus-visibility) and [§4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations); [Authority and Information Projection](../architecture/information-authority-and-projection.md#projection-rules); [Campaign Management V2 §8](../architecture/campaign-management-v2.md#8-artifact-and-image-inspection) for expandable presentation; **[#277](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/277) as the GM-private-field precedent** — reuse that pattern rather than inventing a second one. |
-| **Data hotspots**               | Prisma schema and migrations (reserved). `packages/domain/src/campaign/scenario.ts` and `scenarioPlayerProjection`; `packages/domain/src/campaign/scenarioSession.ts`. `packages/database/src/services/campaignManagementService.ts`, `scenarioService.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| **API/UI hotspots**             | `apps/api/src/routes/scenarios/participantRoutes.ts`, `scenarioRoutes.ts`, `access.ts`. `apps/web/app/(app)/campaigns/[campaignId]/CampaignWorkspaceShell.tsx` — shared with PPV1 P1/P2/P4/P5/P7 and #268 S1/S2; **one integration owner required**. `apps/web/src/features/scenarios/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| **Settled**                     | The Inspector exists and is generic; click-through routes to canonical homes; presence and visibility do not imply known identity; revelation does not replace the person; notes and history survive identification; both a generic appearance and a specific portrait are supported, and **V1 selection of each is a global singleton on the Person, with visibility independent** ([OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation)); the authorization tiers in [section 5](#5-person-inspector); the GM dossier is **structurally excluded** from player projections, search and context; shared notes are separate from the dossier; identity reveal is Reveal vocabulary, not Share.                                                       |
-| **Still open**                  | [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled), [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives), [OPEN-PPL-7](#open-ppl-7--the-audience-granularity-of-sharedplayer-notes). [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) is **settled for V1** (two global singleton roles — primary portrait and general appearance — plus zero or more additional illustrations, with visibility independent) and **no longer gates this lane**; only future context-specific overrides remain deferred.                                                                                                                                                                                                        |
-| **QA class**                    | **[Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — privacy projection and persisted-data semantics.** This is the highest-risk lane in the map and the one the #271 defect class most directly threatens.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Dependencies**                | **Lane A** for a person record to attach to. **PPV1 P1 and P2** for the Inspector host surface — the Person Inspector is a specialization of [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector) and **must not create a second Inspector**. **Lane C** for the representation association if a person's Artifacts use one mechanism with Items. [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives) must be settled before Ready. [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled) is **settled for V1** (recognition is party-wide Scenario-Person state) and no longer gates it.                                                                                                                                                                                                                                                                                     |
+| **Extends, does not duplicate** | [PPV1 §8.2](../architecture/player-play-v1.md#82-inspector) and [§13](../architecture/player-play-v1.md#13-canonical-detail-and-click-through-rule); [#268 §5](../architecture/scenario-play-workspace.md#5-presence-versus-visibility) and [§4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations); [Authority and Information Projection](../architecture/information-authority-and-projection.md#projection-rules); [Campaign Management V2 §8](../architecture/campaign-management-v2.md#8-artifact-and-image-inspection) for expandable presentation; **[#277](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/277) as the GM-private-field precedent** — reuse that pattern rather than inventing a second one.                                                                                                                                            |
+| **Data hotspots**               | Prisma schema and migrations (reserved). `packages/domain/src/campaign/scenario.ts` and `scenarioPlayerProjection`; `packages/domain/src/campaign/scenarioSession.ts`. `packages/database/src/services/campaignManagementService.ts`, `scenarioService.ts`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| **API/UI hotspots**             | `apps/api/src/routes/scenarios/participantRoutes.ts`, `scenarioRoutes.ts`, `access.ts`. `apps/web/app/(app)/campaigns/[campaignId]/CampaignWorkspaceShell.tsx` — shared with PPV1 P1/P2/P4/P5/P7 and #268 S1/S2; **one integration owner required**. `apps/web/src/features/scenarios/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| **Settled**                     | The Inspector exists and is generic; click-through routes to canonical homes; presence and visibility do not imply known identity; revelation does not replace the person; notes and history survive identification; both a generic appearance and a specific portrait are supported, and **V1 selection of each is a global singleton on the Person, with visibility independent** ([OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation)); the authorization tiers in [section 5](#5-person-inspector); the GM dossier is **structurally excluded** from player projections, search and context; shared notes are separate from the dossier; identity reveal is Reveal vocabulary, not Share; **recognition is party-wide Scenario-Person state, established in preparation and changed only by an explicit live GM reveal** ([OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled)). |
+| **Still open**                  | [OPEN-PPL-3](#open-ppl-3--where-the-campaign-scoped-gm-only-dossier-lives), [OPEN-PPL-7](#open-ppl-7--the-audience-granularity-of-sharedplayer-notes). [OPEN-PPL-1](#open-ppl-1--how-identity-revelation-is-modelled) is **settled for V1** — recognition is party-wide Scenario-Person state, changed only by an explicit live GM reveal, with per-player recognition deferred — and **no longer gates this lane**. [OPEN-PPL-9](#open-ppl-9--the-scope-of-a-selected-primary-representation) is **settled for V1** (two global singleton roles — primary portrait and general appearance — plus zero or more additional illustrations, with visibility independent) and **no longer gates this lane**; only future context-specific overrides remain deferred.                                                                                                                                                     |
+| **QA class**                    | **[Mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — privacy projection and persisted-data semantics.** This is the highest-risk lane in the map and the one the #271 defect class most directly threatens.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### Lane C — Artifact association, PC self-service and the generic visual library
 
@@ -1429,7 +1472,8 @@ Lane A  canonical NPC / Actor authoring
    │        gate: OPEN-PPL-2, OPEN-PPL-5 (OPEN-PPL-4 settled)
    ├── Lane B  representation, identity reveal, Inspector, notes/dossier
    │        also needs: PPV1 P1 + P2 (Inspector host), Lane C (association)
-   │        gate: OPEN-PPL-1, OPEN-PPL-3, OPEN-PPL-7 (OPEN-PPL-9 settled for V1)
+   │        gate: OPEN-PPL-3, OPEN-PPL-7
+   │        (OPEN-PPL-1 and OPEN-PPL-9 settled for V1)
    │                                                               — QA FLOOR
    └── Lane E  GM Campaign Material index + Scenario authoring/history
             extends #239 / #227; gate: OPEN-PPL-11
