@@ -22,9 +22,10 @@ material that players deliberately choose to place on the table. It lets players
 - accumulate additional shared information on existing material;
 - independently inspect shared material without taking control of other players' screens.
 
-**The Blackboard is Campaign-scoped, not Scenario-scoped.** It is a **collaborative player
-surface**. It is **not** a GM planning surface, a representation of current Situation presence, or a
-character-knowledge simulator.
+**The Blackboard is Campaign-scoped, not Scenario-scoped.** It is the table's **one shared
+collaborative surface** — primarily a player workspace, and the **GM may operate the same shared
+Blackboard** ([section 5.1](#51-gm-participation)). It is **not** a GM planning surface, a
+representation of current Situation presence, or a character-knowledge simulator.
 
 ### 1.2 What this contract does not do
 
@@ -181,6 +182,29 @@ available to them.
 > **The Blackboard must never silently expose additional information merely because one or more
 > players know it.**
 
+### 5.1 GM participation
+
+> **The GM may operate the same shared Campaign Blackboard, and may explicitly share player-safe
+> material onto it. There is no hidden GM Blackboard.**
+
+This is settled. It is consistent with
+[#268 §8.2](../architecture/scenario-play-workspace.md#82-who-may-act-and-what-it-changes), under
+which **any participant — player or GM** — may share accessible material and place it on the
+Blackboard.
+
+The GM posts under the same rules as everybody else:
+
+- **Eligibility is unchanged.** The GM must first perform the owning domain's share or reveal
+  action; GM visibility alone confers no eligibility
+  ([section 4.3](#43-gm-visibility-does-not-confer-eligibility)).
+- **Only player-safe material reaches the board**
+  ([section 22](#22-privacy-and-disclosure-invariants)).
+- **Posting is presentation only** and mutates no game-world state.
+
+**A separate GM board, a GM-only layer and any hidden GM view of this board remain
+[non-goals](#24-v1-non-goals).** The Blackboard is not thereby a GM planning surface
+([section 1.1](#11-purpose)).
+
 ---
 
 ## 6. Typed presentation sharing
@@ -283,6 +307,15 @@ richer information.
 **Existing Blackboard content remains as posted until a player explicitly enriches it** through
 [section 8](#8-existing-cards-and-incremental-disclosure).
 
+> **Richer player-safe knowledge never automatically changes an existing Blackboard card. Explicit
+> posting or enrichment is required.**
+
+**This is settled**, and it resolves the apparent tension with
+[Live GM Scenario Play §5.2](live-gm-scenario-play.md#52-people-are-valid-blackboard-material), which
+permits a card to **update to the identified presentation** after recognition. That permission is
+exercised **only** through the explicit posting of
+[section 8](#8-existing-cards-and-incremental-disclosure). Recognition alone never performs it.
+
 ### 9.1 Knowledge-update indication
 
 When a player's accessible information becomes richer, the application **should make that player
@@ -300,6 +333,26 @@ officer — You now recognize this person as Captain Varro."_ with `Add to Black
 
 A **durable-enough** local `New information` indication may accompany transient feedback, so that
 important updates are not lost merely because the player missed a short-lived message.
+
+### 9.2 Local prompts do not imply per-player knowledge divergence
+
+> **V1 Person recognition remains party-wide Scenario state. Local prompts and private inspection do
+> not imply per-player knowledge divergence.**
+
+The settled recognition rule is
+[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state)
+and is not restated here.
+
+A [section 9.1](#91-knowledge-update-indication) indication and a
+[section 11](#11-private-inspection) inspection are therefore **local UI facts, not knowledge
+facts**. They are private because a prompt and a viewport belong to the player looking at them, and
+because the Blackboard must not announce what anybody is reading — **not** because V1 tracks what
+each player separately knows.
+
+This is why nothing in this contract asks the application to adjudicate divergent per-player
+knowledge; **character-by-character knowledge enforcement** remains a
+[non-goal](#24-v1-non-goals), and the
+[#268 §8.1](../architecture/scenario-play-workspace.md#81-core-invariant) invariant is unchanged.
 
 ---
 
@@ -596,6 +649,10 @@ These may be considered later based on actual play experience.
 
 A conforming implementation must support at least these behaviors.
 
+Where an example gives one named player a private prompt or a private view, it describes **local UI
+behavior under the party-wide recognition model**, not per-player knowledge divergence
+([section 9.2](#92-local-prompts-do-not-imply-per-player-knowledge-divergence)).
+
 | Behavior                            | Example                                                                                                                                                             |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Persistent board**                | Jenny posts a map on Monday; Jenny does not play Friday; the map remains on the same Campaign Blackboard for everyone.                                              |
@@ -615,9 +672,9 @@ A conforming implementation must support at least these behaviors.
 
 | Document                                                                                                                                                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Scenario Play Workspace §8](../architecture/scenario-play-workspace.md#8-blackboard-boundary) and [PO-SPW-2](../architecture/scenario-play-workspace.md#po-spw-2--settled-the-blackboard-is-meta-level-player-collaboration) | **Controlling** for the Blackboard's architectural boundary: discussion state rather than game-world state, who may act, non-mutation, and the durable catalogue/placement separation. This contract is the product/UI design **inside** that boundary and changes none of it.                                                                                                                                                                                                                                                                                                                                   |
-| [Campaign Management V2 §9](../architecture/campaign-management-v2.md#9-blackboard-boundary) and [#268 §8.4](../architecture/scenario-play-workspace.md#84-not-a-blackboard-redesign)                                         | Record that broader Blackboard product work was deferred **until actual use establishes a need**, and that the boundary statements are not themselves the design pass. This contract is that later product design; it authorizes no implementation.                                                                                                                                                                                                                                                                                                                                                              |
-| [Live GM Scenario Play §5](live-gm-scenario-play.md#5-durable-player-access-and-the-blackboard-relationship)                                                                                                                  | **Controlling** for the Situation / player-accessible / Blackboard three-way distinction and for the rule that Blackboard removal revokes no access and alters no history. Its §5.2 permission for a card to carry the identified presentation is exercised **only** through the explicit posting of [section 8](#8-existing-cards-and-incremental-disclosure); [section 9](#9-no-silent-blackboard-updates) admits no automatic update.                                                                                                                                                                         |
+| [Scenario Play Workspace §8](../architecture/scenario-play-workspace.md#8-blackboard-boundary) and [PO-SPW-2](../architecture/scenario-play-workspace.md#po-spw-2--settled-the-blackboard-is-meta-level-player-collaboration) | **Controlling** for the Blackboard's architectural boundary: discussion state rather than game-world state, who may act, non-mutation, and the durable catalogue/placement separation. This contract is the product/UI design **inside** that boundary and changes none of it. Its §8.2 "any participant — player or GM" is recorded here as [section 5.1](#51-gm-participation).                                                                                                                                                                                                                                |
+| [Campaign Management V2 §9](../architecture/campaign-management-v2.md#9-blackboard-boundary) and [#268 §8.4](../architecture/scenario-play-workspace.md#84-not-a-blackboard-redesign)                                         | Record that broader Blackboard product work was deferred **until actual use establishes a need**, and that the boundary statements are not themselves the design pass. This contract is that later product design; it authorizes no implementation. **The deferral is superseded for the exact scope of this contract, and Blackboard functionality outside it remains deferred.**                                                                                                                                                                                                                               |
+| [Live GM Scenario Play §5](live-gm-scenario-play.md#5-durable-player-access-and-the-blackboard-relationship)                                                                                                                  | **Controlling** for the Situation / player-accessible / Blackboard three-way distinction and for the rule that Blackboard removal revokes no access and alters no history. Its §5.2 permission for a card to carry the identified presentation is exercised **only** through the explicit posting of [section 8](#8-existing-cards-and-incremental-disclosure); [section 9](#9-no-silent-blackboard-updates) admits no automatic update. **That reading is settled, not an open contradiction.**                                                                                                                 |
 | [Content authoring, Scenario preparation and Artifact management](content-authoring-scenario-preparation-and-artifact-management.md)                                                                                          | **Controlling** for the Person and Item presentation layers (§18.12, §18.13, §18.20, §18.25), typed presence (§18.22) and the realtime architecture decision (§18.26). This contract adds no presentation layer and no override mechanism.                                                                                                                                                                                                                                                                                                                                                                       |
 | [Campaign Material and Scenario Builder](campaign-material-and-scenario-builder-ui.md)                                                                                                                                        | **Controlling** for the Person and Item presentation layers as authored and inspected, and for the two settled Activity event kinds. Campaign Material editing remains a [non-goal](#24-v1-non-goals) of this surface.                                                                                                                                                                                                                                                                                                                                                                                           |
 | [Player Play V1 §12.2](../architecture/player-play-v1.md#122-blackboard)                                                                                                                                                      | Places the Blackboard as one of the five Play views and adds no board semantic. Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |

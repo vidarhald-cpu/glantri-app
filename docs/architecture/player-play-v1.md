@@ -766,7 +766,9 @@ Player-created collaboration Artifacts remain a later bounded capability, as
 [#268 already records](scenario-play-workspace.md#later-bounded-capability--player-created-collaboration-artifacts).
 The Blackboard-redesign deferral in
 [Campaign Management V2 §9](campaign-management-v2.md#9-blackboard-boundary)
-stands.
+stands outside the scope of
+[Campaign Blackboard V1](../product/campaign-blackboard-v1.md), which supersedes
+it for its own scope; this contract still authorizes no Blackboard redesign.
 
 ---
 
@@ -825,7 +827,7 @@ them**, and none is a V1 restructuring blocker.
 | **Redesign of the Character sheet**                                               | As above.                                                                                                                                                                                                                                                                                                                                 |
 | **Redesign of Equipment**                                                         | As above.                                                                                                                                                                                                                                                                                                                                 |
 | **Redesign of Map**                                                               | As above; Map internals remain owned by [Maps / Spatial Play](maps-spatial-play.md#2-controlling-map-definition).                                                                                                                                                                                                                         |
-| **Redesign of Blackboard**                                                        | As above; the deferral in [Campaign Management V2 §9](campaign-management-v2.md#9-blackboard-boundary) stands.                                                                                                                                                                                                                            |
+| **Redesign of Blackboard**                                                        | As above; the deferral in [Campaign Management V2 §9](campaign-management-v2.md#9-blackboard-boundary) stands outside the scope of [Campaign Blackboard V1](../product/campaign-blackboard-v1.md), which supersedes it for that scope and authorizes no implementation.                                                                   |
 | **Broad GM-management-page redesign**                                             | See [section 16](#16-relationship-to-the-later-gm-surface).                                                                                                                                                                                                                                                                               |
 
 ### 14.1 Future chat and messages — record only
