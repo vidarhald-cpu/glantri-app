@@ -882,6 +882,12 @@ The design must be compatible with the later principle that the GM uses the
 **same conceptual Play surface with additional controls**, while separate GM
 management pages handle preparation and administration.
 
+> That GM surface is specified by
+> [Live GM Scenario Play](../product/live-gm-scenario-play.md), which records the
+> same principle as a hard UX rule — **same arena, different projection and
+> authority**. It authorizes no implementation and changes nothing this contract
+> settles.
+
 - **Do not design that GM management overhaul now.** The approved GM authoring
   model is recorded in
   [Content authoring, Scenario preparation and Artifact management](../product/content-authoring-scenario-preparation-and-artifact-management.md),
