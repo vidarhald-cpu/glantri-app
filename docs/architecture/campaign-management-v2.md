@@ -230,10 +230,14 @@ The only currently approved Blackboard correction is:
 > being used.**
 
 Broader Blackboard product work remains deferred until actual use establishes a
-concrete need. The
+concrete need, **except for the exact scope of
+[Campaign Blackboard V1](../product/campaign-blackboard-v1.md), which is that
+later product design and supersedes this deferral for its own scope**.
+Blackboard functionality outside that contract remains deferred. The
 [Scenario Play Workspace §8](scenario-play-workspace.md#8-blackboard-boundary)
 contract states a non-mutation boundary for Blackboard projection in play; it
-is a boundary statement, not a redesign, and this deferral stands.
+is a boundary statement, not a redesign, and the deferral stands for everything
+the V1 contract does not cover.
 
 ## 10. Controlling V2 principles
 
