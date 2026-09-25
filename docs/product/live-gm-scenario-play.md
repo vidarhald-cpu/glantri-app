@@ -293,7 +293,8 @@ remove on the Blackboard remain the three distinct operations named in
 
 > **Blackboard is already architecturally scoped but still needs a later compact
 > UI/workflow design pass.** That pass is not performed here and is not
-> authorized here.
+> authorized here. It is recorded separately as
+> [Campaign Blackboard V1](campaign-blackboard-v1.md).
 
 ### 5.2 People are valid Blackboard material
 
