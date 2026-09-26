@@ -88,6 +88,8 @@ Show a fact where the viewer needs it to choose, act, or understand the result.
 - Reference information should stay close enough to the affected value or choice to be usable without repetitive navigation.
 - A fact should not be copied into unrelated panels merely to make each panel self-contained.
 
+**Capture in context; retrieve through context.** Where the user records something during play, the surface derives the context it already knows — scenario, encounter, acting character, selected person, item, artifact, skill or task — rather than asking for it. Retrieval must work both by browsing or searching and **through the subject itself**, so the user does not have to remember in which session or category something was recorded. The Campaign form of this principle is [Content authoring §18.36](content-authoring-scenario-preparation-and-artifact-management.md#1836-capture-in-context-retrieve-through-context).
+
 ### 4.4 Preserve continuity and distinguish state over time
 
 Accepted actions and results remain understandable and available when progression advances. Moving to the next task must not erase the result the user just accepted or rolled before it can be perceived.
@@ -112,6 +114,8 @@ Every user-facing fact has an intended audience. Presentation must reflect the v
 - Redaction must preserve safe workflow truth when needed. Hiding a private die must not make a completed process look pending.
 - Client-side hiding is not an adequate privacy boundary. Protected facts should be excluded or sanitized before reaching an unauthorized client.
 - Ambiguous visibility fails closed: show less and give a safe, useful status rather than guessing.
+- **Structure is a leak too.** A player surface must not reveal through its own shape what the GM prepared privately — whether an entry is backed by a full record, whether two apparently separate entries are privately the same person, whether hidden actors are present, or whether a presentation is an override. The Campaign form is [Content authoring §18.31](content-authoring-scenario-preparation-and-artifact-management.md#1831-player-projection-must-hide-preparation-mechanics).
+- **Knowledge is held per character where the product models it.** Persistent player-facing story knowledge is character-scoped, so two players' characters may legitimately know different things, and a shared surface shows only what was deliberately shared ([Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)). **That divergence is intended and is not a synchronization defect.**
 
 ### 4.6 Show important rolls and calculation context to entitled users
 
