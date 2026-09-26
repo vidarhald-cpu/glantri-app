@@ -20,10 +20,24 @@ export function normalizeProfessionId(input: unknown): string | undefined {
   return retiredProfessionIdAliases[input] ?? input;
 }
 
+/**
+ * Reader-content layer (Forgejo #361). A Profession's reader prose: one line for tables and cards,
+ * a several-paragraph full description for Inspectors, what a practitioner actually does, and what
+ * the occupation's training does not supply. `fullDescription` is never a copy of
+ * `shortDescription`, and neither is ever sourced from the catalogue's authoring `note`.
+ */
+const readerContentFields = {
+  shortDescription: z.string().optional(),
+  fullDescription: z.string().optional(),
+  typicalActivities: z.array(z.string().min(1)).optional(),
+  boundaries: z.array(z.string().min(1)).optional(),
+} as const;
+
 export const professionFamilyDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   description: z.string().optional(),
+  ...readerContentFields,
 });
 
 export const professionDefinitionSchema = z.preprocess(
@@ -51,6 +65,7 @@ export const professionDefinitionSchema = z.preprocess(
     name: z.string().min(1),
     subtypeName: z.string().min(1),
     description: z.string().optional(),
+    ...readerContentFields,
     exclusiveLearningGroupPairs: z.array(z.tuple([idSchema, idSchema])).optional(),
   }),
 );
