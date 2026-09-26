@@ -186,8 +186,9 @@ consolidation).**
 - **Removing current access does not rewrite Activity or history and does not
   make players "forget"** —
   [Live GM Scenario Play §5.1](live-gm-scenario-play.md#51-glantri-does-not-model-forgetting-in-v1).
-- **Person recognition is not an Artifact-access state.** Recognition is shared
-  Scenario-party state ([section 7.4](#74-recognition-is-shared-scenario-party-state)).
+- **Person recognition is not an Artifact-access state.** Recognition is
+  Character-scoped Scenario-Person state
+  ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)).
 
 ### 2.5 GM-only notes on Items and Artifacts
 
@@ -269,12 +270,12 @@ presentation model**. They are not Artifact content, not a Story Note
 ([Campaign Storylines §2](campaign-storylines.md#2-model)), and not the GM-only
 dossier.
 
-| Text                                 | Player-safe                                                                                       |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------- |
-| **general/unidentified label**       | while the Person is visible but **unidentified**                                                  |
-| **general/unidentified description** | while the Person is visible but **unidentified**                                                  |
-| **identified label**                 | once the Person is **recognized** ([section 7.4](#74-recognition-is-shared-scenario-party-state)) |
-| **identified description**           | once the Person is **recognized** ([section 7.4](#74-recognition-is-shared-scenario-party-state)) |
+| Text                                 | Player-safe                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **general/unidentified label**       | while the Person is visible but **unidentified**                                                                                      |
+| **general/unidentified description** | while the Person is visible but **unidentified**                                                                                      |
+| **identified label**                 | once the Person is **recognized by the viewing Character** ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)) |
+| **identified description**           | once the Person is **recognized by the viewing Character** ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)) |
 
 **The label is presentation metadata, not another identity level.** It is the
 short player-facing name a layer presents; it introduces no partial-identity
@@ -315,12 +316,13 @@ The Campaign Material **Person Inspector**:
 - exposes use and history;
 - allows reuse of the Person in another Scenario.
 
-> **Which layer applies is decided by shared Scenario-party recognition state**
-> ([section 7.4](#74-recognition-is-shared-scenario-party-state)), not on the
-> Person. How identity revelation is modelled is **settled for V1** —
+> **Which layer applies is decided by the viewing Character's Scenario-Person
+> recognition state**
+> ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)), not
+> on the Person. How identity revelation is modelled is **settled for V1** —
 > [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
-> — as party-wide Scenario-Person state; per-player recognition remains
-> deferred.
+> — as **Character-scoped** Scenario-Person state. The earlier party-wide answer
+> and its per-player deferral are **superseded**.
 
 > **The Person Inspector must not become the Character editor.**
 
@@ -511,7 +513,7 @@ is
 | A **generic context/scope column**                                                  |
 | An **arbitrary resolution hierarchy** beyond [section 7.1](#71-the-resolution-rule) |
 | An **entitlement-specific override system**                                         |
-| A **per-player override**                                                           |
+| A **per-player presentation override**                                              |
 | **Scenario-scoped primary roles**                                                   |
 | **Modification of the Person's canonical Artifact selections**                      |
 | A general **override-resolution framework**                                         |
@@ -522,45 +524,74 @@ The Person's canonical selections stay global and untouched, per
 override, remains forbidden**, and the general context-specific override case
 remains deferred to the Product Owner.
 
+> **The per-player row is about overriding presentation content, and it stands.**
+> It is **not** a prohibition on Character-scoped knowledge. Which of the two
+> canonical layers a viewer receives is resolved from that viewer's Character's
+> recognition state
+> ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)) and
+> introduces no override slot, no scope column and no resolution hierarchy.
+
 ### 7.3 Three distinct concepts
 
 **Presence, visibility/recognition and presentation are conceptually distinct**
 and must not be collapsed into one another or into a single flag.
 
-### 7.4 Recognition is shared Scenario-party state
+### 7.4 Recognition is Character-scoped Scenario-Person state
 
-**For V1, recognition is persistent Scenario-Person, party-wide play state, not
-per-player state.** It persists for that Scenario rather than lasting only for a
-session or a view. This is the settled answer to
+**For V1, recognition is persistent Scenario-Person play state held per
+Character**, not once for the whole party. It persists for that Scenario rather
+than lasting only for a session or a view. This is the settled answer to
 [OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled),
 recorded at
-[Content authoring §18.23](content-authoring-scenario-preparation-and-artifact-management.md#1823-open-ppl-1-settled-for-v1--recognition-is-party-wide-scenario-person-state);
-**a lane implementing recognition no longer stops and returns it to the Product
+[Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped),
+which **supersedes** the earlier party-wide settlement of 2026-09-25;
+**a lane implementing recognition does not stop and return it to the Product
 Owner.**
 
 - **Scenario preparation establishes the initial unidentified/identified
-  state.**
+  state**, for the Scenario's participating Characters.
 - **An explicit mid-play GM reveal/recognition action changes it.** It changes in
   no other way, and **preparation edits emit no recognition events**.
-- **Presentation resolves from that shared state**, plus the optional Scenario
-  override and the canonical fallback of [section 7.1](#71-the-resolution-rule).
+- **Recognition is granted to a selected set of Characters** — commonly the
+  acting Character, the current Encounter's or Scenario's participants, or all
+  relevant Campaign player Characters. **The exact selector UI is not prescribed
+  here.**
+- **Presentation resolves from the viewing Character's recognition state**, plus
+  the optional Scenario override and the canonical fallback of
+  [section 7.1](#71-the-resolution-rule).
 
-**Per-player recognition is deferred, not rejected.** V1 builds no per-player
-visibility or recognition controls, and nothing built for V1 may make per-player
-recognition a redesign rather than an extension.
+**This creates no per-Character presentation override.** Which of the two
+canonical layers a viewer receives is a projection question over the existing
+layers; **every prohibition in [section 7.2](#72-what-the-override-is-and-is-not)
+stands, including the per-player override row.**
+
+**Character-scoped recognition also means Characters may hold different
+knowledge**, and that difference is **intended** — the Blackboard asymmetry of
+[Campaign Blackboard V1 §9](campaign-blackboard-v1.md#9-no-silent-blackboard-updates)
+and
+[Content authoring §18.29](content-authoring-scenario-preparation-and-artifact-management.md#1829-the-blackboard-is-shared-external-memory-not-knowledge-synchronization).
 
 #### 7.4.1 Only a change during play is history
 
 **A player-visible recognition or reveal during play produces a distinct
-player-safe state-transition Activity event.** The party learned who someone is,
+player-safe state-transition Activity event.** Someone learned who a Person is,
 and that learning is part of what happened.
 
 **That event kind is `person_identity_revealed`, and it is not a
 `scenario_announcement`.** Publishing a prepared GM message
 ([section 8.1](#81-publication-creates-a-scenario_announcement-activity-event))
-and the party recognizing a Person are different things that happened, and they
+and a Character recognizing a Person are different things that happened, and they
 are recorded as different event kinds. `person_identity_revealed` records a
-mid-play **shared-party transition from unidentified to identified**.
+mid-play transition from unidentified to identified.
+
+> **Whose history it is, is an open product decision.** Recognition is now
+> Character-scoped ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)),
+> so a recognition reaching only some Characters cannot be written as shared
+> party history without leaking. **Whether and how such a transition enters the
+> one shared Activity record is unsettled** and is recorded at
+> [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
+> A lane that would persist or project it **stops and returns that decision.**
+> Everything else in this section stands.
 
 **Its payload snapshots the resolved player-safe label
 ([section 3.1](#31-the-canonical-presentation-label-and-texts)) immediately
@@ -667,7 +698,7 @@ Prepared intent, for example:
 > **Actual state-changing actions happen in live Scenario Play**
 > ([Live GM Scenario Play §6](live-gm-scenario-play.md#6-the-live-gm-inspector)).
 
-This is the same boundary [section 7.4](#74-recognition-is-shared-scenario-party-state)
+This is the same boundary [section 7.4](#74-recognition-is-character-scoped-scenario-person-state)
 draws for recognition and [section 8](#8-prepared-gm-messages) draws for
 messages: **a change during play is history; a change during preparation is
 not.**
@@ -687,8 +718,13 @@ Typical cases are a Person speaking and a narrator or material message.
   GM-only until published**.
 - **Nothing enters Activity before publication.** A prepared but unpublished
   message has no Activity representation of any kind.
-- In V1, publication is **party-wide — shared to the Scenario's players as a
-  group. There is no per-player audience selector.**
+- In V1, publication of a prepared message is **party-wide — shared to the
+  Scenario's players as a group. There is no per-player audience selector.**
+  **This is announcement publication, not a knowledge disclosure.** Granting
+  persistent knowledge to a selected set of Characters is a different operation
+  with its own recipients
+  ([Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)),
+  and this bullet does not restrict it.
 - **V1 builds no dialogue trees and no automatic narrative triggers.**
 
 ### 8.1 Publication creates a `scenario_announcement` Activity event
@@ -713,10 +749,16 @@ rendering and history** — no GM-only preparation context travels with it.
 ### 8.2 Speaker identity in a published announcement
 
 **A published `scenario_announcement` renders its speaker according to the
-party's recognition state at publication time**
-([section 7.4](#74-recognition-is-shared-scenario-party-state)), with the
-Scenario overlay and canonical fallback of
+recognition state at publication time**
+([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)), with
+the Scenario overlay and canonical fallback of
 [section 7.1](#71-the-resolution-rule) applied to that state.
+
+> **Which Character's recognition state resolves one shared announcement label is
+> the same open question as the recognition event's audience**, recorded at
+> [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
+> **The rule below is unaffected and holds in every case**: the announcement must
+> not expose canonical identity to a viewer not entitled to it.
 
 **An unidentified Person must not expose canonical identity through the Activity
 projection.** The canonical Person relation carried by the event may remain

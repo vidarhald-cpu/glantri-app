@@ -202,11 +202,11 @@ Players see: The officer
 ```
 
 **The `Players see:` value is the resolved player-safe label** of the layer the
-party's shared Scenario recognition state selects, after the Scenario overlay,
-per
+**viewing Character's** Scenario recognition state selects, after the Scenario
+overlay, per
 [Campaign Material and Scenario Builder §3.1](campaign-material-and-scenario-builder-ui.md#31-the-canonical-presentation-label-and-texts),
 [§7.1](campaign-material-and-scenario-builder-ui.md#71-the-resolution-rule) and
-[§7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state).
+[§7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-character-scoped-scenario-person-state).
 Where no label is set it takes that section's fallback — `Unidentified person`
 at the unidentified layer, the canonical player-facing Person name at the
 identified layer. **It is never sourced from the GM dossier.**
@@ -305,13 +305,20 @@ presentation.**
 - After recognition, the Blackboard card **may update to the identified
   presentation**.
 
-**No per-player knowledge enforcement exists in V1.** Recognition is party-wide
-Scenario state
-([Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state)),
-and the Blackboard invariant that Glantri does not adjudicate what another
-player's Character could know
+**Recognition is Character-scoped**
+([Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-character-scoped-scenario-person-state)),
+so **Characters may hold different knowledge of the same Person**, and the
+Blackboard card carries only what a Character **deliberately posted**. Posting
+does not copy knowledge into another Character's Knowledge Library, and removal
+does not take it away —
+[Content authoring §18.29](content-authoring-scenario-preparation-and-artifact-management.md#1829-the-blackboard-is-shared-external-memory-not-knowledge-synchronization).
+
+The Blackboard invariant that Glantri does not adjudicate what another player's
+Character could **infer or reason**
 ([#268 §8.1](../architecture/scenario-play-workspace.md#81-core-invariant))
-is unchanged.
+is unchanged. **It was never a statement that knowledge is party-wide**, and it
+does not prevent the application from holding what a Character has explicitly
+been told or has discovered.
 
 ---
 
@@ -354,9 +361,17 @@ Possible live actions:
 > is unchanged, and no live action exposes it.
 
 `Reveal identity` is the mid-play recognition transition of
-[Campaign Material and Scenario Builder §7.4.1](campaign-material-and-scenario-builder-ui.md#741-only-a-change-during-play-is-history)
-and produces `person_identity_revealed`
-([section 9](#9-historical-activity)).
+[Campaign Material and Scenario Builder §7.4.1](campaign-material-and-scenario-builder-ui.md#741-only-a-change-during-play-is-history).
+**It grants recognition to a selected set of Characters** — by default the
+context's obvious recipients — because recognition is Character-scoped
+([Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)).
+Whether it also produces a `person_identity_revealed` Activity entry
+([section 9](#9-historical-activity)) is the open decision at
+[Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
+
+The Person Inspector is also a capture surface for a
+[section 6.6](#66-recording-a-discovery-or-a-story-event) Discovery about that
+Person.
 
 ### 6.2 Item
 
@@ -420,6 +435,49 @@ player-safe text identity is snapshotted at publication, per
 and
 [Content authoring §18.16](content-authoring-scenario-preparation-and-artifact-management.md#1816-prepared-message-speaker-history-is-text-identity-in-v1).
 
+### 6.6 Recording a Discovery or a Story Event
+
+Two lightweight live-capture actions belong to this surface. Both are settled at
+[Content authoring §18.32](content-authoring-scenario-preparation-and-artifact-management.md#1832-runtime-discoveries-from-skill-rolls-and-play)
+and
+[§18.33](content-authoring-scenario-preparation-and-artifact-management.md#1833-gm-story-events),
+and neither is restated or varied here.
+
+**Record a Discovery.** Player-facing information learned by one or more
+Characters during play — a Perception result, an Insight or social observation,
+cultural or historical recognition, or something learned while examining or
+talking. It **persists into the recipient Character(s)' Knowledge Libraries**.
+
+- **The acting Character is normally the default recipient**, and other
+  Characters may be selected.
+- **The GM records it inline** from the surface the roll or inspection happened
+  on — no separate authoring workflow.
+- **Routine rolls need not create a Discovery.**
+- It is **concise player-facing text plus recipients, provenance and optional
+  typed links**, and **no atomic-fact ontology is authorized.**
+
+**Record a Story Event.** A story development that was not pre-authored but
+matters to later narrative history — for example
+`The chapel roof collapsed, separating the party.` **A Story Event the GM
+publishes as shared history becomes a player-safe Activity entry**; one the GM
+does not publish is not Activity.
+
+> **Capture in context; retrieve through context**
+> ([Content authoring §18.36](content-authoring-scenario-preparation-and-artifact-management.md#1836-capture-in-context-retrieve-through-context)).
+> Scenario, Encounter, acting Character, selected Person/identity,
+> Item/Artifact and Skill/task are **derived from the surface the capture happens
+> on** wherever possible, rather than entered by hand. **No detailed UI layout is
+> prescribed here.**
+
+**A Discovery is Character-private and is not Activity.** It reaches shared
+surfaces only through an explicit act — a player's post to the Blackboard, or a
+player's `Add to session history` snapshot of a note
+([Content authoring §18.34](content-authoring-scenario-preparation-and-artifact-management.md#1834-player-authored-notes-live-in-a-characters-knowledge-library)).
+**The recap never mines Knowledge Libraries**
+([§18.35](content-authoring-scenario-preparation-and-artifact-management.md#1835-the-session-recap-privacy-boundary)).
+
+> **This document settles product behaviour; it authorizes no implementation.**
+
 ---
 
 ## 7. The Messages control and the live composer
@@ -441,9 +499,12 @@ The V1 quick composer carries:
 > creation step is required before immediate publication.** The GM types and
 > publishes.
 
-- **No per-player audience selector exists in V1. Publication is party-wide**,
-  unchanged from
+- **Publishing a message has no per-player audience selector in V1. Publication
+  is party-wide**, unchanged from
   [Campaign Material and Scenario Builder §8](campaign-material-and-scenario-builder-ui.md#8-prepared-gm-messages).
+  **This governs announcements only** — granting knowledge to a selected set of
+  Characters is a different operation
+  ([section 6.6](#66-recording-a-discovery-or-a-story-event)).
 - Where the currently selected resource provides useful context, the composer
   **defaults the speaker and related object intelligently but visibly** — the
   GM can always see what was defaulted and change it before publishing.
@@ -492,7 +553,7 @@ here:
 | Event kind                 | Produced by                                                                                                            |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `scenario_announcement`    | publishing a message ([section 6.5](#65-prepared-message), [section 7](#7-the-messages-control-and-the-live-composer)) |
-| `person_identity_revealed` | a mid-play recognition transition ([section 6.1](#61-person))                                                          |
+| `person_identity_revealed` | a mid-play recognition transition ([section 6.1](#61-person)), subject to the open audience decision below             |
 
 Their semantics are settled elsewhere and are **not restated or varied here**:
 [Content authoring §18.15](content-authoring-scenario-preparation-and-artifact-management.md#1815-scenario-recognition-is-a-distinct-activity-event-kind)
@@ -509,6 +570,16 @@ Two rules bear repeating because they govern this surface directly:
   a change during preparation is not.
 - **`person_identity_revealed` snapshots player-safe before/after text labels,
   not images.**
+- **Its audience is unsettled.** Recognition is Character-scoped, and Activity is
+  one shared player-safe record; **whether and how a recognition reaching only
+  some Characters enters it is an open product decision** at
+  [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
+  **A lane that would persist or project this event stops and returns it.**
+- **A GM Story Event the GM publishes as shared history is player-safe Activity**
+  ([Content authoring §18.33](content-authoring-scenario-preparation-and-artifact-management.md#1833-gm-story-events));
+  one the GM does not publish is not. **Character-private Discoveries and private
+  notes are never Activity** unless explicitly published
+  ([§18.35](content-authoring-scenario-preparation-and-artifact-management.md#1835-the-session-recap-privacy-boundary)).
 
 **The main GM Activity view remains the shared player-safe narrative history** —
 the same history the players have, seen from the GM's seat.
@@ -533,7 +604,6 @@ and nothing in this contract may be read as authorizing them.
 
 | Not built in V1                                                            |
 | -------------------------------------------------------------------------- |
-| **Per-player visibility or recognition**                                   |
 | **Simulated forgetting**                                                   |
 | A **generic visibility ACL system**                                        |
 | A **generic context override hierarchy**                                   |
@@ -543,9 +613,18 @@ and nothing in this contract may be read as authorizing them.
 | A general-purpose **knowledge-management, wiki or task-management system** |
 | **Duplicate Character or Item editors**                                    |
 
-Per-player recognition remains **deferred, not rejected**
-([Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state)):
-nothing built for V1 may make it a redesign rather than an extension.
+> **Per-Character recognition and knowledge are no longer a non-goal.** The
+> earlier row prohibiting per-player visibility or recognition is **removed**:
+> recognition is Character-scoped and Knowledge Libraries are Character-scoped
+> ([Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-character-scoped-scenario-person-state),
+> [Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)).
+> **No lane stops on the ground that per-player knowledge is deferred.**
+
+**A generic visibility ACL system remains a non-goal.** Character-scoped
+knowledge is typed knowledge state on typed subjects, not a general
+access-control framework, and it authorizes **no generalized atomic-fact or
+knowledge-atom ontology**
+([Content authoring §18.32](content-authoring-scenario-preparation-and-artifact-management.md#1832-runtime-discoveries-from-skill-rolls-and-play)).
 
 ### 10.1 Strongly synchronized multiplayer liveness
 

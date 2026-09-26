@@ -345,25 +345,38 @@ officer — You now recognize this person as Captain Varro."_ with `Add to Black
 A **durable-enough** local `New information` indication may accompany transient feedback, so that
 important updates are not lost merely because the player missed a short-lived message.
 
-### 9.2 Local prompts do not imply per-player knowledge divergence
+### 9.2 The Blackboard is shared external memory, not knowledge synchronization
 
-> **V1 Person recognition remains party-wide Scenario state. Local prompts and private inspection do
-> not imply per-player knowledge divergence.**
+> **Knowledge is Character-scoped; the Blackboard is not.** Posting to the Blackboard does **not**
+> copy information into any other Character's Knowledge Library, and removing Blackboard material
+> does **not** alter any Character's Knowledge Library.
 
-The settled recognition rule is
-[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state)
-and is not restated here.
+The settled rules are
+[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-character-scoped-scenario-person-state)
+and
+[Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)
+and
+[§18.29](content-authoring-scenario-preparation-and-artifact-management.md#1829-the-blackboard-is-shared-external-memory-not-knowledge-synchronization),
+which **supersede** the earlier party-wide recognition model. They are not restated here.
+
+A Character may therefore **know something privately, share it later, share only a less-revealing
+presentation, or choose not to share it at all.**
+
+> **That asymmetry is a gameplay feature, not a synchronization defect.** Characters' skills,
+> perceptions and private discoveries are intended to create meaningful information differences
+> within the party. **No implementation may resolve it by synchronizing the Blackboard with any
+> Knowledge Library, and no QA finding may report the divergence as a bug.**
 
 A [section 9.1](#91-knowledge-update-indication) indication and a
-[section 11](#11-private-inspection) inspection are therefore **local UI facts, not knowledge
-facts**. They are private because a prompt and a viewport belong to the player looking at them, and
-because the Blackboard must not announce what anybody is reading — **not** because V1 tracks what
-each player separately knows.
+[section 11](#11-private-inspection) inspection remain **private to the player looking at them** —
+a prompt and a viewport belong to that player, and the Blackboard must not announce what anybody is
+reading. With Character-scoped knowledge, a 9.1 indication also reflects a **genuine** difference in
+what that Character knows, and **must not disclose that difference to anyone else**.
 
-This is why nothing in this contract asks the application to adjudicate divergent per-player
-knowledge; **character-by-character knowledge enforcement** remains a
-[non-goal](#24-v1-non-goals), and the
-[#268 §8.1](../architecture/scenario-play-workspace.md#81-core-invariant) invariant is unchanged.
+**This contract still asks the application to adjudicate no reasoning or inference**: the
+[#268 §8.1](../architecture/scenario-play-workspace.md#81-core-invariant) invariant — that Glantri
+does not decide what a Character could have worked out — is unchanged. Holding what a Character was
+explicitly told or explicitly discovered is a different thing, and is now the model.
 
 ---
 
@@ -476,6 +489,12 @@ V1 does **not** require note ownership permissions; rich-text collaboration; rev
 simultaneous-document merge semantics.
 
 > **Notes are Blackboard content, not canonical Person, Item or Artifact data.**
+
+**Blackboard notes are not Knowledge Library notes.** A Character's own freeform notes live in that
+Character's Knowledge Library and are private until deliberately shared
+([Content authoring §18.34](content-authoring-scenario-preparation-and-artifact-management.md#1834-player-authored-notes-live-in-a-characters-knowledge-library)).
+**Sharing a note here does not move it**: the original stays in the Knowledge Library, and what
+appears on the board is a separate shared record.
 
 ---
 
@@ -599,6 +618,12 @@ reorder what the board holds.
 > governs.
 
 - **Private knowledge does not leak onto the Blackboard automatically.**
+- **Posting to the Blackboard copies nothing into another Character's Knowledge Library, and
+  removing Blackboard material alters no Character's Knowledge Library.**
+- **No player-facing People card may expose whether an entry is the canonical Person, an alias
+  backed by one, or an unresolved identity** — no distinguishable card type, icon, identifier form
+  or metadata
+  ([People/Artifact model §4.2](people-artifact-and-gm-authoring-model.md#42-the-identity-anti-leak-invariant)).
 - **A GM-private object is not Blackboard-eligible merely because the GM can see it.** The owning
   domain's explicit share or reveal action comes first
   ([section 4.3](#43-gm-visibility-does-not-confer-eligibility)).
@@ -647,7 +672,6 @@ contract may be read as authorizing them.**
 | **Arbitrary card rotation**                                                          |
 | **Rich-text document editing**                                                       |
 | **Version history for player notes**                                                 |
-| **Character-by-character knowledge enforcement**                                     |
 | **Automatic sharing of newly learned information**                                   |
 | **Automatic synchronization to current Situation presentation**                      |
 | **Presenter-controlled shared card inspection**                                      |
@@ -658,15 +682,26 @@ contract may be read as authorizing them.**
 
 These may be considered later based on actual play experience.
 
+> **The removed row.** **Character-by-character knowledge enforcement is no longer a non-goal**:
+> persistent player-facing knowledge is Character-scoped
+> ([Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)).
+> What this surface still does not do is **own or synchronize** that knowledge — the Blackboard
+> holds only what a Character deliberately posted
+> ([section 9.2](#92-the-blackboard-is-shared-external-memory-not-knowledge-synchronization)).
+> **Generalized fact-selection or knowledge-atom modeling remains a non-goal**, and is refused for
+> Discoveries as well
+> ([§18.32](content-authoring-scenario-preparation-and-artifact-management.md#1832-runtime-discoveries-from-skill-rolls-and-play)).
+
 ---
 
 ## 25. Core V1 acceptance examples
 
 A conforming implementation must support at least these behaviors.
 
-Where an example gives one named player a private prompt or a private view, it describes **local UI
-behavior under the party-wide recognition model**, not per-player knowledge divergence
-([section 9.2](#92-local-prompts-do-not-imply-per-player-knowledge-divergence)).
+Where an example gives one named player a private prompt or a private view, it describes behavior
+under **Character-scoped knowledge**: what that Character knows may genuinely differ from what
+another Character knows, and the Blackboard shows only what was deliberately posted
+([section 9.2](#92-the-blackboard-is-shared-external-memory-not-knowledge-synchronization)).
 
 | Behavior                            | Example                                                                                                                                                             |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
