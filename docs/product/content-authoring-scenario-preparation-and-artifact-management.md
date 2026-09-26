@@ -21,6 +21,11 @@ OPEN-PPL-10 without deciding it** ([section 18.10](#1810-open-ppl-10-deferred-an
 and **narrowly authorize a two-layer Scenario presentation override**
 ([section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)).
 
+**The controlling content-authoring principle — _content management serves the
+story; it does not prescribe the story_ — is recorded at
+[section 18.27](#1827-narrative-freedom--content-management-serves-the-story).**
+It constrains how every lane models Campaign content, and authorizes nothing.
+
 This contract **generalizes an implemented pipeline**. It does not introduce a
 second import system, and no reader should build one from it.
 
@@ -1911,6 +1916,102 @@ requires. **Nothing else in
 through [section 18.36](#1836-capture-in-context-retrieve-through-context) is
 gated on it**, including the Knowledge Library, Discoveries, notes, the People
 identity model and the retrieval principle.
+
+---
+
+### 18.27 Narrative freedom — content management serves the story
+
+**Status:** **RECORDED AS REQUIRED, 2026-09-26.** **Authority:** Product Owner.
+**Amends:** nothing. **Gates:** nothing, and it authorizes nothing. It is a
+**standing constraint** on every lane that models, stores or presents Campaign
+content.
+
+> **Content management serves the story; it does not prescribe the story.**
+
+Glantri must make complex Campaign material **vivid, memorable, reusable and
+easy to navigate** without forcing it into a **single chronology, interpretation
+or expected sequence of revelation**.
+
+**Ambiguity, partial knowledge, mistaken or multiple identities, revisitation,
+delayed recognition, conflicting appearances, retrospective reinterpretation and
+multiple viewpoints are ordinary supported states, not data defects to be
+normalized away.**
+
+#### The seven consequences
+
+1. **Chronological history may be recorded, but chronology is not the organizing
+   ontology of the story.** This is a **refusal**, not an omission: the natural
+   modelling instinct to make time the spine of the story is declined. Durable
+   history ([section 9](#9-durable-history)) and Activity remain exactly what
+   they are — records — and acquire no authority to order or structure the
+   narrative.
+2. **GM-known relationships do not automatically become player-known
+   relationships.** Knowing a fact on the GM side is not a pending disclosure
+   awaiting propagation. The GM-only dossier
+   ([People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier))
+   and the GM-private default
+   ([section 11.6](#116-visibility-everything-begins-gm-private)) are the
+   settled shape of this consequence.
+3. **Unresolved identities, and contradictory or player-mistaken
+   interpretations, may persist until explicitly resolved in play.** A Person
+   may remain a generic appearance indefinitely
+   ([People/Artifact model §4](people-artifact-and-gm-authoring-model.md#4-person-representation-and-identity));
+   nothing in the model may force, expire or tidy away that state.
+4. **Associations support retrieval and context, not prescribed causality or
+   encounter order.** The canonical Artifact Association layer
+   ([section 4.1](#41-the-canonical-artifact-association-layer)) and every typed
+   relationship built over it answer _what relates to what_. They do not encode
+   _what causes what_ or _what happens first_, and no surface may read them that
+   way.
+5. **Readiness is advisory and must never block improvisation.** This rule is
+   **already stated** and is deliberately **not** restated in different words
+   here:
+   [Campaign Material and Scenario Builder §10](campaign-material-and-scenario-builder-ui.md#10-preparation-readiness),
+   over the derived readiness of [section 15](#15-representation-readiness).
+   That wording governs; this entry only records that the rule is one of this
+   principle's consequences.
+6. **Player-facing content supports memory and investigation without presenting
+   the Campaign as a solved database of canonical facts.** Player-capable
+   surfaces help players remember and investigate. They must not read as a
+   settled, complete, authoritative answer key, and they must not imply that
+   what is recorded is all there is.
+7. **The implementation must not simplify or "repair" ambiguity merely to make
+   the domain model cleaner.** **This is a prohibition, and it is the operative
+   consequence for any Builder.** An implementation may **not**, in order to
+   tidy the model: collapse multiple or unresolved identities into one resolved
+   record; deduplicate, reconcile or overwrite conflicting appearances,
+   descriptions or player interpretations; derive a canonical chronology or
+   sequence the product has not asked for; propagate knowledge automatically to
+   remove a divergence; or add a completeness, correctness or resolution
+   requirement to content that the product allows to remain open. A cleaner
+   domain model is **not** a justification. Where the correct behavior is
+   genuinely ambiguous and materially consequential, record `Needs decision`
+   per
+   [Product & Presentation Principles §3](product-presentation-principles.md#3-interpretation-and-authority)
+   rather than resolving it in code.
+
+#### Where this principle bears
+
+| Contract                                                                        | The consequences it instantiates                                                                                          |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| [People, Artifacts and GM authoring](people-artifact-and-gm-authoring-model.md) | Consequences 2, 3 and 7 — unresolved and multiple identities, delayed recognition, and the GM dossier that stays private. |
+| [Campaign Blackboard V1](campaign-blackboard-v1.md)                             | Consequences 1, 6 and 7 — no silent updates, access without obligation, and the refusal to model forgetting.              |
+| [Campaign Storylines](campaign-storylines.md)                                   | Consequences 1 and 4 — the flexible hierarchy and typed links for retrieval rather than causality.                        |
+
+#### Boundary — what this principle is not licence for
+
+**This principle reopens nothing and creates nothing.** Specifically:
+
+- It **must not be cited to reopen settled mechanics**, including anything
+  settled by [section 17](#17-scope-boundaries), any ruling in this
+  [section 18](#18-rulings-recorded-here), or the settled positions of the
+  contracts listed above.
+- It **must not be used to create generalized narrative machinery** — no
+  narrative engine, no general-purpose wiki or knowledge base, no timeline
+  subsystem, no causality or inference layer, and no universal hierarchy of
+  facts.
+- It **grants no new scope, surface, entity or capability.** It constrains how
+  work that is already authorized models content, and nothing more.
 
 ---
 

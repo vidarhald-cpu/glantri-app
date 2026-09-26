@@ -214,6 +214,16 @@ Recording #284 §3.
   general appearance — plus an open set of additional illustrations, not a
   single "primary" slot.
 
+**An unresolved identity is an ordinary supported state, not an incomplete
+record.** A Person may remain a generic appearance for as long as play leaves
+them unrecognized, and contradictory or player-mistaken interpretations may
+persist until play resolves them. Delayed recognition, revisitation and
+retrospective reinterpretation are likewise supported states. This instantiates
+the third consequence of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story), whose seventh
+consequence additionally **prohibits** collapsing multiple or unresolved
+identities into one resolved record, or reconciling conflicting appearances and
+descriptions, in order to make the domain model cleaner.
+
 Identity revelation is a **GM visibility operation**, so it belongs to the
 **Reveal** vocabulary settled by
 [#268 §4.5](../architecture/scenario-play-workspace.md#45-reveal-and-share-are-two-different-operations)
@@ -400,6 +410,13 @@ Recording #284 §5.
   campaign notes.
 - It **must be structurally excluded from all player projections, search and
   context**.
+
+**GM-known relationships do not automatically become player-known
+relationships.** Dossier content is not a pending disclosure awaiting
+propagation, and no hidden origin, motive, secret or relationship recorded here
+becomes player-known because the GM knows it. Making it player-known is always a
+separate, explicit act on a player-capable object. This instantiates the second
+consequence of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story).
 
 > ### This is a hard privacy constraint, not a UI preference
 >
