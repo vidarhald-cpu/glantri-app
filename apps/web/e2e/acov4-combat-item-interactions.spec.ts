@@ -18,10 +18,65 @@ async function getEncounter(request: APIRequestContext, encounterId: string) {
   expect(response.ok()).toBe(true);
   return (await response.json()) as {
     encounter: {
-      combatRoundState?: { genericActions?: Array<{ id: string; status: string }> };
+      combatRoundState?: {
+        genericActions?: Array<{
+          duration: { kind: string };
+          id: string;
+          itemInteraction?: {
+            itemLabel: string;
+            operation: string;
+            recipientParticipantId?: string;
+          };
+          resolution?: { text: string };
+          status: string;
+        }>;
+      };
       updatedAt: string;
     };
   };
+}
+
+/**
+ * A3, Forgejo issue #335 — Combat Panel Contract §12.15, P8 of the parity matrix.
+ *
+ * `GenericCombatActionPanel` is retired, so the Item facts this spec used to read off its render
+ * inside Combat are asserted on the payloads their surviving surfaces consume instead. That is the
+ * demonstrated equivalent P8 allows, and the payload-not-DOM rule the matrix carries from #271.
+ *
+ * - Encounter Item presence, label and audience: `GET /encounters/:encounterId/items`, the payload
+ *   `EncounterItemsPanel` reads on its surviving render outside Combat
+ *   (`RoleplayEncounterScreens.tsx`), which is M8's relocated access.
+ * - An Item action's declared status and its GM-authored resolution text: the viewer's own
+ *   `GET /encounters/:encounterId` projection, which is what every Combat surface renders from.
+ */
+async function getEncounterItems(request: APIRequestContext, encounterId: string) {
+  const response = await request.get(`${API_URL}/encounters/${encounterId}/items`);
+  expect(response.ok(), await response.text()).toBe(true);
+  return (await response.json()) as {
+    items: Array<{ itemId: string; label: string; visibility: "players" | "gm_only" }>;
+  };
+}
+
+async function getItemAction(
+  request: APIRequestContext,
+  encounterId: string,
+  actionId: string,
+): Promise<
+  NonNullable<
+    NonNullable<
+      Awaited<ReturnType<typeof getEncounter>>["encounter"]["combatRoundState"]
+    >["genericActions"]
+  >[number]
+> {
+  const { encounter } = await getEncounter(request, encounterId);
+  const action = encounter.combatRoundState?.genericActions?.find(
+    (candidate) => candidate.id === actionId,
+  );
+  expect(
+    action,
+    `Item action ${actionId} is absent from the payload this viewer is served`,
+  ).toBeTruthy();
+  return action!;
 }
 
 async function gmCompleteItemAction(input: {
@@ -223,12 +278,18 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
 
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
-    await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
     // Forgejo issue #356 — M7's client half. The canonical Item declaration surface is now the
     // player's own, mounted in the Action Selector (Combat Panel Contract §12.4), where before it
     // reached only the GM through `GenericCombatActionPanel`.
     await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(1);
-    await expect(playerPage.getByText("No Items are present in this Encounter.")).toBeVisible();
+    // A3, Forgejo issue #335 — no Combat surface embeds Encounter Item presence any more, and no
+    // "Actions and tasks" panel is rendered. Presence itself is asserted on the payload.
+    await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toHaveCount(0);
+    await expect(playerPage.getByRole("heading", { name: "Actions and tasks" })).toHaveCount(0);
+    await expect(playerPage.getByRole("heading", { name: "Items and task history" })).toHaveCount(
+      0,
+    );
+    expect((await getEncounterItems(playerContext.request, encounterId)).items).toEqual([]);
 
     const passActionId = `acov4-pass-${suffix}`;
     let current = await getEncounter(playerContext.request, encounterId);
@@ -247,18 +308,23 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
         recipientParticipantId: recipientEncounterParticipantId,
       },
     );
-    await playerPage.reload();
-    await expect(playerPage.getByText("Waiting for GM review · GM decides")).toBeVisible();
+    // A3 — the declared Item action and its pending review are asserted on the payload the viewer
+    // is served rather than on the retired panel's status line and history selector.
+    expect(await getItemAction(playerContext.request, encounterId, passActionId)).toMatchObject({
+      duration: { kind: "gm_decided" },
+      itemInteraction: {
+        itemLabel: itemName,
+        operation: "pass",
+        recipientParticipantId: recipientEncounterParticipantId,
+      },
+      status: "declared",
+    });
 
     const declaredPass = await getEncounter(gmPage.request, encounterId);
     const passAction = declaredPass.encounter.combatRoundState?.genericActions?.find(
       (candidate) => candidate.id === passActionId && candidate.status === "declared",
     );
     expect(passAction).toBeTruthy();
-    await playerPage.reload();
-    await expect(
-      playerPage.getByLabel("Action and task history").locator("option:checked"),
-    ).toContainText(`Pass / give ${itemName}`);
 
     await gmCompleteItemAction({
       actionId: passAction!.id,
@@ -271,9 +337,12 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await gmPage.goto(
       `/campaigns/${campaignId}?tab=combat&scenarioId=${scenarioId}&encounterId=${encounterId}`,
     );
-    await expect(gmPage.getByText("Result:", { exact: true }).locator("..")).toContainText(
-      `${itemName} changes hands.`,
-    );
+    // A3 — the GM's Combat Inspector renders no "Actions and tasks" panel, and the resolution the
+    // GM authored is read from the payload the Inspector itself renders from.
+    await expect(gmPage.getByRole("heading", { name: "Actions and tasks" })).toHaveCount(0);
+    expect(
+      (await getItemAction(gmPage.request, encounterId, passAction!.id)).resolution?.text,
+    ).toContain(`${itemName} changes hands.`);
 
     let optionsResponse = await recipientContext.request.get(
       `${API_URL}/encounters/${encounterId}/combat-round/item-interactions/options`,
@@ -314,17 +383,20 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       resultText: `${itemName} is present and unheld.`,
     });
     await playerPage.reload();
-    await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
-    // Scoped to Encounter Items: the canonical Item declaration surface now also names the Item on
-    // the player's page (Forgejo issue #356), so an unscoped match is ambiguous.
-    await expect(
-      playerPage.getByLabel("Encounter Items").getByText(itemName, { exact: true }),
-    ).toBeVisible();
+    // A3 — the dropped Item's Encounter presence and its player-visible audience, read from the
+    // payload `EncounterItemsPanel` consumes on its surviving surface outside Combat rather than
+    // from a Combat render that no longer exists. The Item is still named on the player's Combat
+    // page, by the canonical Item declaration surface (Forgejo issue #356).
+    await expect(playerPage.getByLabel("Items in this Combat")).toContainText(itemName);
+    await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toHaveCount(0);
     await gmPage.reload();
-    await expect(gmPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
-    await expect(gmPage.getByRole("listitem").filter({ hasText: itemName })).toContainText(
-      "visible to players",
-    );
+    await expect(gmPage.getByRole("heading", { name: "Encounter Items" })).toHaveCount(0);
+    expect((await getEncounterItems(playerContext.request, encounterId)).items).toEqual([
+      expect.objectContaining({ itemId: item!.id, label: itemName }),
+    ]);
+    expect((await getEncounterItems(gmPage.request, encounterId)).items).toEqual([
+      expect.objectContaining({ itemId: item!.id, label: itemName, visibility: "players" }),
+    ]);
 
     optionsResponse = await playerContext.request.get(
       `${API_URL}/encounters/${encounterId}/combat-round/item-interactions/options`,
@@ -363,10 +435,12 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
       Object.values(canonical.state.itemsById).filter((candidate) => candidate.id === item!.id),
     ).toEqual([expect.objectContaining({ holderCharacterId: characterId, id: item!.id })]);
     await playerPage.reload();
-    await expect(playerPage.getByText("Result:", { exact: true }).locator("..")).toContainText(
-      `${itemName} is picked up again.`,
-    );
-    await expect(playerPage.getByText("No Items are present in this Encounter.")).toBeVisible();
+    // A3 — the resolution the player is entitled to, and the Item's Encounter presence, both read
+    // from the payloads their surviving surfaces consume.
+    expect(
+      (await getItemAction(playerContext.request, encounterId, pickupActionId)).resolution?.text,
+    ).toContain(`${itemName} is picked up again.`);
+    expect((await getEncounterItems(playerContext.request, encounterId)).items).toEqual([]);
     await playerPage.goto(`/characters/${characterId}/equipment`);
     await expect(playerPage.getByText("On person", { exact: true })).toBeVisible();
     await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
