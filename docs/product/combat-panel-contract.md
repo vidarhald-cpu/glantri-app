@@ -1076,6 +1076,40 @@ assertion made **on API payloads, not the DOM** — the #271 lesson.
 
 **Any unticked row blocks the deletion commit.**
 
+##### P1 and P2 — what a full task lifecycle is today, recorded 2026-09-26
+
+Preserved from the independent QA finding on the A3 prerequisite lane. It
+qualifies what P1 and P2 may be ticked for; it **weakens neither check** and
+changes no other row.
+
+- **P1 and P2 must not be ticked as proving a continuous `advance -> resolve`
+  chain, because the current domain cannot produce one.**
+  `buildPerformTaskProcess`
+  (`packages/domain/src/encounter/combatProgressionProjection/resolution.ts:1228-1305`)
+  is a mutually exclusive ladder: `resolve_combat_task` is projected when the
+  task is at its final opportunity (`:1289`), and `advance_combat_task` **only**
+  in the `else` branch (`:1298`), so the two are never offered at the same
+  moment. `advanceCombatTaskAtOpportunity`
+  (`packages/domain/src/encounter/combatRoundManager.ts:29209`) additionally
+  refuses at the final opportunity (`:29229`) and otherwise applies
+  `consumesOpportunity: true` (`:29240`), which closes the actor's phase.
+- **The complete lifecycle available today is `declare -> review -> roll ->
+resolve`, plus a GM `advance` on a multi-round task.** That is what P1 and P2
+  demonstrate, and ticking them on that shape is correct.
+- **Do not construct a fixture that forces a shape production cannot emit.** A
+  parity fixture that manufactures a continuous `advance -> resolve` chain would
+  prove parity against a domain that does not exist. This is the same failure
+  mode as the A2 precedent recorded above — the #271 lesson that an assertion
+  aimed at the wrong layer conceals rather than catches the defect.
+- **This does not make the deletion commit unsafe.**
+  `GenericCombatActionPanel`'s route already refuses declaration-materialized
+  Perform Tasks with `409 task_route_converged`
+  (`apps/api/src/routes/scenarios/encounterRoutes.ts:7403-7407`), so no working
+  alternative path exists today and the deletion removes no capability.
+- **The underlying defect is owned by a separate authorized floor-class lane,
+  Forgejo issue #344. A3 must not absorb it.** A3's scope stays composition and
+  routing only, as **Minimal new domain, API and UI** above already requires.
+
 #### M1-M8 discharged by A3
 
 - **M1, M2, M3, M4** — not resolved by A3; **demonstrated** by it, through P1, P2, P3, P7 and P9

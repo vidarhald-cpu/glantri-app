@@ -116,6 +116,7 @@ import {
   projectCombatNpcDeclarationProposal,
   resolveCombatDeclarationParticipantIdentity,
   validateCombatDeclarationTargets,
+  type CombatGenericAction,
 } from "@glantri/domain";
 import {
   buildCharacterSheetSummary,
@@ -187,6 +188,7 @@ import {
   rollContinuedContactMaintenanceOnServer,
   rollOffensiveParryBrawlingOnServer,
   sendCombatTaskLifecycleCommandOnServer,
+  type CombatTaskLifecycleOperation,
   type CombatItemInteractionOptions,
   rollCombatCriticalOnServer,
   rollCombatHitLocationOnServer,
@@ -307,6 +309,18 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import { GenericCombatActionPanel } from "@/features/combat-generic-actions/GenericCombatActionPanel";
+import {
+  buildCombatTaskItemOptions,
+  buildCombatTaskReviewDraftFromTask,
+  buildCombatTaskReviewDuration,
+  getCombatTaskResolveValidationMessage,
+  getCombatTaskReviewValidationMessage,
+  CombatTaskResolveControls,
+  CombatTaskReviewFields,
+  type CombatTaskItemOption,
+  type CombatTaskResultDraft,
+  type CombatTaskReviewDraft,
+} from "./CombatTaskLifecycleControls";
 import {
   getCombatRoundManagerInspectionSelection,
   getCurrentCombatRoundTaskSelection,
@@ -4509,6 +4523,18 @@ export default function CombatRoundManagerPanel({
   const [combatExperienceDifficultyDrafts, setCombatExperienceDifficultyDrafts] = useState<
     Record<string, string>
   >({});
+  /**
+   * GM Combat Task command inputs, keyed by the canonical task's action id. The review fields are
+   * rendered by the Action Selector and the resolve inputs by Current action, under the settled M5
+   * and M6 rulings (Combat Panel Contract §12.17); both are only ever command inputs here. A draft
+   * is seeded from the task itself when absent, so no effect can race the projected task.
+   */
+  const [combatTaskReviewDrafts, setCombatTaskReviewDrafts] = useState<
+    Record<string, CombatTaskReviewDraft>
+  >({});
+  const [combatTaskResultDrafts, setCombatTaskResultDrafts] = useState<
+    Record<string, CombatTaskResultDraft>
+  >({});
   const combatExperienceDifficultyRequestInFlightRef = useRef(false);
   const [distanceDrafts, setDistanceDrafts] = useState<Record<string, string>>({});
   const [roundEndDistanceOverrideDrafts, setRoundEndDistanceOverrideDrafts] = useState<
@@ -6971,6 +6997,67 @@ export default function CombatRoundManagerPanel({
       !inspectorDraft.disarmSelection.targetItemId)
       ? "Select a trapping weapon, opponent, and weapon to disarm."
       : undefined;
+  /**
+   * The canonical Perform Task the projected Current action addresses, and the GM command inputs it
+   * needs. Nothing here creates, retargets or re-times a task: the projection owns which command is
+   * required, and these are only that command's inputs.
+   */
+  const inspectorCombatTaskCommandType =
+    inspectorCurrentCommandType === "review_combat_task" ||
+    inspectorCurrentCommandType === "roll_combat_task" ||
+    inspectorCurrentCommandType === "advance_combat_task" ||
+    inspectorCurrentCommandType === "resolve_combat_task"
+      ? inspectorCurrentCommandType
+      : undefined;
+  const inspectorCombatTaskActionId = inspectorCombatTaskCommandType
+    ? currentActionPresentation?.primaryAction.descriptor?.actionId
+    : undefined;
+  const inspectorCombatTask: CombatGenericAction | undefined =
+    !inspectorIsHistorical && selectedRoundIsActive && inspectorCombatTaskActionId
+      ? roundState.genericActions.find(
+          (action) =>
+            action.id === inspectorCombatTaskActionId && action.declarationKind === "perform_task",
+        )
+      : undefined;
+  const inspectorCombatTaskOwner = inspectorCombatTask
+    ? effectiveScenarioParticipants.find((candidate) =>
+        encounter.participants.some(
+          (member) =>
+            member.id === inspectorCombatTask.ownerParticipantId &&
+            (member.scenarioParticipantId === candidate.id ||
+              member.characterId === candidate.characterId),
+        ),
+      )
+    : undefined;
+  const inspectorCombatTaskParticipantOptions = roundState.participants.map((entry) => ({
+    label: entry.label,
+    participantId: entry.participantId,
+  }));
+  const inspectorCombatTaskItemOptions: readonly CombatTaskItemOption[] = inspectorCombatTask
+    ? buildCombatTaskItemOptions(inspectorCombatTaskOwner)
+    : [];
+  const inspectorCombatTaskReviewDraft: CombatTaskReviewDraft | undefined = inspectorCombatTask
+    ? (combatTaskReviewDrafts[inspectorCombatTask.id] ??
+      buildCombatTaskReviewDraftFromTask(inspectorCombatTask))
+    : undefined;
+  const inspectorCombatTaskResultDraft: CombatTaskResultDraft | undefined = inspectorCombatTask
+    ? (combatTaskResultDrafts[inspectorCombatTask.id] ?? {
+        audience: [inspectorCombatTask.ownerParticipantId],
+        text: "",
+      })
+    : undefined;
+  const inspectorCombatTaskReviewValidationMessage =
+    inspectorCombatTaskCommandType === "review_combat_task" && inspectorCombatTaskReviewDraft
+      ? getCombatTaskReviewValidationMessage(inspectorCombatTaskReviewDraft)
+      : inspectorCombatTaskCommandType === "review_combat_task"
+        ? "This Combat Task is no longer available to review."
+        : undefined;
+  const inspectorCombatTaskResolveValidationMessage =
+    inspectorCombatTaskCommandType === "resolve_combat_task" && inspectorCombatTaskResultDraft
+      ? getCombatTaskResolveValidationMessage(inspectorCombatTaskResultDraft)
+      : inspectorCombatTaskCommandType === "resolve_combat_task"
+        ? "This Combat Task is no longer available to resolve."
+        : undefined;
   const inspectorActionValidationMessage =
     inspectorCurrentCommandType === "set_combat_experience_difficulty"
       ? inspectorCombatExperienceDifficultyValidationMessage
@@ -6988,7 +7075,11 @@ export default function CombatRoundManagerPanel({
               ? inspectorDamageCommitValidationMessage
               : inspectorCurrentCommandType === "prepare_round_end_review"
                 ? inspectorRoundEndActionValidationMessage
-                : undefined;
+                : inspectorCurrentCommandType === "review_combat_task"
+                  ? inspectorCombatTaskReviewValidationMessage
+                  : inspectorCurrentCommandType === "resolve_combat_task"
+                    ? inspectorCombatTaskResolveValidationMessage
+                    : undefined;
   const inspectorCombatExperienceActionLabel = inspectorCombatExperienceDifficultyStartPending
     ? "Start Combat Experience rolls"
     : inspectorCombatExperienceDifficultyUpdatePending ||
@@ -8091,6 +8182,48 @@ export default function CombatRoundManagerPanel({
       </button>
     </div>
   ) : null;
+  /**
+   * Current action owns the Combat Task commands and their inputs, under the settled M6 ruling: the
+   * GM-authored player-safe result text and its audience are resolve-command inputs, and the two
+   * finish commands are issued at the same opportunity boundary. Current action renders no prior
+   * result and no declaration control.
+   */
+  const inspectorCombatTaskLifecycleControls =
+    inspectorCombatTask && inspectorCombatTaskResultDraft && !inspectorIsInspectionOnly ? (
+      <CombatTaskResolveControls
+        disabled={saving || Boolean(inspectorSnapshot)}
+        draft={inspectorCombatTaskResultDraft}
+        interruptAvailable={inspectorCombatTaskCommandType !== "review_combat_task"}
+        onCancel={() =>
+          invokeGmCurrentAction(
+            currentActionPresentation?.primaryAction.descriptor
+              ? {
+                  ...currentActionPresentation.primaryAction.descriptor,
+                  commandType: "cancel_combat_task",
+                }
+              : undefined,
+          )
+        }
+        onChange={(change) =>
+          setCombatTaskResultDrafts((current) => ({
+            ...current,
+            [inspectorCombatTask.id]: { ...inspectorCombatTaskResultDraft, ...change },
+          }))
+        }
+        onInterrupt={() =>
+          invokeGmCurrentAction(
+            currentActionPresentation?.primaryAction.descriptor
+              ? {
+                  ...currentActionPresentation.primaryAction.descriptor,
+                  commandType: "interrupt_combat_task",
+                }
+              : undefined,
+          )
+        }
+        participantOptions={inspectorCombatTaskParticipantOptions}
+        resolveInputsVisible={inspectorCombatTaskCommandType === "resolve_combat_task"}
+      />
+    ) : null;
   const inspectorCriticalBleedTreatmentControls =
     selectedScenarioParticipant && !inspectorIsHistorical ? (
       <CriticalBleedTreatmentControls
@@ -8103,6 +8236,7 @@ export default function CombatRoundManagerPanel({
     ) : null;
   const inspectorPreActionControls =
     inspectorLiveCombatTaskControls ||
+    inspectorCombatTaskLifecycleControls ||
     inspectorCriticalBleedTreatmentControls ||
     inspectorDefenseReviewControls ||
     inspectorMissileReadinessControls ||
@@ -8121,6 +8255,7 @@ export default function CombatRoundManagerPanel({
         {inspectorStepWorkflowStatus}
         {inspectorDeclarationProposal}
         {inspectorLiveCombatTaskControls}
+        {inspectorCombatTaskLifecycleControls}
         {inspectorCriticalBleedTreatmentControls}
         {inspectorCurrentActionOutcomeControls}
         {inspectorDefenseReviewControls}
@@ -9453,6 +9588,123 @@ export default function CombatRoundManagerPanel({
         caughtError instanceof Error
           ? caughtError.message
           : "Unable to cancel the live Combat Task.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * The canonical GM Combat Task lifecycle, issued from Current action at the opportunity boundary.
+   *
+   * Every field the server authorizes with comes from the immutable projected descriptor. The GM
+   * review fields and the resolve command's result text and audience are carried as **command
+   * inputs** only, exactly as the settled M5 and M6 rulings require. This adds no command, route,
+   * client function or domain type: `sendCombatTaskLifecycleCommandOnServer` already accepts every
+   * one of these inputs, and the declaration-boundary cancel above already proves the call here.
+   */
+  async function invokeInspectorCombatTaskLifecycle(
+    candidate: CurrentActionCommandDescriptor | undefined,
+    operation: CombatTaskLifecycleOperation,
+    finishKind?: "cancel" | "interrupt",
+  ) {
+    const descriptor = resolveCombatTaskCommandContext({
+      descriptor: candidate,
+      expectedCommandTypes: candidate ? [candidate.commandType] : [],
+      presentation: currentActionPresentation,
+      requiredFields: [
+        "actionId",
+        "executionGroupId",
+        "expectedRevision",
+        "participantId",
+        "processId",
+        "stageId",
+        "taskId",
+      ],
+    });
+    const participant = descriptor ? scenarioParticipantForTask(descriptor) : undefined;
+    const action = inspectorCombatTask;
+    if (!descriptor || !participant || !action || descriptor.actionId !== action.id) {
+      setSaveError("This Combat Task is no longer available at the actor's action opportunity.");
+      return;
+    }
+    const reviewDraft =
+      combatTaskReviewDrafts[action.id] ?? buildCombatTaskReviewDraftFromTask(action);
+    const resultDraft =
+      combatTaskResultDrafts[action.id] ??
+      ({ audience: [action.ownerParticipantId], text: "" } as CombatTaskResultDraft);
+    if (operation === "review" && getCombatTaskReviewValidationMessage(reviewDraft)) {
+      setSaveError(getCombatTaskReviewValidationMessage(reviewDraft));
+      return;
+    }
+    if (operation === "resolve" && getCombatTaskResolveValidationMessage(resultDraft)) {
+      setSaveError(getCombatTaskResolveValidationMessage(resultDraft));
+      return;
+    }
+    setSaving(true);
+    try {
+      const { encounter: nextEncounter } = await sendCombatTaskLifecycleCommandOnServer({
+        actionId: action.id,
+        currentEncounter: encounter,
+        encounterId: descriptor.encounterId,
+        executionGroupId: descriptor.executionGroupId!,
+        expectedRevision: descriptor.expectedRevision,
+        operation,
+        processId: descriptor.processId,
+        scenarioParticipantId: participant.id,
+        stageId: descriptor.stageId,
+        taskId: descriptor.taskId,
+        ...(operation === "finish" ? { boundary: "opportunity" as const, finishKind } : {}),
+        ...(operation === "review"
+          ? {
+              difficulty:
+                reviewDraft.rollKind === "none"
+                  ? undefined
+                  : Number.parseInt(reviewDraft.difficulty, 10),
+              duration: buildCombatTaskReviewDuration(reviewDraft),
+              environmentDescription:
+                reviewDraft.referenceKind === "environment"
+                  ? reviewDraft.environmentDescription
+                  : undefined,
+              itemId: reviewDraft.referenceKind === "item" ? reviewDraft.itemId : undefined,
+              preset: action.preset === "look_around" ? ("look_around" as const) : undefined,
+              referenceKind: reviewDraft.referenceKind,
+              referenceParticipantId:
+                reviewDraft.referenceKind === "participant"
+                  ? reviewDraft.referenceParticipantId
+                  : undefined,
+              rollKind: reviewDraft.rollKind,
+              skillId: reviewDraft.rollKind === "skill" ? reviewDraft.skillId : undefined,
+              statId: reviewDraft.rollKind === "stat" ? reviewDraft.statId : undefined,
+            }
+          : {}),
+        ...(operation === "resolve"
+          ? {
+              resultText: resultDraft.text.trim(),
+              visibleToParticipantIds: resultDraft.audience,
+            }
+          : {}),
+      });
+      const nextRoundState = combatRoundStateSchema.parse(nextEncounter.combatRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+      if (operation === "review") {
+        setCombatTaskReviewDrafts((current) => {
+          const { [action.id]: _removed, ...rest } = current;
+          return rest;
+        });
+      }
+      if (operation === "resolve" || operation === "finish") {
+        setCombatTaskResultDrafts((current) => {
+          const { [action.id]: _removed, ...rest } = current;
+          return rest;
+        });
+      }
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to update the Combat Task.",
       );
     } finally {
       setSaving(false);
@@ -12180,6 +12432,33 @@ export default function CombatRoundManagerPanel({
       case "prepare_round_end_review":
         // This descriptor is consumed by the single guarded preparation effect.
         return;
+      // The canonical GM Combat Task lifecycle. Review is mandatory and first — a task sits at
+      // `declared` until it is reviewed, so nothing else below is reachable without it.
+      case "review_combat_task":
+        void invokeInspectorCombatTaskLifecycle(descriptor, "review");
+        return;
+      case "roll_combat_task":
+        void invokeResultProducingGmCommand(descriptor, () =>
+          invokeInspectorCombatTaskLifecycle(descriptor, "roll"),
+        );
+        return;
+      case "advance_combat_task":
+        void invokeInspectorCombatTaskLifecycle(descriptor, "advance");
+        return;
+      case "resolve_combat_task":
+        void invokeResultProducingGmCommand(descriptor, () =>
+          invokeInspectorCombatTaskLifecycle(descriptor, "resolve"),
+        );
+        return;
+      // Both finish commands are issued at the opportunity boundary from Current action. They are
+      // reached through this one canonical switch, so no Combat Task command can fall through to
+      // the default handler below.
+      case "interrupt_combat_task":
+        void invokeInspectorCombatTaskLifecycle(descriptor, "finish", "interrupt");
+        return;
+      case "cancel_combat_task":
+        void invokeInspectorCombatTaskLifecycle(descriptor, "finish", "cancel");
+        return;
       default:
         setSaveError("This combat task does not have a canonical command handler.");
     }
@@ -12467,6 +12746,30 @@ export default function CombatRoundManagerPanel({
                           secondaryActionId={inspectorDisplayDraft.secondaryActionId}
                           sourceLabel={inspectorSourceLabel}
                         />
+                        {inspectorCombatTaskCommandType === "review_combat_task" &&
+                        inspectorCombatTask &&
+                        inspectorCombatTaskReviewDraft ? (
+                          <CombatTaskReviewFields
+                            disabled={
+                              saving || inspectorIsInspectionOnly || Boolean(inspectorSnapshot)
+                            }
+                            draft={inspectorCombatTaskReviewDraft}
+                            intent={inspectorCombatTask.intent}
+                            itemOptions={inspectorCombatTaskItemOptions}
+                            onChange={(change) =>
+                              setCombatTaskReviewDrafts((current) => ({
+                                ...current,
+                                [inspectorCombatTask.id]: {
+                                  ...inspectorCombatTaskReviewDraft,
+                                  ...change,
+                                },
+                              }))
+                            }
+                            participantOptions={inspectorCombatTaskParticipantOptions}
+                            skills={content?.skills ?? []}
+                            validationMessage={inspectorCombatTaskReviewValidationMessage}
+                          />
+                        ) : null}
                         {inspectorDisplayDraft.actionId === "disarm" ||
                         inspectorDisplayDraft.actionId === "parry_disarm" ? (
                           <>

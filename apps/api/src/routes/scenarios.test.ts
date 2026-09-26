@@ -267,6 +267,7 @@ vi.mock("../lib/sessionAuth", () => ({
 }));
 
 import { scenariosRoutes } from "./scenarios";
+import { buildPlayerSafeEncounterForUser } from "./scenarios/encounterRoutes";
 
 function emptyModifierBuckets() {
   return {
@@ -28180,4 +28181,189 @@ describe("scenarios route contract", () => {
 
     await playerApp.close();
   });
+
+  /**
+   * Forgejo issue #340, acceptance criteria 2 and 3. The GM drives `roll_combat_task` — not only
+   * the player — and the resolve carries the audience the GM chose. The privacy assertion is made
+   * on the **API payload** the player is served, through the same
+   * `buildPlayerSafeEncounterForUser` projection the encounter routes serialize with, not on the
+   * DOM. No privacy projection is changed here; the resolve only supplies the existing
+   * `visibleToParticipantIds` input.
+   */
+  it("lets the GM roll and resolve, and serves the result only to the chosen audience", async () => {
+    const prepared = makePerformTaskFixture();
+    const participants = [
+      prepared.participants[0]!,
+      {
+        ...prepared.participants[1]!,
+        controlledByUserId: mocks.playerUser.id,
+      } as ScenarioParticipant,
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const review = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        difficulty: 26,
+        duration: { kind: "round" },
+        referenceKind: "environment",
+        environmentDescription: "The rusted winch housing.",
+        rollKind: "stat",
+        statId: "dex",
+      },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    const reviewedState = combatRoundStateSchema.parse(mutable.encounter.combatRoundState);
+    expect(reviewedState.genericActions[0]).toMatchObject({
+      reference: { description: "The rusted winch housing.", kind: "environment" },
+      rollRequest: { basis: { kind: "stat", statId: "dex" }, difficulty: 26 },
+      status: "active",
+    });
+
+    // The roll, driven by the GM rather than the owning player.
+    const roll = await app.inject({
+      method: "POST",
+      payload: performTaskDescriptor(mutable.encounter),
+      url: "/encounters/encounter-1/combat-round/roll-combat-task",
+    });
+    expect(roll.statusCode, roll.body).toBe(200);
+    expect(roll.json().command).toMatchObject({ type: "roll_combat_task" });
+    expect(
+      combatRoundStateSchema.parse(mutable.encounter.combatRoundState).genericActions[0]
+        ?.rollResult,
+    ).toBeTruthy();
+
+    const resolve = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        resultText: "The winch groans and the portcullis lifts.",
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-combat-task",
+    });
+    expect(resolve.statusCode, resolve.body).toBe(200);
+    const resolved = mutable.encounter;
+    expect(combatRoundStateSchema.parse(resolved.combatRoundState).genericActions[0]).toMatchObject(
+      {
+        resolution: {
+          text: "The winch groans and the portcullis lifts.",
+          // The owner is always entitled; nobody else was chosen.
+          visibleToParticipantIds: ["encounter-participant-1"],
+        },
+        status: "completed",
+      },
+    );
+    await app.close();
+
+    // The non-entitled viewer receives no row at all in the payload the API serves them.
+    const nonEntitled = buildPlayerSafeEncounterForUser({
+      encounter: resolved,
+      scenarioParticipants: participants,
+      userId: mocks.playerUser.id,
+    });
+    expect(nonEntitled.combatRoundState?.genericActions ?? []).toHaveLength(0);
+    expect(JSON.stringify(nonEntitled)).not.toContain("The winch groans and the portcullis lifts.");
+  });
+
+  /** Forgejo issue #340, acceptance criterion 3 — the entitled viewer does receive the result. */
+  it("serves the resolved result to a viewer the GM put in the audience", async () => {
+    const prepared = makePerformTaskFixture();
+    const participants = [
+      prepared.participants[0]!,
+      {
+        ...prepared.participants[1]!,
+        controlledByUserId: mocks.playerUser.id,
+      } as ScenarioParticipant,
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const review = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        duration: { kind: "round" },
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    const resolve = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        resultText: "The winch groans and the portcullis lifts.",
+        visibleToParticipantIds: ["encounter-participant-2"],
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-combat-task",
+    });
+    expect(resolve.statusCode, resolve.body).toBe(200);
+    await app.close();
+
+    const entitled = buildPlayerSafeEncounterForUser({
+      encounter: mutable.encounter,
+      scenarioParticipants: participants,
+      userId: mocks.playerUser.id,
+    });
+    expect(entitled.combatRoundState?.genericActions).toHaveLength(1);
+    expect(entitled.combatRoundState?.genericActions[0]?.resolution).toMatchObject({
+      text: "The winch groans and the portcullis lifts.",
+      visibleToParticipantIds: ["encounter-participant-2"],
+    });
+  });
+
+  /** Forgejo issue #340, acceptance criterion 4 — both finish commands at the opportunity. */
+  it.each([
+    ["interrupt", "interrupted", "interrupt_combat_task"],
+    ["cancel", "cancelled", "cancel_combat_task"],
+  ] as const)(
+    "lets the GM %s a Combat Task at the opportunity boundary",
+    async (finishKind, expectedStatus, expectedCommand) => {
+      vi.clearAllMocks();
+      const prepared = makePerformTaskFixture();
+      const mutable = setupMutableCombatRouteState({
+        encounter: prepared.encounter,
+        participants: prepared.participants,
+        user: mocks.adminUser,
+      });
+      const app = await buildScenarioTestApp();
+      const review = await app.inject({
+        method: "POST",
+        payload: {
+          ...performTaskDescriptor(mutable.encounter),
+          duration: { kind: "round" },
+          rollKind: "none",
+        },
+        url: "/encounters/encounter-1/combat-round/review-combat-task",
+      });
+      expect(review.statusCode, review.body).toBe(200);
+
+      const finished = await app.inject({
+        method: "POST",
+        payload: {
+          ...performTaskDescriptor(mutable.encounter),
+          boundary: "opportunity",
+          finishKind,
+        },
+        url: "/encounters/encounter-1/combat-round/finish-combat-task",
+      });
+      expect(finished.statusCode, finished.body).toBe(200);
+      expect(finished.json().command).toMatchObject({ type: expectedCommand });
+      const state = combatRoundStateSchema.parse(mutable.encounter.combatRoundState);
+      expect(state.genericActions[0]?.status).toBe(expectedStatus);
+      expect(state.events.filter((event) => event.type === "task_resolved")).toHaveLength(0);
+      await app.close();
+    },
+  );
 });
