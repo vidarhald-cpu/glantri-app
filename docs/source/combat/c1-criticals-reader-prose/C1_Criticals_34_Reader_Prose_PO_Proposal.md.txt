@@ -1,0 +1,402 @@
+# C1 Criticals — Complete 34-Result Reader Prose Proposal
+
+**Status: Product Owner review.**
+
+The proposed titles and narratives below use the exact 34-entry recovery inventory. The five integrated entries are identified individually as optional editorial revisions; none of their mechanics is reopened. Your explicit rulings govern the embedded chest missile, Falling/Crushing functional restrictions, and the corrected Fire/Energy content. [S1; S2]
+
+The bold line beneath each key is the proposed title. The following paragraph is the proposed reader narrative. Consistency notes are editorial annotations, not part of the narrative.
+
+## A. Complete 34-result authored set
+
+Source basis: S2, “Five entries already frozen and integrated” and “Exact remaining 29 and recovered content”; S3, corresponding exact keys. Fire entries additionally use S4.
+
+### 01. `sharp|arm|01`
+
+**Forearm graze opens the hand**
+
+A shallow forearm cut makes the struck hand spasm open and drop what it held.
+
+### 02. `sharp|arm|12`
+
+**Hand severed at the wrist**
+
+The blade severs the hand at the wrist, and the held item falls from its grasp. Blood pumps from the open stump.
+
+### 03. `sharp|head|03`
+
+**Scalp slash**
+
+The blade cuts across the scalp. The target is left dazed, struggling to gather their thoughts through the pain.
+
+*Consistency note:* This describes the retained multi-round Stun. The recovered blood-in-the-eyes image is omitted; no Bleed, visual impairment, or impaired stance is added.
+
+### 04. `sharp|head|04`
+
+**Glancing head strike**
+
+The blade glances off the head, jarring the skull. A brief daze follows.
+
+*Consistency note:* The brief daze describes the accepted one-full-round Stun beginning next round, not an additional immediate effect or unconsciousness.
+
+### 05. `sharp|head|10`
+
+**Concussive head wound**
+
+A heavy strike from the blade wounds the head and causes a severe concussion. The target loses consciousness.
+
+*Consistency note:* **Optional editorial revision to an already integrated result.** Replaces “slumps unconscious” without adding a fall, a drop, Stun, or bleeding.
+
+### 06. `sharp|chest|04`
+
+**Pectoral slash**
+
+A slash tears the weapon-side chest and shoulder muscles, leaving the target unsteady and making them drop what they held. Defensive parries remain possible, but the injured muscles cannot drive an effective attack.
+
+*Consistency note:* **Optional editorial revision to an already integrated result.** Retains the narrow muscle-injury justification for parry-only and makes impaired stance explicit without assuming a shield or adding arm loss. [S5, chest-04 exceptions]
+
+### 07. `sharp|chest|05`
+
+**Deep slash across the ribs**
+
+The blade bites across the ribs and the muscles between them, twisting the target off their feet. The target is left dazed on the ground.
+
+### 08. `sharp|chest|09`
+
+**Lung injured by a chest slash**
+
+The blade cuts deep between the ribs and injures a lung, causing internal bleeding. Breathing is short and laboured, and ordinary exertion is difficult.
+
+### 09. `sharp|lower_leg|12`
+
+**Lower leg devastated below the knee**
+
+The blade tears deep into the lower leg below the knee, leaving it unable to bear weight and sending the target to the ground. Blood runs freely from the wound.
+
+*Consistency note:* Describes structural destruction and loss of use, not a severed leg.
+
+### 10. `blunt|arm|12`
+
+**Hand crushed beyond use**
+
+The blow crushes the hand, shattering bones and tearing the surrounding flesh. The hand is unusable, the held item drops, and blood flows from the open wound.
+
+*Consistency note:* **Optional editorial revision to an already integrated result.** Makes the accepted external bleeding explicit; no whole-body collapse is implied.
+
+### 11. `blunt|head|04`
+
+**Jarring blow to the skull**
+
+A blunt impact jars the skull. A brief daze follows the blow.
+
+*Consistency note:* As with `sharp|head|04`, the daze describes the accepted one-full-round Stun beginning next round, not immediate additional Stun or unconsciousness.
+
+### 12. `blunt|head|10`
+
+**Blunt-force concussion**
+
+A heavy impact produces a severe concussion. The target loses consciousness.
+
+*Consistency note:* Unconsciousness is retained without the recovered suggestion of a fall.
+
+### 13. `blunt|chest|04`
+
+**Chest and shoulder impact**
+
+The blow batters the muscles of the weapon-side chest and shoulder, leaving the target unsteady and making them drop what they held. Defensive parries remain possible, but the injured muscles cannot drive an effective attack.
+
+*Consistency note:* The second narrow chest-04 exception retains its muscular justification. It does not acquire Stun, bleeding, breathing impairment, or an unusable arm. [S2; S5]
+
+### 14. `blunt|chest|09`
+
+**Crushed ribs impair breathing**
+
+Several ribs buckle inward and bruise a lung; breathing becomes shallow and painful as blood collects inside the chest.
+
+### 15. `blunt|upper_leg|12`
+
+**Shattered thighbone with internal bleeding**
+
+The thighbone shatters, and the thigh swells with internal bleeding. The leg gives way, sending the target to the ground, and cannot support their weight.
+
+### 16. `blunt|lower_leg|12`
+
+**Crushed ankle and lower shinbone**
+
+The ankle and lower shinbone are crushed; the joint cannot bear weight and the target falls to the ground. Blood collects inside the damaged tissues.
+
+### 17. `arrows_bolts|chest|11`
+
+**Missile lodged deep in the chest**
+
+The arrow or bolt lodges between the ribs and tears lung tissue, with internal bleeding around the embedded shaft. Breathing is laboured, and ordinary exertion is difficult.
+
+*Consistency note:* The breathing/general-action impairment and the separate Stun both last **until appropriate care**, under the settled Product Owner ruling. No removal procedure is added. [S1]
+
+### 18. `firearms|lower_leg|12`
+
+**Gunshot destroys the ankle**
+
+The shot blows the ankle apart; the joint cannot bear weight and the target falls to the ground. Blood flows from the torn wound.
+
+### 19. `falling_crushing|whole_body|10`
+
+**Whole-body crush trauma**
+
+The impact causes multiple fractures, deep bruising and open wounds across the body, with bleeding both internally and from the wounds. The target cannot stand or walk.
+
+*Consistency note:* Standing/walking loss is a GM-managed functional fact, not a global action lock. No fall or prone position is narrated.
+
+### 20. `falling_crushing|whole_body|12`
+
+**Major fractures and deep crush wounds**
+
+The body is crushed across several regions, with unstable fractures, torn tissue and deep internal injuries. The target cannot stand or walk, and the wounds bleed both internally and externally.
+
+*Consistency note:* No fall or position is narrated. The recovery material records current prone without a fall operation; this prose does not reinterpret either field. See Section E.
+
+### 21. `fire_energy|whole_body|06`
+
+**Clothing or fur burning across the body**
+
+Clothing or fur burns across the body, and the flames char exposed skin. The burning continues until the flames are smothered or quenched, or the burning material is removed.
+
+*Consistency note:* Describes active burning and the accepted extinguishing/removal event, not compelled extinguishing actions, rolling, or unconsciousness. [S4]
+
+### 22. `fire_energy|whole_body|09`
+
+**Deep burns with systemic shock**
+
+Deep burns cover broad areas of skin; damaged tissue leaks fluid and systemic shock begins to impair circulation and awareness.
+
+*Consistency note:* Retains the superseding Fire revision's supported shock description. It does not add a separate general-action restriction or automatic unconsciousness. [S4]
+
+### 23. `fire_energy|whole_body|10`
+
+**Widespread deep burns with inhalation injury**
+
+Widespread deep burns char the body while inhaled heat injures the airway; breathing grows laboured as circulatory shock deepens.
+
+*Consistency note:* Airway injury and worsening circulatory shock are expressly present in the superseding revision. They do not create an additional deterioration rule or automatic unconsciousness. [S4]
+
+**Shared Fire/Energy annotation:** The three non-Bleed content rates remain 1/4, 1/3 and 1/2 HP per round, respectively, with onset after the first full three-second interval. They remain non-executable content values; none of these narratives supplies a ticker, treatment check, or new control subsystem. [S1; S2; S4]
+
+### 24. `pointed_weapons|arm|02`
+
+**Hand puncture breaks the grip**
+
+The point passes through the flesh of the hand, forcing the fingers open and dropping what they held. The puncture bleeds, and the hand remains awkward to use.
+
+*Consistency note:* **Optional editorial revision to an already integrated result.** Distinguishes impaired use from an unusable hand and makes the accepted external bleeding explicit.
+
+### 25. `pointed_weapons|arm|09`
+
+**Joint puncture locks the arm**
+
+The point enters the elbow or shoulder joint; the arm folds or locks and cannot be used. Blood runs from the puncture.
+
+### 26. `pointed_weapons|arm|10`
+
+**Deep upper-arm puncture opens a vessel**
+
+The point drives through the upper arm and opens a major vessel; the arm fails and blood pulses from the wound.
+
+### 27. `pointed_weapons|arm|11`
+
+**Transfixed hand**
+
+The point passes through the hand and remains embedded, leaving the hand unusable. The grip opens and the held item drops as blood runs from the wound.
+
+*Consistency note:* The transfixion is confined to the hand. The prose does not prescribe an attachment to particular equipment or a whole-body pin.
+
+### 28. `pointed_weapons|head|08`
+
+**Neck puncture opens a major vessel**
+
+The point opens a vessel at the side of the neck or beneath the jaw; blood pulses from the wound.
+
+### 29. `pointed_weapons|head|10`
+
+**Penetrating brain wound**
+
+The point penetrates the temple or side of the face and injures the brain, causing internal bleeding. The target loses consciousness.
+
+*Consistency note:* The brain injury accounts for unconsciousness. No fall, external bleeding, or additional Stun is supplied by the narrative.
+
+### 30. `pointed_weapons|chest|07`
+
+**Punctured lung shortens every breath**
+
+The point slips between the ribs and punctures a lung, causing bleeding inside the chest. Breathing becomes short and laboured, and exertion is difficult.
+
+*Consistency note:* **Optional editorial revision to an already integrated result.** Clarifies internal bleeding and impaired exertion without upgrading the injury to the collapsed lung in `pointed_weapons|chest|12`.
+
+### 31. `pointed_weapons|chest|12`
+
+**Deep chest puncture collapses a lung**
+
+The point penetrates deep into the chest and collapses a lung. The target gasps for each breath and struggles with ordinary exertion while blood collects inside the chest.
+
+### 32. `pointed_weapons|abdomen|08`
+
+**Weapon lodged in the abdomen**
+
+The point remains lodged in the abdomen, with bleeding inside the body. The embedded weapon makes ordinary actions painful and difficult.
+
+*Consistency note:* The prose does not prescribe additional injury from movement or attempted removal. Controlled removal and care remain within the supplied classification.
+
+### 33. `pointed_weapons|upper_leg|12`
+
+**Major thigh vessel opened**
+
+The point opens a major vessel in the thigh, and blood pulses from the wound. The leg is unusable and gives way, sending the target to the ground.
+
+### 34. `pointed_weapons|lower_leg|16`
+
+**Lower leg nearly severed**
+
+The point tears through the ankle or shin, leaving the lower leg almost severed and bleeding heavily. The leg cannot bear weight and gives way, sending the target to the ground.
+
+*Consistency note:* The exceptional near-severing injury is retained: neither an ordinary puncture nor complete detachment replaces it.
+
+## B. Five integrated-result editorial review
+
+All five entries below receive **optional editorial changes proposed**, not approved replacement text. Their accepted mechanics remain unchanged. Comparison is against the supplied recovered prose, not an independently inspected current canonical narrative. [S2; S3]
+
+### `pointed_weapons|arm|02` — Optional editorial change proposed
+
+**Proposed title:** Hand puncture breaks the grip
+
+**Proposed narrative:** The point passes through the flesh of the hand, forcing the fingers open and dropping what they held. The puncture bleeds, and the hand remains awkward to use.
+
+**Reason:** Makes the continuing impairment and external bleeding intelligible without changing impaired use into loss of use.
+
+### `blunt|arm|12` — Optional editorial change proposed
+
+**Proposed title:** Hand crushed beyond use
+
+**Proposed narrative:** The blow crushes the hand, shattering bones and tearing the surrounding flesh. The hand is unusable, the held item drops, and blood flows from the open wound.
+
+**Reason:** Replaces the awkward “torn bone” construction and includes the accepted external bleeding without implying collapse.
+
+### `pointed_weapons|chest|07` — Optional editorial change proposed
+
+**Proposed title:** Punctured lung shortens every breath
+
+**Proposed narrative:** The point slips between the ribs and punctures a lung, causing bleeding inside the chest. Breathing becomes short and laboured, and exertion is difficult.
+
+**Reason:** Replaces the imprecise “blood-tinged” breathing description with a clear internal injury and its accepted functional effects.
+
+### `sharp|head|10` — Optional editorial change proposed
+
+**Proposed title:** Concussive head wound
+
+**Proposed narrative:** A heavy strike from the blade wounds the head and causes a severe concussion. The target loses consciousness.
+
+**Reason:** Retains the concussion and actual unconsciousness while removing the unsupported positional implication of “slumps”.
+
+### `sharp|chest|04` — Optional editorial change proposed
+
+**Proposed title:** Pectoral slash
+
+**Proposed narrative:** A slash tears the weapon-side chest and shoulder muscles, leaving the target unsteady and making them drop what they held. Defensive parries remain possible, but the injured muscles cannot drive an effective attack.
+
+**Reason:** Names the injured muscles, includes impaired stance, and preserves the narrow offensive/defensive distinction without assuming a shield.
+
+## C. Recovered-prose disposition — remaining 29
+
+The comparison baseline is the recovered title/narrative in S3, with S4 controlling the Fire entries. “Retained substantially” entries below retain both title and narrative unchanged. “Lightly edited” entries preserve the recovered injury account while simplifying wording, removing misleading implications, or explicitly describing an already accepted consequence. “Substantially rewritten” entries replace the principal framing and are explained individually.
+
+| Exact key | Disposition | Editorial basis |
+|---|---|---|
+| `sharp\|arm\|01` | Recovered prose retained substantially | Title and narrative unchanged. |
+| `sharp\|arm\|12` | Recovered prose lightly edited | Keeps severing and pumping blood; replaces redundancy with the accepted drop. |
+| `sharp\|head\|03` | Recovered prose substantially rewritten for clarity/consistency | Replaces blood in the eyes and reeling with the scalp injury and sustained daze; avoids unsupported bleeding, visual impairment and stance implications. |
+| `sharp\|head\|04` | Recovered prose lightly edited | Keeps the glancing impact and daze; identifies the blade and distinguishes the brief effect. |
+| `sharp\|chest\|05` | Recovered prose lightly edited | Simplifies “intercostal muscle”; retains the fall and substitutes daze for potentially misleading gasping. |
+| `sharp\|chest\|09` | Recovered prose lightly edited | Retains the penetrating slash and lung injury; explicitly describes internal bleeding and difficult exertion. |
+| `sharp\|lower_leg\|12` | Recovered prose lightly edited | Retains the destructive below-knee wound and blood loss; makes the accepted fall explicit. |
+| `blunt\|head\|04` | Recovered prose lightly edited | Keeps blunt impact and brief daze, without using unconsciousness as a descriptive contrast. |
+| `blunt\|head\|10` | Recovered prose lightly edited | Shortens the title and replaces positional “slumps” with “loses consciousness”. |
+| `blunt\|chest\|04` | Recovered prose substantially rewritten for clarity/consistency | Reframes the shield-specific account around damaged chest/shoulder muscles, impaired stance, the drop and the narrow parry-only distinction. |
+| `blunt\|chest\|09` | Recovered prose retained substantially | Title and narrative unchanged. |
+| `blunt\|upper_leg\|12` | Recovered prose lightly edited | Uses “thighbone”; keeps swelling and internal blood loss and explicitly describes the accepted fall. |
+| `blunt\|lower_leg\|12` | Recovered prose lightly edited | Uses “lower shinbone”; retains local destruction and weight-bearing failure, with accepted internal bleeding made explicit. |
+| `arrows_bolts\|chest\|11` | Recovered prose lightly edited | Retains the embedded shaft and lung injury; makes impaired exertion explicit. |
+| `firearms\|lower_leg\|12` | Recovered prose lightly edited | Retains the ankle blown apart and external wound; makes the fall explicit. |
+| `falling_crushing\|whole_body\|10` | Recovered prose lightly edited | Removes qualifying “normally” from standing/walking loss and describes both bleeding sources. |
+| `falling_crushing\|whole_body\|12` | Recovered prose lightly edited | Replaces the jargon-heavy title; retains unstable fractures and torn tissue, omits position, and states both bleeding sources. |
+| `fire_energy\|whole_body\|06` | Recovered prose lightly edited | Smooths “catches and sustains”; retains active flames and the accepted extinguishing/removal end event. |
+| `fire_energy\|whole_body\|09` | Recovered prose retained substantially | Superseding Fire title and narrative unchanged. |
+| `fire_energy\|whole_body\|10` | Recovered prose retained substantially | Superseding Fire title and narrative unchanged. |
+| `pointed_weapons\|arm\|09` | Recovered prose lightly edited | Keeps the joint puncture and unusable arm; adds the accepted visible bleeding. |
+| `pointed_weapons\|arm\|10` | Recovered prose retained substantially | Title and narrative unchanged, including the exposed-vessel severity. |
+| `pointed_weapons\|arm\|11` | Recovered prose substantially rewritten for clarity/consistency | Retains transfixion, an embedded point, hand loss of use and the drop; removes equipment-specific attachment assumptions and explicitly describes external bleeding. |
+| `pointed_weapons\|head\|08` | Recovered prose retained substantially | Title and narrative unchanged. |
+| `pointed_weapons\|head\|10` | Recovered prose lightly edited | Keeps penetrating brain injury and unconsciousness, removes collapse, and includes accepted internal bleeding. |
+| `pointed_weapons\|chest\|12` | Recovered prose lightly edited | Retains the collapsed lung and gasping; makes internal bleeding and impaired exertion explicit. |
+| `pointed_weapons\|abdomen\|08` | Recovered prose substantially rewritten for clarity/consistency | Replaces the movement/removal-causes-further-tearing claim with the lodged weapon, existing internal bleeding and general-action impairment. |
+| `pointed_weapons\|upper_leg\|12` | Recovered prose lightly edited | Keeps the opened vessel and pulsing blood; explicitly states local loss of use and the accepted fall. |
+| `pointed_weapons\|lower_leg\|16` | Recovered prose lightly edited | Retains near-severing and heavy bleeding; explicitly describes the accepted fall. |
+
+**Disposition totals: 6 retained substantially + 19 lightly edited + 4 substantially rewritten = 29.**
+
+## D. Terminology and style guide
+
+These conventions preserve the distinctions required by the authoring brief and the accepted localized-function approach. [S1; S5]
+
+| Term or convention | Reusable guidance |
+|---|---|
+| **Dazed / stunned** | Describe disruption of thought or response, not unconsciousness. These words do not create extra conditions. Use a brief daze for the one-round head results and continuing difficulty gathering thoughts for the multi-round result; exact timing remains in the structured effects. |
+| **Unconscious** | Use only for explicit unconsciousness. Prefer “loses consciousness” to “slumps”, “collapses” or “falls unconscious” when no fall operation exists. Unconsciousness does not supply a drop operation. |
+| **Impaired** | The named function is difficult or unreliable, not wholly unavailable. Prefer concrete wording such as “awkward to use”, “unsteady” or “exertion is difficult”; do not broaden the affected function. |
+| **Unusable** | State the loss of the specified hand, arm, leg or joint function plainly. It does not itself mean severing, permanent disability or a whole-body action lock. Standing/walking loss says nothing additional about unrelated actions. |
+| **Bleeding** | Match external wounds with visible blood and internal wounds with blood collecting within the injured region. Do not add either type where absent, or infer death, shock progression or unconsciousness from bleeding. |
+| **Lodged / transfixed / pinned** | “Lodged” means retained in the wound; “transfixed” describes penetration through the part. “Pinned” additionally asserts an attachment and needs specific support. None supplies a removal procedure, extra movement injury, or whole-body restraint by implication. |
+| **Crushed / shattered / severed** | Distinguish compressive destruction, bone broken into fragments, and actual detachment. Keep “nearly severed” distinct from “severed”. Structural destruction does not automatically mean amputation. |
+| **Burns** | Distinguish active flames, deep burns with systemic shock, and burns with airway injury. Retain only the particular accepted injury account; burn-fluid loss is not Bleed, and shock language is not an unconsciousness or mortality rule. |
+| **Care and recovery** | Leave care generic unless a more specific classification is expressly accepted. Narrative should not create treatment checks, recovery times, permanence or later deterioration. |
+| **Sentence construction** | Name the impact and injured part, then describe the immediate supported result. Prefer ordinary anatomy to medical jargon. Describe a fall or drop only where separately authorised; leave values and durations to the structured effects. |
+
+## E. Exception / conflict list
+
+### 1. `sharp|head|03` — unsupported blood-in-the-eyes imagery
+
+The recovered narrative sends blood into the eyes, although the accepted result has neither Bleed nor a visual-impairment state. “Reeling” also risks suggesting unsupported loss of balance. The proposed narrative retains the scalp cut and Stun without these implications. [S2, remaining-29 table; S3, exact key]
+
+### 2. `sharp|head|10`, `blunt|head|10`, `pointed_weapons|head|10` — unconsciousness coupled to positional wording
+
+The recovered narratives use “slumps unconscious” or “collapses unconscious”, but these entries contain no `fall_to_ground` operation. The proposals say “loses consciousness” without adding a fall or a prone state. The change to integrated `sharp|head|10` remains an optional editorial proposal. [S2; S3, corresponding keys]
+
+### 3. `falling_crushing|whole_body|10` — “normally” weakens the stated function loss
+
+“Cannot stand or walk normally” leaves room for abnormal standing or walking, whereas the supplied functional result is standing/walking unusable. The proposal states “cannot stand or walk”, with no additional action enforcement. [S1; S2; S3, exact key]
+
+### 4. `falling_crushing|whole_body|12` — current-prone field versus the narrative guardrail
+
+REPORT.md and the reconstruction record **current prone**, but no `fall_to_ground` operation. Your narrative guardrail says not to imply prone when that operation is absent. The proposal therefore omits position altogether. This is not a decision to delete the recorded prone state, add a fall operation, or resolve the state/operation distinction through prose. [S1, Falling guardrail; S2, remaining-29 table; S3, exact key]
+
+### 5. `pointed_weapons|abdomen|08` — movement/removal implies a new injury consequence
+
+The recovered claim that movement or careless removal tears the wound wider prescribes additional injury beyond the accepted lodged-weapon, impairment, bleeding and care/removal content. The proposal describes the existing injury and difficulty acting instead; no new worsening rule is supplied. [S2; S3, exact key]
+
+**No other unresolved conflict prevents these prose proposals.** The embedded-chest duration and the Fire/Energy rates are settled by the supplied rulings, not reopened questions. [S1]
+
+## F. Completeness check
+
+| Check | Result |
+|---|---|
+| Authored inventory in Section A | **Exactly 34 distinct keys**, matching the supplied reconstruction. |
+| Integrated/frozen entries | **Exactly 5**: `pointed_weapons\|arm\|02`, `blunt\|arm\|12`, `pointed_weapons\|chest\|07`, `sharp\|head\|10`, `sharp\|chest\|04`. |
+| Remaining entries | **Exactly 29**, each classified once in Section C. |
+| Corrected Fire/Energy entries | **All 3**: `fire_energy\|whole_body\|06` — 1/4; `fire_energy\|whole_body\|09` — 1/3; `fire_energy\|whole_body\|10` — 1/2 HP per round, non-Bleed and non-executable. |
+| Additional source-catalogue Criticals | **None.** The other 574 results remain outside this package. |
+
+**End of content package — submitted for Product Owner review.**
+
+### Source references
+
+- **S1 — `Pasted text.txt`:** authoring instructions, source hierarchy, express Product Owner rulings and narrative guardrails.
+- **S2 — `REPORT.md`:** “Five entries already frozen and integrated”, “Exact remaining 29 and recovered content”, accepted corrections, and non-Bleed content boundary.
+- **S3 — `reconstructed-34-investigation-only.json`:** recovered titles and narratives, exact inventory, and per-key mechanical context. Historical `sourceTitle` fields are provenance, not authority to restore superseded effects.
+- **S4 — `historical-fire-revision.md`:** superseding titles, narratives and accepted content semantics for Fire/Energy 06, 09 and 10.
+- **S5 — `historical-partial-acceptance.md`:** accepted localized-function and Stun direction, and the narrow chest-04 parry-only exceptions. Its rejected initial Fire rates are superseded by S4 and the rulings in S1/S2.
