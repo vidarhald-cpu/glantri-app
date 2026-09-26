@@ -252,6 +252,21 @@ domain explicitly provides multiple player-safe versions or representations, the
 among those they are allowed to access. A Map is posted through its appropriate player-safe
 Artifact/map representation.
 
+**Amended 2026-09-26.** For a **Map**, the shareable unit is the **Map layer**.
+
+> **A Character may post any subset of the Map layers they personally know**, and the Blackboard
+> Map contains exactly the layers deliberately shared.
+
+[Section 9](#9-no-silent-blackboard-updates) governs it unchanged: later learning another layer
+never enriches the existing card, and only explicit enrichment through
+[section 8](#8-existing-cards-and-incremental-disclosure) does.
+
+**Blackboard Map cards do not automatically include current live placements**, which are transient
+live state ([Maps / Spatial Play §7.6](../architecture/maps-spatial-play.md#76-placement-state-is-normally-transient)).
+
+The Map-side rule is
+[Maps / Spatial Play §9.10](../architecture/maps-spatial-play.md#910-blackboard-sharing-of-maps).
+
 ### 6.4 Unstructured information
 
 **V1 does not provide a generic per-fact selection system.** Knowledge, hypotheses, interpretation
@@ -451,6 +466,10 @@ domination by arbitrarily enlarged cards.
 
 Resource types such as Maps may use an appropriate recognizable thumbnail on the board while still
 opening into a larger private inspection view.
+
+**Amended 2026-09-26.** For Maps, V1 may support **at least** a compact Map card and a **larger,
+planning-sized Map presentation on the board**. **Arbitrary free resizing remains not required**,
+and the rest of this section is unchanged.
 
 ---
 
@@ -730,5 +749,5 @@ another Character knows, and the Blackboard shows only what was deliberately pos
 | [Player Play V1 §12.2](../architecture/player-play-v1.md#122-blackboard)                                                                                                                                                      | Places the Blackboard as one of the five Play views and adds no board semantic. Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [Shared Campaign Blackboard](campaign-scenario-encounter-workflows.md#shared-campaign-blackboard)                                                                                                                             | **Descriptive**, not controlling: it records the **currently implemented** shared surface — its entry categories, shared search, revision state and pinning — and defers to the content-authoring contract for this domain. Its four entry categories are **legacy implementation categories** and are **not** canonical product taxonomy ([section 4.2](#42-the-shipped-entry-categories-are-legacy-implementation-categories)); that question is settled and is no longer an open product decision. Aligning the implementation with [section 4](#4-eligible-blackboard-material) is implementation-lane work. |
 | [Authority and Information Projection](../architecture/information-authority-and-projection.md)                                                                                                                               | Server-side projection authority for [section 22](#22-privacy-and-disclosure-invariants). A viewer never receives GM-private material through the Blackboard.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| [Maps / Spatial Play](../architecture/maps-spatial-play.md)                                                                                                                                                                   | The Map view's own authority. A Map reaches the Blackboard only through its player-safe Artifact/map representation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| [Maps / Spatial Play](../architecture/maps-spatial-play.md)                                                                                                                                                                   | The Map view's own authority. A Map reaches the Blackboard through the player-safe Artifact/map representations of the **Map layers the posting Character personally knows and deliberately shares** ([§6.3](#63-artifact--map), amended 2026-09-26).                                                                                                                                                                                                                                                                                                                                                            |
 | [Product & Presentation Principles](product-presentation-principles.md)                                                                                                                                                       | Presentation and privacy principles this surface inherits.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |

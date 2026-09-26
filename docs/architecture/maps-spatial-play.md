@@ -5,7 +5,9 @@
 **Portfolio area:** #118 Maps / Spatial Play\
 **Product milestone:** Map Workspace V1\
 **Architecture status:** Ready\
-**Implementation status:** Future / activation-gated
+**Implementation status:** Future / activation-gated\
+**Amended:** Product Owner Maps ruling of **2026-09-26** (ruling points 1-13);
+see [section 1.1](#11-the-2026-09-26-maps-ruling)
 
 ---
 
@@ -35,6 +37,40 @@ It also deliberately leaves tactical and VTT-like mechanics outside **Map Worksp
 
 The purpose of this contract is to allow #118 to remain conceptually stable until activation, at which point only a short preflight against then-current development architecture should be required.
 
+## 1.1 The 2026-09-26 Maps ruling
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Scope:** documentation only. It authorizes no implementation and does not
+activate #118.
+
+The Product Owner Maps ruling of 2026-09-26 is recorded **in place** throughout
+this contract rather than as a separate appendix. It amends:
+
+- [section 2](#2-controlling-map-definition) — a Map is a canonical
+  **Campaign-scoped** domain object, and the Map's purpose is **illustrative**;
+- [section 7](#7-marker-model) — live placements, their transience, and
+  player-facing marker treatment;
+- [section 8](#8-layer-model) — Layers carry **visual representations**, and the
+  replacement-versus-new-layer rule;
+- [section 9](#9-visibility-and-sharing-model) — **the material reversal**: Map
+  knowledge is **Character-scoped**, and player-safe classification is
+  **eligibility**, not disclosure;
+- [section 13](#13-editing-and-update-model) — authored Map content versus live
+  placement state;
+- [section 16](#16-durable-domain-boundaries) — a Map is not an Item;
+- [section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics) — the
+  remaining V1 non-goals;
+- [section 9.11](#911-map-disclosure-and-the-shared-activity-record) — how a
+  subset disclosure meets the shared Activity record, applying an already-settled
+  rule;
+- [section 19](#19-resolved-po-decisions) and
+  [section 20](#20-remaining-po-decisions) — the new resolved decisions, and the
+  confirmation that **no new open decision** arises.
+
+The content-intake half of the same ruling is recorded at
+[Content authoring, Scenario preparation and Artifact management §18.38](../product/content-authoring-scenario-preparation-and-artifact-management.md#1838-one-intake-session-for-many-kinds-of-material)
+onward, **not here**.
+
 ---
 
 # 2. Controlling Map definition
@@ -47,7 +83,8 @@ It provides an authored spatial context in which information can be:
 - organized;
 - referenced;
 - navigated;
-- selectively exposed to players.
+- selectively exposed to players, **per Character**
+  ([section 9.6](#96-map-knowledge-is-character-scoped)).
 
 A Map is distinct from:
 
@@ -72,6 +109,63 @@ The common conceptual Map model consists of:
 
 A Map remains valid even when no background Artifact exists.
 
+## 2.1 A Map is a canonical Campaign domain object
+
+**Amended 2026-09-26.**
+
+A Map is a **persistent Campaign-scoped spatial/story resource**. Examples
+include:
+
+- building and site plans;
+- tactical encounter illustrations;
+- settlement Maps;
+- regional Maps;
+- schematic spatial diagrams.
+
+A Map:
+
+- has **stable identity independent of any Scenario**;
+- may be associated with **multiple Scenarios and Encounters**;
+- remains **reusable throughout the Campaign**;
+- is **not inherently a Combat object**;
+- does **not** derive its identity from the image file representing it, per
+  [section 4](#4-map-identity-model).
+
+> **Scenario and Encounter association expresses relevance and use. It does not
+> create a copy of the Map.**
+
+Association also grants **no Character any knowledge** of the Map — see
+[section 9.7](#97-how-a-character-acquires-map-knowledge).
+
+A tactical encounter illustration is one **role and scale** of this single Map
+model ([section 1](#1-status-and-scope)), not a separate Combat object.
+
+## 2.2 Map purpose — illustration, not authoritative rules state
+
+**Amended 2026-09-26.** This is the controlling product principle for Maps.
+
+> **The Map is an illustration of the world in the game.** It exists to make the
+> fiction visually engaging, understandable and memorable.
+
+> **Map position and geometry are illustrative, not authoritative rules state.**
+
+V1 Map coordinates must **not** determine:
+
+- Combat legality;
+- range;
+- movement allowance;
+- pathfinding;
+- line of sight;
+- rules-engine outcomes.
+
+**The GM remains the adjudicator.** A rough sense of scale may be supported; V1
+does not require precise tactical geometry.
+
+This principle is **why**
+[section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics) defers what
+it defers, and it is the standard every future spatial capability is measured
+against — see [section 7.7](#77-player-facing-marker-treatment).
+
 ---
 
 # 3. Map Workspace V1 product outcome
@@ -82,7 +176,10 @@ The first major Maps milestone is:
 
 ### Product outcome
 
-A GM can create and organize persistent Maps, optionally give them Artifact backgrounds, place annotations, entity references and Map links in normalized space, organize them into Layers, navigate between Maps, and selectively share Map information with players.
+A GM can create and organize persistent Maps, optionally give them Artifact backgrounds, place annotations, entity references and Map links in normalized space, organize them into Layers, navigate between Maps, and selectively disclose Map information to Characters.
+
+**Amended 2026-09-26.** Disclosure is **per Character**, not one party-wide share
+([section 9.6](#96-map-knowledge-is-character-scoped)).
 
 Map Workspace V1 is about:
 
@@ -189,6 +286,12 @@ Replacing or revising a background does not automatically reposition markers.
 
 If the new background depicts materially altered geography, repositioning markers is an explicit GM edit.
 
+**Amended 2026-09-26.** "Background" means the Map's **base visual layer** in the
+sense of [section 8.1](#81-layers-carry-visual-representations). Replacing the
+representation of **any** visual layer follows the same positional rule, and the
+**knowledge** consequences of replacing a representation versus adding a layer
+are governed by [section 8.2](#82-replacement-versus-new-knowledge).
+
 ---
 
 # 7. Marker model
@@ -269,6 +372,13 @@ Examples include:
 
 Map-link markers provide the basic drill-down and Map-graph navigation model.
 
+**Amended 2026-09-26.** A Map-link marker is eligible content like any other
+marker. **Following a link presents the destination Map subject to the viewing
+Character's own Map knowledge** ([section 9.6](#96-map-knowledge-is-character-scoped)),
+and a link is **never** a party-wide grant of the destination Map. A Character who
+does not know the destination acquires only what is actually projected to them
+([section 9.7](#97-how-a-character-acquires-map-knowledge)).
+
 ---
 
 ## 7.4 Broken external references
@@ -291,6 +401,105 @@ and\
 
 ---
 
+## 7.5 Live placements
+
+**SETTLED FOR V1, 2026-09-26.**
+
+V1 supports **approximate current placement** of:
+
+- player Characters;
+- People/NPC identities;
+- Items where useful.
+
+The GM must be able to:
+
+- add one Character/Person;
+- **bulk-add** multiple Characters/People;
+- add an Item;
+- **drag and drop** placements;
+- remove placements;
+- show or hide placements where appropriate.
+
+**An Item need not have a placement merely because it exists.** An unseen or
+hidden Item may simply have **no position disclosed to any Character**, and the GM
+may keep **GM-only placements** where useful.
+
+> **A GM-only or hidden placement must be incapable of granting Map knowledge.**
+> Only what is **actually projected** to a Character establishes anything
+> ([section 9.7](#97-how-a-character-acquires-map-knowledge)).
+
+**Placement eligibility is per Character in the same way Layer eligibility is**
+([section 9.6](#96-map-knowledge-is-character-scoped)); there is no single
+party-wide set of visible placements.
+
+A placement is an Entity-reference marker in the sense of
+[section 7.2](#72-entity-reference-marker), so its
+[critical invariant](#critical-invariant) holds: moving a placement changes
+**only** Map placement, never Campaign, Combat or entity-location state.
+
+---
+
+## 7.6 Placement state is normally transient
+
+**SETTLED FOR V1, 2026-09-26.**
+
+> **Map and Layer knowledge is persistent. Current placements are normally live
+> contextual state, not permanent Character memory.**
+
+**Opening a Map later from a Character's Knowledge Library shows the Layers that
+Character knows — not a historical snapshot of where every actor and Item once
+stood** ([section 9.7](#97-how-a-character-acquires-map-knowledge)).
+
+If a past position matters narratively it belongs in an **explicit narrative
+record** — a Discovery, a Note, Blackboard material, a Story Event or another
+deliberate record:
+[Content authoring §18.32](../product/content-authoring-scenario-preparation-and-artifact-management.md#1832-runtime-discoveries-from-skill-rolls-and-play),
+[§18.33](../product/content-authoring-scenario-preparation-and-artifact-management.md#1833-gm-story-events) and
+[§18.34](../product/content-authoring-scenario-preparation-and-artifact-management.md#1834-player-authored-notes-live-in-a-characters-knowledge-library).
+
+**V1 does not require historical Map-position replay**
+([section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics)).
+
+---
+
+## 7.7 Player-facing marker treatment
+
+**SETTLED FOR V1, 2026-09-26.**
+
+Character and People placements must be **visually distinguishable enough to be
+useful**. V1 should support:
+
+- **stable, recognizable markers** for player Characters;
+- **label visibility controls** — labels shown continuously, hidden, or revealed
+  on hover, tap or selection;
+- **viewer-local label display state**;
+- optional **local highlighting of the current player's own Character**.
+
+> **Do not rely on colour alone for marker identity.**
+> ([Product & Presentation Principles](../product/product-presentation-principles.md).)
+
+**Player-facing labels must use the appropriate player-safe Person/identity
+presentation**, resolved from the viewing Character's own recognition state —
+[Content authoring §18.30](../product/content-authoring-scenario-preparation-and-artifact-management.md#1830-people-identities-and-metknown-state).
+
+> **Marker appearance must not leak whether a Person is backed by a full
+> Character/NPC record, is a lightweight Person, is an alias or identity, or is
+> unresolved.**
+
+That is the identity anti-leak invariant
+([People, Artifacts and GM authoring §4.2](../product/people-artifact-and-gm-authoring-model.md#42-the-identity-anti-leak-invariant))
+applied to Map markers, and the structural standard of
+[Content authoring §18.31](../product/content-authoring-scenario-preparation-and-artifact-management.md#1831-player-projection-must-hide-preparation-mechanics).
+
+Future capabilities **may** include custom personal tokens or portraits, facing
+and directional indicators, declared movement/action overlays, and Combat-intent
+visualization.
+
+> **These remain illustrative and must not make the Map authoritative for
+> Combat** ([section 2.2](#22-map-purpose--illustration-not-authoritative-rules-state)).
+
+---
+
 # 8. Layer model
 
 Map Workspace V1 contains a lightweight **Layer** concept.
@@ -300,7 +509,8 @@ A Layer provides:
 - a name;
 - ordering;
 - a collection of markers;
-- visibility state.
+- visibility state — **eligibility for player disclosure, not a party-wide
+  visible state** ([section 9.2](#92-layer-visibility)).
 
 Example organizational Layers might include:
 
@@ -326,15 +536,103 @@ They are not yet:
 
 Later spatial systems may add richer Layer semantics without redefining the fundamental Map model.
 
+## 8.1 Layers carry visual representations
+
+**Amended 2026-09-26.** A Layer is **not only a marker container**.
+
+A Map consists of an **ordered set of layers**. A layer may carry a **visual
+representation backed by an Artifact/image**, its own markers, or both.
+
+V1 requires:
+
+- **stack order**;
+- **visibility and disclosure semantics**
+  ([section 9](#9-visibility-and-sharing-model));
+- a **player-safe base layer where one exists**;
+- additional **player-safe or GM-only** layers;
+- **optional future opacity** support.
+
+Opacity may be represented as an optional display property. **V1 does not require
+sophisticated layer compositing controls beyond basic ordering and visibility.**
+
+> **V1 rule: one Map layer corresponds to one visual Artifact representation.**
+
+Multi-file tiled or composite layers are **deferred**.
+
+The optional background Artifact of
+[section 2](#2-controlling-map-definition) is the **base visual layer** of this
+stack, not a separate mechanism.
+
+**A player-safe base layer is not mandatory at Map creation time.** The GM may
+prepare a Map privately first.
+
+> **However, a Character cannot receive a usable player projection of a Map until
+> at least one player-safe layer exists.**
+
+That is a missing representation, not a privacy failure — see
+[section 9.8](#98-player-safe-eligibility-is-not-disclosure). A Map remains valid
+with no visual layer at all
+([section 14.6](#146-background-less-map)).
+
+## 8.2 Replacement versus new knowledge
+
+**Amended 2026-09-26.** These two operations must be distinguished carefully,
+because confusing them leaks information.
+
+| Operation                  | What it is                                                                                                  | Knowledge consequence                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Replace representation** | same layer identity, same information: a corrected, higher-resolution, restyled or otherwise improved image | Characters who already know the layer **continue to know it** and see the replacement                  |
+| **Add layer**              | **new spatial or story information** — a secret passage, a cellar, a hidden room, a revealed structure      | **Nobody knows it** merely because they knew the base layer; it is learned only by explicit disclosure |
+
+> **Hard rule: replacement changes representation; new information creates a new
+> layer.**
+
+**This prevents accidental knowledge leaks through image replacement.** A GM who
+edits a secret passage into the base image instead of adding a layer has
+disclosed it to every Character who knows the base layer.
+
+During intake the GM chooses between the two **explicitly**, and the choice is
+never inferred from a filename —
+[Content authoring §18.41](../product/content-authoring-scenario-preparation-and-artifact-management.md#1841-map-intake--identity-layer-choice-and-eligibility).
+
 ---
 
 # 9. Visibility and sharing model
 
-Map Workspace V1 supports three levels of visibility control.
+**MATERIALLY AMENDED 2026-09-26.** Map Workspace V1 controls **eligibility for
+player display** at three levels, and resolves what a given player actually sees
+against **that player's Character's Map knowledge**.
 
 The effective hierarchy is:
 
-> **Map access → Layer visibility → optional Marker override**
+> **Map access → Layer eligibility → optional Marker override**, projected
+> through **the viewing Character's Map knowledge**
+
+> **Eligibility and knowledge are two different things. Conflating them is the
+> specific defect this section exists to prevent** —
+> [section 9.8](#98-player-safe-eligibility-is-not-disclosure).
+
+**Map knowledge is Character-scoped**
+([section 9.6](#96-map-knowledge-is-character-scoped)).
+
+> **Sections 9.1 to 9.3 describe the GM-side classification of a Map, its Layers
+> and its markers. They do not describe one shared party-wide player view.**
+
+> **EVERY statement anywhere in this contract that a Map, a Layer or a marker is
+> "player-visible", "shared with players" or otherwise visible as one shared
+> party-wide state is SUPERSEDED** by
+> [section 9.6](#96-map-knowledge-is-character-scoped). This supersession is
+> **not scoped to sections 9.1 to 9.3**; it reaches
+> [section 2](#2-controlling-map-definition),
+> [section 3](#3-map-workspace-v1-product-outcome),
+> [section 7.3](#73-map-link-marker),
+> [section 8](#8-layer-model),
+> [section 10](#10-player-editing-boundary),
+> the [section 14](#14-core-workflows) workflows and the
+> [section 15](#15-acceptance-examples) acceptance examples.
+
+> **Keep the distinction crisp: eligibility is a property of the Layer; knowledge
+> is a property of the Character.**
 
 ---
 
@@ -342,10 +640,20 @@ The effective hierarchy is:
 
 A Map is either:
 
-- GM-only; or
-- shared with players.
+- **GM-only**; or
+- **player-presentable** — the GM may present it to Characters.
 
 If the Map itself is GM-only, its internal player-facing Layer or marker settings do not independently expose it.
+
+**Amended 2026-09-26.** "Player-presentable" is a **GM-side classification, not a
+disclosure**. It makes the Map available for the GM to present to Characters. It
+grants no Character any knowledge on its own, and **it is not a party-wide
+share**. Which Characters know the Map is governed by
+[section 9.6](#96-map-knowledge-is-character-scoped) and
+[section 9.7](#97-how-a-character-acquires-map-knowledge).
+
+> **The phrase "shared with players" as a single party-wide state is
+> superseded.**
 
 ---
 
@@ -360,6 +668,16 @@ This allows the GM to prepare public and secret information on the same Map.
 
 Separate player and GM copies of the same underlying Map are therefore not required merely to maintain hidden information.
 
+**Amended 2026-09-26.** A Layer's **player-visible** classification means the
+Layer is **eligible** to be disclosed to Characters. It does **not** mean any
+Character knows it, and it does **not** disclose it to the party.
+
+> **Revealing a Layer to one Character does not reveal it to any other
+> Character** ([section 9.6](#96-map-knowledge-is-character-scoped)).
+
+A **GM-only** Layer is **ineligible** for Character disclosure until the GM
+explicitly reclassifies it.
+
 ---
 
 ## 9.3 Marker visibility override
@@ -373,6 +691,9 @@ This supports cases such as:
 - progressive revelation without restructuring Layers.
 
 Marker overrides are exceptions to Layer-level defaults rather than a replacement for Layer organization.
+
+**Amended 2026-09-26.** A marker override adjusts **eligibility** for the marker
+it names. Like Layer eligibility, it is not itself a disclosure to any Character.
 
 ---
 
@@ -416,6 +737,242 @@ and:
 
 > revealing all information associated with that entity.
 
+**Confirmed unchanged, 2026-09-26.** This boundary **already anticipates** the
+2026-09-26 ruling that Map disclosure affects Map knowledge only
+([section 9.9](#99-map-disclosure-affects-map-knowledge-only)) and that marker
+presentation must not leak an entity's backing
+([section 7.7](#77-player-facing-marker-treatment)). It is restated nowhere else
+and required no change.
+
+---
+
+## 9.6 Map knowledge is Character-scoped
+
+**SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner. **Supersedes** the
+party-wide reading of [section 9.1](#91-map-access),
+[section 9.2](#92-layer-visibility) and
+[section 9.3](#93-marker-visibility-override), and of
+[section 10](#10-player-editing-boundary) to the extent that "players consume what
+is shared" implied **one shared player view**.
+
+> **Map knowledge is Character-scoped**, consistent with
+> [Content authoring §18.28](../product/content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped).
+
+**Different Characters may legitimately see different projections of the same
+canonical Map.** There is **one canonical Map** and no per-Character copy.
+
+| Viewer     | Projection                             |
+| ---------- | -------------------------------------- |
+| **GM**     | base Map + secret tunnel + hidden room |
+| **Elena**  | base Map + secret tunnel               |
+| **Marcus** | base Map only                          |
+
+> **Revealing a Map Layer to one Character does not reveal it to any other
+> Character unless they are also explicit recipients.**
+
+A Map a Character knows lives in **that Character's Knowledge Library**. **There
+is no party-wide Map knowledge store, and no lane may create one** —
+[Content authoring §18.28](../product/content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)
+authorizes no second shared knowledge record.
+
+> **A leftover party-wide sentence is not a stop sign.** No lane stops on the
+> ground that per-Character Map knowledge is deferred or outside V1 scope. The
+> reversal recorded here is the current controlling position.
+
+**This authorizes no per-Character presentation override.** Which projection a
+viewer receives is a **visibility and projection** question resolved from that
+viewer's Character-scoped Map knowledge, exactly as
+[Content authoring §18.28](../product/content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)
+resolves it for People. The prohibitions it preserves — no generic scope column,
+no entitlement hierarchy, no override-resolution framework, no per-Character
+**presentation override** — stand unchanged.
+
+---
+
+## 9.7 How a Character acquires Map knowledge
+
+**SETTLED FOR V1, 2026-09-26.**
+
+**There is no separate requirement to pre-share a Map before using it in play.**
+
+> **In ordinary live play, presenting the player-safe Map to a Character is what
+> establishes that Map for that Character.**
+
+**Tightened 2026-09-26. The operative trigger is actual projection, not
+placement.**
+
+> **A GM-side placement alone grants no Map knowledge.** A Character acquires the
+> Map and its Layers when the **player-safe Map is actually projected or shown to
+> that Character**.
+
+> **Hidden and preparatory GM placement must not leak knowledge**, and a GM-only
+> placement must be **incapable** of granting it
+> ([section 7.5](#75-live-placements)).
+
+Placing a Character on a Map the GM has not yet shown that Character therefore
+establishes nothing. Placement in ordinary live play is how projection normally
+happens; it is not itself the grant.
+
+- The Character acquires the **player-safe Map and Layers actually projected to
+  them**, and the Map enters that Character's Knowledge Library.
+- **Additional Layers are learned when explicitly disclosed to that Character.**
+- Once learned, a Map or Layer **remains** in that Character's Knowledge Library
+  under the V1 no-forgetting assumption.
+- **Removing the Character from the live Map does not remove their Map
+  knowledge.**
+- **Scenario association alone grants no knowledge**
+  ([section 2.1](#21-a-map-is-a-canonical-campaign-domain-object)).
+
+### The knowledge and placement boundary
+
+Acquisition happens **at projection**, yet **knowledge persists while placement
+does not** ([section 7.6](#76-placement-state-is-normally-transient)).
+
+> **Projection is the event that establishes knowledge. Placement is not the
+> record of it, and a placement the Character never saw is not the grant of it.**
+
+Opening the Map later shows the Layers that Character knows, not where anybody
+stood. There is no contradiction between
+[section 7.6](#76-placement-state-is-normally-transient) and this section.
+
+---
+
+## 9.8 Player-safe eligibility is not disclosure
+
+**SETTLED FOR V1, 2026-09-26.**
+
+> **Do not conflate "eligible for player display or disclosure" with "already
+> known by one or more Characters".**
+
+Worked example — a secret tunnel overlay:
+
+| Property           | Value      |
+| ------------------ | ---------- |
+| player-safe        | **yes**    |
+| currently known by | **nobody** |
+
+- **Importing or authoring a player-safe Layer discloses it to no Character.**
+- **GM-only Layers remain ineligible** for Character disclosure until the GM
+  explicitly changes that classification.
+- A Map with no player-safe Layer yet **cannot produce a usable player
+  projection** ([section 8.1](#81-layers-carry-visual-representations)).
+
+The intake form of this rule is
+[Content authoring §18.41](../product/content-authoring-scenario-preparation-and-artifact-management.md#1841-map-intake--identity-layer-choice-and-eligibility),
+and it is the Map form of the GM-private import default at
+[Content authoring §11.6](../product/content-authoring-scenario-preparation-and-artifact-management.md#116-visibility-everything-begins-gm-private).
+
+---
+
+## 9.9 Map disclosure affects Map knowledge only
+
+**SETTLED FOR V1, 2026-09-26.**
+
+> **Revealing a Map or Map Layer must not silently modify any other knowledge
+> domain.**
+
+Revealing a secret tunnel:
+
+- **grants** Map-Layer knowledge;
+- does **not** reveal Person identity;
+- does **not** grant Item knowledge;
+- does **not** alter a Character's knowledge about actors merely because they are
+  placed nearby.
+
+> **Map consumes the player-safe projection of People, Items and other domains.
+> It does not become an alternate knowledge or reveal engine for those domains.**
+
+This is the knowledge-side statement of the permissions boundary already recorded
+at [section 9.5](#95-permissions-boundary-for-referenced-entities). It is governed
+by
+[Authority and Information Projection](information-authority-and-projection.md#projection-rules)
+and
+[Content authoring §18.31](../product/content-authoring-scenario-preparation-and-artifact-management.md#1831-player-projection-must-hide-preparation-mechanics).
+
+---
+
+## 9.10 Blackboard sharing of Maps
+
+**SETTLED FOR V1, 2026-09-26.** The product form is
+[Campaign Blackboard V1 §6.3](../product/campaign-blackboard-v1.md#63-artifact--map).
+
+**Maps are valid Blackboard material.**
+
+> **A Character may share any subset of the Map Layers they personally know.**
+
+Example: Elena knows base + secret tunnel + cellar. She may post base only; base
+plus tunnel; or every Layer she knows.
+
+- **The Blackboard Map contains exactly the Layers deliberately shared.**
+- It **must not silently track later changes** in the posting Character's Map
+  knowledge. If she later learns another Layer, the existing Blackboard Map
+  **remains unchanged** until somebody explicitly enriches it —
+  [Campaign Blackboard V1 §9](../product/campaign-blackboard-v1.md#9-no-silent-blackboard-updates).
+- **Blackboard sharing copies no Map knowledge into any other Character's
+  Knowledge Library** —
+  [Campaign Blackboard V1 §9.2](../product/campaign-blackboard-v1.md#92-the-blackboard-is-shared-external-memory-not-knowledge-synchronization).
+- **Blackboard Map cards do not automatically include current live placements**
+  ([section 7.6](#76-placement-state-is-normally-transient)).
+
+V1 may support **at least** a compact Map card and a larger, planning-sized Map
+presentation on the board. **Arbitrary free resizing is not required** —
+[Campaign Blackboard V1 §14](../product/campaign-blackboard-v1.md#14-card-sizing).
+
+---
+
+## 9.11 Map disclosure and the shared Activity record
+
+**SETTLED FOR V1, 2026-09-26.** **Authority:** the Product Owner ruling of
+2026-09-26 that settles how a Character-scoped disclosure meets the shared
+Activity record, whose canonical home is
+[Content authoring §18.37](../product/content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
+**This section decides nothing of its own**; it applies that rule to Map-Layer
+disclosure, over the Character-scoped knowledge model of
+[Content authoring §18.28](../product/content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped).
+
+Two settled rules meet here, exactly as they do for Person recognition:
+
+- **Activity is one shared player-safe narrative record**, and the exclusive
+  source for a session recap —
+  [Content authoring §9](../product/content-authoring-scenario-preparation-and-artifact-management.md#9-durable-history) and
+  [§18.35](../product/content-authoring-scenario-preparation-and-artifact-management.md#1835-the-session-recap-privacy-boundary).
+- **Map knowledge is Character-scoped**
+  ([section 9.6](#96-map-knowledge-is-character-scoped)), and placement on a
+  player-presentable Map is how a Character acquires it
+  ([section 9.7](#97-how-a-character-acquires-map-knowledge)).
+
+The consequence follows directly from the settled rule:
+
+> **Disclosing a Map or Map Layer to one Character, or to a subset of Characters,
+> grants that knowledge to those Characters' Knowledge Libraries and produces no
+> shared Activity entry.**
+
+> **A disclosure made to the complete intended participating audience is the
+> shared case**, and may be recorded as shared narrative history.
+
+If a Map Layer known privately **later becomes disclosed to the complete intended
+audience**, that public transition is the shared case and may be recorded then.
+
+**Shared Activity represents shared narrative knowledge.** Character-private Map
+knowledge must not leak into it, nor into the shared recap source —
+[Content authoring §18.35](../product/content-authoring-scenario-preparation-and-artifact-management.md#1835-the-session-recap-privacy-boundary).
+
+### The escape valve for a narratively important discovery
+
+> **If a Map discovery matters narratively, the GM may explicitly record a Story
+> Event** ([Content authoring §18.33](../product/content-authoring-scenario-preparation-and-artifact-management.md#1833-gm-story-events)), which becomes
+> player-safe Activity and recap input.
+
+That is the **only** route by which a subset disclosure enters shared history, and
+it is a **deliberate GM act**, never an automatic consequence of disclosing a
+Layer.
+
+> **Activity must not be used as a generic layer-visibility log.** Do not emit an
+> Activity entry per Layer reveal, per placement change, or per viewer.
+
+> **No lane stops on this question.** It is settled, and this section adds no
+> Map-specific decision.
+
 ---
 
 # 10. Player-editing boundary
@@ -434,6 +991,18 @@ The architecture nevertheless preserves room for later capabilities such as:
 - collaboratively edited Maps.
 
 Those capabilities introduce additional ownership, visibility and collaboration semantics and should be designed explicitly when required rather than being implicitly included in V1.
+
+**Amended 2026-09-26.** [M3](#m3--player-authored-markers) remains **deferred**:
+V1 exposes no general player Map editing.
+
+> **That is a V1 UI boundary, not an architectural constraint.** The underlying
+> create, import, stage and validate machinery must **not** be built as
+> intrinsically GM-only —
+> [Content authoring §18.44](../product/content-authoring-scenario-preparation-and-artifact-management.md#1844-content-production-capability-is-actor-neutral).
+
+What a player **sees** of a Map is not governed by this section at all; it is
+governed by that player's Character-scoped Map knowledge
+([section 9.6](#96-map-knowledge-is-character-scoped)).
 
 ---
 
@@ -485,6 +1054,13 @@ Map background behavior aligns with the approved Artifact-management architectur
 A normal Map background reference targets the **stable Artifact identity**.
 
 It therefore resolves to that Artifact's **current active revision**.
+
+**Amended 2026-09-26.** This applies to **every visual layer representation**
+([section 8.1](#81-layers-carry-visual-representations)), not only to a base
+background. Correcting a layer's logical Artifact flows through to the Map and
+**changes no Character's knowledge**; supplying genuinely **new** spatial
+information requires a **new layer**
+([section 8.2](#82-replacement-versus-new-knowledge)).
 
 Consequences:
 
@@ -539,6 +1115,18 @@ Secret or unfinished content can remain:
 
 This avoids creating a separate publication/versioning subsystem merely to support normal GM preparation.
 
+## Authored Map content versus live placement state
+
+**Amended 2026-09-26.** The editable list above is **authored Map content**, and
+it is persistent.
+
+> **Live placements are not authored Map content.** They are live contextual state
+> and are normally transient
+> ([section 7.6](#76-placement-state-is-normally-transient)).
+
+Editing authored content retains Map identity. Adding, moving or clearing a live
+placement is not a Map revision at all, and V1 requires no history of it.
+
 ---
 
 # 14. Core workflows
@@ -574,11 +1162,17 @@ The destination Map does not thereby acquire a required single parent.
 ## 14.3 Prepare shared and secret information together
 
 1. GM prepares a Map containing both public and secret information.
-2. GM shares the Map with players.
-3. Selected Layers are player-visible.
-4. Secret Layers remain GM-only.
-5. Individual marker overrides may reveal or hide exceptional markers.
-6. Visibility may change later without creating another Map.
+2. GM marks the Map **player-presentable**.
+3. Selected Layers are **player-safe**, that is **eligible** for disclosure.
+4. Secret Layers remain GM-only and therefore **ineligible**.
+5. Individual marker overrides may raise or lower eligibility for exceptional markers.
+6. Eligibility may change later without creating another Map.
+7. **Each Character learns only the Layers actually projected to that Character**
+   ([section 9.7](#97-how-a-character-acquires-map-knowledge)).
+
+**Amended 2026-09-26.** Steps 2 and 3 are **GM-side classification**, not a
+party-wide share, and they disclose nothing on their own
+([section 9.8](#98-player-safe-eligibility-is-not-disclosure)).
 
 ---
 
@@ -626,13 +1220,19 @@ A regional Map contains:
 - undiscovered ruins;
 - enemy locations.
 
-The Map is shared.
+The Map is **player-presentable**.
 
-The Towns, Roads and Known Locations Layers are player-visible.
+The Towns, Roads and Known Locations Layers are **player-safe**, that is eligible
+for disclosure. GM Secrets remains GM-only and ineligible.
 
-GM Secrets remains hidden.
+Elena is shown the Map during play and learns the three eligible Layers. Marcus,
+who was not present, knows none of them until the Map is projected to him.
 
 **Accepted.**
+
+**Amended 2026-09-26.** The earlier wording — "the Map is shared" and "the Layers
+are player-visible" — described one party-wide player view and is **superseded**
+by [section 9.6](#96-map-knowledge-is-character-scoped).
 
 ---
 
@@ -640,9 +1240,17 @@ GM Secrets remains hidden.
 
 A hidden ruin sits on the GM Secrets Layer.
 
-After the characters discover it, the GM changes that marker's visibility so players can see it without revealing the rest of the Layer.
+After the Characters discover it, the GM changes that marker's override so the
+marker becomes **eligible** without making the rest of the Layer eligible, then
+discloses it to the Characters who were there.
 
 **Accepted.**
+
+**Amended 2026-09-26.** Changing the override makes the marker eligible; it
+discloses it to nobody by itself, and it reaches only the Characters the GM
+actually discloses it to
+([section 9.3](#93-marker-visibility-override) and
+[section 9.8](#98-player-safe-eligibility-is-not-disclosure)).
 
 ---
 
@@ -674,9 +1282,11 @@ The NPC remains authoritative for its own identity and game information.
 
 ## 15.5 Permission-protected entity information
 
-Players can see an NPC marker on a shared Map.
+A Character who knows the Layer the marker sits on can see that NPC marker.
 
-The marker identifies the NPC in the manner chosen for Map presentation.
+The marker identifies the NPC through the player-safe presentation resolved from
+**that Character's own recognition state**
+([section 7.7](#77-player-facing-marker-treatment)).
 
 The NPC's GM-only information remains inaccessible unless the NPC domain independently permits player access.
 
@@ -752,6 +1362,30 @@ Its authored Map information and position remain, while the external reference i
 Artifact provides media/content.
 
 Map provides interactive spatial context.
+
+---
+
+## A Map is not an Item
+
+**Added 2026-09-26.**
+
+An **Item** is a **physical object in the fiction**. A Map is a canonical spatial
+resource the application uses to illustrate a place or a layout.
+
+> **A physical parchment map, scroll, book or document discovered by Characters is
+> an Item**, potentially with an associated Artifact that players can inspect.
+
+That Item is **not automatically connected in the application to the canonical Map
+domain object, even when both depict the same place.** Connecting them is an
+explicit authoring act.
+
+> **Do not conflate Items with Maps merely because both may visually depict a
+> location.**
+
+This matches the owning-domain semantics already recorded at
+[Campaign Blackboard V1 §4.1](../product/campaign-blackboard-v1.md#41-owning-domain-semantics) and the
+Item-versus-Artifact distinction of
+[AI-assisted Artifact and Item intake](../product/ai-assisted-artifact-intake.md#item-versus-artifact).
 
 ---
 
@@ -832,7 +1466,22 @@ The following are outside Map Workspace V1:
 - multi-user tactical manipulation;
 - player-owned annotations;
 - Map revision history;
-- rollback.
+- rollback;
+- drawing tools;
+- live collaborative annotation;
+- VTT walls and lights;
+- automatic Item positioning;
+- historical placement or token replay;
+- exact geospatial coordinates.
+
+**Amended 2026-09-26.** The last six entries were added by the 2026-09-26 ruling.
+
+> **Do not turn V1 Maps into a full VTT.**
+
+**The architecture must allow later growth without requiring any of the items
+above now.** That, together with
+[section 2.2](#22-map-purpose--illustration-not-authoritative-rules-state), is the
+test a later spatial capability must pass.
 
 Later spatial mechanics should **extend the common Map/spatial model**.
 
@@ -911,9 +1560,94 @@ Player annotation and collaborative editing remain later capabilities.
 
 ---
 
+## M4 — Map is a canonical Campaign domain object
+
+**Approved, 2026-09-26**
+
+A Map is a persistent **Campaign-scoped** spatial/story resource with stable
+identity independent of any Scenario, reusable across Scenarios and Encounters.
+Scenario/Encounter association expresses relevance, not ownership, and creates no
+copy. A Map is not an Item, and not inherently a Combat object.
+[Section 2.1](#21-a-map-is-a-canonical-campaign-domain-object) and
+[section 16](#16-durable-domain-boundaries).
+
+---
+
+## M5 — The Map is illustrative, not authoritative rules state
+
+**Approved, 2026-09-26**
+
+Map position and geometry illustrate the fiction. V1 coordinates must not
+determine Combat legality, range, movement allowance, pathfinding, line of sight
+or rules-engine outcomes. **The GM remains the adjudicator.**
+[Section 2.2](#22-map-purpose--illustration-not-authoritative-rules-state).
+
+---
+
+## M6 — Layers carry visual representations; replacement is not new information
+
+**Approved, 2026-09-26**
+
+A Layer may carry a visual Artifact representation, markers, or both. **One V1
+layer corresponds to one visual Artifact representation**; multi-file tiled or
+composite layers are deferred, and opacity is an optional display property.
+
+> **Replacement changes representation. New information creates a new layer.**
+
+[Section 8.1](#81-layers-carry-visual-representations) and
+[section 8.2](#82-replacement-versus-new-knowledge).
+
+---
+
+## M7 — Map knowledge is Character-scoped
+
+**Approved, 2026-09-26**
+
+Different Characters may hold different projections of one canonical Map.
+Player-safe classification is **eligibility**, never disclosure. Map disclosure
+affects Map knowledge only. **This supersedes the party-wide reading of
+[section 9](#9-visibility-and-sharing-model).**
+[Section 9.6](#96-map-knowledge-is-character-scoped) through
+[section 9.9](#99-map-disclosure-affects-map-knowledge-only).
+
+---
+
+## M8 — Live placements are transient; knowledge is not
+
+**Approved, 2026-09-26**
+
+V1 supports approximate live placement of Characters, People and Items, with
+bulk-add, drag/drop, removal and show/hide. Placements are live contextual state,
+not Character memory. **Knowledge is acquired at actual projection, not by GM-side
+placement**, and knowledge acquired that way persists after the placement ends.
+Player-facing markers must not leak a Person's backing.
+[Section 7.5](#75-live-placements) through
+[section 7.7](#77-player-facing-marker-treatment), and
+[section 9.7](#97-how-a-character-acquires-map-knowledge).
+
+---
+
+## M9 — Blackboard Map sharing is by known-Layer subset
+
+**Approved, 2026-09-26**
+
+A Character may post any subset of the Map Layers they personally know. The posted
+Map contains exactly those Layers, never tracks the poster's later learning, and
+copies no knowledge into another Character's Knowledge Library.
+[Section 9.10](#910-blackboard-sharing-of-maps).
+
+---
+
 # 20. Remaining PO decisions
 
 No material product or architecture decision remains unresolved for **Map Workspace V1**.
+
+**Confirmed 2026-09-26.** The 2026-09-26 Maps ruling introduced **no new open
+decision**. The one question it could have raised — whether a Map-Layer disclosure
+reaching only some Characters produces a shared Activity entry — is **already
+answered** by the settled rule at
+[Content authoring §18.37](../product/content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record),
+applied to Maps at [section 9.11](#911-map-disclosure-and-the-shared-activity-record).
 
 Future decisions will be required when later capabilities are activated, particularly around:
 
@@ -948,6 +1682,17 @@ The conceptual contract now establishes:
 - durable Map/Campaign/Combat/Story boundaries;
 - a cohesive Map Workspace V1 milestone;
 - explicit exclusion of later tactical mechanics.
+
+**Amended 2026-09-26.** The 2026-09-26 Maps ruling adds to that list:
+
+- the canonical **Campaign-scoped** Map object, and the Map/Item boundary;
+- the **illustrative, not authoritative** Map purpose;
+- the **visual layer stack** and the replacement-versus-new-layer rule;
+- **Character-scoped Map knowledge**, and the eligibility-versus-knowledge
+  distinction;
+- **live placements** and their transience;
+- player-facing marker treatment and the identity anti-leak invariant;
+- **Blackboard Map sharing by known-Layer subset**.
 
 No further product ruling is required before the architecture can be treated as complete.
 

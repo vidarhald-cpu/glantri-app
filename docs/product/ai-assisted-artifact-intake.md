@@ -20,6 +20,18 @@ The person or the AI states only **human and semantic facts**. Glantri derives
 internal package state and every database identity. The format has no place to
 supply one, and the schema rejects any attempt to add one.
 
+**Confirmed and extended, 2026-09-26.** The Product Owner ruling of 2026-09-26
+confirms this division and extends it to **Maps and multi-type packages**: an
+external tool must not be required to supply SHA-256 digests, dimensions, MIME
+metadata, database IDs or generated timestamps, and **Glantri computes any hash it
+needs during staging**. It supersedes any workflow requiring a human or an ordinary
+AI conversation to substitute checksums by hand before import.
+
+> **That governs the human and ordinary-AI-conversation workflow. It does not
+> weaken the machine package format's digest validation**, which continues to
+> **fail closed** — see [The advanced entry point](#the-advanced-entry-point) and
+> [Content authoring §18.42](content-authoring-scenario-preparation-and-artifact-management.md#1842-external-tools-supply-semantics-glantri-derives-technical-metadata).
+
 ## The invariant
 
 **No canonical Item or Artifact exists before the GM confirms.** Intake stages
@@ -150,6 +162,21 @@ The `Import Artifact package` route, with its authored manifest and declared
 checksums, is unchanged. It remains available for package-shaped work, it is
 not a prerequisite for ordinary intake, and ordinary intake never requires a
 GM to see a manifest.
+
+**Confirmed 2026-09-26.** The two coexist. The authored-package route keeps its
+declared per-resource `sha256` and its **fail-closed** digest, signature, length
+and declared-type validation
+([Artifact packages and library](../architecture/artifact-package-format.md)),
+because a machine-authored package **can** supply a digest and is held to it.
+**Ordinary intake never asks a human for one. Neither rule weakens the other.**
+
+> **Recorded as an explicit usability objective, 2026-09-26.** A user should be
+> able to use an ordinary AI conversation to create images, semantic
+> manifest/context and optionally one package or archive, then upload that result
+> directly into the intake workbench — with **no Codex or Builder thread, no
+> repository access, no manual checksum calculation, no Glantri database IDs and
+> no manual package surgery.** See
+> [Content authoring §18.43](content-authoring-scenario-preparation-and-artifact-management.md#1843-the-ordinary-ai-conversation-workflow).
 
 > **It is not a separate route.** In implementation, ordinary upload, AI-assisted
 > intake and authored package import are **three entry points into one
