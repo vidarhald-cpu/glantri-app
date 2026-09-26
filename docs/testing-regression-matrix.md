@@ -123,7 +123,9 @@ Three traps, each of which has already been misreported as a product defect:
 - **`ARTIFACT_LOCAL_ROOT` must be set**, or three specs fail on a
   missing-environment assertion rather than on product behaviour — see
   `apps/web/e2e/blackboard.spec.ts:121-122` and
-  `apps/web/e2e/artifactImports.spec.ts:231`.
+  `apps/web/e2e/artifactImports.spec.ts:231`. Setting it for the Playwright
+  process alone is **not enough**; see
+  [further environment traps](#further-environment-traps--recorded-2026-09-26).
 - **`apps/web/e2e/global-setup.ts` is not idempotent.** A second run against the
   same database fails with `409 CHARACTER_ALREADY_IN_ACTIVE_CAMPAIGN`, so
   **every full e2e run needs a fresh, unseeded disposable database.**
@@ -137,41 +139,129 @@ listed in
 the supported interactive path; this note records only that agents must use the
 cleanup/setup/migrate sequence instead.
 
+### Further environment traps — recorded 2026-09-26
+
+Three additional traps, each of which cost a real lane real time. They are
+**additional to**, not replacements for, the three above.
+
+- **`ARTIFACT_LOCAL_ROOT` must reach the application stack process, not only the
+  Playwright process.** `turbo.json:11` lists it in the `dev` task's
+  `passThroughEnv`, so it is propagated to the server **only if it is already
+  exported on the command that starts the stack**. Exporting it just before
+  invoking Playwright leaves the server without it, and
+  `apps/web/e2e/blackboard.spec.ts:27` and
+  `apps/web/e2e/artifactImports.spec.ts:228` then fail spuriously. Export it
+  once, before starting the stack, and reuse the same directory for both
+  processes.
+- **`pnpm dev` is currently unusable on this machine for e2e.** Every web route
+  returns 404 / `/_not-found`, with `Watchpack Error: EMFILE` in the log. This is
+  **not** plain descriptor exhaustion: one lane confirmed `ulimit -n` at 1048576
+  with `kern.num_files` well below its own limit, so raising the descriptor limit
+  is not the fix. Two independent lanes fell back to **`next start` against a
+  build produced inside `db:task:exec`**, so that `NEXT_PUBLIC_API_BASE_URL`
+  bakes to that worktree's own API rather than to a foreign stack. Record the
+  fallback as the current working procedure. Caveat: `next start` warns about
+  `output: standalone` (`apps/web/next.config.ts:5`); the warning is expected and
+  is not the signal to act on. **The documented signal that the environment is
+  satisfied is that real routes render and `blackboard.spec.ts:27` plus the
+  environment-sensitive `artifactImports` cases pass.**
+- **A local Playwright run leaves report artifacts behind, and `pnpm lint` then
+  fails on them.** `apps/web/playwright-report/**` and
+  `apps/web/test-results/**` are untracked, and lint fails on the minified trace
+  bundles inside them. This has now cost **two** separate lanes a confusing lint
+  failure attributed to their own change. Clear them with:
+
+  ```bash
+  rm -rf apps/web/playwright-report apps/web/test-results
+  ```
+
+  **Re-judge any lint failure on a clean tree before attributing it to a
+  change.**
+
+### Which Playwright environment to trust — recorded 2026-09-26
+
+**CI's `application-docker-test` is the trustworthy Playwright environment.**
+Local full-suite e2e on this machine is currently unreliable under concurrent
+lane load, for the reasons in
+[further environment traps](#further-environment-traps--recorded-2026-09-26).
+
+A lane that cannot obtain an attributable local run should **say so and run a
+narrow base-versus-head A/B** on the contested specs only, rather than reporting
+an unattributed full-suite result. Two lanes did exactly that on 2026-09-26 and
+were right to; an unattributed local failure count is what produced the stale
+baseline corrected below.
+
 ### Pre-existing Playwright failure baseline — recorded 2026-09-26
 
-Established by independent QA on clean `dev` at
-`445bb5c580db3bbfc800a281e72cd1ceb62b5dfb`, in a dedicated worktree with its own
-disposable database, and cross-checked against the head of the lane then under
-review: identical failure sets on both sides. Six failures are pre-existing. **A
-lane is not accountable for these six; it is accountable for not adding a
-seventh.**
+**Corrected 2026-09-26 against `3a91c867`. The baseline is four failures, not
+six.** This supersedes the six-failure baseline this section first recorded; what
+was believed, and why it stopped being true, is kept below because that is the
+durable lesson.
 
-Four in the `apps/web/playwright.config.ts` end-to-end project:
+The current baseline was established by an independent floor-class QA lane using
+a **controlled base-versus-head comparison**: a second worktree at
+`5c34b1f0`, its own disposable database, and its own stack on its own derived
+ports, running the contested specs on both sides.
 
-| Spec                                                    | Case                                                                                 |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `apps/web/e2e/artifactImports.spec.ts:10`               | creates, reuses, revises, retires and imports through review at narrow width         |
-| `apps/web/e2e/artifacts.spec.ts:16`                     | publishes a safe visual Artifact to entitled players without exposing GM controls    |
-| `apps/web/e2e/character-lifecycle-recovery.spec.ts:85`  | keeps canonical truth visible while a failed identity draft is reviewed or discarded |
-| `apps/web/e2e/character-lifecycle-recovery.spec.ts:138` | restores canonical progression after failure and retains explicit recovery controls  |
+Two in the `apps/web/playwright.config.ts` end-to-end project:
+
+| Spec                                      | Case                                                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------- |
+| `apps/web/e2e/artifactImports.spec.ts:10` | creates, reuses, revises, retires and imports through review at narrow width      |
+| `apps/web/e2e/artifacts.spec.ts:16`       | publishes a safe visual Artifact to entitled players without exposing GM controls |
 
 Two in the `apps/web/browser-tests/playwright.config.ts` project: **both
 viewport cases** of `apps/web/browser-tests/skill-reference.spec.mts` — "Skill
 reference stays usable at 1440px" and the same check at 390px.
 
-**`apps/web/e2e/blackboard.spec.ts:27` is not one of them. It is expected to
-pass.** It passed at clean `445bb5c5` and at the lane head in two independent
-runs (19.2 s and 19.4 s). A Builder reported it as a fourth pre-existing
-end-to-end failure: the _count_ of four was right, the _identity_ was wrong, most
-likely because that run was made against an already-seeded database. **Treat any
-failure of `blackboard.spec.ts` as a real regression**, not as baseline noise,
-and re-derive the run against a fresh disposable database before reporting it.
+**A lane is not accountable for these four; it is accountable for not adding a
+fifth.**
+
+#### What was superseded, and why it went stale
+
+The two `apps/web/e2e/character-lifecycle-recovery.spec.ts` cases previously
+listed here — `:85` "keeps canonical truth visible while a failed identity draft
+is reviewed or discarded" and `:138` "restores canonical progression after
+failure and retains explicit recovery controls" — **now pass on both sides of the
+controlled comparison**, at `5c34b1f0` and at head. They appear to have been
+fixed by commits intervening between the original baseline and current `dev`.
+
+The original record was **not wrong about what was true when it was written**. It
+was established at `445bb5c580db3bbfc800a281e72cd1ceb62b5dfb`; `dev` has since
+moved to `3a91c867`, and the document **became stale relative to `dev`** — which
+is precisely the failure mode a written baseline exists to prevent. Three
+separate lanes disagreed about this section before a controlled experiment
+settled it.
+
+**A baseline is only meaningful against a stated SHA.** A lane that finds a
+discrepancy between this section and its own run must **re-derive against current
+`dev` and correct this document**, not work around it and not silently adopt a
+different failure count.
+
+#### Resolved discrepancies
+
+- **`apps/web/e2e/blackboard.spec.ts:27` is not a baseline failure. It is
+  expected to pass.** It passed at clean `445bb5c5`, at the lane head in two
+  independent runs (19.2 s and 19.4 s), and on both sides of the 2026-09-26
+  controlled comparison. A Builder reported it as a fourth pre-existing
+  end-to-end failure: the _count_ of four was right at the time, the _identity_
+  was wrong, most likely because that run was made against an already-seeded
+  database. **Treat any failure of `blackboard.spec.ts` as a real regression**,
+  not as baseline noise, and re-derive the run against a fresh disposable
+  database before reporting it.
+- **A reported failure of `acov4-combat-item-interactions.spec.ts:221` could not
+  be reproduced, and no such case exists.**
+  `apps/web/e2e/acov4-combat-item-interactions.spec.ts` declares **exactly one**
+  test, at line 62 — "passes, drops, and picks up one canonical Item across
+  narrow and desktop views" — and it passes. Line 221 falls inside that single
+  test body. Do not carry this report forward.
 
 Before attributing any failure above to a lane, confirm the run satisfied the
 environment requirements in
-[running the e2e suite without `db:task:exec`](#running-the-e2e-suite-without-dbtaskexec--recorded-2026-09-26).
-Most reported extra failures so far have been environment shortfalls, not
-product defects.
+[running the e2e suite without `db:task:exec`](#running-the-e2e-suite-without-dbtaskexec--recorded-2026-09-26)
+and in [further environment traps](#further-environment-traps--recorded-2026-09-26).
+Most reported extra failures so far have been environment shortfalls or a stale
+baseline, not product defects.
 
 ## Selecting independent-QA regression breadth
 
