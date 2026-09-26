@@ -39,17 +39,30 @@ be dispatched on its recorded contract.
 
 ## Supplied files
 
-The raw evidence preserves the exact supplied UTF-8 bytes. The `.md.txt` suffix identifies
-verbatim Markdown source stored as plain text, separate from this formatted reader guide.
-The original supplied filename is retained before the final `.txt` suffix. Do not format
-the raw evidence.
+The `.md.txt` suffix identifies verbatim Markdown source stored as plain text, separate from
+this formatted reader guide. The original supplied filename is retained before the final
+`.txt` suffix. Do not format the raw evidence.
 
-| Supplied file                                                                                                      | Bytes   | SHA-256                                                          |
-| ------------------------------------------------------------------------------------------------------------------ | ------- | ---------------------------------------------------------------- |
-| [Glantri_Complete_Competency_Catalogue_Reader_Prose.md](Glantri_Complete_Competency_Catalogue_Reader_Prose.md.txt) | 355,963 | 0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376 |
+This package uses the two-file archive form already established by
+[`docs/source/professions`](../professions/README.md), because the supplied file contains 667
+lines with trailing ASCII spaces — Markdown hard line breaks — which the repository's
+whitespace gate rejects. The `.original.base64.txt` archive holds the **exact supplied bytes**
+and is the authority. The `.md.txt` readable copy applies one documented, reversible
+normalization: trailing ASCII spaces and tabs removed per line, all line breaks and every
+other byte preserved. Nothing is reflowed, re-wrapped, corrected, truncated, split or
+compressed, and no line-ending conversion is applied.
+[`competency-source-provenance.json`](competency-source-provenance.json) records both digests
+and the exact rule. Decoding the archive reproduces the supplied file byte-for-byte.
+
+| File                                                                                                                       | Bytes   | SHA-256                                                          |
+| -------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------- |
+| Supplied original `Glantri_Complete_Competency_Catalogue_Reader_Prose.md`                                                  | 355,963 | 0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376 |
+| [Exact archive](Glantri_Complete_Competency_Catalogue_Reader_Prose.original.base64.txt) (base64; decodes to the row above) | 480,865 | 0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376 |
+| [Readable copy](Glantri_Complete_Competency_Catalogue_Reader_Prose.md.txt) (trailing spaces/tabs stripped per line)        | 354,629 | c9d9c8c395024d71289dadf97717f450868fa2cdf86da51017d6f8a9231e007b |
 
 Original source directory: `/Users/vidarhald/Documents/Glantri local/`. Supplied file date:
-10 September 2026. The digest and byte length above match the values pinned in #102's body
-exactly. The digest was verified against the supplied file before the copy and against the
-committed file after it. Builders must reference this repository path and must not depend on
-the private machine path.
+10 September 2026. The original digest and byte length above match the values pinned in
+#102's body exactly. The digest was verified against the supplied file before the copy and
+against the committed archive after it. Builders must reference this repository path and must
+not depend on the private machine path. Any consumer needing the exact approved string must
+decode the archive, not read the readable copy.

@@ -41,9 +41,9 @@ The generic Concrete Skill page remains primary. An Arch Society is an optional 
 
 #### Deception
 
-**ID:** `skill:deception`  
-**Name:** Deception  
-**Competency type:** Base Skill  
+**ID:** `skill:deception`
+**Name:** Deception
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -78,14 +78,14 @@ The competence concerns the construction and delivery of the misleading account.
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:deception (P:95; D:822)  
+**Provenance:** [R] Pilot Skill: skill:deception (P:95; D:822)
 [R] Legacy Skill: intrigue (C:2964)
 
 #### Insight
 
-**ID:** `skill:insight`  
-**Name:** Insight  
-**Competency type:** Base Skill  
+**ID:** `skill:insight`
+**Name:** Insight
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -120,19 +120,19 @@ The result is an informed reading of another person. Fear, embarrassment, custom
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:insight (P:99; D:890)  
-[R] Legacy Skill: intrigue (C:2964)  
-[R] Legacy Skill: insight (C:3151)  
-[R] Legacy Skill: social_perception (C:3184)  
-[R] Legacy Skill: detect_lies (C:3219)  
-[R] Legacy Skill: seduction (C:3253)  
+**Provenance:** [R] Pilot Skill: skill:insight (P:99; D:890)
+[R] Legacy Skill: intrigue (C:2964)
+[R] Legacy Skill: insight (C:3151)
+[R] Legacy Skill: social_perception (C:3184)
+[R] Legacy Skill: detect_lies (C:3219)
+[R] Legacy Skill: seduction (C:3253)
 [R] Q:97 — Detect Lies (qualitative name, no recovered target ID)
 
 #### Interrogation
 
-**ID:** `skill:interrogation`  
-**Name:** Interrogation  
-**Competency type:** Base Skill  
+**ID:** `skill:interrogation`
+**Name:** Interrogation
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -173,9 +173,9 @@ This practice can be used with willing witnesses as well as reluctant respondent
 
 #### Intimidation
 
-**ID:** `skill:intimidation`  
-**Name:** Intimidation  
-**Competency type:** Base Skill  
+**ID:** `skill:intimidation`
+**Name:** Intimidation
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -214,9 +214,9 @@ The competence lies in making that pressure effective in the circumstances. A th
 
 #### Leadership
 
-**ID:** `skill:leadership`  
-**Name:** Leadership  
-**Competency type:** Base Skill  
+**ID:** `skill:leadership`
+**Name:** Leadership
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -255,9 +255,9 @@ Leadership can develop in households, work parties, expeditions or public life. 
 
 #### Oratory
 
-**ID:** `skill:oratory`  
-**Name:** Oratory  
-**Competency type:** Base Skill  
+**ID:** `skill:oratory`
+**Name:** Oratory
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -292,18 +292,18 @@ The competence applies to public appeals, explanations, ceremonial addresses and
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:oratory (P:103; D:958)  
-[R] Legacy Skill: rhetorical_composition (C:2543)  
-[R] Legacy Skill: seduction (C:3253)  
-[R] Legacy Skill: recitation (C:3408)  
-[R] Legacy Skill: oratory (C:3447)  
+**Provenance:** [R] Pilot Skill: skill:oratory (P:103; D:958)
+[R] Legacy Skill: rhetorical_composition (C:2543)
+[R] Legacy Skill: seduction (C:3253)
+[R] Legacy Skill: recitation (C:3408)
+[R] Legacy Skill: oratory (C:3447)
 [R] Q:100 — Diplomacy (qualitative name, no recovered target ID)
 
 #### Teaching
 
-**ID:** `skill:teaching`  
-**Name:** Teaching  
-**Competency type:** Base Skill  
+**ID:** `skill:teaching`
+**Name:** Teaching
+**Competency type:** Base Skill
 **Domain:** Social Interaction
 
 **Short description**
@@ -344,9 +344,9 @@ Teaching can be oral, practical or text-based. It may take place in a household,
 
 #### Document & Credential Forgery
 
-**ID:** `skill:document-forgery`  
-**Name:** Document & Credential Forgery  
-**Competency type:** Base Skill  
+**ID:** `skill:document-forgery`
+**Name:** Document & Credential Forgery
+**Competency type:** Base Skill
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -385,9 +385,9 @@ The work depends on the kind of record involved: an authorization, receipt or ce
 
 #### Palaeography & Decipherment
 
-**ID:** `skill:palaeography-decipherment`  
-**Name:** Palaeography & Decipherment  
-**Competency type:** Base Skill  
+**ID:** `skill:palaeography-decipherment`
+**Name:** Palaeography & Decipherment
+**Competency type:** Base Skill
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -426,9 +426,9 @@ The competence ranges from interpreting an unfamiliar hand within a known tradit
 
 #### Translation & Interpretation
 
-**ID:** `skill:translation-interpretation`  
-**Name:** Translation & Interpretation  
-**Competency type:** Base Skill  
+**ID:** `skill:translation-interpretation`
+**Name:** Translation & Interpretation
+**Competency type:** Base Skill
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -469,9 +469,9 @@ Spoken interpreting also requires keeping track of an unfolding exchange; writte
 
 #### Mathematics
 
-**ID:** `mathematics`  
-**Name:** Mathematics  
-**Competency type:** Base Skill  
+**ID:** `mathematics`
+**Name:** Mathematics
+**Competency type:** Base Skill
 **Domain:** Scholarship
 
 **Short description**
@@ -506,15 +506,15 @@ The competence can support calculations, geometric reasoning and the comparison 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: measurement (C:2568)  
-[R] Legacy Skill: mathematics (C:2598)  
+**Provenance:** [R] Legacy Skill: measurement (C:2568)
+[R] Legacy Skill: mathematics (C:2598)
 [R] Q:86 — Mathematics (qualitative name, no recovered target ID)
 
 #### Meditation
 
-**ID:** `meditation`  
-**Name:** Meditation  
-**Competency type:** Base Skill  
+**ID:** `meditation`
+**Name:** Meditation
+**Competency type:** Base Skill
 **Domain:** Scholarship
 
 **Short description**
@@ -555,9 +555,9 @@ In Glantri, Meditation can prepare a practitioner for a subsequent task and may 
 
 #### Mnemonics
 
-**ID:** `skill:mnemonics`  
-**Name:** Mnemonics  
-**Competency type:** Base Skill  
+**ID:** `skill:mnemonics`
+**Name:** Mnemonics
+**Competency type:** Base Skill
 **Domain:** Scholarship
 
 **Short description**
@@ -592,14 +592,14 @@ The competence is especially useful when a sequence, list or extended account mu
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: recitation (C:3408)  
+**Provenance:** [R] Legacy Skill: recitation (C:3408)
 [R] Legacy Skill: memory (C:3499)
 
 #### Philosophy
 
-**ID:** `philosophy`  
-**Name:** Philosophy  
-**Competency type:** Base Skill  
+**ID:** `philosophy`
+**Name:** Philosophy
+**Competency type:** Base Skill
 **Domain:** Scholarship
 
 **Short description**
@@ -634,14 +634,14 @@ Philosophical work may be conducted through discussion, commentary or sustained 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: philosophy (C:2428)  
+**Provenance:** [R] Legacy Skill: philosophy (C:2428)
 [R] Q:86 — Philosophy (qualitative name, no recovered target ID)
 
 #### Research
 
-**ID:** `skill:research`  
-**Name:** Research  
-**Competency type:** Base Skill  
+**ID:** `skill:research`
+**Name:** Research
+**Competency type:** Base Skill
 **Domain:** Scholarship
 
 **Short description**
@@ -676,18 +676,18 @@ Research does not inherently require literacy or an archive. Its defining work i
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:research (P:54; D:570)  
-[R] Legacy Skill: detect_lies (C:3219)  
-[R] Q:97 — Generic Investigation (qualitative name, no recovered target ID)  
+**Provenance:** [R] Pilot Skill: skill:research (P:54; D:570)
+[R] Legacy Skill: detect_lies (C:3219)
+[R] Q:97 — Generic Investigation (qualitative name, no recovered target ID)
 [R] Q:97 — Detect Lies (qualitative name, no recovered target ID)
 
 ### Craft & Making
 
 #### Alchemy
 
-**ID:** `alchemy`  
-**Name:** Alchemy  
-**Competency type:** Base Skill  
+**ID:** `alchemy`
+**Name:** Alchemy
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -722,14 +722,14 @@ Alchemy combines practical material work with a body of learned explanation. Its
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: alchemy (C:2668)  
+**Provenance:** [R] Legacy Skill: alchemy (C:2668)
 [R] Q:87 — Alchemy (qualitative name, no recovered target ID)
 
 #### Armoring
 
-**ID:** `skill:armoring`  
-**Name:** Armoring  
-**Competency type:** Base Skill  
+**ID:** `skill:armoring`
+**Name:** Armoring
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -772,9 +772,9 @@ The craft can take different forms according to available materials and local pr
 
 #### Brewing
 
-**ID:** `skill:brewing`  
-**Name:** Brewing  
-**Competency type:** Base Skill  
+**ID:** `skill:brewing`
+**Name:** Brewing
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -809,14 +809,14 @@ The ingredients, equipment and ways of judging a batch depend on the brewing tra
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: brewing (C:4523)  
+**Provenance:** [R] Legacy Skill: brewing (C:4523)
 [R] Q:87 — Brewing (qualitative name, no recovered target ID)
 
 #### Carpentry
 
-**ID:** `carpentry`  
-**Name:** Carpentry  
-**Competency type:** Base Skill  
+**ID:** `carpentry`
+**Name:** Carpentry
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -851,15 +851,15 @@ The competence can serve building frames, furnishings, fittings and other timber
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: measurement (C:2568)  
-[R] Legacy Skill: carpentry (C:4441)  
+**Provenance:** [R] Legacy Skill: measurement (C:2568)
+[R] Legacy Skill: carpentry (C:4441)
 [R] Q:87 — Carpentry (qualitative name, no recovered target ID)
 
 #### Cooking
 
-**ID:** `skill:cooking`  
-**Name:** Cooking  
-**Competency type:** Base Skill  
+**ID:** `skill:cooking`
+**Name:** Cooking
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -898,9 +898,9 @@ Cooking may be learned in a household, communal kitchen or specialist establishm
 
 #### Distilling
 
-**ID:** `skill:distilling`  
-**Name:** Distilling  
-**Competency type:** Base Skill  
+**ID:** `skill:distilling`
+**Name:** Distilling
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -935,14 +935,14 @@ Distillation can serve drinks, aromatic materials or other preparations accordin
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: brewing (C:4523)  
+**Provenance:** [R] Legacy Skill: brewing (C:4523)
 [R] Q:87 — Distilling (qualitative name, no recovered target ID)
 
 #### Fibre Working
 
-**ID:** `skill:fibre-working`  
-**Name:** Fibre Working  
-**Competency type:** Base Skill  
+**ID:** `skill:fibre-working`
+**Name:** Fibre Working
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -981,9 +981,9 @@ Different plant and animal fibres require different treatment. The competence co
 
 #### Leatherwork
 
-**ID:** `leatherworking`  
-**Name:** Leatherwork  
-**Competency type:** Base Skill  
+**ID:** `leatherworking`
+**Name:** Leatherwork
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1018,14 +1018,14 @@ The competence can serve bags, belts, cases and other leather fittings within a 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: leatherworking (C:4413)  
+**Provenance:** [R] Legacy Skill: leatherworking (C:4413)
 [R] Q:87 — Leatherwork (qualitative name, no recovered target ID)
 
 #### Locksmithing
 
-**ID:** `skill:locksmithing`  
-**Name:** Locksmithing  
-**Competency type:** Base Skill  
+**ID:** `skill:locksmithing`
+**Name:** Locksmithing
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1064,9 +1064,9 @@ Lock traditions differ in materials and mechanisms. The competence concerns prac
 
 #### Masonry
 
-**ID:** `skill:masonry`  
-**Name:** Masonry  
-**Competency type:** Base Skill  
+**ID:** `skill:masonry`
+**Name:** Masonry
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1101,15 +1101,15 @@ Construction-oriented stone dressing belongs here, alongside the assembly of mas
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: measurement (C:2568)  
-[R] Legacy Skill: stoneworking (C:4550)  
+**Provenance:** [R] Legacy Skill: measurement (C:2568)
+[R] Legacy Skill: stoneworking (C:4550)
 [R] Q:87 — Masonry (qualitative name, no recovered target ID)
 
 #### Pottery
 
-**ID:** `pottery`  
-**Name:** Pottery  
-**Competency type:** Base Skill  
+**ID:** `pottery`
+**Name:** Pottery
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1144,14 +1144,14 @@ Tools, kiln arrangements and surface treatments vary among traditions. The core 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: pottery (C:4363)  
+**Provenance:** [R] Legacy Skill: pottery (C:4363)
 [R] Q:87 — Pottery (qualitative name, no recovered target ID)
 
 #### Ropework
 
-**ID:** `ropework`  
-**Name:** Ropework  
-**Competency type:** Base Skill  
+**ID:** `ropework`
+**Name:** Ropework
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1190,9 +1190,9 @@ Ropework appears in vessels, lifting work and timber construction, but its centr
 
 #### Sailmaking
 
-**ID:** `skill:sailmaking`  
-**Name:** Sailmaking  
-**Competency type:** Base Skill  
+**ID:** `skill:sailmaking`
+**Name:** Sailmaking
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1227,7 +1227,7 @@ Sails differ with vessels, rigs and materials. This is a substantial maritime cr
 
 **ID status:** Provisional target ID for this authoring pass.
 
-**Provenance:** [R] Q:87 — Sailmaking (qualitative name, no recovered target ID)  
+**Provenance:** [R] Q:87 — Sailmaking (qualitative name, no recovered target ID)
 [R2] Former proposed target spec:sailmaking under Tailoring. [PO-FINAL] Separate base Skill; no Tailoring parent or automatic migration.
 
 **Ruling / compatibility note:** [PO-FINAL] Normal base Skill. The earlier proposed Tailoring Specialization is superseded for target authoring; Tailoring and Sailmaking confer no competence on one another.
@@ -1236,9 +1236,9 @@ Sails differ with vessels, rigs and materials. This is a substantial maritime cr
 
 #### Smelting
 
-**ID:** `skill:smelting`  
-**Name:** Smelting  
-**Competency type:** Base Skill  
+**ID:** `skill:smelting`
+**Name:** Smelting
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1277,9 +1277,9 @@ The craft depends on sustained control of heat, materials and furnace conditions
 
 #### Smithing
 
-**ID:** `skill:smithing`  
-**Name:** Smithing  
-**Competency type:** Base Skill  
+**ID:** `skill:smithing`
+**Name:** Smithing
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1314,14 +1314,14 @@ The craft combines practiced handwork with knowledge of materials and workshop p
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:smithing (P:108; D:1043)  
+**Provenance:** [R] Pilot Skill: skill:smithing (P:108; D:1043)
 [R] Legacy Skill: smithing (C:4576)
 
 #### Tailoring
 
-**ID:** `tailoring`  
-**Name:** Tailoring  
-**Competency type:** Base Skill  
+**ID:** `tailoring`
+**Name:** Tailoring
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1356,14 +1356,14 @@ Clothing traditions differ in their cuts, fastening and expectations of fit. The
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: tailoring (C:4471)  
+**Provenance:** [R] Legacy Skill: tailoring (C:4471)
 [R] Q:87 — Tailoring (qualitative name, no recovered target ID)
 
 #### Weapon Maintenance
 
-**ID:** `weapon_maintenance`  
-**Name:** Weapon Maintenance  
-**Competency type:** Base Skill  
+**ID:** `weapon_maintenance`
+**Name:** Weapon Maintenance
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1402,9 +1402,9 @@ The work varies with the weapon's materials and mechanism. Its purpose is depend
 
 #### Weaving
 
-**ID:** `weaving`  
-**Name:** Weaving  
-**Competency type:** Base Skill  
+**ID:** `weaving`
+**Name:** Weaving
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1439,14 +1439,14 @@ The equipment and woven structures depend on the tradition. The craft makes clot
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: weaving (C:4388)  
+**Provenance:** [R] Legacy Skill: weaving (C:4388)
 [R] Q:87 — Weaving (qualitative name, no recovered target ID)
 
 #### Winemaking
 
-**ID:** `skill:winemaking`  
-**Name:** Winemaking  
-**Competency type:** Base Skill  
+**ID:** `skill:winemaking`
+**Name:** Winemaking
+**Competency type:** Base Skill
 **Domain:** Craft & Making
 
 **Short description**
@@ -1481,16 +1481,16 @@ The craft includes practical judgment throughout the transformation of the mater
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: brewing (C:4523)  
+**Provenance:** [R] Legacy Skill: brewing (C:4523)
 [R] Q:87 — Winemaking (qualitative name, no recovered target ID)
 
 ### Construction & Engineering
 
 #### Architecture
 
-**ID:** `skill:architecture`  
-**Name:** Architecture  
-**Competency type:** Base Skill  
+**ID:** `skill:architecture`
+**Name:** Architecture
+**Competency type:** Base Skill
 **Domain:** Construction & Engineering
 
 **Short description**
@@ -1525,14 +1525,14 @@ Architecture joins spatial judgment to an understanding of construction. It does
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Q:88 — Architecture (qualitative name, no recovered target ID)  
+**Provenance:** [R] Q:88 — Architecture (qualitative name, no recovered target ID)
 [R] Q:88 — Generic Engineering (qualitative name, no recovered target ID)
 
 #### Mechanics
 
-**ID:** `mechanics`  
-**Name:** Mechanics  
-**Competency type:** Base Skill  
+**ID:** `mechanics`
+**Name:** Mechanics
+**Competency type:** Base Skill
 **Domain:** Construction & Engineering
 
 **Short description**
@@ -1567,16 +1567,16 @@ The competence can be expressed through calculation, models or practical experie
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: mechanics (C:2769)  
-[R] Legacy Skill: trap_handling (C:4154)  
-[R] Q:88 — Mechanics (qualitative name, no recovered target ID)  
+**Provenance:** [R] Legacy Skill: mechanics (C:2769)
+[R] Legacy Skill: trap_handling (C:4154)
+[R] Q:88 — Mechanics (qualitative name, no recovered target ID)
 [R] Q:88 — Generic Engineering (qualitative name, no recovered target ID)
 
 #### Mining
 
-**ID:** `skill:mining`  
-**Name:** Mining  
-**Competency type:** Base Skill  
+**ID:** `skill:mining`
+**Name:** Mining
+**Competency type:** Base Skill
 **Domain:** Construction & Engineering
 
 **Short description**
@@ -1611,15 +1611,15 @@ The competence concerns extraction and the maintenance of workable excavations. 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: stoneworking (C:4550)  
-[R] Q:88 — Mining (qualitative name, no recovered target ID)  
+**Provenance:** [R] Legacy Skill: stoneworking (C:4550)
+[R] Q:88 — Mining (qualitative name, no recovered target ID)
 [R] Q:88 — Generic Engineering (qualitative name, no recovered target ID)
 
 #### Shipbuilding
 
-**ID:** `skill:shipbuilding`  
-**Name:** Shipbuilding  
-**Competency type:** Base Skill  
+**ID:** `skill:shipbuilding`
+**Name:** Shipbuilding
+**Competency type:** Base Skill
 **Domain:** Construction & Engineering
 
 **Short description**
@@ -1654,14 +1654,14 @@ The craft may draw heavily on timber work, but a vessel is not simply a watertig
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Q:88 — Shipbuilding (qualitative name, no recovered target ID)  
+**Provenance:** [R] Q:88 — Shipbuilding (qualitative name, no recovered target ID)
 [R] Q:88 — Generic Engineering (qualitative name, no recovered target ID)
 
 #### Siege Engineering
 
-**ID:** `skill:siege-engineering`  
-**Name:** Siege Engineering  
-**Competency type:** Base Skill  
+**ID:** `skill:siege-engineering`
+**Name:** Siege Engineering
+**Competency type:** Base Skill
 **Domain:** Construction & Engineering
 
 **Short description**
@@ -1696,14 +1696,14 @@ The competence centres on engineering: what can be built, how it must be support
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Q:88 — Siege Engineering (qualitative name, no recovered target ID)  
+**Provenance:** [R] Q:88 — Siege Engineering (qualitative name, no recovered target ID)
 [R] Q:88 — Generic Engineering (qualitative name, no recovered target ID)
 
 #### Surveying
 
-**ID:** `surveying`  
-**Name:** Surveying  
-**Competency type:** Base Skill  
+**ID:** `surveying`
+**Name:** Surveying
+**Competency type:** Base Skill
 **Domain:** Construction & Engineering
 
 **Short description**
@@ -1738,18 +1738,18 @@ Surveying is differentiated by its reproducible measurement practice. It can sup
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: measurement (C:2568)  
-[R] Legacy Skill: surveying (C:2735)  
-[R] Q:88 — Surveying (qualitative name, no recovered target ID)  
+**Provenance:** [R] Legacy Skill: measurement (C:2568)
+[R] Legacy Skill: surveying (C:2735)
+[R] Q:88 — Surveying (qualitative name, no recovered target ID)
 [R] Q:88 — Generic Engineering (qualitative name, no recovered target ID)
 
 ### Healing
 
 #### First Aid
 
-**ID:** `skill:first-aid`  
-**Name:** First Aid  
-**Competency type:** Base Skill  
+**ID:** `skill:first-aid`
+**Name:** First Aid
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -1784,14 +1784,14 @@ The competence is practical and time-sensitive. It concerns the first response a
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:first-aid (P:19; D:485)  
+**Provenance:** [R] Pilot Skill: skill:first-aid (P:19; D:485)
 [R] Legacy Skill: first_aid (C:4673)
 
 #### Medicine
 
-**ID:** `skill:medicine`  
-**Name:** Medicine  
-**Competency type:** Base Skill  
+**ID:** `skill:medicine`
+**Name:** Medicine
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -1826,14 +1826,14 @@ Medical knowledge and available treatments depend on the tradition and circumsta
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:medicine (P:40; D:536)  
+**Provenance:** [R] Pilot Skill: skill:medicine (P:40; D:536)
 [R] Legacy Skill: medicine (C:4641)
 
 #### Nursing
 
-**ID:** `nursing`  
-**Name:** Nursing  
-**Competency type:** Base Skill  
+**ID:** `nursing`
+**Name:** Nursing
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -1872,9 +1872,9 @@ The competence is more than attendance or kindness. It is the learned work of ma
 
 #### Pharmacy
 
-**ID:** `skill:pharmacy`  
-**Name:** Pharmacy  
-**Competency type:** Base Skill  
+**ID:** `skill:pharmacy`
+**Name:** Pharmacy
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -1909,15 +1909,15 @@ The work combines material practice with knowledge of the preparations themselve
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:pharmacy (P:91; D:755)  
-[R] Legacy Skill: herb_lore (C:4697)  
+**Provenance:** [R] Pilot Skill: skill:pharmacy (P:91; D:755)
+[R] Legacy Skill: herb_lore (C:4697)
 [R] Legacy Skill: pharmacy (C:4768)
 
 #### Poisons
 
-**ID:** `skill:poisons`  
-**Name:** Poisons  
-**Competency type:** Base Skill  
+**ID:** `skill:poisons`
+**Name:** Poisons
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -1952,14 +1952,14 @@ The competence concerns toxic substances as a learned material practice. It does
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: poison_lore (C:4730)  
+**Provenance:** [R] Legacy Skill: poison_lore (C:4730)
 [R] Q:89 — Poisons (qualitative name, no recovered target ID)
 
 #### Surgery
 
-**ID:** `skill:surgery`  
-**Name:** Surgery  
-**Competency type:** Base Skill  
+**ID:** `skill:surgery`
+**Name:** Surgery
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -1994,15 +1994,15 @@ Operative practices differ across medical traditions and circumstances. Surgery 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:surgery (P:47; D:553)  
-[R] Legacy Specialization: surgery (C:5544)  
+**Provenance:** [R] Pilot Skill: skill:surgery (P:47; D:553)
+[R] Legacy Specialization: surgery (C:5544)
 [R] Q:89 — Surgery (qualitative name, no recovered target ID)
 
 #### Veterinary Medicine
 
-**ID:** `skill:veterinary-medicine`  
-**Name:** Veterinary Medicine  
-**Competency type:** Base Skill  
+**ID:** `skill:veterinary-medicine`
+**Name:** Veterinary Medicine
+**Competency type:** Base Skill
 **Domain:** Healing
 
 **Short description**
@@ -2043,9 +2043,9 @@ Animals cannot supply a verbal account of their symptoms, so observation and inf
 
 #### Cartography
 
-**ID:** `skill:cartography`  
-**Name:** Cartography  
-**Competency type:** Base Skill  
+**ID:** `skill:cartography`
+**Name:** Cartography
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2084,9 +2084,9 @@ A useful map is more than a collection of place names or an attractive picture. 
 
 #### Celestial Navigation
 
-**ID:** `skill:celestial-navigation`  
-**Name:** Celestial Navigation  
-**Competency type:** Base Skill  
+**ID:** `skill:celestial-navigation`
+**Name:** Celestial Navigation
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2121,15 +2121,15 @@ Different methods depend on different knowledge and equipment. The competence do
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Specialization: navigation_by_environment (C:5508)  
-[R] Legacy Skill: navigation (C:3847)  
+**Provenance:** [R] Legacy Specialization: navigation_by_environment (C:5508)
+[R] Legacy Skill: navigation (C:3847)
 [R] Q:90 — Celestial Navigation (qualitative name, no recovered target ID)
 
 #### Chart Navigation
 
-**ID:** `skill:chart-navigation`  
-**Name:** Chart Navigation  
-**Competency type:** Base Skill  
+**ID:** `skill:chart-navigation`
+**Name:** Chart Navigation
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2164,15 +2164,15 @@ The competence depends on an actual practice of navigational chart use. Maritime
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:chart-navigation (P:75; D:604)  
-[R] Legacy Specialization: navigation_by_environment (C:5508)  
+**Provenance:** [R] Pilot Skill: skill:chart-navigation (P:75; D:604)
+[R] Legacy Specialization: navigation_by_environment (C:5508)
 [R] Legacy Skill: navigation (C:3847)
 
 #### Dead Reckoning
 
-**ID:** `skill:dead-reckoning`  
-**Name:** Dead Reckoning  
-**Competency type:** Base Skill  
+**ID:** `skill:dead-reckoning`
+**Name:** Dead Reckoning
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2207,15 +2207,15 @@ The central task is reconstructing movement since a starting point or later corr
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:dead-reckoning (P:68; D:587)  
-[R] Legacy Specialization: navigation_by_environment (C:5508)  
+**Provenance:** [R] Pilot Skill: skill:dead-reckoning (P:68; D:587)
+[R] Legacy Specialization: navigation_by_environment (C:5508)
 [R] Legacy Skill: navigation (C:3847)
 
 #### Pilotage
 
-**ID:** `skill:pilotage`  
-**Name:** Pilotage  
-**Competency type:** Base Skill  
+**ID:** `skill:pilotage`
+**Name:** Pilotage
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2250,17 +2250,17 @@ The competence is closely tied to place. Knowing one coast, river or harbour doe
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:pilotage (P:110; D:1077)  
-[R] Pilot Specialization: spec:home-coast-pilotage (P:601; D:1297)  
-[R] Legacy Specialization: navigation_by_environment (C:5508)  
-[R] Legacy Skill: navigation (C:3847)  
+**Provenance:** [R] Pilot Skill: skill:pilotage (P:110; D:1077)
+[R] Pilot Specialization: spec:home-coast-pilotage (P:601; D:1297)
+[R] Legacy Specialization: navigation_by_environment (C:5508)
+[R] Legacy Skill: navigation (C:3847)
 [R] Legacy Skill: boat_handling (C:3907)
 
 #### Seamanship
 
-**ID:** `skill:seamanship`  
-**Name:** Seamanship  
-**Competency type:** Base Skill  
+**ID:** `skill:seamanship`
+**Name:** Seamanship
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2295,15 +2295,15 @@ The practice varies with vessel and means of propulsion. It includes the allocat
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:seamanship (P:109; D:1060)  
-[R] Legacy Skill: sailing (C:3811)  
+**Provenance:** [R] Pilot Skill: skill:seamanship (P:109; D:1060)
+[R] Legacy Skill: sailing (C:3811)
 [R] Legacy Skill: boat_handling (C:3907)
 
 #### Wayfinding
 
-**ID:** `skill:wayfinding`  
-**Name:** Wayfinding  
-**Competency type:** Base Skill  
+**ID:** `skill:wayfinding`
+**Name:** Wayfinding
+**Competency type:** Base Skill
 **Domain:** Navigation
 
 **Short description**
@@ -2338,18 +2338,18 @@ The signs that matter differ among environments. Wayfinding is practical interpr
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:wayfinding (P:113; D:1128)  
-[R] Pilot Specialization: spec:desert-wayfinding (P:613; D:1314)  
-[R] Legacy Specialization: navigation_by_environment (C:5508)  
+**Provenance:** [R] Pilot Skill: skill:wayfinding (P:113; D:1128)
+[R] Pilot Specialization: spec:desert-wayfinding (P:613; D:1314)
+[R] Legacy Specialization: navigation_by_environment (C:5508)
 [R] Legacy Skill: navigation (C:3847)
 
 ### Weapon Practice
 
 #### 1-h conc./axe
 
-**ID:** `one_handed_concussion_axe`  
-**Name:** 1-h conc./axe  
-**Competency type:** Base Skill  
+**ID:** `one_handed_concussion_axe`
+**Name:** 1-h conc./axe
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2388,9 +2388,9 @@ The family brings together several weapon forms without making their physical di
 
 #### 1-h edged
 
-**ID:** `one_handed_edged`  
-**Name:** 1-h edged  
-**Competency type:** Base Skill  
+**ID:** `one_handed_edged`
+**Name:** 1-h edged
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2429,9 +2429,9 @@ This is the broad weapon-family competence. The weapons within it have different
 
 #### 2-h conc./axe
 
-**ID:** `two_handed_concussion_axe`  
-**Name:** 2-h conc./axe  
-**Competency type:** Base Skill  
+**ID:** `two_handed_concussion_axe`
+**Name:** 2-h conc./axe
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2470,9 +2470,9 @@ Practice concerns the handling demands of this family, including the Battle Axe 
 
 #### 2-h edged
 
-**ID:** `two_handed_edged`  
-**Name:** 2-h edged  
-**Competency type:** Base Skill  
+**ID:** `two_handed_edged`
+**Name:** 2-h edged
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2511,9 +2511,9 @@ The competence concerns the established family and its handling demands. It is n
 
 #### Bow
 
-**ID:** `bow`  
-**Name:** Bow  
-**Competency type:** Base Skill  
+**ID:** `bow`
+**Name:** Bow
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2548,14 +2548,14 @@ Bows differ in their form and the demands they place on their users. Learning to
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Legacy Skill: bow (C:5237)  
+**Provenance:** [R] Legacy Skill: bow (C:5237)
 [R] Q:91 — Bow (qualitative name, no recovered target ID)
 
 #### Brawling
 
-**ID:** `brawling`  
-**Name:** Brawling  
-**Competency type:** Base Skill  
+**ID:** `brawling`
+**Name:** Brawling
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2593,9 +2593,9 @@ Brawling may develop through disciplined practice or repeated close encounters. 
 
 #### Crossbow
 
-**ID:** `crossbow`  
-**Name:** Crossbow  
-**Competency type:** Base Skill  
+**ID:** `crossbow`
+**Name:** Crossbow
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2630,16 +2630,16 @@ Large weapons in this family also bring demands of positioning and crew work. Us
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Legacy Skill: crossbow (C:5290)  
+**Provenance:** [R] Legacy Skill: crossbow (C:5290)
 [R] Q:91 — Crossbow (qualitative name, no recovered target ID)
 
 **Unresolved interaction:** [R/PO02] Existing Ballista→crossbow binding remains frozen. Its exact interaction with Siege Engine Operation is for the later Combat pass, not established by the prose.
 
 #### Dodge
 
-**ID:** `dodge`  
-**Name:** Dodge  
-**Competency type:** Base Skill  
+**ID:** `dodge`
+**Name:** Dodge
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2674,16 +2674,16 @@ Dodge is a particular defensive competence. It is learned through practice in re
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Pilot Skill: skill:dodge (P:26; D:502)  
+**Provenance:** [R] Pilot Skill: skill:dodge (P:26; D:502)
 [R] Legacy Skill: dodge (C:4954)
 
 **Ruling / compatibility note:** [R2/PO02] Future target ID dodge follows the live identity. The approved Pilot G08 link remains on skill:dodge in the preservation register; no source conversion is executed.
 
 #### Firearms
 
-**ID:** `skill:firearms`  
-**Name:** Firearms  
-**Competency type:** Base Skill  
+**ID:** `skill:firearms`
+**Name:** Firearms
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2718,16 +2718,16 @@ The practice encompasses handheld forms such as pistols, muskets and rifles. The
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] W:4896,4985,5074,5163,5252,5341 — exact Firearms weaponSkill strings; no matching source Skill ID recovered.  
+**Provenance:** [R] W:4896,4985,5074,5163,5252,5341 — exact Firearms weaponSkill strings; no matching source Skill ID recovered.
 [PO] PO03 selects one new base Skill.
 
 **Ruling / compatibility note:** [PO03] Six frozen source template strings remain binding evidence: Musket, Arquebus, Cartridge Rifle, Pistol, Cartridge Pistol, Hand Cannon. No runtime assignment is changed.
 
 #### Lance
 
-**ID:** `lance`  
-**Name:** Lance  
-**Competency type:** Base Skill  
+**ID:** `lance`
+**Name:** Lance
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2766,9 +2766,9 @@ The competence concerns the weapon itself. Controlling a mount and managing the 
 
 #### Parry
 
-**ID:** `parry`  
-**Name:** Parry  
-**Competency type:** Base Skill  
+**ID:** `parry`
+**Name:** Parry
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2803,16 +2803,16 @@ Parrying demands judgment about contact and the position left afterward. A defen
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Legacy Skill: parry (C:4980)  
+**Provenance:** [R] Legacy Skill: parry (C:4980)
 [R] Q:91 — Parry (qualitative name, no recovered target ID)
 
 **Ruling / compatibility note:** [PO02] Candidate Shield is not treated as an automatic Parry alias. Equipment applicability and existing effects remain unchanged.
 
 #### Polearms
 
-**ID:** `polearms`  
-**Name:** Polearms  
-**Competency type:** Base Skill  
+**ID:** `polearms`
+**Name:** Polearms
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2851,9 +2851,9 @@ The family includes spears, javelins, staff and other pole weapons. A long shaft
 
 #### Sling
 
-**ID:** `sling`  
-**Name:** Sling  
-**Competency type:** Base Skill  
+**ID:** `sling`
+**Name:** Sling
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2888,14 +2888,14 @@ The competence depends on practiced control of a flexible launching tool. It is 
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Legacy Skill: sling (C:5212)  
+**Provenance:** [R] Legacy Skill: sling (C:5212)
 [R] Q:91 — Sling (qualitative name, no recovered target ID)
 
 #### Throwing
 
-**ID:** `throwing`  
-**Name:** Throwing  
-**Competency type:** Base Skill  
+**ID:** `throwing`
+**Name:** Throwing
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
 
 **Short description**
@@ -2936,9 +2936,9 @@ Using a weapon in the hand and sending it as a projectile are different tasks. T
 
 #### Battle Tactics
 
-**ID:** `tactics`  
-**Name:** Battle Tactics  
-**Competency type:** Base Skill  
+**ID:** `tactics`
+**Name:** Battle Tactics
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -2973,16 +2973,16 @@ Tactical judgment may inform a commander or be exercised by one, but deciding on
 
 **ID status:** Operational identity; preferred reader rename.
 
-**Provenance:** [R] Pilot Skill: skill:battle-tactics (P:33; D:519)  
+**Provenance:** [R] Pilot Skill: skill:battle-tactics (P:33; D:519)
 [R] Legacy Skill: tactics (C:5445)
 
 **Ruling / compatibility note:** [R2/PO02] Reader name Battle Tactics; retained operational target ID tactics. Candidate skill:battle-tactics remains provenance pending an explicit crosswalk.
 
 #### Battlefield Awareness
 
-**ID:** `battlefield_awareness`  
-**Name:** Battlefield Awareness  
-**Competency type:** Base Skill  
+**ID:** `battlefield_awareness`
+**Name:** Battlefield Awareness
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3021,9 +3021,9 @@ This is awareness shaped by battlefield experience and practice. It does not pro
 
 #### Campaign Strategy
 
-**ID:** `skill:campaign-strategy`  
-**Name:** Campaign Strategy  
-**Competency type:** Base Skill  
+**ID:** `skill:campaign-strategy`
+**Name:** Campaign Strategy
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3062,9 +3062,9 @@ The competence concerns connections across engagements and movements rather than
 
 #### Combat Experience
 
-**ID:** `combat_experience`  
-**Name:** Combat Experience  
-**Competency type:** Base Skill  
+**ID:** `combat_experience`
+**Name:** Combat Experience
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3103,9 +3103,9 @@ The competence expresses learned functioning under combat conditions. It does no
 
 #### Formation Fighting
 
-**ID:** `formation_fighting`  
-**Name:** Formation Fighting  
-**Competency type:** Base Skill  
+**ID:** `formation_fighting`
+**Name:** Formation Fighting
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3144,9 +3144,9 @@ The competence lies in making individual fighting work as part of a collective b
 
 #### Military Command
 
-**ID:** `captaincy`  
-**Name:** Military Command  
-**Competency type:** Base Skill  
+**ID:** `captaincy`
+**Name:** Military Command
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3181,16 +3181,16 @@ Command includes responsibility for the unit as an organized body. It can draw o
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Legacy Skill: captaincy (C:5483)  
+**Provenance:** [R] Legacy Skill: captaincy (C:5483)
 [R] Q:92 — Captaincy (qualitative name, no recovered target ID)
 
 **Ruling / compatibility note:** [R2/PO02] Reader name Military Command; retained operational target ID captaincy. This is distinct from Leadership and Battle Tactics.
 
 #### Military Logistics
 
-**ID:** `skill:military-logistics`  
-**Name:** Military Logistics  
-**Competency type:** Base Skill  
+**ID:** `skill:military-logistics`
+**Name:** Military Logistics
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3229,9 +3229,9 @@ The competence concerns keeping an organized force supplied over time. It joins 
 
 #### Military Reconnaissance
 
-**ID:** `skill:military-reconnaissance`  
-**Name:** Military Reconnaissance  
-**Competency type:** Base Skill  
+**ID:** `skill:military-reconnaissance`
+**Name:** Military Reconnaissance
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3270,9 +3270,9 @@ The competence includes the purpose and conduct of reconnaissance as military wo
 
 #### Mounted Combat
 
-**ID:** `mounted_combat`  
-**Name:** Mounted Combat  
-**Competency type:** Base Skill  
+**ID:** `mounted_combat`
+**Name:** Mounted Combat
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3307,14 +3307,14 @@ The competence concerns the conjunction of riding and fighting in combat. It rem
 
 **ID status:** Operational source identity retained.
 
-**Provenance:** [R] Legacy Skill: mounted_combat (C:5412)  
+**Provenance:** [R] Legacy Skill: mounted_combat (C:5412)
 [R] Q:98 — Mounted Combat (qualitative name, no recovered target ID)
 
 #### Siege Engine Operation
 
-**ID:** `skill:siege-engine-operation`  
-**Name:** Siege Engine Operation  
-**Competency type:** Base Skill  
+**ID:** `skill:siege-engine-operation`
+**Name:** Siege Engine Operation
+**Competency type:** Base Skill
 **Domain:** Warfare
 
 **Short description**
@@ -3357,9 +3357,9 @@ The competence is the practical work of making an engine function as part of an 
 
 #### Appraisal
 
-**ID:** `skill:appraisal`  
-**Name:** Appraisal  
-**Competency type:** Base Skill  
+**ID:** `skill:appraisal`
+**Name:** Appraisal
+**Competency type:** Base Skill
 **Domain:** Trade & Finance
 
 **Short description**
@@ -3394,14 +3394,14 @@ Value depends on purpose and circumstances as well as the object itself. Apprais
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:appraisal (P:107; D:1026)  
+**Provenance:** [R] Pilot Skill: skill:appraisal (P:107; D:1026)
 [R] Legacy Skill: appraisal (C:3035)
 
 #### Banking & Credit
 
-**ID:** `banking`  
-**Name:** Banking & Credit  
-**Competency type:** Base Skill  
+**ID:** `banking`
+**Name:** Banking & Credit
+**Competency type:** Base Skill
 **Domain:** Trade & Finance
 
 **Short description**
@@ -3436,14 +3436,14 @@ The institutions and instruments differ among societies. The defining competence
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: banking (C:2893)  
+**Provenance:** [R] Legacy Skill: banking (C:2893)
 [R] Q:93 — Banking & Credit (qualitative name, no recovered target ID)
 
 #### Bargaining
 
-**ID:** `skill:bargaining`  
-**Name:** Bargaining  
-**Competency type:** Base Skill  
+**ID:** `skill:bargaining`
+**Name:** Bargaining
+**Competency type:** Base Skill
 **Domain:** Trade & Finance
 
 **Short description**
@@ -3478,15 +3478,15 @@ The competence applies beyond buying and selling, including the negotiation of o
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:bargaining (P:106; D:1009)  
-[R] Legacy Skill: bargaining (C:2795)  
+**Provenance:** [R] Pilot Skill: skill:bargaining (P:106; D:1009)
+[R] Legacy Skill: bargaining (C:2795)
 [R] Q:100 — Diplomacy (qualitative name, no recovered target ID)
 
 #### Bookkeeping
 
-**ID:** `skill:bookkeeping`  
-**Name:** Bookkeeping  
-**Competency type:** Base Skill  
+**ID:** `skill:bookkeeping`
+**Name:** Bookkeeping
+**Competency type:** Base Skill
 **Domain:** Trade & Finance
 
 **Short description**
@@ -3521,14 +3521,14 @@ The record may use the written forms, tallies or other accounting means of a par
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:bookkeeping (P:104; D:975)  
+**Provenance:** [R] Pilot Skill: skill:bookkeeping (P:104; D:975)
 [R] Legacy Skill: bookkeeping (C:3000)
 
 #### Trade
 
-**ID:** `skill:trade`  
-**Name:** Trade  
-**Competency type:** Base Skill  
+**ID:** `skill:trade`
+**Name:** Trade
+**Competency type:** Base Skill
 **Domain:** Trade & Finance
 
 **Short description**
@@ -3563,17 +3563,17 @@ The competence may be exercised in a market, travelling trade or an established 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:trade (P:105; D:992)  
-[R] Legacy Skill: trading (C:2853)  
+**Provenance:** [R] Pilot Skill: skill:trade (P:105; D:992)
+[R] Legacy Skill: trading (C:2853)
 [R] Q:93 — Trade / Commerce (qualitative name, no recovered target ID)
 
 ### Law & Administration
 
 #### Administration
 
-**ID:** `skill:administration`  
-**Name:** Administration  
-**Competency type:** Base Skill  
+**ID:** `skill:administration`
+**Name:** Administration
+**Competency type:** Base Skill
 **Domain:** Law & Administration
 
 **Short description**
@@ -3608,14 +3608,14 @@ The competence can serve a household, estate, workshop, public office or other o
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:administration (P:101; D:924)  
+**Provenance:** [R] Pilot Skill: skill:administration (P:101; D:924)
 [R] Legacy Skill: administration (C:2927)
 
 #### Law
 
-**ID:** `skill:law`  
-**Name:** Law  
-**Competency type:** Base Skill  
+**ID:** `skill:law`
+**Name:** Law
+**Competency type:** Base Skill
 **Domain:** Law & Administration
 
 **Short description**
@@ -3650,8 +3650,8 @@ Law is always learned in relation to a legal system. It may depend on written en
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:law:olog-princely (P:61; D:111)  
-[R] Legacy Skill: law (C:2460)  
+**Provenance:** [R] Pilot Skill: skill:law:olog-princely (P:61; D:111)
+[R] Legacy Skill: law (C:2460)
 [R] Q:94 — Law: legal-tradition bindings (qualitative name, no recovered target ID)
 
 **Ruling / compatibility note:** [PO08] The target is generic Law plus a legal-system context. Candidate skill:law:olog-princely remains unchanged as source content; its name is not inserted into generic reader prose.
@@ -3660,9 +3660,9 @@ Law is always learned in relation to a legal system. It may depend on written en
 
 #### Animal Lore
 
-**ID:** `skill:animal-lore`  
-**Name:** Animal Lore  
-**Competency type:** Base Skill  
+**ID:** `skill:animal-lore`
+**Name:** Animal Lore
+**Competency type:** Base Skill
 **Domain:** Natural Knowledge
 
 **Short description**
@@ -3701,9 +3701,9 @@ The competence is knowledge about animals in their environments. It can inform s
 
 #### Astronomy
 
-**ID:** `astronomy`  
-**Name:** Astronomy  
-**Competency type:** Base Skill  
+**ID:** `astronomy`
+**Name:** Astronomy
+**Competency type:** Base Skill
 **Domain:** Natural Knowledge
 
 **Short description**
@@ -3738,14 +3738,14 @@ Astronomy may support calendars and other learned work without presuming modern 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: astronomy (C:2631)  
+**Provenance:** [R] Legacy Skill: astronomy (C:2631)
 [R] Q:95 — Astronomy (qualitative name, no recovered target ID)
 
 #### Plant Lore
 
-**ID:** `skill:plant-lore`  
-**Name:** Plant Lore  
-**Competency type:** Base Skill  
+**ID:** `skill:plant-lore`
+**Name:** Plant Lore
+**Competency type:** Base Skill
 **Domain:** Natural Knowledge
 
 **Short description**
@@ -3780,14 +3780,14 @@ Plant Lore connects recognition with practical knowledge of plants. It can infor
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:plant-lore (P:92; D:771)  
+**Provenance:** [R] Pilot Skill: skill:plant-lore (P:92; D:771)
 [R] Legacy Skill: herb_lore (C:4697)
 
 #### Weather Lore
 
-**ID:** `skill:weather-lore`  
-**Name:** Weather Lore  
-**Competency type:** Base Skill  
+**ID:** `skill:weather-lore`
+**Name:** Weather Lore
+**Competency type:** Base Skill
 **Domain:** Natural Knowledge
 
 **Short description**
@@ -3828,9 +3828,9 @@ The competence can be transmitted through observation and practice without forma
 
 #### Fishing
 
-**ID:** `skill:fishing`  
-**Name:** Fishing  
-**Competency type:** Base Skill  
+**ID:** `skill:fishing`
+**Name:** Fishing
+**Competency type:** Base Skill
 **Domain:** Outdoor & Survival
 
 **Short description**
@@ -3869,9 +3869,9 @@ Fishing traditions differ greatly in waters, quarry and equipment. The competenc
 
 #### Hunting
 
-**ID:** `skill:hunting`  
-**Name:** Hunting  
-**Competency type:** Base Skill  
+**ID:** `skill:hunting`
+**Name:** Hunting
+**Competency type:** Base Skill
 **Domain:** Outdoor & Survival
 
 **Short description**
@@ -3910,9 +3910,9 @@ The competence concerns the hunt as an activity. A hunter may also need to read 
 
 #### Survival
 
-**ID:** `skill:survival`  
-**Name:** Survival  
-**Competency type:** Base Skill  
+**ID:** `skill:survival`
+**Name:** Survival
+**Competency type:** Base Skill
 **Domain:** Outdoor & Survival
 
 **Short description**
@@ -3951,9 +3951,9 @@ The competence is the maintenance of basic viability in an unsupported environme
 
 #### Tracking
 
-**ID:** `skill:tracking`  
-**Name:** Tracking  
-**Competency type:** Base Skill  
+**ID:** `skill:tracking`
+**Name:** Tracking
+**Competency type:** Base Skill
 **Domain:** Outdoor & Survival
 
 **Short description**
@@ -3992,9 +3992,9 @@ Tracking combines observation with knowledge of how movement leaves signs in dif
 
 #### Trapping
 
-**ID:** `skill:trapping`  
-**Name:** Trapping  
-**Competency type:** Base Skill  
+**ID:** `skill:trapping`
+**Name:** Trapping
+**Competency type:** Base Skill
 **Domain:** Outdoor & Survival
 
 **Short description**
@@ -4029,16 +4029,16 @@ The competence centres on taking animals through traps, including practical mana
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: trap_handling (C:4154)  
+**Provenance:** [R] Legacy Skill: trap_handling (C:4154)
 [R] Q:96 — Trapping (qualitative name, no recovered target ID)
 
 ### Awareness & Investigation
 
 #### Perception
 
-**ID:** `skill:perception`  
-**Name:** Perception  
-**Competency type:** Base Skill  
+**ID:** `skill:perception`
+**Name:** Perception
+**Competency type:** Base Skill
 **Domain:** Awareness & Investigation
 
 **Short description**
@@ -4073,21 +4073,21 @@ The competence concerns what the available senses can reveal. A noticed mark, so
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:perception (P:87; D:688)  
-[R] Legacy Skill: perception (C:3592)  
-[R] Legacy Skill: search (C:4093)  
-[R] Legacy Skill: trap_handling (C:4154)  
-[R] Q:97 — Perception (qualitative name, no recovered target ID)  
-[R] Q:97 — Generic Investigation (qualitative name, no recovered target ID)  
+**Provenance:** [R] Pilot Skill: skill:perception (P:87; D:688)
+[R] Legacy Skill: perception (C:3592)
+[R] Legacy Skill: search (C:4093)
+[R] Legacy Skill: trap_handling (C:4154)
+[R] Q:97 — Perception (qualitative name, no recovered target ID)
+[R] Q:97 — Generic Investigation (qualitative name, no recovered target ID)
 [R] Q:97 — Detect Traps (qualitative name, no recovered target ID)
 
 ### Athletics & Movement
 
 #### Athletics
 
-**ID:** `skill:athletics`  
-**Name:** Athletics  
-**Competency type:** Base Skill  
+**ID:** `skill:athletics`
+**Name:** Athletics
+**Competency type:** Base Skill
 **Domain:** Athletics & Movement
 
 **Short description**
@@ -4122,17 +4122,17 @@ The competence includes general athletic and acrobatic body-control work within 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:athletics (P:88; D:704)  
-[R] Legacy Skill: jump (C:3983)  
-[R] Legacy Skill: balance (C:4031)  
-[R] Legacy Skill: acrobatics (C:4063)  
+**Provenance:** [R] Pilot Skill: skill:athletics (P:88; D:704)
+[R] Legacy Skill: jump (C:3983)
+[R] Legacy Skill: balance (C:4031)
+[R] Legacy Skill: acrobatics (C:4063)
 [R] Q:98 — Acrobatics (qualitative name, no recovered target ID)
 
 #### Climbing
 
-**ID:** `climb`  
-**Name:** Climbing  
-**Competency type:** Base Skill  
+**ID:** `climb`
+**Name:** Climbing
+**Competency type:** Base Skill
 **Domain:** Athletics & Movement
 
 **Short description**
@@ -4167,14 +4167,14 @@ The practice depends on the surface and the means available. It is more than pul
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: climb (C:3933)  
+**Provenance:** [R] Legacy Skill: climb (C:3933)
 [R] Q:98 — Climbing (qualitative name, no recovered target ID)
 
 #### Riding
 
-**ID:** `skill:riding`  
-**Name:** Riding  
-**Competency type:** Base Skill  
+**ID:** `skill:riding`
+**Name:** Riding
+**Competency type:** Base Skill
 **Domain:** Athletics & Movement
 
 **Short description**
@@ -4209,14 +4209,14 @@ Riding depends on a working relationship with the kind of mount and riding pract
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:riding (P:117; D:1196)  
+**Provenance:** [R] Pilot Skill: skill:riding (P:117; D:1196)
 [R] Legacy Skill: riding (C:3720)
 
 #### Running
 
-**ID:** `skill:running`  
-**Name:** Running  
-**Competency type:** Base Skill  
+**ID:** `skill:running`
+**Name:** Running
+**Competency type:** Base Skill
 **Domain:** Athletics & Movement
 
 **Short description**
@@ -4255,9 +4255,9 @@ The competence includes both the demands of rapid running and the discipline of 
 
 #### Swimming
 
-**ID:** `skill:swimming`  
-**Name:** Swimming  
-**Competency type:** Base Skill  
+**ID:** `skill:swimming`
+**Name:** Swimming
+**Competency type:** Base Skill
 **Domain:** Athletics & Movement
 
 **Short description**
@@ -4292,16 +4292,16 @@ The competence develops through practice in water. It is not an automatic conseq
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:swimming (P:111; D:1094)  
+**Provenance:** [R] Pilot Skill: skill:swimming (P:111; D:1094)
 [R] Legacy Skill: swim (C:4007)
 
 ### Covert Entry & Infiltration
 
 #### Camouflage
 
-**ID:** `camouflage`  
-**Name:** Camouflage  
-**Competency type:** Base Skill  
+**ID:** `camouflage`
+**Name:** Camouflage
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4336,14 +4336,14 @@ The work depends on the place and conditions in which concealment must hold. Pre
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: hide (C:4273)  
+**Provenance:** [R] Legacy Skill: hide (C:4273)
 [R] Legacy Skill: camouflage (C:4304)
 
 #### Conceal Object
 
-**ID:** `conceal_object`  
-**Name:** Conceal Object  
-**Competency type:** Base Skill  
+**ID:** `conceal_object`
+**Name:** Conceal Object
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4382,9 +4382,9 @@ The competence concerns lasting concealment of the object. A convincing hiding p
 
 #### Disguise
 
-**ID:** `skill:disguise`  
-**Name:** Disguise  
-**Competency type:** Base Skill  
+**ID:** `skill:disguise`
+**Name:** Disguise
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4419,14 +4419,14 @@ The competence concerns what observers are led to see in the person before them.
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:disguise (P:100; D:907)  
+**Provenance:** [R] Pilot Skill: skill:disguise (P:100; D:907)
 [R] Legacy Skill: disguise (C:4338)
 
 #### Lockpicking
 
-**ID:** `skill:lockpicking`  
-**Name:** Lockpicking  
-**Competency type:** Base Skill  
+**ID:** `skill:lockpicking`
+**Name:** Lockpicking
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4461,14 +4461,14 @@ The competence depends on the lock and the means available. It does not imply th
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:lockpicking (P:97; D:856)  
+**Provenance:** [R] Pilot Skill: skill:lockpicking (P:97; D:856)
 [R] Legacy Skill: lockpicking (C:4185)
 
 #### Sleight of Hand
 
-**ID:** `skill:sleight-of-hand`  
-**Name:** Sleight of Hand  
-**Competency type:** Base Skill  
+**ID:** `skill:sleight-of-hand`
+**Name:** Sleight of Hand
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4507,9 +4507,9 @@ The competence can serve performance or covert action. Its defining work is prac
 
 #### Stealth
 
-**ID:** `skill:stealth`  
-**Name:** Stealth  
-**Competency type:** Base Skill  
+**ID:** `skill:stealth`
+**Name:** Stealth
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4544,15 +4544,15 @@ Stealth includes ordinary hiding and quiet movement. It depends on actual opport
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:stealth (P:96; D:839)  
-[R] Legacy Skill: stealth (C:4241)  
+**Provenance:** [R] Pilot Skill: skill:stealth (P:96; D:839)
+[R] Legacy Skill: stealth (C:4241)
 [R] Legacy Skill: hide (C:4273)
 
 #### Trapmaking
 
-**ID:** `skill:trapmaking`  
-**Name:** Trapmaking  
-**Competency type:** Base Skill  
+**ID:** `skill:trapmaking`
+**Name:** Trapmaking
+**Competency type:** Base Skill
 **Domain:** Covert Entry & Infiltration
 
 **Short description**
@@ -4587,16 +4587,16 @@ The competence concerns constructed devices and their functioning. Recognizing t
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: trap_handling (C:4154)  
+**Provenance:** [R] Legacy Skill: trap_handling (C:4154)
 [R] Q:99 — Trapmaking (qualitative name, no recovered target ID)
 
 ### Culture & Society
 
 #### Astrology
 
-**ID:** `astrology`  
-**Name:** Astrology  
-**Competency type:** Base Skill  
+**ID:** `astrology`
+**Name:** Astrology
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4631,14 +4631,14 @@ The competence describes knowledge and performance of the practice. It does not 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: astrology (C:4928)  
+**Provenance:** [R] Legacy Skill: astrology (C:4928)
 [R] Q:100 — Astrology (qualitative name, no recovered target ID)
 
 #### Customs
 
-**ID:** `skill:customs`  
-**Name:** Customs  
-**Competency type:** Base Skill  
+**ID:** `skill:customs`
+**Name:** Customs
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4673,19 +4673,19 @@ Customs is learned knowledge of convention, not a judgment of a society's merit 
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:customs (P:102; D:941)  
-[R] Legacy Specialization: etiquette_by_culture (C:5499)  
-[R] Legacy Skill: etiquette (C:3060)  
-[R] Legacy Skill: social_perception (C:3184)  
-[R] Legacy Skill: seduction (C:3253)  
-[R] Q:100 — Customs (qualitative name, no recovered target ID)  
+**Provenance:** [R] Pilot Skill: skill:customs (P:102; D:941)
+[R] Legacy Specialization: etiquette_by_culture (C:5499)
+[R] Legacy Skill: etiquette (C:3060)
+[R] Legacy Skill: social_perception (C:3184)
+[R] Legacy Skill: seduction (C:3253)
+[R] Q:100 — Customs (qualitative name, no recovered target ID)
 [R] Q:100 — Diplomacy (qualitative name, no recovered target ID)
 
 #### Divination
 
-**ID:** `divination`  
-**Name:** Divination  
-**Competency type:** Base Skill  
+**ID:** `divination`
+**Name:** Divination
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4720,14 +4720,14 @@ The competence concerns learned practice and interpretation. Knowledge of its pr
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: divination (C:4821)  
+**Provenance:** [R] Legacy Skill: divination (C:4821)
 [R] Legacy Skill: ritual_interpretation (C:4890)
 
 #### Gambling
 
-**ID:** `gambling`  
-**Name:** Gambling  
-**Competency type:** Base Skill  
+**ID:** `gambling`
+**Name:** Gambling
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4762,14 +4762,14 @@ Some games offer substantial choice while others leave much to chance. The compe
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: gambling (C:2818)  
+**Provenance:** [R] Legacy Skill: gambling (C:2818)
 [R] Q:100 — Gambling (qualitative name, no recovered target ID)
 
 #### Geography
 
-**ID:** `skill:geography`  
-**Name:** Geography  
-**Competency type:** Base Skill  
+**ID:** `skill:geography`
+**Name:** Geography
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4808,9 +4808,9 @@ The knowledge may be learned through travel, oral teaching, maps or other record
 
 #### Heraldry
 
-**ID:** `heraldry`  
-**Name:** Heraldry  
-**Competency type:** Base Skill  
+**ID:** `heraldry`
+**Name:** Heraldry
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4845,14 +4845,14 @@ Heraldry is a learned system of signs and conventions. Seeing an emblem does not
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: heraldry (C:3091)  
+**Provenance:** [R] Legacy Skill: heraldry (C:3091)
 [R] Q:100 — Heraldry (qualitative name, no recovered target ID)
 
 #### History
 
-**ID:** `history`  
-**Name:** History  
-**Competency type:** Base Skill  
+**ID:** `history`
+**Name:** History
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4887,14 +4887,14 @@ Historical knowledge can be transmitted orally or through records. The competenc
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: history (C:2358)  
+**Provenance:** [R] Legacy Skill: history (C:2358)
 [R] Q:100 — History (qualitative name, no recovered target ID)
 
 #### Politics
 
-**ID:** `skill:politics`  
-**Name:** Politics  
-**Competency type:** Base Skill  
+**ID:** `skill:politics`
+**Name:** Politics
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4929,15 +4929,15 @@ The competence concerns political understanding in context. It can inform negoti
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: intrigue (C:2964)  
-[R] Q:100 — Politics (qualitative name, no recovered target ID)  
+**Provenance:** [R] Legacy Skill: intrigue (C:2964)
+[R] Q:100 — Politics (qualitative name, no recovered target ID)
 [R] Q:100 — Diplomacy (qualitative name, no recovered target ID)
 
 #### Religion
 
-**ID:** `skill:religion`  
-**Name:** Religion  
-**Competency type:** Base Skill  
+**ID:** `skill:religion`
+**Name:** Religion
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -4972,14 +4972,14 @@ The competence describes informed participation and understanding. It does not i
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: ritual_interpretation (C:4890)  
+**Provenance:** [R] Legacy Skill: ritual_interpretation (C:4890)
 [R] Q:100 — Religion (qualitative name, no recovered target ID)
 
 #### Streetwise
 
-**ID:** `skill:streetwise`  
-**Name:** Streetwise  
-**Competency type:** Base Skill  
+**ID:** `skill:streetwise`
+**Name:** Streetwise
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -5014,15 +5014,15 @@ The competence is rooted in a particular milieu. It can concern lodging, work, t
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:streetwise (P:93; D:788)  
-[R] Legacy Skill: intrigue (C:2964)  
+**Provenance:** [R] Pilot Skill: skill:streetwise (P:93; D:788)
+[R] Legacy Skill: intrigue (C:2964)
 [R] Q:100 — Streetwise (qualitative name, no recovered target ID)
 
 #### Underworld
 
-**ID:** `skill:underworld`  
-**Name:** Underworld  
-**Competency type:** Base Skill  
+**ID:** `skill:underworld`
+**Name:** Underworld
+**Competency type:** Base Skill
 **Domain:** Culture & Society
 
 **Short description**
@@ -5057,16 +5057,16 @@ The competence concerns knowledge of a social world whose activities operate out
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Pilot Skill: skill:underworld (P:94; D:805)  
+**Provenance:** [R] Pilot Skill: skill:underworld (P:94; D:805)
 [R] Q:100 — Underworld (qualitative name, no recovered target ID)
 
 ### Agriculture & Husbandry
 
 #### Animal Handling
 
-**ID:** `skill:animal-handling`  
-**Name:** Animal Handling  
-**Competency type:** Base Skill  
+**ID:** `skill:animal-handling`
+**Name:** Animal Handling
+**Competency type:** Base Skill
 **Domain:** Agriculture & Husbandry
 
 **Short description**
@@ -5105,9 +5105,9 @@ The competence concerns immediate working contact with animals. It can support m
 
 #### Animal Husbandry
 
-**ID:** `skill:animal-husbandry`  
-**Name:** Animal Husbandry  
-**Competency type:** Base Skill  
+**ID:** `skill:animal-husbandry`
+**Name:** Animal Husbandry
+**Competency type:** Base Skill
 **Domain:** Agriculture & Husbandry
 
 **Short description**
@@ -5146,9 +5146,9 @@ The competence concerns animals over time rather than a single act of control. I
 
 #### Cart Driving
 
-**ID:** `skill:cart-driving`  
-**Name:** Cart Driving  
-**Competency type:** Base Skill  
+**ID:** `skill:cart-driving`
+**Name:** Cart Driving
+**Competency type:** Base Skill
 **Domain:** Agriculture & Husbandry
 
 **Short description**
@@ -5187,9 +5187,9 @@ The competence belongs to the combined handling of team and vehicle. Directing a
 
 #### Farming
 
-**ID:** `skill:farming`  
-**Name:** Farming  
-**Competency type:** Base Skill  
+**ID:** `skill:farming`
+**Name:** Farming
+**Competency type:** Base Skill
 **Domain:** Agriculture & Husbandry
 
 **Short description**
@@ -5228,9 +5228,9 @@ The competence is sustained cultivation rather than simply knowing a useful plan
 
 #### Herding
 
-**ID:** `herding`  
-**Name:** Herding  
-**Competency type:** Base Skill  
+**ID:** `herding`
+**Name:** Herding
+**Competency type:** Base Skill
 **Domain:** Agriculture & Husbandry
 
 **Short description**
@@ -5271,9 +5271,9 @@ The competence concerns a moving and grazing population, not simply repeating an
 
 #### Acting
 
-**ID:** `acting`  
-**Name:** Acting  
-**Competency type:** Base Skill  
+**ID:** `acting`
+**Name:** Acting
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5308,14 +5308,14 @@ Acting may use a written play, remembered material or improvisation. Its purpose
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: acting (C:3379)  
+**Provenance:** [R] Legacy Skill: acting (C:3379)
 [R] Q:102 — Acting (qualitative name, no recovered target ID)
 
 #### Dance
 
-**ID:** `dancing`  
-**Name:** Dance  
-**Competency type:** Base Skill  
+**ID:** `dancing`
+**Name:** Dance
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5350,14 +5350,14 @@ Dance can belong to communal occasions, ceremony or staged performance. Its comp
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: dancing (C:3301)  
+**Provenance:** [R] Legacy Skill: dancing (C:3301)
 [R] Q:102 — Dance (qualitative name, no recovered target ID)
 
 #### Music
 
-**ID:** `music`  
-**Name:** Music  
-**Competency type:** Base Skill  
+**ID:** `music`
+**Name:** Music
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5392,14 +5392,14 @@ Music can be learned and preserved by ear, demonstration or notation. The compet
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: music (C:3349)  
+**Provenance:** [R] Legacy Skill: music (C:3349)
 [R] Q:102 — Music (qualitative name, no recovered target ID)
 
 #### Poetry & Literary Composition
 
-**ID:** `skill:poetry-literary-composition`  
-**Name:** Poetry & Literary Composition  
-**Competency type:** Base Skill  
+**ID:** `skill:poetry-literary-composition`
+**Name:** Poetry & Literary Composition
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5434,14 +5434,14 @@ The competence can produce poetry and other literary works without assuming that
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: rhetorical_composition (C:2543)  
+**Provenance:** [R] Legacy Skill: rhetorical_composition (C:2543)
 [R] Q:102 — Poetry & Literary Composition (qualitative name, no recovered target ID)
 
 #### Sculpture
 
-**ID:** `skill:sculpture`  
-**Name:** Sculpture  
-**Competency type:** Base Skill  
+**ID:** `skill:sculpture`
+**Name:** Sculpture
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5476,14 +5476,14 @@ The craft may involve carving, modelling or another sculptural practice. Its pur
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: stoneworking (C:4550)  
+**Provenance:** [R] Legacy Skill: stoneworking (C:4550)
 [R] Q:102 — Sculpture (qualitative name, no recovered target ID)
 
 #### Singing
 
-**ID:** `singing`  
-**Name:** Singing  
-**Competency type:** Base Skill  
+**ID:** `singing`
+**Name:** Singing
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5518,14 +5518,14 @@ The competence is practiced use of the voice as a musical instrument. A pleasant
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: singing (C:3277)  
+**Provenance:** [R] Legacy Skill: singing (C:3277)
 [R] Q:102 — Singing (qualitative name, no recovered target ID)
 
 #### Storytelling
 
-**ID:** `storytelling`  
-**Name:** Storytelling  
-**Competency type:** Base Skill  
+**ID:** `storytelling`
+**Name:** Storytelling
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5560,14 +5560,14 @@ The story may be inherited, newly composed or adapted for the occasion. The comp
 
 **ID status:** Proposed product ID; source migration separate.
 
-**Provenance:** [R] Legacy Skill: storytelling (C:3325)  
+**Provenance:** [R] Legacy Skill: storytelling (C:3325)
 [R] Legacy Skill: recitation (C:3408)
 
 #### Visual Art
 
-**ID:** `skill:visual-art`  
-**Name:** Visual Art  
-**Competency type:** Base Skill  
+**ID:** `skill:visual-art`
+**Name:** Visual Art
+**Competency type:** Base Skill
 **Domain:** Arts & Performance
 
 **Short description**
@@ -5610,9 +5610,9 @@ Visual work may be representational, decorative or symbolic. The competence conc
 
 ### Fencing
 
-**ID:** `fencing`  
-**Name:** Fencing  
-**Competency type:** Specialization  
+**ID:** `fencing`
+**Name:** Fencing
+**Competency type:** Specialization
 **Domain:** Weapon Practice
 
 **Parent:** 1-h edged — `one_handed_edged`
@@ -5649,17 +5649,17 @@ This is Glantri's swashbuckling fencing tradition, including its sword-and-buckl
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Legacy Specialization: fencing (C:5607)  
-[R] Legacy Specialization: sword_and_buckler_or_main_gauche_style (C:5616)  
+**Provenance:** [R] Legacy Specialization: fencing (C:5607)
+[R] Legacy Specialization: sword_and_buckler_or_main_gauche_style (C:5616)
 [R] M:85–96; W:3175–3634. [PO] PO02/16 controls swashbuckling scope.
 
 **Ruling / compatibility note:** [PO02/16] Existing swashbuckling tradition, parent and bindings preserved. Sword & Buckler / Main-Gauche practice is included, not another target Specialization.
 
 ### Court Administration
 
-**ID:** `spec:court-administration`  
-**Name:** Court Administration  
-**Competency type:** Specialization  
+**ID:** `spec:court-administration`
+**Name:** Court Administration
+**Competency type:** Specialization
 **Domain:** Law & Administration
 
 **Parent:** Administration — `skill:administration`
@@ -5700,9 +5700,9 @@ The additional competence lies in the workings of a court as an institution. It 
 
 ### Animal Training
 
-**ID:** `spec:animal-training`  
-**Name:** Animal Training  
-**Competency type:** Specialization  
+**ID:** `spec:animal-training`
+**Name:** Animal Training
+**Competency type:** Specialization
 **Domain:** Agriculture & Husbandry
 
 **Parent:** Animal Handling — `skill:animal-handling`
@@ -5739,14 +5739,14 @@ The specialist competence extends Animal Handling from managing an immediate int
 
 **ID status:** Provisional Revision 2 target ID; the stated product parent is selected, with mechanics separately authored.
 
-**Provenance:** [R] Legacy Skill: animal_training (C:3655)  
+**Provenance:** [R] Legacy Skill: animal_training (C:3655)
 [R] Q:101 — Animal Training (qualitative name, no recovered target ID)
 
 ### Steppe Remount Training
 
-**ID:** `spec:steppe-remount-training`  
-**Name:** Steppe Remount Training  
-**Competency type:** Specialization  
+**ID:** `spec:steppe-remount-training`
+**Name:** Steppe Remount Training
+**Competency type:** Specialization
 **Domain:** Agriculture & Husbandry
 
 **Parent:** Animal Husbandry — `skill:animal-husbandry`
@@ -5789,9 +5789,9 @@ The practice is based on steppe remount management and extends Animal Husbandry 
 
 ### Falconry
 
-**ID:** `spec:falconry`  
-**Name:** Falconry  
-**Competency type:** Specialization  
+**ID:** `spec:falconry`
+**Name:** Falconry
+**Competency type:** Specialization
 **Domain:** Agriculture & Husbandry
 
 **Parent:** Animal Training — `spec:animal-training` (Specialization parent; root base Skill: Animal Handling)
@@ -5834,9 +5834,9 @@ Falconry extends Animal Training into a substantial specialist practice with bir
 
 ### Fortification
 
-**ID:** `spec:fortification`  
-**Name:** Fortification  
-**Competency type:** Specialization  
+**ID:** `spec:fortification`
+**Name:** Fortification
+**Competency type:** Specialization
 **Domain:** Construction & Engineering
 
 **Parent:** Architecture — `skill:architecture`
@@ -5877,9 +5877,9 @@ This specialization extends Architecture through learned defensive design. Its s
 
 ### Siege Operations
 
-**ID:** `spec:siege-operations`  
-**Name:** Siege Operations  
-**Competency type:** Specialization  
+**ID:** `spec:siege-operations`
+**Name:** Siege Operations
+**Competency type:** Specialization
 **Domain:** Warfare
 
 **Parent:** Battle Tactics — `tactics`
@@ -5920,9 +5920,9 @@ The specialization extends Battle Tactics into engagements shaped by fortificati
 
 ### Longbow
 
-**ID:** `longbow`  
-**Name:** Longbow  
-**Competency type:** Specialization  
+**ID:** `longbow`
+**Name:** Longbow
+**Competency type:** Specialization
 **Domain:** Weapon Practice
 
 **Parent:** Bow — `bow`
@@ -5959,17 +5959,17 @@ The specialization deepens Bow for this weapon practice. Its additional work lie
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Runtime Synthetic Specialization: longbow (M:44–52; M:143–177)  
-[R] Legacy Skill: longbow (C:5265)  
+**Provenance:** [R] Runtime Synthetic Specialization: longbow (M:44–52; M:143–177)
+[R] Legacy Skill: longbow (C:5265)
 [R] M:44–52,143–177; W:4807. Raw Skill and synthetic Specialization are distinct source types.
 
 **Ruling / compatibility note:** [PO04/16] Bow parent and existing compatibility treatment preserved. Legacy raw Longbow Skill is not a second future acquisition.
 
 ### Baking
 
-**ID:** `spec:baking`  
-**Name:** Baking  
-**Competency type:** Specialization  
+**ID:** `spec:baking`
+**Name:** Baking
+**Competency type:** Specialization
 **Domain:** Craft & Making
 
 **Parent:** Cooking — `skill:cooking`
@@ -6010,9 +6010,9 @@ The additional competence is consistent control of baked foods across variations
 
 ### Court Cookery
 
-**ID:** `spec:court-cookery`  
-**Name:** Court Cookery  
-**Competency type:** Specialization  
+**ID:** `spec:court-cookery`
+**Name:** Court Cookery
+**Competency type:** Specialization
 **Domain:** Craft & Making
 
 **Parent:** Cooking — `skill:cooking`
@@ -6053,9 +6053,9 @@ The specialization adds a real body of culinary practice to Cooking. Its context
 
 ### Food Preservation
 
-**ID:** `spec:food-preservation`  
-**Name:** Food Preservation  
-**Competency type:** Specialization  
+**ID:** `spec:food-preservation`
+**Name:** Food Preservation
+**Competency type:** Specialization
 **Domain:** Craft & Making
 
 **Parent:** Cooking — `skill:cooking`
@@ -6096,9 +6096,9 @@ The specialization adds dependable preservation practice to Cooking. It includes
 
 ### Courtly Protocol
 
-**ID:** `spec:courtly-protocol`  
-**Name:** Courtly Protocol  
-**Competency type:** Specialization  
+**ID:** `spec:courtly-protocol`
+**Name:** Courtly Protocol
+**Competency type:** Specialization
 **Domain:** Culture & Society
 
 **Parent:** Customs — `skill:customs`
@@ -6139,9 +6139,9 @@ The specialization extends Customs into a differentiated body of formal court pr
 
 ### Omen Reading
 
-**ID:** `spec:omen-reading`  
-**Name:** Omen Reading  
-**Competency type:** Specialization  
+**ID:** `spec:omen-reading`
+**Name:** Omen Reading
+**Competency type:** Specialization
 **Domain:** Culture & Society
 
 **Parent:** Divination — `divination`
@@ -6178,14 +6178,14 @@ The specialization deepens Divination through an established practice of reading
 
 **ID status:** Provisional Revision 2 target ID; the stated product parent is selected, with mechanics separately authored.
 
-**Provenance:** [R] Legacy Specialization: augury (C:5598)  
+**Provenance:** [R] Legacy Specialization: augury (C:5598)
 [R] Legacy Skill: omen_reading (C:4852)
 
 ### Cordage / Ropemaking
 
-**ID:** `spec:cordage-ropemaking`  
-**Name:** Cordage / Ropemaking  
-**Competency type:** Specialization  
+**ID:** `spec:cordage-ropemaking`
+**Name:** Cordage / Ropemaking
+**Competency type:** Specialization
 **Domain:** Craft & Making
 
 **Parent:** Fibre Working — `skill:fibre-working`
@@ -6226,9 +6226,9 @@ The specialization extends Fibre Working from the preparation of usable fibres a
 
 ### Genealogy
 
-**ID:** `spec:genealogy`  
-**Name:** Genealogy  
-**Competency type:** Specialization  
+**ID:** `spec:genealogy`
+**Name:** Genealogy
+**Competency type:** Specialization
 **Domain:** Culture & Society
 
 **Parent:** History — `history`
@@ -6269,9 +6269,9 @@ The specialization extends History into sustained work on family connections. A 
 
 ### Court Advocacy
 
-**ID:** `spec:court-advocacy`  
-**Name:** Court Advocacy  
-**Competency type:** Specialization  
+**ID:** `spec:court-advocacy`
+**Name:** Court Advocacy
+**Competency type:** Specialization
 **Domain:** Law & Administration
 
 **Parent:** Law — `skill:law`
@@ -6312,9 +6312,9 @@ The specialization extends Law through the work of representing a case in a form
 
 ### Warded-Lock Entry
 
-**ID:** `spec:warded-lock-entry`  
-**Name:** Warded-Lock Entry  
-**Competency type:** Specialization  
+**ID:** `spec:warded-lock-entry`
+**Name:** Warded-Lock Entry
+**Competency type:** Specialization
 **Domain:** Covert Entry & Infiltration
 
 **Parent:** Lockpicking — `skill:lockpicking`
@@ -6355,9 +6355,9 @@ The specialization deepens Lockpicking for a particular family of mechanical con
 
 ### Bone Setting
 
-**ID:** `bone_setting`  
-**Name:** Bone Setting  
-**Competency type:** Specialization  
+**ID:** `bone_setting`
+**Name:** Bone Setting
+**Competency type:** Specialization
 **Domain:** Healing
 
 **Parent:** Medicine — `skill:medicine`
@@ -6398,9 +6398,9 @@ The specialization adds focused knowledge and practiced manual care to Medicine.
 
 ### Diagnostic Medicine
 
-**ID:** `spec:diagnostic-medicine`  
-**Name:** Diagnostic Medicine  
-**Competency type:** Specialization  
+**ID:** `spec:diagnostic-medicine`
+**Name:** Diagnostic Medicine
+**Competency type:** Specialization
 **Domain:** Healing
 
 **Parent:** Medicine — `skill:medicine`
@@ -6441,9 +6441,9 @@ The specialization deepens the diagnostic work already present in Medicine. Its 
 
 ### Obstetrics
 
-**ID:** `obstetrics`  
-**Name:** Obstetrics  
-**Competency type:** Specialization  
+**ID:** `obstetrics`
+**Name:** Obstetrics
+**Competency type:** Specialization
 **Domain:** Healing
 
 **Parent:** Medicine — `skill:medicine`
@@ -6484,9 +6484,9 @@ The specialization extends Medicine through focused knowledge of maternal and ch
 
 ### Poison Treatment
 
-**ID:** `poison_treatment`  
-**Name:** Poison Treatment  
-**Competency type:** Specialization  
+**ID:** `poison_treatment`
+**Name:** Poison Treatment
+**Competency type:** Specialization
 **Domain:** Healing
 
 **Parent:** Medicine — `skill:medicine`
@@ -6527,9 +6527,9 @@ The specialization deepens Medicine in a demanding class of cases. Knowledge of 
 
 ### Music Composition
 
-**ID:** `spec:music-composition`  
-**Name:** Music Composition  
-**Competency type:** Specialization  
+**ID:** `spec:music-composition`
+**Name:** Music Composition
+**Competency type:** Specialization
 **Domain:** Arts & Performance
 
 **Parent:** Music — `music`
@@ -6570,9 +6570,9 @@ The specialization extends Music from informed performance into sustained compos
 
 ### Theology
 
-**ID:** `spec:theology`  
-**Name:** Theology  
-**Competency type:** Specialization  
+**ID:** `spec:theology`
+**Name:** Theology
+**Competency type:** Specialization
 **Domain:** Culture & Society
 
 **Parent:** Religion — `skill:religion`
@@ -6613,9 +6613,9 @@ The specialization extends Religion where sustained doctrinal study forms a diff
 
 ### Pickpocketing
 
-**ID:** `spec:pickpocketing`  
-**Name:** Pickpocketing  
-**Competency type:** Specialization  
+**ID:** `spec:pickpocketing`
+**Name:** Pickpocketing
+**Competency type:** Specialization
 **Domain:** Covert Entry & Infiltration
 
 **Parent:** Sleight of Hand — `skill:sleight-of-hand`
@@ -6656,9 +6656,9 @@ The specialization extends Sleight of Hand through practiced work around another
 
 ### Weaponsmithing
 
-**ID:** `spec:weaponsmithing`  
-**Name:** Weaponsmithing  
-**Competency type:** Specialization  
+**ID:** `spec:weaponsmithing`
+**Name:** Weaponsmithing
+**Competency type:** Specialization
 **Domain:** Craft & Making
 
 **Parent:** Smithing — `skill:smithing`
@@ -6695,15 +6695,15 @@ The specialization extends Smithing through the requirements of metal weapon pro
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Specialization: spec:weaponsmithing (P:589; D:1280)  
-[R] Legacy Specialization: weaponsmith (C:5535)  
+**Provenance:** [R] Pilot Specialization: spec:weaponsmithing (P:589; D:1280)
+[R] Legacy Specialization: weaponsmith (C:5535)
 [R] Q:87 — Weaponsmithing (qualitative name, no recovered target ID)
 
 ### Battlefield Surgery
 
-**ID:** `battlefield_surgery`  
-**Name:** Battlefield Surgery  
-**Competency type:** Specialization  
+**ID:** `battlefield_surgery`
+**Name:** Battlefield Surgery
+**Competency type:** Specialization
 **Domain:** Healing
 
 **Parent:** Surgery — `skill:surgery`
@@ -6748,9 +6748,9 @@ The specialization extends Surgery through the demands of field treatment rather
 
 ### Spoken Common
 
-**ID:** `spoken:common`  
-**Name:** Spoken Common  
-**Competency type:** Spoken language  
+**ID:** `spoken:common`
+**Name:** Spoken Common
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -6781,14 +6781,14 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Spoken language: spoken:common (P:122; D:1213)  
+**Provenance:** [R] Pilot Spoken language: spoken:common (P:122; D:1213)
 [R] Legacy named-language record: common_language (C:229)
 
 ### Spoken Mogrebi
 
-**ID:** `spoken:mogrebi`  
-**Name:** Spoken Mogrebi  
-**Competency type:** Spoken language  
+**ID:** `spoken:mogrebi`
+**Name:** Spoken Mogrebi
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -6819,14 +6819,14 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Spoken language: spoken:mogrebi (P:123; D:132)  
+**Provenance:** [R] Pilot Spoken language: spoken:mogrebi (P:123; D:132)
 [R] Legacy named-language record: mogrebi_language (C:245)
 
 ### Spoken Ologian
 
-**ID:** `spoken:ologian`  
-**Name:** Spoken Ologian  
-**Competency type:** Spoken language  
+**ID:** `spoken:ologian`
+**Name:** Spoken Ologian
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -6857,14 +6857,14 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Spoken language: spoken:ologian (P:124; D:138)  
+**Provenance:** [R] Pilot Spoken language: spoken:ologian (P:124; D:138)
 [R] Legacy named-language record: ologian_language (C:273)
 
 ### Spoken Phoenician
 
-**ID:** `spoken:phoenician`  
-**Name:** Spoken Phoenician  
-**Competency type:** Spoken language  
+**ID:** `spoken:phoenician`
+**Name:** Spoken Phoenician
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -6895,14 +6895,14 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Spoken language: spoken:phoenician (P:125; D:144)  
+**Provenance:** [R] Pilot Spoken language: spoken:phoenician (P:125; D:144)
 [R] Legacy named-language record: phoenician_language (C:277)
 
 ### Spoken N'kolian
 
-**ID:** `spoken:nkolian`  
-**Name:** Spoken N'kolian  
-**Competency type:** Spoken language  
+**ID:** `spoken:nkolian`
+**Name:** Spoken N'kolian
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -6933,14 +6933,14 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Spoken language: spoken:nkolian (P:126; D:150)  
+**Provenance:** [R] Pilot Spoken language: spoken:nkolian (P:126; D:150)
 [R] Legacy named-language record: n_kolian_language (C:253)
 
 ### Spoken Scythian
 
-**ID:** `spoken:scythian`  
-**Name:** Spoken Scythian  
-**Competency type:** Spoken language  
+**ID:** `spoken:scythian`
+**Name:** Spoken Scythian
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -6971,14 +6971,14 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Spoken language: spoken:scythian (P:127; D:156)  
+**Provenance:** [R] Pilot Spoken language: spoken:scythian (P:127; D:156)
 [R] Legacy named-language record: scythian_language (C:297)
 
 ### Spoken Mycenaean Greek
 
-**ID:** `spoken:mycenaean-greek`  
-**Name:** Spoken Mycenaean Greek  
-**Competency type:** Spoken language  
+**ID:** `spoken:mycenaean-greek`
+**Name:** Spoken Mycenaean Greek
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7013,9 +7013,9 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 ### Spoken Old Common
 
-**ID:** `spoken:old-common`  
-**Name:** Spoken Old Common  
-**Competency type:** Spoken language  
+**ID:** `spoken:old-common`
+**Name:** Spoken Old Common
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7050,9 +7050,9 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 ### Spoken Old Latin
 
-**ID:** `spoken:old-latin`  
-**Name:** Spoken Old Latin  
-**Competency type:** Spoken language  
+**ID:** `spoken:old-latin`
+**Name:** Spoken Old Latin
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7087,9 +7087,9 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 ### Spoken Old Persian
 
-**ID:** `spoken:old-persian`  
-**Name:** Spoken Old Persian  
-**Competency type:** Spoken language  
+**ID:** `spoken:old-persian`
+**Name:** Spoken Old Persian
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7124,9 +7124,9 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 ### Spoken Scandian
 
-**ID:** `spoken:scandian`  
-**Name:** Spoken Scandian  
-**Competency type:** Spoken language  
+**ID:** `spoken:scandian`
+**Name:** Spoken Scandian
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7161,9 +7161,9 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 ### Spoken Sumerian
 
-**ID:** `spoken:sumerian`  
-**Name:** Spoken Sumerian  
-**Competency type:** Spoken language  
+**ID:** `spoken:sumerian`
+**Name:** Spoken Sumerian
+**Competency type:** Spoken language
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7202,9 +7202,9 @@ A speaker follows explanations, asks questions and makes themselves understood i
 
 ### Written Mogrebi in Sacred Mogrebi
 
-**ID:** `written:mogrebi:sacred-mogrebi`  
-**Name:** Written Mogrebi in Sacred Mogrebi  
-**Competency type:** Written tradition  
+**ID:** `written:mogrebi:sacred-mogrebi`
+**Name:** Written Mogrebi in Sacred Mogrebi
+**Competency type:** Written tradition
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7235,15 +7235,15 @@ A reader recovers meaning from Mogrebi texts composed within the Sacred Mogrebi 
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Written tradition: written:mogrebi:sacred-mogrebi (P:138; D:162)  
-[R] Legacy named-language record: sacred_mogrebi_language (C:289)  
+**Provenance:** [R] Pilot Written tradition: written:mogrebi:sacred-mogrebi (P:138; D:162)
+[R] Legacy named-language record: sacred_mogrebi_language (C:289)
 [R] Pilot support: script:sacred-mogrebi (D:1797)
 
 ### Written Ologian in Church Ologian
 
-**ID:** `written:ologian:church-ologian`  
-**Name:** Written Ologian in Church Ologian  
-**Competency type:** Written tradition  
+**ID:** `written:ologian:church-ologian`
+**Name:** Written Ologian in Church Ologian
+**Competency type:** Written tradition
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7274,15 +7274,15 @@ A reader recovers meaning from Ologian texts composed within the Church Ologian 
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Written tradition: written:ologian:church-ologian (P:146; D:168)  
-[R] Legacy named-language record: church_ologian_language (C:225)  
+**Provenance:** [R] Pilot Written tradition: written:ologian:church-ologian (P:146; D:168)
+[R] Legacy named-language record: church_ologian_language (C:225)
 [R] Pilot support: script:church-ologian (D:1805)
 
 ### Written Phoenician in Phoenician script
 
-**ID:** `written:phoenician:phoenician`  
-**Name:** Written Phoenician in Phoenician script  
-**Competency type:** Written tradition  
+**ID:** `written:phoenician:phoenician`
+**Name:** Written Phoenician in Phoenician script
+**Competency type:** Written tradition
 **Domain:** Languages & Textual Practice
 
 **Short description**
@@ -7313,8 +7313,8 @@ A reader recovers meaning from Phoenician texts composed within the Phoenician s
 
 **ID status:** Existing source ID proposed for retention.
 
-**Provenance:** [R] Pilot Written tradition: written:phoenician:phoenician (P:154; D:174)  
-[R] Legacy named-language record: phoenician_language (C:277)  
+**Provenance:** [R] Pilot Written tradition: written:phoenician:phoenician (P:154; D:174)
+[R] Legacy named-language record: phoenician_language (C:277)
 [R] Pilot support: script:phoenician (D:1813)
 
 ## Script support and unresolved language bindings
