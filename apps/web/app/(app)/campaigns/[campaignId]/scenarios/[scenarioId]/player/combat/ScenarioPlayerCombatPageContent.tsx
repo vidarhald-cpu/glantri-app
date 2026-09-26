@@ -122,6 +122,7 @@ import {
   FeintSkillPreview,
 } from "@/features/player-combat/FeintSkillPreview";
 import { GenericCombatActionPanel } from "@/features/combat-generic-actions/GenericCombatActionPanel";
+import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";
 import {
   buildCombatParticipantCandidates,
   type CombatParticipantRosterEntry,
@@ -5237,6 +5238,24 @@ export default function ScenarioPlayerCombatPageContent({
               declarationRecorded={selectedParticipantStoredDeclarationThisRound}
               declarationIntent={declarationIntent}
               distancePreferenceOptions={distancePreferenceOptions}
+              itemInteractionControls={
+                encounterSession && selectedRoundParticipant ? (
+                  <CombatItemInteractionPanel
+                    encounter={encounterSession}
+                    isGm={isGameMaster}
+                    // The Item options this surface offers — including the Pass recipients — are
+                    // the viewer's own privacy-filtered projection, so the panel is keyed to the
+                    // projection exactly as the panel beside it is. A GM visibility change that
+                    // does not move the encounter revision would otherwise leave a stale recipient
+                    // in the select. Forgejo issue #356.
+                    key={`${encounterSession.id}:${projectionCacheKey}`}
+                    onEncounterUpdated={(nextEncounter) => {
+                      acceptEncounterSession(nextEncounter);
+                    }}
+                    participantId={selectedRoundParticipant.participantId}
+                  />
+                ) : undefined
+              }
               movementId={selectedMovementId}
               movementIntent={selectedMovementIntent}
               onActionChange={(actionId) => {

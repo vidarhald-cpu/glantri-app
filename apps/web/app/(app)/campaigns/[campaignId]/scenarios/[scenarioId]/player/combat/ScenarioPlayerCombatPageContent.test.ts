@@ -71,7 +71,28 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
       "showGenericDeclarationControls={false}",
     );
-    expect(source).not.toContain("<CombatItemInteractionPanel");
+  });
+
+  /**
+   * Forgejo issue #356 — M7's client half. The canonical Item declaration surface now reaches the
+   * player through the Action Selector, the Combat Panel Contract §12.4 destination, rather than
+   * only through the `GenericCombatActionPanel` subtree that A3 (#335) deletes. The existing
+   * `CombatItemInteractionPanel` is mounted unchanged, as a component.
+   */
+  it("mounts the canonical Item declaration surface in the player Action Selector", () => {
+    const source = readSource();
+    const selector = source.indexOf("<PlayerCombatActionSelectorPanel");
+    const slot = source.indexOf("itemInteractionControls={", selector);
+
+    expect(selector).toBeGreaterThan(-1);
+    expect(slot).toBeGreaterThan(selector);
+    const mount = source.slice(slot, slot + 1200);
+    expect(mount).toContain("<CombatItemInteractionPanel");
+    expect(mount).toContain("encounter={encounterSession}");
+    expect(mount).toContain("isGm={isGameMaster}");
+    expect(mount).toContain("participantId={selectedRoundParticipant.participantId}");
+    // Keyed to the projection so a visibility change refreshes the offered Item options.
+    expect(mount).toContain("key={`${encounterSession.id}:${projectionCacheKey}`}");
   });
 
   it("uses canonical board positioning for Current task and tracker-local keyboard navigation", () => {

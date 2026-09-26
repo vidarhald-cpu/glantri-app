@@ -224,7 +224,10 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
 
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
     await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
-    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(0);
+    // Forgejo issue #356 — M7's client half. The canonical Item declaration surface is now the
+    // player's own, mounted in the Action Selector (Combat Panel Contract §12.4), where before it
+    // reached only the GM through `GenericCombatActionPanel`.
+    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(1);
     await expect(playerPage.getByText("No Items are present in this Encounter.")).toBeVisible();
 
     const passActionId = `acov4-pass-${suffix}`;
@@ -312,7 +315,11 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     });
     await playerPage.reload();
     await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
-    await expect(playerPage.getByText(itemName, { exact: true })).toBeVisible();
+    // Scoped to Encounter Items: the canonical Item declaration surface now also names the Item on
+    // the player's page (Forgejo issue #356), so an unscoped match is ambiguous.
+    await expect(
+      playerPage.getByLabel("Encounter Items").getByText(itemName, { exact: true }),
+    ).toBeVisible();
     await gmPage.reload();
     await expect(gmPage.getByRole("heading", { name: "Encounter Items" })).toBeVisible();
     await expect(gmPage.getByRole("listitem").filter({ hasText: itemName })).toContainText(
