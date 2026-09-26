@@ -96,8 +96,7 @@ describe("ArtifactPanel", () => {
   });
 
   it("offers exactly two access filter values and a removable active-filter chip", async () => {
-    // Acceptance criteria 5 and 6 — the Player-shared material job view
-    // (Campaign Material §2.1) over the two access states (§2.4).
+    // The canonical two-state Artifact filters remain available in standalone mode.
     mocks.loadArtifacts.mockResolvedValue({
       artifacts: [
         managedArtifact,
@@ -235,5 +234,35 @@ describe("ArtifactPanel", () => {
     await user.click(await screen.findByRole("button", { name: "Share with Campaign" }));
     expect(await screen.findByText(/current state has been refreshed/i)).toBeInTheDocument();
     expect(mocks.loadArtifacts).toHaveBeenCalledTimes(2);
+  });
+
+  it("reuses one Artifact card in the Inspector with Scenario associations read-only", async () => {
+    mocks.loadArtifacts.mockResolvedValue({
+      artifacts: [managedArtifact, { ...managedArtifact, id: "other", title: "Other Artifact" }],
+      mode: "gm",
+      references: [
+        {
+          id: "ref-1",
+          artifactId: managedArtifact.id,
+          scenarioId: "scenario-1",
+          state: "attached",
+          version: 1,
+          title: managedArtifact.title,
+        },
+      ],
+    });
+    render(
+      <ArtifactPanel
+        campaignId="campaign-1"
+        focusedArtifactId="artifact-1"
+        readOnlyAssociations
+        scenarios={[{ id: "scenario-1", name: "Northern route", status: "draft" } as never]}
+      />,
+    );
+    expect(await screen.findByText("Northern pass")).toBeInTheDocument();
+    expect(screen.queryByText("Other Artifact")).not.toBeInTheDocument();
+    expect(screen.getByText(/Northern route · attached/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Attach privately" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Find Artifacts")).not.toBeInTheDocument();
   });
 });
