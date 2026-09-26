@@ -1149,9 +1149,9 @@ previously left to the building lane. **Gates:** the
 [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for the lane that
 persists the event kind.
 
-**A mid-play party recognition or reveal produces the distinct player-safe
+**A mid-play recognition or reveal produces the distinct player-safe
 state-transition Activity event `person_identity_revealed`.** It records a
-**shared-party transition from unidentified to identified** during play. It is
+transition from unidentified to identified during play. It is
 **not** a `scenario_announcement`
 ([Campaign Material and Scenario Builder §8.1](campaign-material-and-scenario-builder-ui.md#81-publication-creates-a-scenario_announcement-activity-event)):
 publishing a prepared GM message and the party learning who someone is are
@@ -1176,6 +1176,17 @@ player-safe/privacy-projected semantics, the classification
 [PPV1 §9.4](../architecture/player-play-v1.md#94-the-existing-event-and-roll-model)
 applies to adding an announcement event type. **This section settles the product
 decision; it authorizes no implementation.**
+
+> **Amended, 2026-09-26: this event's recipient scope is no longer settled.** The
+> earlier reading that `person_identity_revealed` records a **shared-party**
+> transition assumed party-wide recognition, which
+> [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
+> supersedes. **Whether and how a Character-scoped recognition transition enters
+> the one shared Activity record is an open product decision**, recorded at
+> [section 18.37](#1837-character-scoped-knowledge-and-the-shared-activity-record).
+> **Everything else in this section stands**: the event kind is distinct from
+> `scenario_announcement`, preparation-state edits produce no Activity, the
+> payload is text-identity-only, and the lane is floor-class.
 
 ### 18.16 Prepared-message speaker history is text identity in V1
 
@@ -1373,38 +1384,35 @@ underneath, never a single stored boolean. The live-play form is
 and the preparation-side independence it protects is
 [Campaign Material and Scenario Builder §7.6](campaign-material-and-scenario-builder-ui.md#76-the-item-scenario-overlay).
 
-### 18.23 OPEN-PPL-1 settled for V1 — recognition is party-wide Scenario-Person state
+### 18.23 OPEN-PPL-1 settled for V1 — superseded by Character-scoped recognition
 
-**Status:** **SETTLED FOR V1, 2026-09-25.** **Authority:** Product Owner.
-**Settles:**
-[OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled),
-whose entry carries the same settlement. **Gates:** **Nothing.** It no longer
-gates lane B.
+_The heading is retained in position so existing references continue to resolve.
+**Its earlier ruling — that recognition is party-wide Scenario-Person state —
+is superseded and is no longer controlling.**_
 
-**Recognition is party-wide Scenario-Person state.** It is persistent state of
-the Scenario-Person pair, held once for the whole party, not per player and not
-per session or view.
+**Status:** **SUPERSEDED, 2026-09-26.** **Authority:** Product Owner.
+**Superseded by:**
+[section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped),
+which re-settles
+[OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled)
+as **Character-scoped** knowledge and recognition. **Gates:** **Nothing.**
 
-- **Scenario preparation establishes the initial unidentified/identified
-  state.**
-- **An explicit live GM reveal changes it**, and nothing else does.
-- **Preparation edits emit no recognition events.** Only a change during play is
-  history, per
-  [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
-- **Per-player recognition remains deferred, not rejected.** V1 builds no
-  per-player recognition or visibility control, and nothing built for V1 may
-  make per-player recognition a redesign rather than an extension.
+**What is superseded.** That recognition is party-wide Scenario-Person state
+held once for the whole party; and that per-player recognition is deferred, that
+V1 builds no per-player recognition or visibility control, and that no lane may
+build it. **Those statements are withdrawn. No lane stops on them, and no lane
+treats per-Character knowledge as out of scope.**
 
-**None of the four options originally recorded under OPEN-PPL-1 was
-Scenario-scoped party state.** This settles the decision by a fifth answer
-rather than by selecting one of them, and the deferred options are neither
-ranked nor rejected.
-
-**A lane implementing recognition no longer stops and returns to the Product
-Owner.** The product/UI form is
-[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-shared-scenario-party-state);
-the persisted event kind remains floor-class under
+**What survives, and is restated at
+[section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped):**
+that Scenario preparation establishes the initial unidentified/identified state;
+that an explicit live GM action is the only thing that changes it during play;
+and that **preparation edits emit no recognition events** — only a change during
+play is history, per
 [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+
+The controlling product/UI form is now
+[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-character-scoped-scenario-person-state).
 
 ### 18.24 Artifact access states and the legacy `scenario` audience
 
@@ -1513,6 +1521,397 @@ surfaces are GM-side preparation and operate correctly on the existing model.
 The live-play form is
 [Live GM Scenario Play §10.1](live-gm-scenario-play.md#101-strongly-synchronized-multiplayer-liveness).
 
+### 18.28 Persistent player-facing knowledge is Character-scoped
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Supersedes:** [section 18.23](#1823-open-ppl-1-settled-for-v1--superseded-by-character-scoped-recognition)
+and the party-wide half of every statement it settled. **Re-settles:**
+[OPEN-PPL-1](people-artifact-and-gm-authoring-model.md#open-ppl-1--how-identity-revelation-is-modelled).
+**Gates:** Nothing. A lane implementing recognition or knowledge proceeds on
+this section.
+
+> **Persistent player-facing knowledge in V1 is fundamentally Character-scoped.
+> There is no single Campaign-party knowledge library.**
+
+**A Character's Knowledge Library is the persistent story material explicitly
+available to that Character.** It is the V1 home of that Character's
+Discoveries ([section 18.32](#1832-runtime-discoveries-from-skill-rolls-and-play)),
+player-authored notes ([section 18.34](#1834-player-authored-notes-live-in-a-characters-knowledge-library))
+and met/known People state
+([section 18.30](#1830-people-identities-and-metknown-state)).
+
+**A disclosure to a group means granting the same information to a selected set
+of Characters.** It does **not** create a separate global "group knowledge"
+truth store, and no second shared knowledge record is authorized.
+
+**Recipient selection is by Character.** Common recipient shortcuts may later
+include: the acting Character; selected Characters; the current Encounter's
+participants; the current Scenario's participants; all relevant Campaign player
+Characters. **The exact UI is not prescribed here.**
+
+**Canonical recognition is therefore Character-scoped**: an encountered or known
+identity becomes connected to a canonical Person identity **for the relevant
+Character or Characters**, not once for the whole party.
+
+**What this replaces.** [Section 18.23](#1823-open-ppl-1-settled-for-v1--superseded-by-character-scoped-recognition)
+settled recognition as party-wide Scenario-Person state held once for the whole
+party. **That is superseded.** Its preparation/live asymmetry survives unchanged
+and is restated here:
+
+- **Scenario preparation establishes the initial unidentified/identified
+  state.** Preparation may establish it for the Scenario's participating
+  Characters; it remains preparation.
+- **An explicit live GM action changes it**, and nothing else does.
+- **Preparation edits emit no recognition Activity.** Only a change during play
+  is history, per
+  [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+
+**No per-Character presentation override is authorized by this.** Which
+presentation layer a viewer receives is a **visibility/projection** question
+resolved from that viewer's Character-scoped recognition state, over the
+existing two canonical layers of
+[section 18.13](#1813-the-canonical-person-presentation-layers) and the single
+narrow Scenario override of
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1).
+**Every prohibition in [section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)
+and [section 18.20](#1820-item-presentation-layers-and-scenario-overrides)
+stands** — no generic scope column, no entitlement hierarchy, no
+override-resolution framework, and no per-player or per-Character
+**presentation override**.
+
+**Per-Character knowledge is no longer deferred and is no longer a non-goal.**
+Every earlier statement that V1 builds no per-player recognition or knowledge
+control, or that per-player knowledge divergence does not exist, is superseded.
+**No lane stops on the ground that per-player knowledge is deferred.**
+
+**The product/UI form** is
+[Campaign Material and Scenario Builder §7.4](campaign-material-and-scenario-builder-ui.md#74-recognition-is-character-scoped-scenario-person-state);
+the identity model is
+[People/Artifact model §4](people-artifact-and-gm-authoring-model.md#4-person-representation-and-identity);
+the live form is
+[Live GM Scenario Play §5.2](live-gm-scenario-play.md#52-people-are-valid-blackboard-material)
+and [§6.1](live-gm-scenario-play.md#61-person). **This section settles the
+product decision; it authorizes no implementation.**
+
+### 18.29 The Blackboard is shared external memory, not knowledge synchronization
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Extends:** [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped).
+**Gates:** Nothing beyond the lane that builds the Blackboard.
+
+**The Campaign Blackboard remains a shared Campaign workspace.** A Character may
+post information available in **their own Knowledge Library** to the Blackboard
+at an authorized presentation/detail level.
+
+> **Posting to the Blackboard does not copy that information into any other
+> Character's Knowledge Library. Removing Blackboard material does not alter any
+> Character's Knowledge Library.**
+
+A Character may therefore **know something privately, share it later, share only
+a less-revealing presentation, or choose not to share it at all.**
+
+> **This asymmetry between Knowledge Library and Blackboard is a gameplay
+> feature, not a synchronization defect.** Characters' skills, perceptions and
+> private discoveries are intended to create meaningful information differences
+> within the party. **No lane may "fix" it by synchronizing the two, and no QA
+> finding may treat the divergence as a bug.**
+
+The Blackboard contract is
+[Campaign Blackboard V1](campaign-blackboard-v1.md), whose
+[§9](campaign-blackboard-v1.md#9-no-silent-blackboard-updates) no-silent-update
+rule and [§22](campaign-blackboard-v1.md#22-privacy-and-disclosure-invariants)
+invariants carry this rule on the product surface.
+
+### 18.30 People, identities and met/known state
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Amends:** [section 18.13](#1813-the-canonical-person-presentation-layers) by
+scoping which layer projects to the viewing Character.
+**Gates:** the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for the
+lane that persists identity or met/known state, which is privacy-relevant.
+
+**A "People you have met" concept is preserved** as part of player-facing
+knowledge, held per Character.
+
+**A canonical Person may have multiple player-facing identities** — for example
+`Captain Varro`, `The masked swordsman`, `Brother Anselm`. **The GM and the
+system may know privately that several identities resolve to the same canonical
+Person while the Characters do not.** **Multiple identities may coexist as
+apparently separate People entries for as long as the fiction requires.**
+
+> **Anti-leak invariant.** **No distinguishable player-facing card type, icon,
+> identifier form, metadata or other mechanical leak may expose whether a
+> player-facing People entry is the canonical Person, an identity/alias backed
+> by a canonical Person, or an unresolved encountered identity.** This is a
+> **privacy invariant, not a UI preference**, and it is enforced by what the
+> projection carries, on the standard of
+> [section 18.31](#1831-player-projection-must-hide-preparation-mechanics).
+
+**Resolution retains history.** When play establishes that two identities are
+the same person, **the GM may explicitly resolve them, and their
+encounter/history information must be retained rather than discarded.**
+**Resolution may connect two aliases without yet revealing a canonical
+identity.**
+
+**A Person's states are not a single flag.** A Person may be **known without
+being met**; **met under an unresolved identity**; **met and recognized**; or
+**represented through several identities at different times**.
+
+**Background people do not become durable People entries merely because they
+physically exist in a scene.** **Hidden NPCs remain fully usable by the GM** in
+selectors, rolls, Combat, Items, tasks and other GM operations **without
+becoming player-visible or player-known**.
+
+**A meaningful player-facing encounter as a discrete actor may establish a "met"
+identity**, and **the GM must also have an explicit way to make a
+Person/identity known without an encounter** — a public figure, a portrait,
+extensive discussion, investigation or reputation.
+
+**A textual mention in an Artifact does not by itself reveal a hidden canonical
+Person association.**
+
+**Scenario/context-specific presentation may allow the same Person to appear
+differently** — mask, disguise, darkness, assumed role — **without leaking that
+two appearances share the same canonical Person**. This is served by the
+existing narrow Scenario presentation override of
+[section 18.11](#1811-narrow-scenario-presentation-override-authorized-for-v1)
+and authorizes no wider override mechanism.
+
+The identity model this records is
+[People/Artifact model §4](people-artifact-and-gm-authoring-model.md#4-person-representation-and-identity),
+which carries the full text.
+
+### 18.31 Player projection must hide preparation mechanics
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Extends:** [section 18.30](#1830-people-identities-and-metknown-state) to
+every player-facing Scenario and knowledge surface. **Gates:** Nothing on its
+own; it is the standard the privacy-relevant lanes are reviewed against.
+
+> **Player-facing Scenario and knowledge material represents the fiction, not
+> the GM's preparation model.**
+
+**The player UI must not reveal, merely through structure**, whether:
+
+- someone is backed by a full Character/NPC record;
+- a People entry is canonical versus an identity/alias;
+- the GM holds extensive hidden dossier or content;
+- two unresolved identities privately map to one canonical Person;
+- a presentation is canonical versus a Scenario override;
+- hidden actors are mechanically present.
+
+This is enforced on the standard already recorded for the GM dossier and the
+session-summary source rule: **the excluded material is not present in what the
+player surface receives**, rather than hidden after the fact —
+[People/Artifact model §6.1](people-artifact-and-gm-authoring-model.md#61-the-gm-only-dossier),
+[§11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source)
+and
+[Authority and Information Projection](../architecture/information-authority-and-projection.md#projection-rules).
+
+**This supports the narrative-freedom requirement** that content management
+serves the story: the model **must not normalize away ambiguity, mystery,
+delayed recognition or multiple perspectives** for data-model convenience.
+
+### 18.32 Runtime Discoveries from Skill rolls and play
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Extends:** [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped).
+**Gates:** Nothing beyond the lane that builds it.
+
+**The GM cannot reasonably author a separate note for every Skill roll, or
+pre-author the outcomes of live play. V1 must support lightweight runtime
+recording of meaningful discoveries.**
+
+A **Discovery** is player-facing information learned by one or more Characters
+during play — a Perception result, an Insight or social observation, cultural or
+historical recognition, or information learned during examination or
+conversation.
+
+**A Discovery is persistable into the recipient Character(s)' Knowledge
+Libraries**, with lightweight typed context where available: Scenario or
+Encounter, source Character, related Person/identity, Item, Artifact, and
+Skill/task.
+
+> **This is not authorization for a generalized atomic-fact ontology.** A
+> Discovery may simply be **concise player-facing text plus recipient(s),
+> provenance and optional typed links.** No fact decomposition, no
+> knowledge-atom model and no fact-selection framework is authorized, which is
+> the same refusal already recorded as a
+> [Blackboard non-goal](campaign-blackboard-v1.md#24-v1-non-goals).
+
+**The common Skill-resolution interaction must be low-friction.** The acting
+Character is normally the default recipient, and the GM must be able to record a
+meaningful result **inline** rather than opening a separate authoring workflow.
+
+**Routine rolls need not create persistent Discoveries.**
+
+**A Discovery is Character-private by default.** It is not Activity, not
+Blackboard content and not recap input; it becomes any of those only through an
+explicit act — [section 18.29](#1829-the-blackboard-is-shared-external-memory-not-knowledge-synchronization)
+for the Blackboard,
+[section 18.34](#1834-player-authored-notes-live-in-a-characters-knowledge-library)
+for publication into shared history, and
+[section 18.35](#1835-the-session-recap-privacy-boundary) for the recap.
+
+### 18.33 GM Story Events
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Extends:** [section 9](#9-durable-history). **Gates:** the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for the lane that
+persists a new player-safe Activity kind, on the basis already recorded in
+[section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+
+**The GM needs a lightweight live-play action to record story events that were
+not pre-authored** but matter to later narrative history — for example
+`The chapel roof collapsed, separating the party.`
+
+**It is recordable from live Scenario/Encounter context, with contextual links
+derived automatically where possible**, rather than requiring clerical metadata
+entry — [section 18.36](#1836-capture-in-context-retrieve-through-context).
+
+**A Story Event intended as shared/public history becomes a player-safe Activity
+entry**, projected under
+[PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules)
+like any other. A Story Event the GM does not intend as shared history is not
+Activity.
+
+**Activity remains the authoritative source for AI session-summary
+generation**, unchanged —
+[People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source)
+and [section 18.35](#1835-the-session-recap-privacy-boundary).
+
+### 18.34 Player-authored notes live in a Character's Knowledge Library
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Settles, in part:**
+[OPEN-PPL-7](people-artifact-and-gm-authoring-model.md#open-ppl-7--the-audience-granularity-of-sharedplayer-notes)
+— per-Character private notes exist; whether a **shared** per-Person note body
+also exists remains open there. **Gates:** Nothing for the private note itself.
+
+**A player/Character may create freeform notes in their own Knowledge Library**,
+optionally attached to a Person/identity, Item, Artifact, Discovery, Scenario or
+Encounter, or another supported subject.
+
+**These notes are not automatically** Activity or history; Blackboard content;
+or input to a session recap.
+
+**A player may deliberately share a note or its information to the Blackboard**,
+under [section 18.29](#1829-the-blackboard-is-shared-external-memory-not-knowledge-synchronization).
+
+**A player may also explicitly publish a snapshot of a note into shared session
+history.** The UI may describe this as **`Add to session history`** and must
+explain that the shared snapshot may be used by the later recap.
+
+> **Publishing does not transform the original private note into a different
+> object.** The original remains in that Character's Knowledge Library, and the
+> published snapshot is a separate shared record.
+
+**Knowledge Library notes are not Blackboard player notes.** Blackboard notes
+are shared workspace content ([Campaign Blackboard V1 §16](campaign-blackboard-v1.md#16-player-notes));
+these are Character-private knowledge. The two must not be collapsed.
+
+### 18.35 The session recap privacy boundary
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Preserves:**
+[People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source).
+**Gates:** the [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) for any
+summary-drafting lane, unchanged and on privacy grounds.
+
+The recap flow is preserved exactly:
+
+> **player-safe Activity → AI draft → GM review/edit/approval → published
+> recap.**
+
+**Character-private Discoveries and private player notes are excluded** unless
+explicitly published into an Activity or history surface appropriate to the
+recap audience.
+
+> **A public recap must not leak Character-private discoveries.**
+
+> **The summary generator must not independently mine private Knowledge Library
+> content, GM notes or private player notes.** **Activity remains the
+> authoritative source.** Widening the generator's inputs to the Knowledge
+> Library is prohibited, on the same "handed the player-safe projection and
+> nothing else" standard as
+> [People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source).
+
+**This section does not settle where the approved recap lives.** The canonical
+home of the published recap remains
+[OPEN-PPL-11](people-artifact-and-gm-authoring-model.md#open-ppl-11--where-the-post-play-summary-lives),
+**open and unchanged**; nothing here narrows or chooses among its options.
+
+### 18.36 Capture in context; retrieve through context
+
+**Status:** **SETTLED FOR V1 as a product principle, 2026-09-26.**
+**Authority:** Product Owner. **Extends:**
+[Product & Presentation Principles §4.3](product-presentation-principles.md#43-put-information-at-the-decision-or-outcome-it-serves).
+**Gates:** Nothing; it is a requirement on the surfaces that capture and
+retrieve knowledge.
+
+> **Capture in context; retrieve through context.**
+
+**The GM and players must not have to perform extensive metadata entry during
+live play.** Where possible the application **derives** Scenario, Encounter,
+acting Character, selected Person/identity, Item/Artifact, Skill/task and other
+context **from the surface on which the capture occurs**.
+
+**A Character's Knowledge Library must support later retrieval both through
+broader browsing/search and through the subject itself.** Inspecting a Person
+identity must make that Character's relevant Discoveries and Notes available
+**without requiring the player to remember in which session or category they
+were created**.
+
+> **No detailed UI layout is prescribed. This records the semantic and
+> interaction requirements only.**
+
+### 18.37 Character-scoped knowledge and the shared Activity record
+
+**Status:** **RECORDED AS AN OPEN PRODUCT DECISION, 2026-09-26.**
+**Authority:** Product Owner rulings of 2026-09-26 create it; **no option is
+chosen.** **Gates:** the lane that would persist or project a recognition
+transition, and nothing else.
+
+Two settled rules now meet:
+
+- **Activity is one shared player-safe narrative record** of what happened, and
+  the exclusive source for a session recap —
+  [section 9](#9-durable-history) and
+  [People/Artifact model §11.2](people-artifact-and-gm-authoring-model.md#112-the-session-summary-source-rule--activity-is-the-only-source).
+- **Recognition and knowledge are Character-scoped** —
+  [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped).
+
+**A recognition transition that reaches only some Characters therefore cannot be
+written as shared party history without leaking**, which
+[section 18.35](#1835-the-session-recap-privacy-boundary) forbids. The same
+tension applies to the resolved speaker label a published announcement carries
+([Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement)),
+which is currently resolved once from party recognition state.
+
+**Options, none chosen and none ranked:**
+
+1. **`person_identity_revealed` is written only when the recognition is a shared
+   disclosure** to all of the Scenario's participating player Characters, and a
+   narrower disclosure produces no Activity entry.
+2. **The event carries its recipient Characters** and Activity projection filters
+   it per viewer, under
+   [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules).
+3. **The event records only the fiction-neutral fact** that someone learned
+   something, with the identity content held in the recipient Characters'
+   Knowledge Libraries.
+4. **Recognition produces no Activity at all**, and narrative history carries
+   only the GM's explicit Story Event
+   ([section 18.33](#1833-gm-story-events)).
+
+**Until this is settled, a lane that would persist or project a recognition
+Activity entry stops and returns the decision**, exactly as
+[People/Artifact model §15](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen)
+requires. **Nothing else in
+[section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
+through [section 18.36](#1836-capture-in-context-retrieve-through-context) is
+gated on it**, including the Knowledge Library, Discoveries, notes, the People
+identity model and the retrieval principle.
+
 ---
 
 ## 19. Future target: Content Production Interface
@@ -1610,17 +2009,17 @@ narrowed here.
 This contract is controlling for the model it describes. The documents below
 retain their own authority for everything else and point here for this model.
 
-| Document                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                                                                                                                                                                                                                                                                                                                |
-| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                                                                                                                                                                                                                                                                                                           |
-| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                                                                                                                                                                                                                                                                                                             |
-| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                                                                                                                                                                                                                                                                                                                  |
-| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); OPEN-PPL-9 answered **for V1** by [section 18.9](#189-open-ppl-9-answered-for-v1) with future scoping deferred; OPEN-PPL-10 **still open but deferred and non-blocking** per [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). The other seven remain open.                                           |
-| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                                                                                                                                                                                                                                                                                                              |
-| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                                                                                                                                                                                                                                                                                                                    |
-| [Live GM Scenario Play](live-gm-scenario-play.md)                                             | The GM's live operating surface. It operates over this model and produces the Activity kinds settled in [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind) and [section 18.16](#1816-prepared-message-speaker-history-is-text-identity-in-v1); the Encounter rules it enforces are [section 18.18](#1818-one-active-encounter-per-character) and [section 18.19](#1819-live-improvisation-may-establish-the-scenario-membership-it-implies). |
-| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                                                                                                                                                                                                                                                                                                                    |
-| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Document                                                                                      | Relationship                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Artifact Management & Package Import](../architecture/artifact-management-package-import.md) | Artifact domain, identity, revisions, validation and atomicity remain authoritative. PO-6 is superseded by [section 11.5](#115-importable-domain-types).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| [Artifact packages and library (AM1)](../architecture/artifact-package-format.md)             | AM1 surface description; importable-type scope governed here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| [AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md)                        | The #271 intake contract; it is an entry point into the one pipeline, not a separate route.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| [Scenario Play Workspace](../architecture/scenario-play-workspace.md)                         | Play authority remains #268's. §4.4 amended narrowly by [section 10](#10-encounter-and-artifact-ownership-versus-durable-association).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| [People, Artifact and GM authoring model](people-artifact-and-gm-authoring-model.md)          | Records the #284 rulings, and is **controlling for the Person identity and met/known model** that [section 18.30](#1830-people-identities-and-metknown-state) records. OPEN-PPL-6 resolved by [section 18.6](#186-open-ppl-6-resolved) and OPEN-PPL-4 by [section 18.8](#188-open-ppl-4-resolved); OPEN-PPL-9 answered **for V1** by [section 18.9](#189-open-ppl-9-answered-for-v1) with future scoping deferred; OPEN-PPL-10 **still open but deferred and non-blocking** per [section 18.10](#1810-open-ppl-10-deferred-and-non-blocking). OPEN-PPL-1 is re-settled **for V1 as Character-scoped** by [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped), superseding [section 18.23](#1823-open-ppl-1-settled-for-v1--superseded-by-character-scoped-recognition); OPEN-PPL-7 is settled **in part** by [section 18.34](#1834-player-authored-notes-live-in-a-characters-knowledge-library); OPEN-PPL-11 is **untouched and open** per [section 18.35](#1835-the-session-recap-privacy-boundary). The remaining decisions are unchanged. |
+| [Campaign Management V2](../architecture/campaign-management-v2.md)                           | Campaign UX contract; the Campaign Material surface in [section 7](#7-central-campaign-material-surface) extends its §6.2.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [Player Play V1](../architecture/player-play-v1.md)                                           | Player play authority remains PPV1's. This contract is GM authoring.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| [Live GM Scenario Play](live-gm-scenario-play.md)                                             | The GM's live operating surface. It operates over this model, carries the live capture surfaces of [section 18.32](#1832-runtime-discoveries-from-skill-rolls-and-play) and [section 18.33](#1833-gm-story-events), and produces the Activity kinds settled in [section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind) and [section 18.16](#1816-prepared-message-speaker-history-is-text-identity-in-v1); the Encounter rules it enforces are [section 18.18](#1818-one-active-encounter-per-character) and [section 18.19](#1819-live-improvisation-may-establish-the-scenario-membership-it-implies).                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| [Campaign, Scenario and Encounter Workflows](campaign-scenario-encounter-workflows.md)        | Workspace responsibilities; authoring model governed here.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| [Secure Campaign Artifact storage boundary](../decisions/architecture/artifact-storage.md)    | Storage and privacy boundary remains authoritative and is unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| [Functional ownership](../architecture/ownership.md)                                          | Coordination boundaries; Artifact authoring crosses the Campaign area.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| [Testing and refactor safety](../testing-regression-matrix.md)                                | Regression breadth for this pipeline.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
