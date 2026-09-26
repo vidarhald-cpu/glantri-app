@@ -194,7 +194,13 @@ export function isCombatGenericActionFinalOpportunity(action: CombatGenericActio
   return action.progress.completedRounds + 1 >= required;
 }
 
-/** True when the owner still holds an unconsumed primary-action opportunity for this task. */
+/**
+ * True when the owner still holds an unconsumed primary-action opportunity for this task.
+ *
+ * `lastProgressedRoundNumber` is the round whose opportunity was consumed. Only
+ * `advanceCombatGenericActionAtOpportunity` writes it; the round rollover deliberately does not
+ * (see `advanceCombatGenericActionsToRound`).
+ */
 export function isCombatGenericActionOpportunityOpen(input: {
   action: CombatGenericAction;
   roundNumber: number;
@@ -494,6 +500,25 @@ export function finishCombatGenericAction(input: {
   return replaceAction(input.actions, next);
 }
 
+/**
+ * Carries `round`/`rounds` tasks across a round rollover.
+ *
+ * `lastProgressedRoundNumber` means exactly one thing: the round in which the owner's
+ * primary-action opportunity for this task was consumed. `isCombatGenericActionOpportunityOpen`
+ * and `advanceCombatGenericActionAtOpportunity` are its only writers and readers in that sense, so
+ * **the rollover must never stamp it**. Stamping the round being entered closed the opportunity
+ * for the whole of that round and re-closed it every round after, which made a `rounds: N` task
+ * unreachable — no resolve, advance, interrupt or cancel — from round 2 onward (Forgejo #344).
+ *
+ * `completedRounds` is therefore derived rather than incremented: a round of the task's life
+ * counts exactly once, whether the owner spent the opportunity explicitly through
+ * `advanceCombatGenericActionAtOpportunity` or the round simply elapsed. `Math.max` keeps an
+ * explicit advance already recorded for that round from being counted a second time here, and
+ * makes the carry idempotent without a persisted rollover marker.
+ *
+ * `phase` and `gm_decided` durations are untouched, exactly as before: phase-timed recurrence is
+ * governed by rule decision 0007 ruling 3, and `gm_decided` leaves the count with the GM.
+ */
 export function advanceCombatGenericActionsToRound(input: {
   actions: readonly CombatGenericAction[];
   advancedAt: string;
@@ -501,27 +526,28 @@ export function advanceCombatGenericActionsToRound(input: {
 }): CombatGenericAction[] {
   return input.actions.map((candidate) => {
     const action = combatGenericActionSchema.parse(candidate);
+    const startedRoundNumber = action.progress.startedRoundNumber;
     if (
       action.status !== "active" ||
-      action.progress.startedRoundNumber == null ||
+      startedRoundNumber == null ||
       action.duration.kind === "phase" ||
       action.duration.kind === "gm_decided" ||
-      action.progress.lastProgressedRoundNumber === input.nextRoundNumber ||
-      input.nextRoundNumber <= action.progress.startedRoundNumber
+      input.nextRoundNumber <= startedRoundNumber
     ) {
       return action;
     }
     const totalRounds = getCombatGenericActionTotalRounds(action.duration);
+    const completedRounds = Math.min(
+      Math.max(action.progress.completedRounds, input.nextRoundNumber - startedRoundNumber),
+      totalRounds ?? Number.MAX_SAFE_INTEGER,
+    );
+    if (completedRounds === action.progress.completedRounds) return action;
     return combatGenericActionSchema.parse({
       ...action,
       lastUpdatedAt: input.advancedAt,
       progress: {
         ...action.progress,
-        completedRounds: Math.min(
-          action.progress.completedRounds + 1,
-          totalRounds ?? Number.MAX_SAFE_INTEGER,
-        ),
-        lastProgressedRoundNumber: input.nextRoundNumber,
+        completedRounds,
         totalRounds,
       },
     });

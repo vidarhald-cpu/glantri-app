@@ -642,5 +642,119 @@ if (!process.env.DATABASE_URL_TEST) {
         ),
       ).toHaveLength(1);
     });
+
+    // Forgejo #339 / content authoring §18.24: `CampaignAsset.visibility` is not
+    // a player-access axis. The 2026-08-24 migration added `audience` with
+    // `DEFAULT 'gm_private'` without touching `visibility`, so a pre-migration
+    // row can carry `audience = 'gm_private'` with `visibility =
+    // 'visible_to_all'`. `visibility` must never broaden access beyond the
+    // resolved audience.
+    it("never lets a Campaign asset's legacy visibility broaden access beyond its resolved audience", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const repository = createPrismaScenarioRepository(prisma!);
+      // Every collaborator is built on the test client. `ScenarioService`'s
+      // defaults construct their own Prisma clients from `DATABASE_URL`, which
+      // is absent in CI, so the session write path fails there unless the
+      // equipment read model is injected — as the neighbouring Item tests do.
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentReadService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(repository, characterService);
+      const service = new ScenarioService(
+        repository,
+        characterService,
+        equipmentReadService,
+        prisma!,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "The keep",
+        status: "active",
+      });
+      const asset = await prisma!.campaignAsset.create({
+        data: {
+          audience: "campaign",
+          campaignId: campaign.id,
+          createdByUserId: gm.id,
+          storageUrl: `artifact-internal:${campaign.id}/keep-map`,
+          title: "Keep map",
+          type: "map",
+          visibility: "visible_to_all",
+        },
+      });
+      const scenario = await service.createScenario({
+        campaignId: campaign.id,
+        name: "The keep",
+        status: "live",
+      });
+      const prepared = await service.updateScenarioSessionState({
+        actorUserId: gm.id,
+        availableObjects: [
+          {
+            addedAt: "2026-09-26T10:00:00.000Z",
+            id: "available-keep-map",
+            sourceId: asset.id,
+            sourceKind: "campaign_asset",
+            visibility: "players",
+          },
+        ],
+        expectedRevision: scenario.updatedAt,
+        gmPrivateNotes: "",
+        scenarioId: scenario.id,
+      });
+
+      // Control: a genuinely shared Artifact does reach the player projection,
+      // so the assertions below cannot pass by withholding everything.
+      await expect(
+        service.resolveScenarioAvailableObjects({ scenario: prepared, viewerMode: "player" }),
+      ).resolves.toMatchObject([{ id: "available-keep-map" }]);
+
+      // The only two divergences the database permits: the
+      // `CampaignAsset_audience_check` constraint added by the 2026-08-24
+      // migration bounds `audience` to `gm_private`, `campaign` and the retired
+      // legacy `scenario`, so an arbitrary string is unreachable here. The
+      // resolver's catch-all for unrecognised values is covered in
+      // `packages/domain/src/campaign/artifact.test.ts`.
+      for (const divergentAudience of ["gm_private", "scenario"]) {
+        await prisma!.$executeRawUnsafe(
+          `UPDATE "CampaignAsset" SET "audience" = $1, "visibility" = 'visible_to_all'::"ScenarioVisibility" WHERE "id" = $2`,
+          divergentAudience,
+          asset.id,
+        );
+
+        // The read gate: no player-reachable projection exposes it.
+        await expect(
+          service.resolveScenarioAvailableObjects({ scenario: prepared, viewerMode: "player" }),
+        ).resolves.toEqual([]);
+
+        // The GM keeps their own view — `visibility` never granted access, and
+        // withdrawing its authority must not narrow the GM projection either.
+        await expect(
+          service.resolveScenarioAvailableObjects({ scenario: prepared, viewerMode: "gm" }),
+        ).resolves.toMatchObject([{ id: "available-keep-map" }]);
+
+        // The write gate refuses to newly expose it to players.
+        await expect(
+          service.updateScenarioSessionState({
+            actorUserId: gm.id,
+            availableObjects: [
+              {
+                addedAt: "2026-09-26T10:00:00.000Z",
+                id: "available-keep-map",
+                sourceId: asset.id,
+                sourceKind: "campaign_asset",
+                visibility: "players",
+              },
+            ],
+            expectedRevision: prepared.updatedAt,
+            gmPrivateNotes: "",
+            scenarioId: scenario.id,
+          }),
+        ).rejects.toThrow(
+          "Share this Campaign Artifact with players before making it available to players.",
+        );
+      }
+    });
   });
 }

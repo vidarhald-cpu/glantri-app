@@ -107,6 +107,51 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(container.textContent).not.toContain("attacker");
   });
 
+  /**
+   * Forgejo issue #356 — the Action Selector is the declaration destination the Combat Panel
+   * Contract §12.4 names for Item operations ("Action selector, secondary action"), and it carries
+   * that surface as a slot so it keeps no encounter or transport knowledge of its own. Both call
+   * sites — the GM Combat Inspector and the player Combat page — pass the existing
+   * `CombatItemInteractionPanel` into it unchanged.
+   */
+  it("renders the supplied Item interaction declaration surface in the secondary-action region", () => {
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId=""
+        additionalActionNotes=""
+        itemInteractionControls={<div data-testid="item-interaction-surface">Items</div>}
+        movementId=""
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    const surface = screen.getByTestId("item-interaction-surface");
+    expect(surface).toBeInTheDocument();
+    const region = screen.getByRole("combobox", { name: "Secondary action" }).closest("section");
+    expect(region?.contains(surface)).toBe(true);
+  });
+
+  it("omits the Item interaction region when no declaration surface is supplied", () => {
+    render(
+      <PlayerCombatActionSelectorPanel
+        actionId=""
+        additionalActionNotes=""
+        movementId=""
+        onActionChange={vi.fn()}
+        onAdditionalActionNotesChange={vi.fn()}
+        onMovementChange={vi.fn()}
+        onSecondaryActionChange={vi.fn()}
+        secondaryActionId=""
+      />,
+    );
+
+    expect(screen.queryByTestId("item-interaction-surface")).toBeNull();
+  });
+
   it("keeps the selector prompt and shows the completed declaration state", () => {
     render(
       <PlayerCombatActionSelectorPanel
