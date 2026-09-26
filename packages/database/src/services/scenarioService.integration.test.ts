@@ -652,8 +652,21 @@ if (!process.env.DATABASE_URL_TEST) {
     it("never lets a Campaign asset's legacy visibility broaden access beyond its resolved audience", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const repository = createPrismaScenarioRepository(prisma!);
-      const campaignService = new CampaignService(repository);
-      const service = new ScenarioService(repository);
+      // Every collaborator is built on the test client. `ScenarioService`'s
+      // defaults construct their own Prisma clients from `DATABASE_URL`, which
+      // is absent in CI, so the session write path fails there unless the
+      // equipment read model is injected — as the neighbouring Item tests do.
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const equipmentReadService = new CharacterEquipmentReadModelService(
+        createPrismaCharacterEquipmentRepository(prisma!),
+      );
+      const campaignService = new CampaignService(repository, characterService);
+      const service = new ScenarioService(
+        repository,
+        characterService,
+        equipmentReadService,
+        prisma!,
+      );
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
         name: "The keep",
