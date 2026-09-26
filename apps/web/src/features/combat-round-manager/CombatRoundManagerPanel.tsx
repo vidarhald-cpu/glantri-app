@@ -176,6 +176,7 @@ import {
   rollCombatDisarmOnServer,
   commitCombatDisarmOnServer,
   loadCombatItemInteractionOptions,
+  updateCombatItemInteractionOnServer,
   commitRoundEndDistanceControlOnServer,
   commitRoundEndParticipantReviewOnServer,
   progressCombatMissileReadinessOnServer,
@@ -309,6 +310,18 @@ import {
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
 import { GenericCombatActionPanel } from "@/features/combat-generic-actions/GenericCombatActionPanel";
+import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";
+import {
+  buildCombatItemActionReviewDraftFromAction,
+  buildCombatItemActionReviewDuration,
+  getCombatItemActionPrimaryOperation,
+  getCombatItemActionResolveValidationMessage,
+  getCombatItemActionReviewValidationMessage,
+  isOpenCombatItemAction,
+  CombatItemActionLifecycleControls,
+  type CombatItemActionResultDraft,
+  type CombatItemActionReviewDraft,
+} from "./CombatItemActionLifecycleControls";
 import {
   buildCombatTaskItemOptions,
   buildCombatTaskReviewDraftFromTask,
@@ -4535,6 +4548,18 @@ export default function CombatRoundManagerPanel({
   const [combatTaskResultDrafts, setCombatTaskResultDrafts] = useState<
     Record<string, CombatTaskResultDraft>
   >({});
+  /**
+   * The GM's canonical Item action command inputs, keyed by the Item action's id — Forgejo issue
+   * #356. As with the Combat Task drafts above, these are only ever command inputs: the action
+   * itself, its id and its revision come from the projected canonical round state.
+   */
+  const [selectedCombatItemActionId, setSelectedCombatItemActionId] = useState<string>();
+  const [combatItemActionReviewDrafts, setCombatItemActionReviewDrafts] = useState<
+    Record<string, CombatItemActionReviewDraft>
+  >({});
+  const [combatItemActionResultDrafts, setCombatItemActionResultDrafts] = useState<
+    Record<string, CombatItemActionResultDraft>
+  >({});
   const combatExperienceDifficultyRequestInFlightRef = useRef(false);
   const [distanceDrafts, setDistanceDrafts] = useState<Record<string, string>>({});
   const [roundEndDistanceOverrideDrafts, setRoundEndDistanceOverrideDrafts] = useState<
@@ -7058,6 +7083,47 @@ export default function CombatRoundManagerPanel({
       : inspectorCombatTaskCommandType === "resolve_combat_task"
         ? "This Combat Task is no longer available to resolve."
         : undefined;
+  /**
+   * The canonical Item actions open in this round, and the GM command inputs they need — Forgejo
+   * issue #356. The action, its id and its status come from the projected canonical round state,
+   * never from a draft, so the GM can only ever issue the command the action's own status allows.
+   * `declared` must be reviewed first, exactly as the retiring panel's handler required.
+   */
+  const inspectorOpenCombatItemActions = roundState.genericActions.filter((action) =>
+    isOpenCombatItemAction(action),
+  );
+  const inspectorCombatItemAction =
+    !inspectorIsHistorical && selectedRoundIsActive
+      ? (inspectorOpenCombatItemActions.find(
+          (action) => action.id === selectedCombatItemActionId,
+        ) ?? inspectorOpenCombatItemActions[0])
+      : undefined;
+  const inspectorCombatItemActionParticipantOptions = roundState.participants.map((entry) => ({
+    label: entry.label,
+    participantId: entry.participantId,
+  }));
+  const inspectorCombatItemActionReviewDraft: CombatItemActionReviewDraft | undefined =
+    inspectorCombatItemAction
+      ? (combatItemActionReviewDrafts[inspectorCombatItemAction.id] ??
+        buildCombatItemActionReviewDraftFromAction(inspectorCombatItemAction))
+      : undefined;
+  const inspectorCombatItemActionResultDraft: CombatItemActionResultDraft | undefined =
+    inspectorCombatItemAction
+      ? (combatItemActionResultDrafts[inspectorCombatItemAction.id] ?? {
+          audience: [inspectorCombatItemAction.ownerParticipantId],
+          text: "",
+        })
+      : undefined;
+  const inspectorCombatItemActionPrimaryOperation = inspectorCombatItemAction
+    ? getCombatItemActionPrimaryOperation(inspectorCombatItemAction)
+    : undefined;
+  const inspectorCombatItemActionValidationMessage =
+    inspectorCombatItemActionPrimaryOperation === "review" && inspectorCombatItemActionReviewDraft
+      ? getCombatItemActionReviewValidationMessage(inspectorCombatItemActionReviewDraft)
+      : inspectorCombatItemActionPrimaryOperation === "resolve" &&
+          inspectorCombatItemActionResultDraft
+        ? getCombatItemActionResolveValidationMessage(inspectorCombatItemActionResultDraft)
+        : undefined;
   const inspectorActionValidationMessage =
     inspectorCurrentCommandType === "set_combat_experience_difficulty"
       ? inspectorCombatExperienceDifficultyValidationMessage
@@ -8224,6 +8290,47 @@ export default function CombatRoundManagerPanel({
         resolveInputsVisible={inspectorCombatTaskCommandType === "resolve_combat_task"}
       />
     ) : null;
+  /**
+   * Current action owns the Item action commands and their inputs, under the same M5/M6 split the
+   * Combat Task controls above follow: the review duration and the resolve command's player-safe
+   * text and audience are command inputs here, and the Item picker that declares the action lives
+   * in the Action Selector.
+   */
+  const inspectorCombatItemActionLifecycleControls =
+    inspectorCombatItemAction &&
+    inspectorCombatItemActionReviewDraft &&
+    inspectorCombatItemActionResultDraft &&
+    !inspectorIsInspectionOnly ? (
+      <CombatItemActionLifecycleControls
+        actions={inspectorOpenCombatItemActions}
+        disabled={saving || Boolean(inspectorSnapshot)}
+        onCancel={() => void invokeInspectorCombatItemActionLifecycle("cancel")}
+        onInterrupt={() => void invokeInspectorCombatItemActionLifecycle("interrupt")}
+        onPrimary={() =>
+          void invokeInspectorCombatItemActionLifecycle(
+            inspectorCombatItemActionPrimaryOperation ?? "review",
+          )
+        }
+        onResultChange={(change) =>
+          setCombatItemActionResultDrafts((current) => ({
+            ...current,
+            [inspectorCombatItemAction.id]: { ...inspectorCombatItemActionResultDraft, ...change },
+          }))
+        }
+        onReviewChange={(change) =>
+          setCombatItemActionReviewDrafts((current) => ({
+            ...current,
+            [inspectorCombatItemAction.id]: { ...inspectorCombatItemActionReviewDraft, ...change },
+          }))
+        }
+        onSelectAction={(actionId) => setSelectedCombatItemActionId(actionId)}
+        participantOptions={inspectorCombatItemActionParticipantOptions}
+        resultDraft={inspectorCombatItemActionResultDraft}
+        reviewDraft={inspectorCombatItemActionReviewDraft}
+        selectedAction={inspectorCombatItemAction}
+        validationMessage={inspectorCombatItemActionValidationMessage}
+      />
+    ) : null;
   const inspectorCriticalBleedTreatmentControls =
     selectedScenarioParticipant && !inspectorIsHistorical ? (
       <CriticalBleedTreatmentControls
@@ -8237,6 +8344,7 @@ export default function CombatRoundManagerPanel({
   const inspectorPreActionControls =
     inspectorLiveCombatTaskControls ||
     inspectorCombatTaskLifecycleControls ||
+    inspectorCombatItemActionLifecycleControls ||
     inspectorCriticalBleedTreatmentControls ||
     inspectorDefenseReviewControls ||
     inspectorMissileReadinessControls ||
@@ -8256,6 +8364,7 @@ export default function CombatRoundManagerPanel({
         {inspectorDeclarationProposal}
         {inspectorLiveCombatTaskControls}
         {inspectorCombatTaskLifecycleControls}
+        {inspectorCombatItemActionLifecycleControls}
         {inspectorCriticalBleedTreatmentControls}
         {inspectorCurrentActionOutcomeControls}
         {inspectorDefenseReviewControls}
@@ -9705,6 +9814,82 @@ export default function CombatRoundManagerPanel({
     } catch (caughtError) {
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to update the Combat Task.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /**
+   * The canonical GM Item action lifecycle — Forgejo issue #356, M7's client half.
+   *
+   * The declaration half is the existing `CombatItemInteractionPanel`, mounted by the Action
+   * Selector; this is the GM's `review` / `activate` / `resolve` side, plus the two finish
+   * commands. Every authorizing field comes from the projected canonical round state — the
+   * action's own id and the encounter's current revision — never from a draft, and the operation
+   * offered is the one the action's status allows. This adds no command, route, client function
+   * or domain type: `updateCombatItemInteractionOnServer` already accepts each of these
+   * operations, and `expectedItemRevision` stays exactly where M7 put it, on the declaration.
+   */
+  async function invokeInspectorCombatItemActionLifecycle(
+    operation: "review" | "activate" | "resolve" | "interrupt" | "cancel",
+  ) {
+    const action = inspectorCombatItemAction;
+    if (!action) {
+      setSaveError("This Item action is no longer available in this round.");
+      return;
+    }
+    const reviewDraft =
+      combatItemActionReviewDrafts[action.id] ?? buildCombatItemActionReviewDraftFromAction(action);
+    const resultDraft =
+      combatItemActionResultDrafts[action.id] ??
+      ({ audience: [action.ownerParticipantId], text: "" } satisfies CombatItemActionResultDraft);
+    if (operation === "review") {
+      const message = getCombatItemActionReviewValidationMessage(reviewDraft);
+      if (message) {
+        setSaveError(message);
+        return;
+      }
+    }
+    if (operation === "resolve") {
+      const message = getCombatItemActionResolveValidationMessage(resultDraft);
+      if (message) {
+        setSaveError(message);
+        return;
+      }
+    }
+    setSaving(true);
+    try {
+      const nextEncounter = await updateCombatItemInteractionOnServer({
+        actionId: action.id,
+        duration:
+          operation === "review" ? buildCombatItemActionReviewDuration(reviewDraft) : undefined,
+        encounterId: encounter.id,
+        expectedRevision: roundView.encounterRevision ?? encounter.updatedAt,
+        operation,
+        resultText: operation === "resolve" ? resultDraft.text.trim() : undefined,
+        visibleToParticipantIds: operation === "resolve" ? [...resultDraft.audience] : undefined,
+      });
+      const nextRoundState = combatRoundStateSchema.parse(nextEncounter.combatRoundState);
+      setRoundState(nextRoundState, nextEncounter.updatedAt);
+      setSelectedRoundNumber(nextRoundState.roundNumber);
+      onEncounterUpdated?.(nextEncounter);
+      setSaveError(undefined);
+      if (operation === "review") {
+        setCombatItemActionReviewDrafts((current) => {
+          const { [action.id]: _removed, ...rest } = current;
+          return rest;
+        });
+      }
+      if (operation === "resolve" || operation === "interrupt" || operation === "cancel") {
+        setCombatItemActionResultDrafts((current) => {
+          const { [action.id]: _removed, ...rest } = current;
+          return rest;
+        });
+      }
+    } catch (caughtError) {
+      setSaveError(
+        caughtError instanceof Error ? caughtError.message : "Unable to update the Item action.",
       );
     } finally {
       setSaving(false);
@@ -12714,6 +12899,29 @@ export default function CombatRoundManagerPanel({
                           declarationRecorded={Boolean(inspector.participant?.declaration)}
                           declarationIntent={inspectorDisplayDraft.declarationIntent}
                           distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
+                          itemInteractionControls={
+                            inspector.participant && !inspectorIsHistorical ? (
+                              <CombatItemInteractionPanel
+                                encounter={{
+                                  ...encounter,
+                                  combatRoundState: roundState,
+                                  updatedAt: roundView.encounterRevision ?? encounter.updatedAt,
+                                }}
+                                isGm
+                                onEncounterUpdated={(nextEncounter) => {
+                                  const nextRoundState = initializeCombatRoundState({
+                                    encounter: nextEncounter,
+                                  });
+                                  if (
+                                    acceptCanonicalEncounterState(nextEncounter, nextRoundState)
+                                  ) {
+                                    onEncounterUpdated?.(nextEncounter);
+                                  }
+                                }}
+                                participantId={inspector.participant.participantId}
+                              />
+                            ) : undefined
+                          }
                           movementId={inspectorDisplayDraft.movementId}
                           movementIntent={inspectorDisplayDraft.movementIntent}
                           onActionChange={(actionId) =>

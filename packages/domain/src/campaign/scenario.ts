@@ -1,6 +1,7 @@
 import { revealableEquipmentState } from "../equipment/itemFacts";
 import { z } from "zod";
 
+import { persistedArtifactAudienceSchema } from "./artifact";
 import { characterBuildSchema, type CharacterBuild } from "../character/build";
 import { deriveCharacterStatLayers } from "../character/statLayers";
 import { combatEffectsStateSchema } from "../encounter/combatEffects";
@@ -354,7 +355,20 @@ export const scenarioParticipantSchema = z.object({
     .optional(),
 });
 
+/**
+ * A persisted Campaign asset row, projected onto the two-state Artifact access
+ * model.
+ *
+ * `audience` is the **only** player-access authority here. Content authoring
+ * §18.24 settles the two canonical states, and the Product Owner ruling of
+ * 2026-09-26 (Forgejo #339) settles that the legacy `visibility` column carries
+ * no independent V1 player-access authority and must never broaden access
+ * beyond the resolved audience. `audience` is therefore parsed through the
+ * fail-closed {@link persistedArtifactAudienceSchema}: an absent, unrecognised
+ * or legacy value resolves to `gm_private`.
+ */
 export const campaignAssetSchema = z.object({
+  audience: persistedArtifactAudienceSchema,
   campaignId: idSchema,
   createdAt: timestampSchema,
   createdByUserId: idSchema,
