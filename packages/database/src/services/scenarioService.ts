@@ -242,8 +242,15 @@ export class ScenarioService {
         if (!asset || !asset.storageUrl.startsWith("artifact-internal:")) {
           throw new Error("Choose a secure Artifact from this Campaign.");
         }
-        if (reference.visibility === "players" && asset.visibility !== "visible_to_all") {
-          throw new Error("Reveal this Campaign asset before making it available to players.");
+        // The resolved two-state Artifact audience is the only player-access
+        // authority. The legacy `visibility` column has none, and must never
+        // broaden access beyond `audience` (content authoring §18.24; Product
+        // Owner ruling 2026-09-26, Forgejo #339). `asset.audience` is already
+        // fail-closed by `persistedArtifactAudienceSchema`.
+        if (reference.visibility === "players" && asset.audience !== "campaign") {
+          throw new Error(
+            "Share this Campaign Artifact with players before making it available to players.",
+          );
         }
         availableObjects.push({ ...reference, expectedHolderCharacterId: undefined });
         continue;
@@ -316,7 +323,9 @@ export class ScenarioService {
         if (
           !asset ||
           !asset.storageUrl.startsWith("artifact-internal:") ||
-          (input.viewerMode === "player" && asset.visibility !== "visible_to_all")
+          // Player-reachable projection: gated on the resolved audience only.
+          // See the equivalent gate in `replaceScenarioAvailableObjects`.
+          (input.viewerMode === "player" && asset.audience !== "campaign")
         ) {
           return [];
         }
