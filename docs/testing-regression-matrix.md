@@ -209,7 +209,7 @@ verified #363 (merged as PR #378). That change fixed the two
 baseline listed below. **Those two cases were stale assertions, not product failures**, and must
 no longer be presented as a baseline a lane may ignore.
 
-Two failures, both in the `apps/web/e2e/playwright.config.ts` project:
+Two failures, both driven by `apps/web/playwright.config.ts`, in specs under `apps/web/e2e`:
 
 | Spec                                      | Case                                                                              |
 | ----------------------------------------- | --------------------------------------------------------------------------------- |
@@ -217,8 +217,8 @@ Two failures, both in the `apps/web/e2e/playwright.config.ts` project:
 | `apps/web/e2e/artifacts.spec.ts:16`       | publishes a safe visual Artifact to entitled players without exposing GM controls |
 
 **The `apps/web/browser-tests/playwright.config.ts` project has zero pre-existing failures.**
-State that explicitly and positively — a lane must be able to read that **any** browser-tests
-failure is a real regression, rather than inferring it from an absence.
+Because it has none, any `apps/web/browser-tests` failure is a real regression and must be
+treated as one.
 
 **A lane is not accountable for these two; it is accountable for not adding a
 third.**
