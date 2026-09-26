@@ -366,7 +366,10 @@ Possible live actions:
 context's obvious recipients — because recognition is Character-scoped
 ([Content authoring §18.28](content-authoring-scenario-preparation-and-artifact-management.md#1828-persistent-player-facing-knowledge-is-character-scoped)).
 Whether it also produces a `person_identity_revealed` Activity entry
-([section 9](#9-historical-activity)) is the open decision at
+([section 9](#9-historical-activity)) is **settled, 2026-09-26**: only a
+disclosure shared with the complete intended participating audience does, and a
+disclosure to a subset is recorded in those Characters' Knowledge Libraries only
+—
 [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
 
 The Person Inspector is also a capture surface for a
@@ -570,11 +573,14 @@ Two rules bear repeating because they govern this surface directly:
   a change during preparation is not.
 - **`person_identity_revealed` snapshots player-safe before/after text labels,
   not images.**
-- **Its audience is unsettled.** Recognition is Character-scoped, and Activity is
-  one shared player-safe record; **whether and how a recognition reaching only
-  some Characters enters it is an open product decision** at
+- **Its audience is settled, 2026-09-26.** Recognition is Character-scoped, and
+  Activity is one shared player-safe record; **the event is emitted only when the
+  disclosure is shared with the complete intended participating audience**, and a
+  disclosure reaching only a subset is recorded in those Characters' Knowledge
+  Libraries and produces no shared identity event —
   [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
-  **A lane that would persist or project this event stops and returns it.**
+  **A lane that persists or projects this event proceeds under that rule; it no
+  longer stops and returns it.**
 - **A GM Story Event the GM publishes as shared history is player-safe Activity**
   ([Content authoring §18.33](content-authoring-scenario-preparation-and-artifact-management.md#1833-gm-story-events));
   one the GM does not publish is not. **Character-private Discoveries and private

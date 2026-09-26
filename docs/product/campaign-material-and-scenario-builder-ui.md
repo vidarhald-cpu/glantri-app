@@ -74,7 +74,9 @@ It is where the GM:
 - handles unattached, fallback, missing or unresolved material
   ([section 2.6](#26-unattached-and-exception-material));
 - **reuses existing canonical content rather than recreating it**, per
-  [Content authoring §5](content-authoring-scenario-preparation-and-artifact-management.md#5-reuse-first).
+  [Content authoring §5](content-authoring-scenario-preparation-and-artifact-management.md#5-reuse-first);
+- runs the **one create/import intake session** for new material
+  ([section 2.8](#28-the-create-and-import-entry-point)).
 
 Artifact identity, associations and provenance are governed by
 [Content authoring §3](content-authoring-scenario-preparation-and-artifact-management.md#3-one-artifact-system),
@@ -131,22 +133,29 @@ appropriate:
 
 These negative boundaries carry the same weight as the scope above.
 
-| Campaign Material must not become                             | Canonical home instead                                              |
-| ------------------------------------------------------------- | ------------------------------------------------------------------- |
-| A duplicate **Character** editor                              | The canonical Character screens                                     |
-| A duplicate **Item**, **inventory** or **progression** editor | The canonical Item/Character screens                                |
-| A duplicate **Combat** editor                                 | The Combat surfaces                                                 |
-| An **image editor** or **drawing tool**                       | Out of scope                                                        |
-| A **map editor**                                              | Out of scope                                                        |
-| A **rich page-layout system**                                 | Out of scope                                                        |
-| A **Scenario reveal-planning** surface                        | [Scenario Builder §7.7](#77-reveal-planning-prepares-play-executes) |
-| An **Encounter operation** surface                            | [Live GM Scenario Play](live-gm-scenario-play.md)                   |
-| A **Storyline editor**                                        | [Campaign Storylines](campaign-storylines.md)                       |
+| Campaign Material must not become                             | Canonical home instead                                                                         |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| A duplicate **Character** editor                              | The canonical Character screens                                                                |
+| A duplicate **Item**, **inventory** or **progression** editor | The canonical Item/Character screens                                                           |
+| A duplicate **Combat** editor                                 | The Combat surfaces                                                                            |
+| An **image editor** or **drawing tool**                       | Out of scope                                                                                   |
+| A **Map spatial editor** or drawing tool                      | Out of scope; spatial authoring is [Maps / Spatial Play](../architecture/maps-spatial-play.md) |
+| A **rich page-layout system**                                 | Out of scope                                                                                   |
+| A **Scenario reveal-planning** surface                        | [Scenario Builder §7.7](#77-reveal-planning-prepares-play-executes)                            |
+| An **Encounter operation** surface                            | [Live GM Scenario Play](live-gm-scenario-play.md)                                              |
+| A **Storyline editor**                                        | [Campaign Storylines](campaign-storylines.md)                                                  |
 
 The standing prohibition **"do not build a general-purpose knowledge-management
 system"**
 ([People/Artifact model §10](people-artifact-and-gm-authoring-model.md#10-gm-campaign-material))
 continues to govern this surface unchanged.
+
+**Amended 2026-09-26.** The Map boundary above means **spatial authoring** —
+placing markers, arranging geometry, drawing. It does **not** prohibit **creating a
+Map object and staging its layers** through
+[section 2.8](#28-the-create-and-import-entry-point); that is content intake, and
+the Map's spatial surface remains owned by
+[Maps / Spatial Play](../architecture/maps-spatial-play.md).
 
 ### 2.4 Artifact access is Campaign-level and current
 
@@ -242,6 +251,59 @@ other homogeneous association or material operations.
 
 > **Do not create a heterogeneous generic bulk editor, and do not create a broad
 > bulk-delete workflow.**
+
+**Amended 2026-09-26.** This boundary concerns **bulk actions over accepted
+canonical material**. It does **not** restrict batch classification, bulk defaults
+or per-entry overrides **inside the staging shell**, which are required by
+[Content authoring §18.40](content-authoring-scenario-preparation-and-artifact-management.md#1840-batch-intake-is-first-class).
+Staged state and canonical state remain distinct, per
+[section 2.6](#26-unattached-and-exception-material).
+
+### 2.8 The Create and Import entry point
+
+**Added 2026-09-26.** **Authority:** Product Owner ruling of 2026-09-26.
+**Authorizes no implementation**, and **enables no new importable type**.
+
+> **The primary GM-facing content-intake entry point is the Campaign Material
+> surface, through an obvious action such as `+ Create / Import`.**
+
+It may offer:
+
+- upload files;
+- import a package;
+- create native text ([section 4](#4-native-text-artifacts));
+- create a Person/NPC;
+- create an Item;
+- create a Map;
+- add representations or layers to existing material.
+
+> **Campaign Material is the workbench, not the canonical owner of every object.**
+> Accepted content continues to belong to its owning domain, exactly as
+> [section 2.2](#22-domain-objects-versus-artifacts) already requires.
+
+**Contextual entry points reuse the same machinery.** `Map -> Add layer`,
+`Person -> Add portrait` and `Scenario Builder -> Add material` invoke the **same**
+intake process with context pre-filled.
+
+> **One engine, many context-prefilled entry points. Do not create independent
+> ingestion implementations behind each button.**
+
+The engine, the shared staging shell, the typed per-domain controls and the batch
+behaviour are governed by
+[Content authoring §18.38](content-authoring-scenario-preparation-and-artifact-management.md#1838-one-intake-session-for-many-kinds-of-material)
+through
+[§18.40](content-authoring-scenario-preparation-and-artifact-management.md#1840-batch-intake-is-first-class),
+over the one pipeline of
+[§2](content-authoring-scenario-preparation-and-artifact-management.md#2-the-one-pipeline-already-exists).
+**The enabled importable set is unchanged** —
+[§11.5](content-authoring-scenario-preparation-and-artifact-management.md#115-importable-domain-types).
+
+**The underlying create, import, stage and validate operations must not be
+architected as intrinsically GM-only**, even though this surface is the GM's —
+[§18.44](content-authoring-scenario-preparation-and-artifact-management.md#1844-content-production-capability-is-actor-neutral).
+
+**Offering `create a Map` here does not make Campaign Material a Map editor**
+([section 2.3](#23-scope-boundaries--what-campaign-material-must-not-become)).
 
 ---
 
@@ -584,14 +646,16 @@ and a Character recognizing a Person are different things that happened, and the
 are recorded as different event kinds. `person_identity_revealed` records a
 mid-play transition from unidentified to identified.
 
-> **Whose history it is, is an open product decision.** Recognition is now
+> **Whose history it is, is settled, 2026-09-26.** Recognition is
 > Character-scoped ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)),
 > so a recognition reaching only some Characters cannot be written as shared
-> party history without leaking. **Whether and how such a transition enters the
-> one shared Activity record is unsettled** and is recorded at
+> party history without leaking. **The event is therefore written only when the
+> disclosure is shared with the complete intended participating audience**; a
+> disclosure to one Character or a subset is recorded in those Characters'
+> Knowledge Libraries and produces no shared identity event —
 > [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
-> A lane that would persist or project it **stops and returns that decision.**
-> Everything else in this section stands.
+> **A lane that persists or projects it proceeds under that rule; it no longer
+> stops and returns the decision.** Everything else in this section stands.
 
 **Its payload snapshots the resolved player-safe label
 ([section 3.1](#31-the-canonical-presentation-label-and-texts)) immediately
@@ -754,11 +818,25 @@ recognition state at publication time**
 the Scenario overlay and canonical fallback of
 [section 7.1](#71-the-resolution-rule) applied to that state.
 
-> **Which Character's recognition state resolves one shared announcement label is
-> the same open question as the recognition event's audience**, recorded at
+> **Settled, 2026-09-26. Authority: Product Owner.** Which label one shared
+> announcement carries is no longer an open question, and **no lane stops on it.**
+> It is the audience-wide counterpart of the recognition-event rule at
 > [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
-> **The rule below is unaffected and holds in every case**: the announcement must
-> not expose canonical identity to a viewer not entitled to it.
+>
+> - **A shared `scenario_announcement` resolves and snapshots the most specific
+>   speaker label that is player-safe for _every_ Character in the intended
+>   audience at publication time.**
+> - **Do not select one Character's recognition state as authoritative.**
+> - **If not every recipient is entitled to the identified label, the common
+>   unidentified/general label is used** —
+>   [section 3.1](#31-the-canonical-presentation-label-and-texts).
+> - **If the GM explicitly discloses the canonical identity to all recipients
+>   first, the identified label may then be used.**
+>
+> **The text-snapshot rule below is preserved unchanged**: later recognition
+> never rewrites historical announcements. **The safety rule below is unaffected
+> and holds in every case**: the announcement must not expose canonical identity
+> to a viewer not entitled to it.
 
 **An unidentified Person must not expose canonical identity through the Activity
 projection.** The canonical Person relation carried by the event may remain

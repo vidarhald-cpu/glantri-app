@@ -606,6 +606,17 @@ set is therefore **Artifact and Item**, and per-domain opt-in is governed by
 
 The existence of the generic registry does not authorize any other importer.
 
+**Amended 2026-09-26.** The Product Owner ruling of 2026-09-26 records a **Map
+package direction** — a semantic manifest plus one or more visual layer files — at
+[Content authoring §18.41](../product/content-authoring-scenario-preparation-and-artifact-management.md#1841-map-intake--identity-layer-choice-and-eligibility).
+
+> **The Map importer remains not enabled.**
+
+That direction also requires the outer envelope to stay **capable** of later
+carrying Person representations, Items, Artifacts, Maps and layers, and
+Scenario-related material. **Capability is not enablement**, and no work is
+blocked on designing an ultimate universal package format.
+
 ---
 
 # 14. Reference model
@@ -1152,6 +1163,11 @@ The GM may accept a valid Artifact-only subset if the Map is optional and the re
 
 **Maps remain outside #119 import authority.**
 
+**Unchanged 2026-09-26.** The Map package direction recorded at
+[Content authoring §18.41](../product/content-authoring-scenario-preparation-and-artifact-management.md#1841-map-intake--identity-layer-choice-and-eligibility)
+does **not** enable a Map importer, and this example still holds exactly as
+written.
+
 ---
 
 ## 20.9 Attempted runtime mutation
@@ -1226,6 +1242,13 @@ Those belong to Maps/Spatial Play.
 Replacing or revising a background Artifact does not make the Artifact itself an interactive Map.
 
 Map import is not enabled by AM1.
+
+**Amended 2026-09-26.** Layers remain Maps/Spatial Play's concern, and the layer
+model is now explicitly **visual as well as organizational** —
+[Maps / Spatial Play §8.1](maps-spatial-play.md#81-layers-carry-visual-representations).
+Each V1 Map layer corresponds to **one visual Artifact representation**, so a Map's
+layers are Artifacts the Map references. **That moves no layer semantics into
+Artifact Management, and it does not enable Map import.**
 
 ---
 

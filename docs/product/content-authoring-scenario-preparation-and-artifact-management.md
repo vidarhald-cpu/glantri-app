@@ -581,13 +581,14 @@ absence. This protects hand-authored GM work against a regenerated batch.
 
 Current enabled state:
 
-| Type                                        | Status                                              |
-| ------------------------------------------- | --------------------------------------------------- |
-| Artifact                                    | **Enabled** (AM1)                                   |
-| Item                                        | **Enabled** (#271)                                  |
-| Scenario GM Plan update                     | Not enabled — requires its owning lane to enable it |
-| Encounter / planning note                   | Not enabled — requires its owning lane to enable it |
-| Map, Story, Character/NPC, any other domain | Not enabled — explicit opt-in only                  |
+| Type                                   | Status                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Artifact                               | **Enabled** (AM1)                                                                                             |
+| Item                                   | **Enabled** (#271)                                                                                            |
+| Scenario GM Plan update                | Not enabled — requires its owning lane to enable it                                                           |
+| Encounter / planning note              | Not enabled — requires its owning lane to enable it                                                           |
+| Map / Map layer                        | **Not enabled** — direction only, at [section 18.41](#1841-map-intake--identity-layer-choice-and-eligibility) |
+| Story, Character/NPC, any other domain | Not enabled — explicit opt-in only                                                                            |
 
 The typed registry in
 [Artifact Management §13](../architecture/artifact-management-package-import.md#13-typed-object-registry)
@@ -595,6 +596,15 @@ continues to govern what an owning domain must define before its type is
 enabled: what may be imported, required validation, legal references, legal
 creation and update semantics, conflict handling, permissions and lifecycle
 consequences.
+
+**Amended 2026-09-26.** The multi-domain intake direction of
+[section 18.38](#1838-one-intake-session-for-many-kinds-of-material) and the Map
+package direction of
+[section 18.41](#1841-map-intake--identity-layer-choice-and-eligibility) are
+**future/target architecture**.
+
+> **They widen no enabled set, expand no current slice, authorize no
+> implementation, and do not change the table above.**
 
 ### 11.6 Visibility: everything begins GM-private
 
@@ -623,6 +633,11 @@ Bulk intake provides:
 - spot review of sampled entries;
 - exception review of the entries that need a decision;
 - **partial acceptance**, as defined below.
+
+**Amended 2026-09-26.** The batch requirements — a staging UI designed for dozens
+of entries, multi-file and package upload, batch classification, bulk defaults with
+per-entry overrides, and one explicit commit of the selected validated batch — are
+recorded at [section 18.40](#1840-batch-intake-is-first-class).
 
 ### 12.1 Partial acceptance means pre-commit selection
 
@@ -1182,13 +1197,17 @@ player-safe/privacy-projected semantics, the classification
 applies to adding an announcement event type. **This section settles the product
 decision; it authorizes no implementation.**
 
-> **Amended, 2026-09-26: this event's recipient scope is no longer settled.** The
-> earlier reading that `person_identity_revealed` records a **shared-party**
-> transition assumed party-wide recognition, which
+> **Amended, 2026-09-26: this event's recipient scope is settled.** The earlier
+> reading that `person_identity_revealed` records a **shared-party** transition
+> assumed party-wide recognition, which
 > [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
-> supersedes. **Whether and how a Character-scoped recognition transition enters
-> the one shared Activity record is an open product decision**, recorded at
+> supersedes. **The event is written only when the identity disclosure is shared
+> with the complete intended participating audience**; a disclosure reaching only
+> a subset is recorded in those Characters' Knowledge Libraries and emits no
+> shared identity event —
 > [section 18.37](#1837-character-scoped-knowledge-and-the-shared-activity-record).
+> **The intermediate record of that question as an open product decision, of the
+> same date, is superseded, and no lane stops on it.**
 > **Everything else in this section stands**: the event kind is distinct from
 > `scenario_announcement`, preparation-state edits produce no Activity, the
 > payload is text-identity-only, and the lane is floor-class.
@@ -1968,12 +1987,13 @@ were created**.
 
 ### 18.37 Character-scoped knowledge and the shared Activity record
 
-**Status:** **RECORDED AS AN OPEN PRODUCT DECISION, 2026-09-26.**
-**Authority:** Product Owner rulings of 2026-09-26 create it; **no option is
-chosen.** **Gates:** the lane that would persist or project a recognition
-transition, and nothing else.
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner ruling
+of 2026-09-26. It **supersedes the earlier record of this section, of the same
+date, as an open product decision with no option chosen.** **Gates:**
+**nothing.** A lane that persists or projects a recognition transition
+**proceeds under the rule below**; it no longer stops and returns this decision.
 
-Two settled rules now meet:
+Two settled rules meet here:
 
 - **Activity is one shared player-safe narrative record** of what happened, and
   the exclusive source for a session recap —
@@ -1982,18 +2002,49 @@ Two settled rules now meet:
 - **Recognition and knowledge are Character-scoped** —
   [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped).
 
-**A recognition transition that reaches only some Characters therefore cannot be
-written as shared party history without leaking**, which
-[section 18.35](#1835-the-session-recap-privacy-boundary) forbids. The same
-tension applies to the resolved speaker label a published announcement carries
-([Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement)),
-which is currently resolved once from party recognition state.
+**A recognition transition that reaches only some Characters cannot be written as
+shared party history without leaking**, which
+[section 18.35](#1835-the-session-recap-privacy-boundary) forbids. That is the
+tension this ruling resolves.
 
-**Options, none chosen and none ranked:**
+**What is ruled:**
 
-1. **`person_identity_revealed` is written only when the recognition is a shared
-   disclosure** to all of the Scenario's participating player Characters, and a
-   narrower disclosure produces no Activity entry.
+> **`person_identity_revealed` is a shared Activity event only when the identity
+> disclosure itself is shared with the complete intended participating
+> audience.**
+
+> **Recognition disclosed only to one Character, or to a subset of Characters, is
+> recorded in those Characters' Knowledge Libraries and produces no shared
+> Activity identity event.**
+
+> **Shared Activity represents shared narrative knowledge. Character-private
+> recognition must not leak into it, nor into the shared recap source** —
+> [section 18.35](#1835-the-session-recap-privacy-boundary).
+
+> **If recognition later becomes publicly disclosed to the full intended
+> audience, that public transition may emit `person_identity_revealed`.**
+
+**The escape valve is the GM's explicit Story Event.** If a private recognition
+matters narratively, the GM may record a Story Event
+([section 18.33](#1833-gm-story-events)), which becomes player-safe Activity and
+recap input. That is the **only** route by which a subset disclosure enters
+shared history, and it is a **deliberate GM act**, never an automatic
+consequence of a disclosure.
+
+> **Activity is not a generic visibility log.** Do not emit an Activity entry per
+> recipient, per viewer, or per private disclosure.
+
+**This is option 1 below, taken as the rule**, together with the
+later-public-transition clause. **Nothing here authorizes implementation**; the
+`person_identity_revealed` lane remains floor-class —
+[section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+
+**The options that were considered, retained as provenance. Option 1 is the one
+chosen; the other three are neither ranked nor rejected:**
+
+1. **CHOSEN.** **`person_identity_revealed` is written only when the recognition
+   is a shared disclosure** to all of the Scenario's participating player
+   Characters, and a narrower disclosure produces no Activity entry.
 2. **The event carries its recipient Characters** and Activity projection filters
    it per viewer, under
    [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules).
@@ -2004,14 +2055,350 @@ which is currently resolved once from party recognition state.
    only the GM's explicit Story Event
    ([section 18.33](#1833-gm-story-events)).
 
-**Until this is settled, a lane that would persist or project a recognition
-Activity entry stops and returns the decision**, exactly as
-[People/Artifact model §15](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen)
-requires. **Nothing else in
+**The resolved speaker label a published announcement carries** is settled
+separately and consistently, by the Product Owner ruling of 2026-09-26 recorded
+at
+[Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement):
+a shared announcement resolves the most specific label player-safe for **every**
+Character in the intended audience, rather than taking one Character's
+recognition state as authoritative.
+
+**This rule is applied to Map-Layer disclosure**, with no decision of its own, at
+[Maps and spatial play §9.11](../architecture/maps-spatial-play.md#911-map-disclosure-and-the-shared-activity-record).
+
+**Nothing in
 [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
 through [section 18.36](#1836-capture-in-context-retrieve-through-context) is
-gated on it**, including the Knowledge Library, Discoveries, notes, the People
-identity model and the retrieval principle.
+gated on this section**, and nothing ever was — the Knowledge Library,
+Discoveries, notes, the People identity model and the retrieval principle all
+stand unchanged.
+
+---
+
+### 18.38 One intake session for many kinds of material
+
+**Status:** **SETTLED FOR V1 as product direction, 2026-09-26.** **Authority:**
+Product Owner. **Extends:** [section 2](#2-the-one-pipeline-already-exists) and
+[section 11](#11-the-general-authoring-package). **Gates:** nothing, and **it
+enables no new importable type** — [section 11.5](#115-importable-domain-types)
+still governs that.
+
+> **Glantri should support one coherent create/import session containing many
+> domain types.**
+
+The GM may receive one AI-produced package containing Person/NPC material;
+portraits; Items; Item illustrations; Map base and overlay layers; letters and
+documents; other Artifacts; Scenario associations; and provenance/context.
+
+**The GM should be able to import the package once, review the entire proposed
+batch, correct the exceptions, and accept the selected material.**
+
+> **Do not require the GM to navigate to separate domain screens and run a
+> separate upload workflow for every piece.**
+
+**This is direction, not authorization.** The **enabled** importable set remains
+**Artifact and Item**. A domain type becomes importable **only when its owning
+implementation lane explicitly enables and validates it**, and nothing here
+widens that set, expands a current slice or authorizes implementation.
+
+The outer envelope should nevertheless remain **capable** of later carrying Person
+representations, Items, Artifacts, Maps and layers, Scenario-related material and
+other approved domains. **Capability is not enablement**, and **no Map intake work
+is blocked on designing an ultimate universal package format** —
+[section 18.41](#1841-map-intake--identity-layer-choice-and-eligibility) may
+establish the first strong typed multi-entry package pattern.
+
+### 18.39 Shared intake shell, typed domain editors
+
+**Status:** **SETTLED FOR V1 as product direction, 2026-09-26.** **Authority:**
+Product Owner. **Extends:** [section 2](#2-the-one-pipeline-already-exists).
+**Gates:** nothing. **Introduces no new role vocabulary.**
+
+Two shapes are prohibited:
+
+| Prohibited                                                       | Why                                                                                                         |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| **One completely separate upload system per domain**             | It multiplies the single pipeline that [section 2](#2-the-one-pipeline-already-exists) says already exists. |
+| **One lowest-common-denominator generic editor for all domains** | It loses the typed semantics each domain needs in order to validate.                                        |
+
+> **Use one shared intake/staging shell with type-specific editors and controls
+> inside it.**
+
+Illustrative type-specific controls:
+
+| Type         | Controls                                                                                              |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| **Map**      | target Map; layer role; order; player-safe or GM-only; optional opacity                               |
+| **Person**   | target Person; general, identified or additional representation role; identity/presentation semantics |
+| **Item**     | physical-Item semantics; representation role; Item-specific fields                                    |
+| **Artifact** | native text or media; access; associations; provenance                                                |
+
+The Person roles are the existing vocabulary of
+[section 4.2](#42-the-v1-association-role-vocabulary-for-a-person); the Item roles
+are [section 4.3](#43-the-v1-association-role-vocabulary-for-an-item) and
+[section 18.25](#1825-item-representation-roles); the Map layer semantics are
+[Maps / Spatial Play §8.1](../architecture/maps-spatial-play.md#81-layers-carry-visual-representations).
+
+**Contextual entry points reuse the same machinery.**
+[Section 2](#2-the-one-pipeline-already-exists) already records that there is one
+import system with several contextual entry points; the 2026-09-26 ruling adds the
+named examples and the hard principle:
+
+- `Map -> Add layer` — target Map preselected;
+- `Person -> Add portrait` — target Person and likely role preselected;
+- `Scenario Builder -> Add material` — Scenario association preselected.
+
+> **One engine, many context-prefilled entry points. Do not create independent
+> ingestion implementations behind each button.**
+
+The GM-facing entry point is
+[Campaign Material and Scenario Builder §2.8](campaign-material-and-scenario-builder-ui.md#28-the-create-and-import-entry-point).
+
+### 18.40 Batch intake is first-class
+
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner.
+**Extends:** [section 12](#12-bulk-intake-and-review). **Preserves:**
+[section 12.1](#121-partial-acceptance-means-pre-commit-selection) exactly.
+**Gates:** nothing.
+
+> **The staging UI must be designed for dozens of files and material entries, not
+> one file at a time.**
+
+It must support multi-file upload; package upload; batch classification; bulk
+defaults; **per-entry overrides**; bulk association where appropriate;
+deselection; and **one explicit commit of the selected validated batch**.
+
+Example batch defaults: Campaign; Scenario; default access; provenance and source
+— the package-default inheritance of
+[section 11.3](#113-package-defaults-and-automated-association).
+
+> **The GM must be able to apply defaults to many entries and refine the
+> exceptions individually.**
+
+**The canonical pipeline is unchanged:**
+
+> **stage -> validate -> preview/review -> explicit accept**
+
+**External packages and AI-provided semantic context are proposals, not commands.**
+The GM may edit the proposed type, target, role, associations, access, layer order
+and other type-specific semantics **before** acceptance.
+
+> **No AI or package import may silently reveal content, overwrite canonical
+> identity, merge Persons, replace a Map, or attach to an ambiguous existing
+> object.**
+
+Each clause is already carried by an existing rule. It is gathered here only
+because a batch UI is where such rules are most easily lost:
+
+| Clause                             | Existing rule                                                                                                                                                                                                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| never silently reveal              | [section 11.6](#116-visibility-everything-begins-gm-private)                                                                                                                                                                                                               |
+| never overwrite canonical identity | [Artifact Management §16.1](../architecture/artifact-management-package-import.md#161-name-equality-is-not-identity-equality) and [INV-IMP-02](../architecture/artifact-management-package-import.md#inv-imp-02--package-authority-is-weaker-than-target-domain-authority) |
+| never merge                        | [Artifact Management §16.5](../architecture/artifact-management-package-import.md#165-generic-merge-prohibited)                                                                                                                                                            |
+| never replace a Map                | [section 18.41](#1841-map-intake--identity-layer-choice-and-eligibility)                                                                                                                                                                                                   |
+| never attach ambiguously           | **Never guess** — [section 11.3](#113-package-defaults-and-automated-association)                                                                                                                                                                                          |
+
+**Partial acceptance is unchanged and is not reopened here.**
+[Section 12.1](#121-partial-acceptance-means-pre-commit-selection) already settles
+it: partial acceptance means **deselect before commit**, the selected set must
+validate **as a whole**, and the selected entries commit **atomically**. **A
+best-effort half-package remains prohibited.**
+
+### 18.41 Map intake — identity, layer choice and eligibility
+
+**Status:** **SETTLED FOR V1 as product direction, 2026-09-26.** **Authority:**
+Product Owner. **Gates:** nothing, and **it does not enable a Map importer** —
+[section 11.5](#115-importable-domain-types) and
+[Artifact Management §13](../architecture/artifact-management-package-import.md#13-typed-object-registry) still govern that. The
+Map domain model is [Maps / Spatial Play](../architecture/maps-spatial-play.md).
+
+**A Map package may carry** a semantic manifest or context and one or more visual
+files — conceptually `old-gatehouse.glantri-map.zip` holding a manifest, a base
+image, optional overlay layers and optional GM-only layers.
+
+The manifest **may propose** a stable external or source identity; a Map title;
+layer names; layer roles; order; player-safe or GM-only status; and optional
+provenance. **Exact serialization and schema remain an implementation concern**
+except where already controlled by
+[Artifact packages and library](../architecture/artifact-package-format.md).
+
+#### New Map versus existing Map
+
+**Names are not identity** — [section 11.2](#112-identity) and
+[Artifact Management §16.1](../architecture/artifact-management-package-import.md#161-name-equality-is-not-identity-equality).
+
+- Import may target an **existing** Map automatically **only** when the package
+  carries an **exact trusted stable identifier** originating from Glantri or
+  another explicitly trusted identity mechanism.
+- Otherwise a package **may suggest** a possible match, and **the human chooses**
+  `Create new` or selects an existing target.
+
+> **Never fuzzy-match canonical identity from a title or a name alone.**
+
+#### Adding versus replacing a layer
+
+During staging the GM must **explicitly** choose whether an incoming image
+**replaces the representation of an existing layer** or **creates a new layer**.
+
+> **Do not infer this from filenames.**
+
+The knowledge consequence is the hard rule of
+[Maps / Spatial Play §8.2](../architecture/maps-spatial-play.md#82-replacement-versus-new-knowledge):
+**replacement means the same knowledge; a new layer means new information.**
+
+#### Player-safe is not disclosed
+
+**Importing a player-safe layer discloses it to no Character**, and GM-only layers
+remain **ineligible** for Character disclosure until the GM explicitly
+reclassifies them —
+[Maps / Spatial Play §9.8](../architecture/maps-spatial-play.md#98-player-safe-eligibility-is-not-disclosure).
+This is the Map form of
+[section 11.6](#116-visibility-everything-begins-gm-private).
+
+#### Intake packages do not define live state
+
+Ordinary Map and content packages must **not** encode current Character positions;
+NPC positions; Item placements; or current Encounter state.
+
+> **Those are live contextual state, not reusable content** —
+> [Maps / Spatial Play §7.6](../architecture/maps-spatial-play.md#76-placement-state-is-normally-transient).
+
+A later, richer Scenario package **may** propose such preparation. **Ordinary Map
+intake remains reusable content intake**, and a package that carries placements
+does not thereby establish them, nor grant any Character knowledge
+([Maps / Spatial Play §9.7](../architecture/maps-spatial-play.md#97-how-a-character-acquires-map-knowledge)).
+
+#### Provenance is preserved and mostly derived
+
+Lightweight provenance — uploaded or imported by; import batch and source;
+original filename; package or source ID; creator/author where supplied; revision
+history — is already specified by [section 6](#6-provenance) and
+[Artifact Management §18](../architecture/artifact-management-package-import.md#18-provenance-and-import-record). **Most
+operational metadata is derived by Glantri rather than demanded from the external
+tool** ([section 18.42](#1842-external-tools-supply-semantics-glantri-derives-technical-metadata)).
+
+### 18.42 External tools supply semantics; Glantri derives technical metadata
+
+**Status:** **CONFIRMED AND EXTENDED, 2026-09-26.** **Authority:** Product Owner.
+**Already recorded at:**
+[AI-assisted intake, The division of labour](ai-assisted-artifact-intake.md#the-division-of-labour).
+**Gates:** nothing.
+
+> **External tools describe meaning; Glantri derives technical file metadata
+> itself.**
+
+An AI conversation or external tool must **not be required** to supply SHA-256
+digests; dimensions; MIME metadata; internal database IDs; generated timestamps;
+or any other technical metadata Glantri can compute from the files. **Where
+Glantri needs a hash or checksum internally, Glantri computes it during
+staging.**
+
+This is existing recorded behaviour: the intake format "has no place to supply
+one, and the schema rejects any attempt to add one", and the preview shows the
+derived media type, byte size, SHA-256 and storage identity **as confirmation that
+the GM never had to supply any of it**
+([AI-assisted intake, What the preview shows](ai-assisted-artifact-intake.md#what-the-preview-shows)). The
+2026-09-26 ruling **extends it to Maps and to multi-type packages**
+([section 18.38](#1838-one-intake-session-for-many-kinds-of-material)), and
+**supersedes any workflow that requires a human or an ordinary AI conversation to
+substitute checksums by hand before import.**
+
+#### The boundary this ruling does not cross
+
+> **This is a requirement on the human and ordinary-AI-conversation workflow. It
+> is NOT a licence to weaken the machine package format's digest validation.**
+
+**Every digest check in [Artifact packages and library](../architecture/artifact-package-format.md) and
+[Artifact Management §15.1](../architecture/artifact-management-package-import.md#151-parse-and-integrity-validation) remains in
+force and continues to fail closed.** A machine-authored package that declares a
+`sha256` per resource **is held to it**, and an incorrect digest fails the import.
+That is a **security control on a floor-class surface** — the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) — and it is unchanged.
+
+The two coexist exactly as
+[AI-assisted intake, The advanced entry point](ai-assisted-artifact-intake.md#the-advanced-entry-point)
+already records: the authored-package route **remains available for package-shaped
+work** and is **not a prerequisite** for ordinary intake.
+
+> **A lane that finds itself about to remove or soften a fail-closed digest check
+> in the name of this ruling has misread it, and stops.**
+
+### 18.43 The ordinary AI conversation workflow
+
+**Status:** **RECORDED AS AN EXPLICIT USABILITY OBJECTIVE, 2026-09-26.**
+**Authority:** Product Owner. **Already recorded in substance at:**
+[AI-assisted Artifact and Item intake](ai-assisted-artifact-intake.md). **Gates:** nothing.
+
+> **A user should be able to use an ordinary AI conversation to create images, a
+> semantic manifest or context, and optionally one package or archive, then upload
+> that result directly into Glantri's intake workbench.**
+
+The workflow must **not require** a Codex or Builder thread; repository access;
+manual checksum calculation; knowledge of Glantri database IDs; or manual package
+surgery. **Glantri stages, validates, derives metadata and asks for explicit human
+acceptance.**
+
+This restates the standing #271 objective — "no developer tooling, no checksums,
+no manifests and no repository access" — as a **product usability objective every
+intake surface is measured against**, including the Map and multi-type direction of
+[section 18.38](#1838-one-intake-session-for-many-kinds-of-material).
+
+### 18.44 Content-production capability is actor-neutral
+
+**Status:** **SETTLED FOR V1 as an architectural constraint, 2026-09-26.**
+**Authority:** Product Owner. **Extends:**
+[Artifact Management §21.5](../architecture/artifact-management-package-import.md#215-ai-and-player-authoring). **Gates:**
+nothing, and **it exposes no player-facing authoring tool.**
+
+> **Content-production operations must not be architected as intrinsically
+> GM-only.**
+
+Campaign Material remains the **primary GM workbench**
+([Campaign Material and Scenario Builder §2](campaign-material-and-scenario-builder-ui.md#2-campaign-material--role)),
+but the underlying **create, import, stage and validate** operations should be
+**reusable and permission-driven**.
+
+Foreseeable future player use cases include henchmen; properties; portraits;
+player-created Maps; Items; and other player-authored material. **V1 need not
+expose any of them.**
+
+> **Hard principle: same canonical create/import machinery; different authority
+> and ownership scopes.**
+
+> **The architecture must not require duplicating the content engine later merely
+> because the first UI was built for a GM.**
+
+**What this does not change.**
+[Artifact Management PO-3](../architecture/artifact-management-package-import.md#po-3--player-artifact-creationsubmission) and
+[§9.3](../architecture/artifact-management-package-import.md#93-player-authority-in-v1) still govern player authority in V1, and
+[Maps / Spatial Play M3](../architecture/maps-spatial-play.md#m3--player-authored-markers) remains **deferred**.
+This section constrains **how the engine is built**, not **who may use it
+today**.
+
+### 18.45 Maps and intake under narrative freedom
+
+**Status:** **CROSS-REFERENCE ONLY, 2026-09-26.** **Authority:** Product Owner.
+**Amends:** nothing. **Authorizes:** nothing.
+
+The controlling principle is
+[section 18.27](#1827-narrative-freedom--content-management-serves-the-story) —
+**content management serves the story; it does not prescribe the story** — and it
+is **not restated here**.
+
+Applied to Maps and intake, it means Map and content tooling must make material
+visually engaging, memorable, reusable and easy to navigate **without forcing** a
+linear chronology, one sequence of revelation, **one shared player perspective**,
+one interpretation, or automatic normalization of mystery and ambiguity.
+
+> **Maps and intake must preserve Character-specific knowledge and player-safe
+> projection rather than flattening material into one universally visible truth**
+> — [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
+> and
+> [Maps / Spatial Play §9.6](../architecture/maps-spatial-play.md#96-map-knowledge-is-character-scoped).
+
+**This reopens no settled mechanic.** The boundary already recorded at
+[section 18.27](#1827-narrative-freedom--content-management-serves-the-story) —
+what that principle is **not** licence for — governs unchanged.
 
 ---
 
