@@ -1,0 +1,140 @@
+.surface {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.intro h2 {
+  margin: 0 0 0.35rem;
+}
+
+.intro p,
+.context {
+  color: #5e5a50;
+  margin: 0;
+}
+
+.controls {
+  align-items: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.controls label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 10rem;
+}
+
+.controls input,
+.controls select {
+  max-width: 100%;
+  min-height: 2.3rem;
+}
+
+.moreFilters {
+  border: 1px solid #d9ddd8;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.moreFilters summary {
+  cursor: pointer;
+}
+
+.moreFilters label {
+  margin-top: 0.5rem;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chips button {
+  border: 1px solid #b5c9be;
+  border-radius: 999px;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+}
+
+.layout {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.listPane,
+.inspector {
+  border: 1px solid #d9ddd8;
+  border-radius: 12px;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.listPane > p {
+  color: #5e5a50;
+  margin: 0 0 0.75rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  max-height: 65vh;
+  overflow: auto;
+  padding: 0;
+}
+
+.entryButton {
+  background: transparent;
+  border: 1px solid #d9ddd8;
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.7rem;
+  text-align: left;
+  width: 100%;
+}
+
+.entryButton[aria-pressed="true"] {
+  background: #eef3ed;
+  border-color: #547b60;
+}
+
+.entryCategory {
+  color: #52665a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.inspector {
+  overflow-wrap: anywhere;
+}
+
+.inspector h3 {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.inspector h4 {
+  margin-bottom: 0.35rem;
+}
+
+.intake {
+  border-top: 1px solid #d9ddd8;
+  padding-top: 1rem;
+}
+
+@media (min-width: 900px) {
+  .layout {
+    grid-template-columns: minmax(15rem, 1fr) minmax(0, 1.6fr);
+  }
+}

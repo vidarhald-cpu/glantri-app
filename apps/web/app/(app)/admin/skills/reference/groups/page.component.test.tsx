@@ -25,7 +25,7 @@ it("opens Learning Groups and explains one, many, and no successor cases", async
       "true",
     ),
   );
-  await user.click(screen.getByText("Retired Learning Groups (13)"));
+  await user.click(screen.getByText("Audit — retired Learning Groups (13)"));
   await user.click(screen.getByRole("link", { name: "Working a boat" }));
   expect(screen.getByText(/Current practice:/)).toBeVisible();
   await user.click(screen.getByRole("link", { name: "Lineage investigation apprenticeship" }));

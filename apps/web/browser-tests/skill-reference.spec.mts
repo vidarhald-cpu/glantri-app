@@ -61,20 +61,46 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto(baseURL);
     await expect(page.getByRole("heading", { name: "Skills and training" })).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(4);
-    await page.getByText("How the Skill system works").click();
+    /* The five required conceptual areas of the competency reference: Skills, Learning Groups,
+       Professions, Societies, and the Rules area under its "How it works" label. */
+    await expect(page.getByRole("tab")).toHaveCount(5);
+    await page.getByRole("tab", { name: "How it works" }).click();
+    await expect(
+      page.getByRole("heading", { name: "How competency works in Glantri" }),
+    ).toBeVisible();
 
     await page.getByRole("tab", { name: "Professions" }).click();
+    const search = page.getByRole("searchbox", { name: "Search Professions, tracks, or training" });
+    await search.fill("Sailor and Boat Worker");
     await page
-      .getByRole("searchbox", { name: "Search Professions, tracks, or training" })
-      .fill("Sailor and Boat Worker");
-    await expect(page.getByText(/alternative training routes here/)).toBeVisible();
-    await page.getByRole("link", { name: "Working a boat" }).first().click();
+      .getByRole("button", { name: "Sailor and Boat Worker — Small-craft boat worker" })
+      .click();
+    /* The Inspector opens with the occupation, and lists the Skills it can train without the reader
+       opening every Learning Group by hand. */
+    await expect(page.getByRole("heading", { name: "What can I learn?" })).toBeVisible();
+    await expect(page.getByText(/possible reach, not effective breadth/)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /^Skills this Profession can train/ }),
+    ).toBeVisible();
+    /* Society Level rows by Social Band columns, last in the Inspector. */
+    await expect(page.getByRole("table", { name: "Society Level by Social Band" })).toBeVisible();
+
+    /* G06 "Working a boat" was removed by the V2 redesign; N01 is the canonical practice. */
+    await page.getByRole("link", { name: "Small-craft boat working" }).first().click();
     await expect(page.getByRole("tab", { name: "Learning Groups" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("heading", { name: "Working a boat" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Small-craft boat working" })).toBeVisible();
+    /* N01 has no published full prose, so the Inspector says so instead of showing its one-liner. */
+    await expect(
+      page.getByText(/A full description of this training practice has not been published/),
+    ).toBeVisible();
+
+    /* Following the relationship kept the reader's Profession search. */
+    await page.getByRole("tab", { name: "Professions" }).click();
+    await expect(search).toHaveValue("Sailor and Boat Worker");
+
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
