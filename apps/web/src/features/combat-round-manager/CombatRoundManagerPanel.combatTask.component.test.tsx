@@ -85,11 +85,8 @@ vi.mock("@/lib/api/scenarioClient", async (importOriginal) => {
   };
 });
 
-// The A3 unblock condition, enforced for every test in this file: the retiring panel renders
-// nothing, so no GM capability proved below can be coming from it.
-vi.mock("@/features/combat-generic-actions/GenericCombatActionPanel", () => ({
-  GenericCombatActionPanel: () => null,
-}));
+// A3, Forgejo issue #335: `GenericCombatActionPanel` is deleted, so every GM capability proved
+// below is necessarily reached without it. The mock this file used to need is gone with it.
 
 import CombatRoundManagerPanel from "./CombatRoundManagerPanel";
 

@@ -208,6 +208,45 @@ filters. A campaign that activates contextual availability must use completed
 bindings and preserve every unresolved case rather than borrowing old
 availability formulas or guessing from occupational names.
 
+### Overlapping Learning Groups do not stack
+
+Product Owner ruling, 2026-09-26, from Alpha inspection of the running
+application. It records the product principle; it introduces no new arithmetic.
+
+Overlapping Learning Groups do not add their Group contribution together for
+the same Skill. Group-derived competence is a **base component** of the Skill,
+not a way to stack the same taught competence through several Profession
+groups. Where several active Groups teach one Skill, the effective Group
+contribution must not simply sum.
+
+A player must likewise not be charged for a group component that produces no
+effective Skill benefit.
+
+This is the product statement of behaviour the accepted calculation already
+defines: `pilot-skill-rules/v1` counts only the strongest group's contribution
+for a Skill and prices only the useful increment, keeping weaker memberships
+visible and explained rather than deleted
+([`pilot-skill-rules-v1.md`](./pilot-skill-rules-v1.md), section 4 "Learning
+groups and histories"). "Overlap does not duplicate the Skill or multiply a
+purchase" under [Learning Groups](#learning-groups), and "Multiple valid routes
+never multiply the purchase, discount, or resulting competency" above, state the
+same rule for membership and for purchase.
+
+The exact persistence, calculation and marginal-cost formulation for the current
+acquisition architecture is **not settled by this ruling and must be verified
+against that architecture before implementation**. It must not be invented in
+the UI.
+
+**Mutually exclusive Profession routes are a separate concept from ordinary
+overlap.** Where the Profession reference says `choose one` — as for the two
+Profession-specific alternatives under [Professions](#professions) — the routes
+are alternatives and must be enforced as alternatives, not reconciled as
+overlap.
+
+A further question about Specializations that a Learning Group explicitly
+teaches remains open; see
+[rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md).
+
 ## Related concepts
 
 - A **Learning History** records how a particular character learned something.
