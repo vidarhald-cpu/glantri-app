@@ -83,6 +83,24 @@ describe("ArtifactService projections", () => {
     );
   });
 
+  it("SYNTHETIC: projects any unrecognised persisted audience as GM only", async () => {
+    // Acceptance criteria 7 and 8 at the persistence boundary (toGmDto).
+    // These stored values are **synthetic by construction** — no writable V1
+    // path produces them, and the database CHECK constraint on
+    // `CampaignAsset.audience` would reject the unrecognised ones outright.
+    // The assertion is that the resolver is a closed default.
+    for (const audience of ["scenario", "players", "public", "Campaign", "", "anything-else"]) {
+      const service = serviceWith({
+        owner: "gm-1",
+        records: [artifact({ audience })],
+      });
+      const [dto] = await service.listForGm("campaign-1", "gm-1");
+      expect(dto?.audience, audience).toBe("gm_private");
+    }
+    const shared = serviceWith({ owner: "gm-1", records: [artifact({ audience: "campaign" })] });
+    expect((await shared.listForGm("campaign-1", "gm-1"))[0]?.audience).toBe("campaign");
+  });
+
   it("exposes only active Campaign-visible map/image identity at the Blackboard boundary", async () => {
     const service = serviceWith({
       owner: "gm-1",

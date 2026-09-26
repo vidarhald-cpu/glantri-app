@@ -181,4 +181,40 @@ describe("CampaignMapService projections", () => {
       }),
     ).resolves.toBe("artifact-private");
   });
+
+  it("SYNTHETIC (fixture-shaped): refuses a residual or unrecognised Artifact audience for a player", async () => {
+    // Acceptance criteria 7 and 8 for the Map-background read path
+    // (mapService.getBackgroundArtifactIdForUser). Both audience values are
+    // **synthetic by construction**: no writable V1 path can produce either
+    // once the third state is retired, so they are supplied directly.
+    const repository = {
+      get: vi.fn().mockResolvedValue(record()),
+      getBackground: vi.fn(),
+      getCampaignOwner: vi.fn().mockResolvedValue("gm-1"),
+    };
+    const campaigns = {
+      listCampaignsByUserAccess: vi
+        .fn()
+        .mockResolvedValue([{ id: "campaign-1", status: "active" }]),
+    };
+    const service = new CampaignMapService(repository as never, campaigns as never);
+
+    for (const audience of ["scenario", "player", "PUBLIC", "", "campaign_players"]) {
+      repository.getBackground.mockResolvedValue({
+        altText: "Residual map image",
+        artifactKind: "map",
+        audience,
+        id: "artifact-residual",
+        lifecycleState: "active",
+        storageState: "ready",
+      });
+      await expect(
+        service.getBackgroundArtifactIdForUser({
+          campaignId: "campaign-1",
+          mapId: "map-1",
+          userId: "player-1",
+        }),
+      ).rejects.toBeInstanceOf(CampaignMapNotFoundError);
+    }
+  });
 });

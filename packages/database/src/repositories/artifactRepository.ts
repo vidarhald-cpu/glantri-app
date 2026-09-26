@@ -282,24 +282,16 @@ export class ArtifactRepository {
     campaignId: string;
     expectedVersion: number;
   }): Promise<ArtifactRecord | null> {
+    // Campaign-level access and Scenario publication are independent axes
+    // (Content authoring §18.24, Live GM Scenario Play §5.1/§8). The GM's
+    // choice is persisted verbatim; an outstanding published Scenario
+    // reference is left exactly as it is and never downgrades the write.
     return this.client.$transaction(async (tx) => {
-      const remainingPublished =
-        input.audience === "gm_private"
-          ? await tx.scenarioArtifactReference.count({
-              where: { artifactId: input.artifactId, state: "published" },
-            })
-          : 0;
-      const persistedAudience =
-        input.audience === "campaign"
-          ? "campaign"
-          : remainingPublished > 0
-            ? "scenario"
-            : "gm_private";
       const result = await tx.campaignAsset.updateMany({
         data: {
-          audience: persistedAudience,
+          audience: input.audience,
           metadataVersion: { increment: 1 },
-          visibility: persistedAudience === "campaign" ? "visible_to_all" : "gm_only",
+          visibility: input.audience === "campaign" ? "visible_to_all" : "gm_only",
         },
         where: {
           campaignId: input.campaignId,
@@ -319,7 +311,7 @@ export class ArtifactRepository {
         actorUserId: input.actorUserId,
         artifactId: artifact.id,
         campaignId: artifact.campaignId,
-        metadata: { audience: persistedAudience, campaignPublished: input.audience === "campaign" },
+        metadata: { audience: input.audience, campaignPublished: input.audience === "campaign" },
       });
       return artifact;
     });
@@ -432,20 +424,11 @@ export class ArtifactRepository {
               });
       }
 
-      const remainingPublished = await tx.scenarioArtifactReference.count({
-        where: { artifactId: artifact.id, state: "published" },
-      });
-      const persistedAudience =
-        artifact.audience === "campaign"
-          ? "campaign"
-          : remainingPublished > 0
-            ? "scenario"
-            : "gm_private";
-      const updatedArtifact = await tx.campaignAsset.update({
-        data: {
-          audience: persistedAudience,
-          visibility: persistedAudience === "campaign" ? "visible_to_all" : "gm_only",
-        },
+      // Scenario assembly never touches Campaign-level access (Content
+      // authoring §18.24: "Scenario association never grants access"). This
+      // path deliberately leaves `audience` and `visibility` alone; only the
+      // reserved `metadataVersion` bump above changed the row.
+      const updatedArtifact = await tx.campaignAsset.findUniqueOrThrow({
         select: artifactSelect,
         where: { id: artifact.id },
       });

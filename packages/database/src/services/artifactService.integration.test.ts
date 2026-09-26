@@ -275,7 +275,22 @@ if (!prisma) {
         expectedVersion: scenarioRepublished.artifact.metadataVersion,
         userId: gm.id,
       });
-      expect(campaignWithdrawn.audience).toBe("scenario");
+      // Content authoring §18.24: Campaign access and Scenario publication are
+      // independent axes. `setAudience("gm_private")` with a published
+      // Scenario reference outstanding persists `gm_private` and leaves the
+      // reference alone. (This assertion previously demanded the forbidden
+      // legacy `scenario` value.)
+      expect(campaignWithdrawn.audience).toBe("gm_private");
+      expect(
+        await prisma.campaignAsset.findUniqueOrThrow({
+          select: { audience: true, visibility: true },
+          where: { id: uploaded.id },
+        }),
+      ).toMatchObject({ audience: "gm_private", visibility: "gm_only" });
+      const stillPublished = await new ArtifactRepository(prisma).listScenarioPublished(
+        campaign.id,
+      );
+      expect(stillPublished.map((row) => row.artifact.id)).toContain(uploaded.id);
       await expect(
         service.updateMetadata({
           artifactId: uploaded.id,
@@ -285,6 +300,214 @@ if (!prisma) {
         }),
       ).rejects.toBeInstanceOf(ArtifactLifecycleError);
       expect((await service.getForGm(campaign.id, uploaded.id, gm.id)).altText).toBe("A pass");
+    });
+
+    it("never persists a third Artifact access state across the whole GM lifecycle", async () => {
+      // Acceptance criteria 3 and 4 (real content): an ordinary uploaded
+      // Artifact in a Campaign with one Scenario, asserted against the
+      // database rather than through the DTO.
+      const gm = await createTestUser(prisma, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const scenario = await prisma.scenario.create({
+        data: {
+          campaignId: campaign.id,
+          description: "",
+          kind: "mixed",
+          name: "The pass",
+          status: "live",
+        },
+      });
+      const store = new MemoryStore();
+      const scenarioRepository = createPrismaScenarioRepository(prisma);
+      const repository = new ArtifactRepository(prisma);
+      const service = new ArtifactService(
+        store,
+        repository,
+        new CampaignService(scenarioRepository),
+        new ScenarioService(scenarioRepository),
+      );
+      const persisted = async () =>
+        prisma.campaignAsset.findUniqueOrThrow({
+          select: { audience: true, visibility: true },
+          where: { id: uploaded.id },
+        });
+      const assertNoThirdState = async (step: string) => {
+        const rows = await prisma.campaignAsset.findMany({ select: { audience: true } });
+        expect(
+          rows.map((row) => row.audience),
+          step,
+        ).not.toContain("scenario");
+        for (const row of rows) expect(["gm_private", "campaign"], step).toContain(row.audience);
+      };
+
+      const uploaded = await service.upload({
+        campaignId: campaign.id,
+        content: stream([Buffer.from("89504e470d0a1a0a00000000", "hex")]),
+        declaredMediaType: "image/png",
+        metadata: {
+          altText: "A pass",
+          artifactKind: "map",
+          provenanceKind: "user_upload",
+          title: "Two channels",
+        },
+        userId: gm.id,
+      });
+      await assertNoThirdState("upload");
+
+      const shared = await service.setAudience({
+        artifactId: uploaded.id,
+        audience: "campaign",
+        campaignId: campaign.id,
+        expectedVersion: uploaded.metadataVersion,
+        userId: gm.id,
+      });
+      expect(await persisted()).toMatchObject({
+        audience: "campaign",
+        visibility: "visible_to_all",
+      });
+      await assertNoThirdState("share");
+
+      const unshared = await service.setAudience({
+        artifactId: uploaded.id,
+        audience: "gm_private",
+        campaignId: campaign.id,
+        expectedVersion: shared.metadataVersion,
+        userId: gm.id,
+      });
+      expect(await persisted()).toMatchObject({ audience: "gm_private", visibility: "gm_only" });
+      await assertNoThirdState("unshare");
+
+      // Criterion 3: attach, publish and withdraw for a gm_private Artifact.
+      const auditBefore = await prisma.artifactAuditEvent.count({
+        where: { action: "audience_change", artifactId: uploaded.id },
+      });
+      const attached = await service.mutateScenarioReference({
+        action: "attach",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: unshared.metadataVersion,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      expect(attached.artifact.audience).toBe("gm_private");
+      expect(await persisted()).toMatchObject({ audience: "gm_private", visibility: "gm_only" });
+      await assertNoThirdState("attach");
+
+      const published = await service.mutateScenarioReference({
+        action: "publish",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: attached.artifact.metadataVersion,
+        expectedReferenceVersion: attached.reference.version,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      expect(published.artifact.audience).toBe("gm_private");
+      expect(await persisted()).toMatchObject({ audience: "gm_private", visibility: "gm_only" });
+      await assertNoThirdState("publish");
+
+      const withdrawn = await service.mutateScenarioReference({
+        action: "withdraw",
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedArtifactVersion: published.artifact.metadataVersion,
+        expectedReferenceVersion: published.reference.version,
+        scenarioId: scenario.id,
+        userId: gm.id,
+      });
+      expect(withdrawn.artifact.audience).toBe("gm_private");
+      expect(await persisted()).toMatchObject({ audience: "gm_private", visibility: "gm_only" });
+      await assertNoThirdState("withdraw");
+
+      // No Scenario transition emits an audience_change audit event.
+      expect(
+        await prisma.artifactAuditEvent.count({
+          where: { action: "audience_change", artifactId: uploaded.id },
+        }),
+      ).toBe(auditBefore);
+
+      const archived = await service.setLifecycle({
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedVersion: withdrawn.artifact.metadataVersion,
+        lifecycle: "archived",
+        userId: gm.id,
+      });
+      await assertNoThirdState("archive");
+
+      // Deletion is refused at the service boundary (history preservation), so
+      // the tombstone write path is exercised directly to complete the walk.
+      await expect(
+        service.delete({
+          artifactId: uploaded.id,
+          campaignId: campaign.id,
+          expectedVersion: archived.metadataVersion,
+          userId: gm.id,
+        }),
+      ).rejects.toBeInstanceOf(ArtifactLifecycleError);
+      const tombstoned = await repository.tombstone({
+        actorUserId: gm.id,
+        artifactId: uploaded.id,
+        campaignId: campaign.id,
+        expectedVersion: archived.metadataVersion,
+      });
+      expect(tombstoned?.audience).toBe("gm_private");
+      await assertNoThirdState("delete");
+    });
+
+    it("SYNTHETIC (fixture-seeded): fails a residual legacy `scenario` row closed on every read path", async () => {
+      // Acceptance criterion 7. This case is **synthetic by construction**:
+      // once criterion 4 holds, no canonical content path can produce a row
+      // carrying the retired legacy `scenario` audience, so the row is seeded
+      // directly. It is deliberately not dressed up as end to end.
+      const gm = await createTestUser(prisma, { roles: ["game_master"] });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const store = new MemoryStore();
+      const scenarioRepository = createPrismaScenarioRepository(prisma);
+      const repository = new ArtifactRepository(prisma);
+      const service = new ArtifactService(
+        store,
+        repository,
+        new CampaignService(scenarioRepository),
+        new ScenarioService(scenarioRepository),
+      );
+      const uploaded = await service.upload({
+        campaignId: campaign.id,
+        content: stream([Buffer.from("89504e470d0a1a0a00000000", "hex")]),
+        declaredMediaType: "image/png",
+        metadata: {
+          altText: "A pass",
+          artifactKind: "map",
+          provenanceKind: "user_upload",
+          title: "Residual row",
+        },
+        userId: gm.id,
+      });
+      await prisma.$executeRaw`
+        UPDATE "CampaignAsset"
+        SET "audience" = 'scenario', "visibility" = 'visible_to_all'::"ScenarioVisibility"
+        WHERE "id" = ${uploaded.id}
+      `;
+      expect(
+        (
+          await prisma.campaignAsset.findUniqueOrThrow({
+            select: { audience: true },
+            where: { id: uploaded.id },
+          })
+        ).audience,
+      ).toBe("scenario");
+
+      // The GM DTO reports the fail-closed resolution, not the stored value.
+      expect((await service.getForGm(campaign.id, uploaded.id, gm.id)).audience).toBe("gm_private");
+      expect((await service.listForGm(campaign.id, gm.id)).map((dto) => dto.audience)).toEqual([
+        "gm_private",
+      ]);
+
+      // Every persisted read path excludes it.
+      expect(await repository.listCampaignPublished(campaign.id)).toEqual([]);
+      expect(await repository.listBlackboardCandidates(campaign.id)).toEqual([]);
+      expect(await repository.getBlackboardCandidate(campaign.id, uploaded.id)).toBeNull();
+      expect(await service.listBlackboardCandidates(campaign.id, gm.id)).toEqual([]);
     });
 
     it("preserves legacy rows as GM-only re-upload-required metadata without a readable locator", async () => {

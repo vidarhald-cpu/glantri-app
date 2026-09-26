@@ -95,6 +95,60 @@ describe("ArtifactPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("offers exactly two access filter values and a removable active-filter chip", async () => {
+    // Acceptance criteria 5 and 6 — the Player-shared material job view
+    // (Campaign Material §2.1) over the two access states (§2.4).
+    mocks.loadArtifacts.mockResolvedValue({
+      artifacts: [
+        managedArtifact,
+        { ...managedArtifact, audience: "campaign", id: "artifact-2", title: "Shared plaza" },
+      ],
+      mode: "gm",
+      references: [],
+    });
+    render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
+    const access = await screen.findByLabelText(/^Access/);
+    expect([...(access as HTMLSelectElement).options].map((option) => option.value)).toEqual([
+      "",
+      "gm_private",
+      "campaign",
+    ]);
+
+    await userEvent.selectOptions(access, "campaign");
+    expect(screen.getByText("Shared plaza")).toBeInTheDocument();
+    expect(screen.queryByText("Northern pass")).not.toBeInTheDocument();
+
+    const chip = screen.getByRole("button", {
+      name: /Access: Shared with Campaign players — remove filter/,
+    });
+    await userEvent.click(chip);
+    expect(screen.getByText("Northern pass")).toBeInTheDocument();
+    expect(screen.getByText("Shared plaza")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remove filter/ })).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(access, "gm_private");
+    expect(screen.getByText("Northern pass")).toBeInTheDocument();
+    expect(screen.queryByText("Shared plaza")).not.toBeInTheDocument();
+  });
+
+  it("never renders a third access state for any Artifact", async () => {
+    // Acceptance criterion 6. The DTO is already resolved fail-closed at the
+    // persistence boundary, so the surface has exactly two labels.
+    mocks.loadArtifacts.mockResolvedValue({
+      artifacts: [
+        managedArtifact,
+        { ...managedArtifact, audience: "campaign", id: "artifact-2", title: "Shared plaza" },
+      ],
+      mode: "gm",
+      references: [],
+    });
+    const { container } = render(<ArtifactPanel campaignId="campaign-1" scenarios={[]} />);
+    expect(await screen.findByText("Northern pass")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Scenario sharing/);
+    expect(container.textContent).toMatch(/Private to GM/);
+    expect(container.textContent).toMatch(/Shared with Campaign/);
+  });
+
   it("shows legacy recovery without fetching or rendering the old URL", async () => {
     mocks.loadArtifacts.mockResolvedValue({
       artifacts: [

@@ -4,6 +4,7 @@ import {
   artifactBlackboardCandidateSchema,
   artifactCommonDtoSchema,
   artifactGmDtoSchema,
+  resolvePersistedArtifactAudience,
   scenarioArtifactReferenceDtoSchema,
   type ArtifactCommonDto,
   type ArtifactGmDto,
@@ -56,7 +57,11 @@ function toGmDto(record: ArtifactRecord): ArtifactGmDto {
   return artifactGmDtoSchema.parse({
     altText: optionalString(record.altText),
     artifactKind: record.artifactKind ?? "image",
-    audience: record.audience,
+    // The single fail-closed persistence boundary for Artifact access
+    // (Content authoring §18.24). Anything that is not exactly `campaign` —
+    // the retired legacy `scenario` value included — resolves to `gm_private`,
+    // so nothing downstream ever sees a third value.
+    audience: resolvePersistedArtifactAudience(record.audience),
     byteSize: record.byteSize === null ? undefined : Number(record.byteSize),
     campaignId: record.campaignId,
     cleanupRequired: record.storageDeletePending,
