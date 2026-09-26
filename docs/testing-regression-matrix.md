@@ -55,8 +55,13 @@ concurrency proof.
 
 ## Playwright Smoke Tests
 
-The browser smoke suite lives in `apps/web/e2e` and is wired into the CI
-`docker-test` job after the API and web containers have started.
+There are **two** Playwright projects, and they are not interchangeable:
+
+- `apps/web/playwright.config.ts` drives the full end-to-end suite in
+  `apps/web/e2e`, which is wired into the CI `docker-test` job after the API and
+  web containers have started.
+- `apps/web/browser-tests/playwright.config.ts` drives the narrow
+  `**/*.spec.mts` browser checks in `apps/web/browser-tests`.
 
 The suite is not read-only. `apps/web/e2e/global-setup.ts` seeds deterministic
 smoke users, a campaign/scenario, and a player character **through the API**,
@@ -68,25 +73,105 @@ holds that port, which on a developer machine is normally the primary
 checkout's API on the shared playtest database.
 
 **From a task-isolated worktree**, run the suite through `db:task:exec`, which
-supplies this worktree's own `PLAYWRIGHT_BASE_URL` and `PLAYWRIGHT_API_URL`
-derived from the same worktree key as its database target, so the browser proof
-and the disposable database cannot drift apart:
+supplies this worktree's own `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_API_URL` and
+`PLAYWRIGHT_BROWSER_API_URL` derived from the same worktree key as its database
+target, so the browser proof and the disposable database cannot drift apart:
 
 ```bash
 pnpm db:task:exec -- pnpm --filter @glantri/web playwright
 ```
 
-**From the primary checkout**, state the addresses of the web and API servers
-you started — the `Stack preflight:` line or your own `pnpm dev` output names
-them — rather than assuming the defaults:
-
-```bash
-PLAYWRIGHT_BASE_URL=http://127.0.0.1:<web-port> PLAYWRIGHT_API_URL=http://127.0.0.1:<api-port> pnpm --filter @glantri/web playwright
-```
-
 Global setup prints a `Playwright smoke target:` line naming the resolved API
 and web URLs before its first write; check it against the stack you intended.
-See [task stack ports and addresses](./dev-database.md#task-stack-ports-and-addresses).
+Why those addresses are derived rather than chosen is the controlling subject of
+[task stack ports and addresses](./dev-database.md#task-stack-ports-and-addresses),
+and is not repeated here.
+
+### Running the e2e suite without `db:task:exec` — recorded 2026-09-26
+
+`pnpm db:task:exec` refuses to run Playwright while its own stack is already up,
+so a worker that must start the stack first and then run the suite has to
+propagate the environment by hand. **Exporting only `PLAYWRIGHT_BASE_URL` and
+`PLAYWRIGHT_API_URL` is not sufficient**, and the shortfall surfaces as spurious
+spec failures rather than as a configuration error. This supersedes the earlier
+two-variable invocation this section documented.
+
+Export **the whole of this worktree's own `.env.task`**, and set the artifact
+root, before naming the Playwright addresses:
+
+```bash
+set -a && . ./.env.task && set +a
+export ARTIFACT_LOCAL_ROOT="$(mktemp -d)"
+PLAYWRIGHT_BASE_URL=http://127.0.0.1:<web-port> \
+  PLAYWRIGHT_API_URL=http://127.0.0.1:<api-port> \
+  pnpm --filter @glantri/web playwright
+```
+
+`.env.task` is created by `db:task:setup` and is never hand-written or copied;
+its six required values and the guard that validates them are recorded in
+[dev-database.md](./dev-database.md#task-database-commands).
+
+Three traps, each of which has already been misreported as a product defect:
+
+- **Specs that write through the database directly need `DATABASE_URL` and the
+  `GLANTRI_DB_*` values**, which is why the whole file must be exported.
+  `apps/web/e2e/lost-seal-scenario.spec.ts:31` and
+  `apps/web/e2e/player-attack-initiative-identity.spec.ts:222` write through
+  `setScenarioParticipantVisibilityForTest`. With only the two `PLAYWRIGHT_*`
+  variables exported they fail; with the full `.env.task` exported and a
+  recycled database they pass. **Neither is a pre-existing failure.**
+- **`ARTIFACT_LOCAL_ROOT` must be set**, or three specs fail on a
+  missing-environment assertion rather than on product behaviour — see
+  `apps/web/e2e/blackboard.spec.ts:121-122` and
+  `apps/web/e2e/artifactImports.spec.ts:231`.
+- **`apps/web/e2e/global-setup.ts` is not idempotent.** A second run against the
+  same database fails with `409 CHARACTER_ALREADY_IN_ACTIVE_CAMPAIGN`, so
+  **every full e2e run needs a fresh, unseeded disposable database.**
+
+To recycle that database between runs, use `db:task:cleanup`, then
+`db:task:setup`, then `db:task:migrate`. **`db:task:reset -- --target
+application --confirm` is not available to an automated worker**: it is blocked
+by a Prisma AI-consent guard no automated worker can satisfy. The command stays
+listed in
+[dev-database.md](./dev-database.md#task-database-commands) because it remains
+the supported interactive path; this note records only that agents must use the
+cleanup/setup/migrate sequence instead.
+
+### Pre-existing Playwright failure baseline — recorded 2026-09-26
+
+Established by independent QA on clean `dev` at
+`445bb5c580db3bbfc800a281e72cd1ceb62b5dfb`, in a dedicated worktree with its own
+disposable database, and cross-checked against the head of the lane then under
+review: identical failure sets on both sides. Six failures are pre-existing. **A
+lane is not accountable for these six; it is accountable for not adding a
+seventh.**
+
+Four in the `apps/web/playwright.config.ts` end-to-end project:
+
+| Spec                                                    | Case                                                                                 |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `apps/web/e2e/artifactImports.spec.ts:10`               | creates, reuses, revises, retires and imports through review at narrow width         |
+| `apps/web/e2e/artifacts.spec.ts:16`                     | publishes a safe visual Artifact to entitled players without exposing GM controls    |
+| `apps/web/e2e/character-lifecycle-recovery.spec.ts:85`  | keeps canonical truth visible while a failed identity draft is reviewed or discarded |
+| `apps/web/e2e/character-lifecycle-recovery.spec.ts:138` | restores canonical progression after failure and retains explicit recovery controls  |
+
+Two in the `apps/web/browser-tests/playwright.config.ts` project: **both
+viewport cases** of `apps/web/browser-tests/skill-reference.spec.mts` — "Skill
+reference stays usable at 1440px" and the same check at 390px.
+
+**`apps/web/e2e/blackboard.spec.ts:27` is not one of them. It is expected to
+pass.** It passed at clean `445bb5c5` and at the lane head in two independent
+runs (19.2 s and 19.4 s). A Builder reported it as a fourth pre-existing
+end-to-end failure: the _count_ of four was right, the _identity_ was wrong, most
+likely because that run was made against an already-seeded database. **Treat any
+failure of `blackboard.spec.ts` as a real regression**, not as baseline noise,
+and re-derive the run against a fresh disposable database before reporting it.
+
+Before attributing any failure above to a lane, confirm the run satisfied the
+environment requirements in
+[running the e2e suite without `db:task:exec`](#running-the-e2e-suite-without-dbtaskexec--recorded-2026-09-26).
+Most reported extra failures so far have been environment shortfalls, not
+product defects.
 
 ## Selecting independent-QA regression breadth
 
