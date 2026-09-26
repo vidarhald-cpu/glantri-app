@@ -10,7 +10,11 @@ presentation, and the required Profession-depth audit. This roadmap remains
 useful for delivery history and source boundaries; its earlier assumptions about
 showing a user-facing `Legacy Catalogue` do not override the successor rule that
 ordinary game, reference, and Admin-facing surfaces explain current Glantri
-content without migration or superseded-system narration.
+content without migration or superseded-system narration. The reader-facing
+prose expectation recorded below for Learning Groups, Professions, Arch
+Societies and Civilizations is now settled as a product requirement for the V2
+reference in that contract's
+[section 9.12](./chargen-competency-experience-contract.md#912-prose-publication).
 
 Observed against local Forgejo `dev@2ae4ceb65dc1bbc25275bde8ca54832d31a3dcc3`.
 Live Forgejo issues remain operational truth for current status, ownership,
