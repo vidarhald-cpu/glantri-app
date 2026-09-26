@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  advanceCombatRoundStep,
   advanceCombatTaskAtOpportunity,
   authorizeCombatProgressionTask,
   buildCombatLogProjection,
@@ -8,8 +9,10 @@ import {
   cancelCombatTaskAtDeclarationBoundary,
   combatDeclarationPrimaryIntentSchema,
   combatRoundStateSchema,
+  commitCombatRoundEndParticipantReview,
   finishCombatTaskAtOpportunity,
   getCombatRoundOpenPerformTaskForParticipant,
+  prepareCombatRoundEndReview,
   projectCombatLogForViewer,
   resolveCombatTaskAtOpportunity,
   reviewCombatTaskAtOpportunity,
@@ -346,6 +349,192 @@ describe("Perform Task resolve timing", () => {
   it("still resolves a gm_decided task at any opportunity", () => {
     const afterReview = reviewed({ duration: { kind: "gm_decided" }, withRoll: false });
     expect(resolveAt(afterReview.state).action.status).toBe("completed");
+  });
+});
+
+/**
+ * Regression suite for Forgejo #344.
+ *
+ * Every next-round state here is produced by the **production** rollover — `advanceCombatRoundStep`
+ * calling `advanceCombatGenericActionsToRound` — and never by the hand-written `state()` helper the
+ * rest of this file uses. That helper is why the defect survived six gates: it fabricated a
+ * next-round shape the rollover never emits, so the assertions never saw the stamped
+ * `lastProgressedRoundNumber` that closed the opportunity for good.
+ */
+describe("Perform Task across a real round rollover (#344)", () => {
+  function stepUntil(source: CombatRoundState, target: CombatRoundState["currentStep"]) {
+    let current = source;
+    for (let guard = 0; guard < 12; guard += 1) {
+      if (current.currentStep === target) return current;
+      current = advanceCombatRoundStep(current);
+    }
+    throw new Error(`Never reached ${target} through advanceCombatRoundStep.`);
+  }
+
+  function completeRoundEndReview(source: CombatRoundState): CombatRoundState {
+    const prepared = prepareCombatRoundEndReview({
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      state: source,
+    });
+    return prepared.participants.reduce((current, participant) => {
+      if (
+        current.roundEndReview?.participantReviews[participant.participantId]?.status === "complete"
+      ) {
+        return current;
+      }
+      return commitCombatRoundEndParticipantReview({
+        command: { createdAt: later, createdByUserId: "user-gm" },
+        participantId: participant.participantId,
+        scenarioParticipantId: `scenario-${participant.participantId}`,
+        state: current,
+      }).state;
+    }, prepared);
+  }
+
+  /**
+   * Carries the encounter across one real round boundary and stops at the next round's Phase 1
+   * action opportunity. Every transition is `advanceCombatRoundStep`; nothing about the task's
+   * next-round progress is written by the test.
+   */
+  function rollOverToNextRound(source: CombatRoundState): CombatRoundState {
+    const atRoundSummary = stepUntil(source, "round_summary");
+    const nextRound = advanceCombatRoundStep(completeRoundEndReview(atRoundSummary));
+    expect(nextRound.roundNumber).toBe(source.roundNumber + 1);
+    expect(nextRound.currentStep).toBe("select_actions");
+    return stepUntil(nextRound, "phase_1_actions");
+  }
+
+  function openTask(source: CombatRoundState) {
+    return getCombatRoundOpenPerformTaskForParticipant({
+      participantId: "a",
+      phase: "phase1",
+      state: source,
+    });
+  }
+
+  function projectedTaskKinds(source: CombatRoundState): string[] {
+    return buildCombatProgressionProjection(source)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .filter((entry) => entry.id.includes(task().id))
+      .map((entry) => entry.kind);
+  }
+
+  function resolveAt(source: CombatRoundState) {
+    return resolveCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-gm" },
+      participantId: "a",
+      phase: "phase1",
+      resultText: "The winch finally gives.",
+      state: source,
+      updatedAt: later,
+      visibleToParticipantIds: [],
+    });
+  }
+
+  it("leaves the round-2 opportunity open after a plain rollover, with no GM advance at all", () => {
+    const roundOne = reviewed({ duration: { kind: "rounds", rounds: 2 }, withRoll: false }).state;
+    const roundTwo = rollOverToNextRound(roundOne);
+
+    const carried = roundTwo.genericActions[0]!;
+    // The rollover counts the elapsed round and must not stamp the opportunity marker.
+    expect(carried.progress).toMatchObject({
+      completedRounds: 1,
+      startedRoundNumber: 1,
+      totalRounds: 2,
+    });
+    expect(carried.progress.lastProgressedRoundNumber).toBeUndefined();
+    expect(carried.status).toBe("active");
+
+    expect(openTask(roundTwo)?.id).toBe(task().id);
+    expect(projectedTaskKinds(roundTwo)).toEqual(["combat_task_resolve"]);
+
+    const resolved = resolveAt(roundTwo);
+    expect(resolved.action).toMatchObject({
+      progress: { completedRounds: 2, lastProgressedRoundNumber: 2, totalRounds: 2 },
+      status: "completed",
+    });
+    expect(resolved.state.events.filter((event) => event.type === "task_resolved")).toHaveLength(1);
+  });
+
+  it("does not let a GM advance in round 1 consume the round-2 opportunity as well", () => {
+    const advanced = advanceCombatTaskAtOpportunity({
+      actionId: task().id,
+      command: { createdAt: later, createdByUserId: "user-a" },
+      participantId: "a",
+      phase: "phase1",
+      state: reviewed({ duration: { kind: "rounds", rounds: 2 }, withRoll: false }).state,
+      submittedBy: "player",
+      updatedAt: later,
+    });
+    expect(advanced.action.progress).toMatchObject({
+      completedRounds: 1,
+      lastProgressedRoundNumber: 1,
+    });
+    expect(openTask(advanced.state)).toBeUndefined();
+
+    const roundTwo = rollOverToNextRound(advanced.state);
+    const carried = roundTwo.genericActions[0]!;
+    // The round the GM already spent is counted once, not twice.
+    expect(carried.progress).toMatchObject({
+      completedRounds: 1,
+      lastProgressedRoundNumber: 1,
+      totalRounds: 2,
+    });
+    expect(openTask(roundTwo)?.id).toBe(task().id);
+    expect(resolveAt(roundTwo).action.status).toBe("completed");
+  });
+
+  it("offers the GM a control at every round of a three-round task, across two real rollovers", () => {
+    const roundOne = reviewed({ duration: { kind: "rounds", rounds: 3 }, withRoll: false }).state;
+    expect(projectedTaskKinds(roundOne)).toEqual(["combat_task_advance"]);
+
+    const roundTwo = rollOverToNextRound(roundOne);
+    expect(roundTwo.genericActions[0]!.progress).toMatchObject({ completedRounds: 1 });
+    expect(openTask(roundTwo)?.id).toBe(task().id);
+    expect(projectedTaskKinds(roundTwo)).toEqual(["combat_task_advance"]);
+    expect(() => resolveAt(roundTwo)).toThrow(
+      /cannot resolve before its reviewed timing completes/,
+    );
+
+    const roundThree = rollOverToNextRound(roundTwo);
+    expect(roundThree.genericActions[0]!.progress).toMatchObject({ completedRounds: 2 });
+    expect(openTask(roundThree)?.id).toBe(task().id);
+    expect(projectedTaskKinds(roundThree)).toEqual(["combat_task_resolve"]);
+    expect(resolveAt(roundThree).action).toMatchObject({
+      progress: { completedRounds: 3, totalRounds: 3 },
+      status: "completed",
+    });
+  });
+
+  it("leaves a phase duration's progress untouched by the rollover", () => {
+    const roundOne = reviewed({
+      duration: { kind: "phase", phase: "phase2" },
+      withRoll: false,
+    }).state;
+    const before = roundOne.genericActions[0]!;
+    const after = rollOverToNextRound(roundOne).genericActions[0]!;
+
+    expect(after.progress).toEqual(before.progress);
+    expect(after.progress).toMatchObject({ completedRounds: 0 });
+    expect(after.progress.lastProgressedRoundNumber).toBeUndefined();
+    expect(after.progress.totalRounds).toBeUndefined();
+    expect(after.lastUpdatedAt).toBe(before.lastUpdatedAt);
+    expect(after.status).toBe("active");
+  });
+
+  it("leaves a gm_decided duration's progress untouched by the rollover", () => {
+    const roundOne = reviewed({ duration: { kind: "gm_decided" }, withRoll: false }).state;
+    const before = roundOne.genericActions[0]!;
+    const after = rollOverToNextRound(roundOne).genericActions[0]!;
+
+    expect(after.progress).toEqual(before.progress);
+    expect(after.progress).toMatchObject({ completedRounds: 0 });
+    expect(after.progress.lastProgressedRoundNumber).toBeUndefined();
+    expect(after.lastUpdatedAt).toBe(before.lastUpdatedAt);
+    expect(openTask(rollOverToNextRound(roundOne))?.id).toBe(task().id);
   });
 });
 

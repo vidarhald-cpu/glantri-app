@@ -209,6 +209,7 @@ function mapScenarioParticipant(record: {
 }
 
 function mapCampaignAsset(record: {
+  audience: string;
   campaignId: string;
   createdAt: Date;
   createdByUserId: string;
@@ -222,6 +223,7 @@ function mapCampaignAsset(record: {
   visibility: string;
 }): CampaignAsset {
   return campaignAssetSchema.parse({
+    audience: record.audience,
     campaignId: record.campaignId,
     createdAt: record.createdAt.toISOString(),
     createdByUserId: record.createdByUserId,
