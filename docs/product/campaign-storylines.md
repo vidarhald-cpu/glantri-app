@@ -77,11 +77,22 @@ moved target cannot leave a dangling or mistyped reference.
 requirement, not a table, column, join or storage shape; the implementing lane
 selects one that satisfies it.
 
+**A typed link means retrieval and context, never causality or order.** Per the
+fourth consequence of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story), these relationships answer
+_what relates to what_; they do not encode _what causes what_ or _what happens
+first_, and no surface may present or traverse them as though they did.
+
 ### 2.2 The hierarchy is flexible
 
 **Story → Chapter → Event is not a required schema and must not be prescribed as
 one.** A chapter may link to several Scenarios, and one Scenario may relate to
 multiple Storylines.
+
+**This flexibility is required, not merely permitted.** It instantiates the first
+consequence of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story): chronological history may be
+recorded, but chronology is **not** the organizing ontology of the story. A
+Storyline must not be forced into a single sequence, and the seventh consequence
+**prohibits** deriving one in order to make the model cleaner.
 
 ### 2.3 Story Notes never absorb domain state
 

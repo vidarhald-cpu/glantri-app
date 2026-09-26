@@ -182,6 +182,12 @@ available to them.
 > **The Blackboard must never silently expose additional information merely because one or more
 > players know it.**
 
+**Access without obligation is deliberate.** The gap between what a player may post and what they
+choose to post is a supported state, not a synchronization defect, and the implementation must not
+close it. This instantiates the sixth and seventh consequences of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story):
+the board supports memory and investigation without presenting the Campaign as a solved database of
+canonical facts, and ambiguity must not be "repaired" to make the model cleaner.
+
 ### 5.1 GM participation
 
 > **The GM may operate the same shared Campaign Blackboard, and may explicitly share player-safe
@@ -309,6 +315,11 @@ richer information.
 
 > **Richer player-safe knowledge never automatically changes an existing Blackboard card. Explicit
 > posting or enrichment is required.**
+
+**This is the seventh consequence of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story) applied to the Blackboard.** A
+card that is less informative than the knowledge now available to the party is **correct**, not
+stale. An implementation may not automatically upgrade, reconcile or re-derive card content to
+remove that divergence.
 
 **This is settled**, and it resolves the apparent tension with
 [Live GM Scenario Play §5.2](live-gm-scenario-play.md#52-people-are-valid-blackboard-material), which
@@ -573,6 +584,10 @@ after its originating Scenario is finished. Presence is typed per resource and t
 ([Content authoring §18.22](content-authoring-scenario-preparation-and-artifact-management.md#1822-no-universal-presence-state)).
 
 **Glantri does not model forgetting in V1** merely because material is no longer currently present.
+
+**That refusal follows the first consequence of [Content authoring §18.27](content-authoring-scenario-preparation-and-artifact-management.md#1827-narrative-freedom--content-management-serves-the-story):** chronology may be
+recorded, but it is not the organizing ontology, so the passage of play does not expire, decay or
+reorder what the board holds.
 
 ---
 
