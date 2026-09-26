@@ -11,7 +11,8 @@ test.describe("canonical V2 competency reference", () => {
     await page
       .getByRole("searchbox", { name: "Search Skills, languages, and writing" })
       .fill("Medicine");
-    await page.getByRole("button", { name: /^Medicine Skill/ }).click();
+    /* The catalogue table's row button carries the competency name. */
+    await page.getByRole("button", { name: "Medicine", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Medicine", exact: true })).toBeVisible();
     await expect(page.getByText(/Derived grant.*Factor 1\.0/)).toBeVisible();
 
