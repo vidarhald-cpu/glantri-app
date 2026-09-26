@@ -18,6 +18,8 @@ import {
   competencyContentV2GroupAvailability,
   competencyContentV2ProfessionRouteAvailability,
   competencyContentV2SocietyLevelAvailability,
+  competencyContentV2FamilyReaderProse,
+  competencyContentV2GroupReaderProse,
   competencyContentV2WrittenLanguageCompetencyIds,
   v2SpokenCompetencyName,
   v2WrittenCompetencyName,
@@ -209,13 +211,30 @@ export function withCompetencyContentV2(content: CanonicalContent): CanonicalCon
       ...(family.tracks ?? []).flatMap((track) => bodyMaps(track, track.id, "profession")),
     ];
   });
+  /*
+   * Reader content (#361). A family's `note` is authoring provenance ("Core settled by the
+   * 2026-09-21 Profession-cores ruling..."), so it is never published as a description; the accepted
+   * Profession catalogue prose is. Tracks are forms of the same occupation and share the family's
+   * prose, because the accepted source authors one entry per family.
+   */
+  const familyReaderContent = (family: V2Family) => {
+    const prose = competencyContentV2FamilyReaderProse[family.code];
+    if (!prose) return {};
+    return {
+      description: prose.shortDescription,
+      shortDescription: prose.shortDescription,
+      fullDescription: prose.fullDescription,
+      ...(prose.typicalActivities ? { typicalActivities: [...prose.typicalActivities] } : {}),
+      ...(prose.boundaries ? { boundaries: [...prose.boundaries] } : {}),
+    };
+  };
   return {
     ...content,
     professionFamilies: families.map((family) =>
       professionFamilyDefinitionSchema.parse({
         id: family.id,
         name: family.name,
-        description: family.note,
+        ...familyReaderContent(family),
       }),
     ),
     professions: paths.map((path) => {
@@ -226,7 +245,7 @@ export function withCompetencyContentV2(content: CanonicalContent): CanonicalCon
         familyId: family.id,
         name: track ? `${family.name} — ${track.name}` : family.name,
         subtypeName: track?.name ?? family.name,
-        description: family.note,
+        ...familyReaderContent(family),
       });
     }),
     professionSkills,
@@ -234,7 +253,21 @@ export function withCompetencyContentV2(content: CanonicalContent): CanonicalCon
       skillGroupDefinitionSchema.parse({
         id: group.id,
         name: group.name,
+        /*
+         * `description` keeps the one-line meaning every existing consumer already relies on.
+         * `fullDescription` is the new Inspector layer and is absent, never substituted, for a group
+         * whose prose is still being authored under #365.
+         */
         description: group.shortDescription,
+        shortDescription: group.shortDescription,
+        ...(competencyContentV2GroupReaderProse[group.id]
+          ? {
+              fullDescription: competencyContentV2GroupReaderProse[group.id]!.fullDescription,
+              ...(competencyContentV2GroupReaderProse[group.id]!.boundaries
+                ? { boundaries: [...competencyContentV2GroupReaderProse[group.id]!.boundaries!] }
+                : {}),
+            }
+          : {}),
         sortOrder,
         skillMemberships: group.fixedSkillIds.map((skillId) => ({ skillId, relevance: "core" })),
         specializationIds: [...(group.specializationIds ?? [])],

@@ -264,6 +264,16 @@ export const skillGroupDefinitionSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   description: z.string().optional(),
+  /**
+   * Reader-content layer (Forgejo #361). `shortDescription` is the one line a table or card shows;
+   * `fullDescription` is the several-paragraph Inspector description and is never a copy of it. A
+   * group whose full description has not been authored yet leaves `fullDescription` absent, so a
+   * one-line summary can never stand in for prose that does not exist.
+   */
+  shortDescription: z.string().optional(),
+  fullDescription: z.string().optional(),
+  /** What this training does not supply, as the accepted source states it. */
+  boundaries: z.array(z.string().min(1)).optional(),
   skillMemberships: z.array(skillGroupSkillMembershipSchema).optional(),
   /** Explicit access only; excluded from group price and group XP. */
   specializationIds: z.array(idSchema).optional(),
