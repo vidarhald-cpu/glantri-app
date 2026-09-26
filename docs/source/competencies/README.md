@@ -2,8 +2,8 @@
 
 Status: **#102 is NOT dispatchable.** Publication here is provenance only.
 
-Forgejo #102 ([SKILLS][CONTENT][REFERENCE] Full 172-entry competency catalogue prose
-integration) names this package as its approved prose source and pins its SHA-256 and byte
+Forgejo #102 (`[SKILLS][CONTENT][REFERENCE] Full 172-entry competency catalogue prose
+integration`) names this package as its approved prose source and pins its SHA-256 and byte
 length in the issue body. The Product Owner ruling of 26 September 2026 requires any
 PO-accepted prose that is a controlling implementation input to be durable and portable in
 the repository rather than referenced from a private machine filesystem path. This

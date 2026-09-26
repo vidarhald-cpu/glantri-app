@@ -2,7 +2,7 @@
 
 Status: **#108 is NOT dispatchable.** Publication here is provenance only.
 
-Forgejo #108 ([CRITICALS][C1][BATCH 1] Five wording-only representative results) names
+Forgejo #108 (`[CRITICALS][C1][BATCH 1] Five wording-only representative results`) names
 this package as its authoritative reader prose, under parent #101. The Product Owner
 ruling of 26 September 2026 requires any PO-accepted prose that is a controlling
 implementation input to be durable and portable in the repository rather than referenced
