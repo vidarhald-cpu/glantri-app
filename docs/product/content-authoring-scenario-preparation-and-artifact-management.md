@@ -1197,13 +1197,17 @@ player-safe/privacy-projected semantics, the classification
 applies to adding an announcement event type. **This section settles the product
 decision; it authorizes no implementation.**
 
-> **Amended, 2026-09-26: this event's recipient scope is no longer settled.** The
-> earlier reading that `person_identity_revealed` records a **shared-party**
-> transition assumed party-wide recognition, which
+> **Amended, 2026-09-26: this event's recipient scope is settled.** The earlier
+> reading that `person_identity_revealed` records a **shared-party** transition
+> assumed party-wide recognition, which
 > [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
-> supersedes. **Whether and how a Character-scoped recognition transition enters
-> the one shared Activity record is an open product decision**, recorded at
+> supersedes. **The event is written only when the identity disclosure is shared
+> with the complete intended participating audience**; a disclosure reaching only
+> a subset is recorded in those Characters' Knowledge Libraries and emits no
+> shared identity event —
 > [section 18.37](#1837-character-scoped-knowledge-and-the-shared-activity-record).
+> **The intermediate record of that question as an open product decision, of the
+> same date, is superseded, and no lane stops on it.**
 > **Everything else in this section stands**: the event kind is distinct from
 > `scenario_announcement`, preparation-state edits produce no Activity, the
 > payload is text-identity-only, and the lane is floor-class.
@@ -1983,12 +1987,13 @@ were created**.
 
 ### 18.37 Character-scoped knowledge and the shared Activity record
 
-**Status:** **RECORDED AS AN OPEN PRODUCT DECISION, 2026-09-26.**
-**Authority:** Product Owner rulings of 2026-09-26 create it; **no option is
-chosen.** **Gates:** the lane that would persist or project a recognition
-transition, and nothing else.
+**Status:** **SETTLED FOR V1, 2026-09-26.** **Authority:** Product Owner ruling
+of 2026-09-26. It **supersedes the earlier record of this section, of the same
+date, as an open product decision with no option chosen.** **Gates:**
+**nothing.** A lane that persists or projects a recognition transition
+**proceeds under the rule below**; it no longer stops and returns this decision.
 
-Two settled rules now meet:
+Two settled rules meet here:
 
 - **Activity is one shared player-safe narrative record** of what happened, and
   the exclusive source for a session recap —
@@ -1997,18 +2002,49 @@ Two settled rules now meet:
 - **Recognition and knowledge are Character-scoped** —
   [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped).
 
-**A recognition transition that reaches only some Characters therefore cannot be
-written as shared party history without leaking**, which
-[section 18.35](#1835-the-session-recap-privacy-boundary) forbids. The same
-tension applies to the resolved speaker label a published announcement carries
-([Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement)),
-which is currently resolved once from party recognition state.
+**A recognition transition that reaches only some Characters cannot be written as
+shared party history without leaking**, which
+[section 18.35](#1835-the-session-recap-privacy-boundary) forbids. That is the
+tension this ruling resolves.
 
-**Options, none chosen and none ranked:**
+**What is ruled:**
 
-1. **`person_identity_revealed` is written only when the recognition is a shared
-   disclosure** to all of the Scenario's participating player Characters, and a
-   narrower disclosure produces no Activity entry.
+> **`person_identity_revealed` is a shared Activity event only when the identity
+> disclosure itself is shared with the complete intended participating
+> audience.**
+
+> **Recognition disclosed only to one Character, or to a subset of Characters, is
+> recorded in those Characters' Knowledge Libraries and produces no shared
+> Activity identity event.**
+
+> **Shared Activity represents shared narrative knowledge. Character-private
+> recognition must not leak into it, nor into the shared recap source** —
+> [section 18.35](#1835-the-session-recap-privacy-boundary).
+
+> **If recognition later becomes publicly disclosed to the full intended
+> audience, that public transition may emit `person_identity_revealed`.**
+
+**The escape valve is the GM's explicit Story Event.** If a private recognition
+matters narratively, the GM may record a Story Event
+([section 18.33](#1833-gm-story-events)), which becomes player-safe Activity and
+recap input. That is the **only** route by which a subset disclosure enters
+shared history, and it is a **deliberate GM act**, never an automatic
+consequence of a disclosure.
+
+> **Activity is not a generic visibility log.** Do not emit an Activity entry per
+> recipient, per viewer, or per private disclosure.
+
+**This is option 1 below, taken as the rule**, together with the
+later-public-transition clause. **Nothing here authorizes implementation**; the
+`person_identity_revealed` lane remains floor-class —
+[section 18.15](#1815-scenario-recognition-is-a-distinct-activity-event-kind).
+
+**The options that were considered, retained as provenance. Option 1 is the one
+chosen; the other three are neither ranked nor rejected:**
+
+1. **CHOSEN.** **`person_identity_revealed` is written only when the recognition
+   is a shared disclosure** to all of the Scenario's participating player
+   Characters, and a narrower disclosure produces no Activity entry.
 2. **The event carries its recipient Characters** and Activity projection filters
    it per viewer, under
    [PPV1 §9](../architecture/player-play-v1.md#9-activity-visibility-and-projection-rules).
@@ -2019,14 +2055,23 @@ which is currently resolved once from party recognition state.
    only the GM's explicit Story Event
    ([section 18.33](#1833-gm-story-events)).
 
-**Until this is settled, a lane that would persist or project a recognition
-Activity entry stops and returns the decision**, exactly as
-[People/Artifact model §15](people-artifact-and-gm-authoring-model.md#15-open-decisions--none-chosen)
-requires. **Nothing else in
+**The resolved speaker label a published announcement carries** is settled
+separately and consistently, by the Product Owner ruling of 2026-09-26 recorded
+at
+[Campaign Material and Scenario Builder §8.2](campaign-material-and-scenario-builder-ui.md#82-speaker-identity-in-a-published-announcement):
+a shared announcement resolves the most specific label player-safe for **every**
+Character in the intended audience, rather than taking one Character's
+recognition state as authoritative.
+
+**This rule is applied to Map-Layer disclosure**, with no decision of its own, at
+[Maps and spatial play §9.11](../architecture/maps-spatial-play.md#911-map-disclosure-and-the-shared-activity-record).
+
+**Nothing in
 [section 18.28](#1828-persistent-player-facing-knowledge-is-character-scoped)
 through [section 18.36](#1836-capture-in-context-retrieve-through-context) is
-gated on it**, including the Knowledge Library, Discoveries, notes, the People
-identity model and the retrieval principle.
+gated on this section**, and nothing ever was — the Knowledge Library,
+Discoveries, notes, the People identity model and the retrieval principle all
+stand unchanged.
 
 ---
 

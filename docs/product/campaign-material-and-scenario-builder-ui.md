@@ -646,14 +646,16 @@ and a Character recognizing a Person are different things that happened, and the
 are recorded as different event kinds. `person_identity_revealed` records a
 mid-play transition from unidentified to identified.
 
-> **Whose history it is, is an open product decision.** Recognition is now
+> **Whose history it is, is settled, 2026-09-26.** Recognition is
 > Character-scoped ([section 7.4](#74-recognition-is-character-scoped-scenario-person-state)),
 > so a recognition reaching only some Characters cannot be written as shared
-> party history without leaking. **Whether and how such a transition enters the
-> one shared Activity record is unsettled** and is recorded at
+> party history without leaking. **The event is therefore written only when the
+> disclosure is shared with the complete intended participating audience**; a
+> disclosure to one Character or a subset is recorded in those Characters'
+> Knowledge Libraries and produces no shared identity event —
 > [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
-> A lane that would persist or project it **stops and returns that decision.**
-> Everything else in this section stands.
+> **A lane that persists or projects it proceeds under that rule; it no longer
+> stops and returns the decision.** Everything else in this section stands.
 
 **Its payload snapshots the resolved player-safe label
 ([section 3.1](#31-the-canonical-presentation-label-and-texts)) immediately
@@ -816,11 +818,25 @@ recognition state at publication time**
 the Scenario overlay and canonical fallback of
 [section 7.1](#71-the-resolution-rule) applied to that state.
 
-> **Which Character's recognition state resolves one shared announcement label is
-> the same open question as the recognition event's audience**, recorded at
+> **Settled, 2026-09-26. Authority: Product Owner.** Which label one shared
+> announcement carries is no longer an open question, and **no lane stops on it.**
+> It is the audience-wide counterpart of the recognition-event rule at
 > [Content authoring §18.37](content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record).
-> **The rule below is unaffected and holds in every case**: the announcement must
-> not expose canonical identity to a viewer not entitled to it.
+>
+> - **A shared `scenario_announcement` resolves and snapshots the most specific
+>   speaker label that is player-safe for _every_ Character in the intended
+>   audience at publication time.**
+> - **Do not select one Character's recognition state as authoritative.**
+> - **If not every recipient is entitled to the identified label, the common
+>   unidentified/general label is used** —
+>   [section 3.1](#31-the-canonical-presentation-label-and-texts).
+> - **If the GM explicitly discloses the canonical identity to all recipients
+>   first, the identified label may then be used.**
+>
+> **The text-snapshot rule below is preserved unchanged**: later recognition
+> never rewrites historical announcements. **The safety rule below is unaffected
+> and holds in every case**: the announcement must not expose canonical identity
+> to a viewer not entitled to it.
 
 **An unidentified Person must not expose canonical identity through the Activity
 projection.** The canonical Person relation carried by the event may remain
