@@ -285,10 +285,13 @@ describe("generic Combat actions", () => {
 
     expect(duplicate[0]).toMatchObject({
       preset: "environmental_movement",
-      progress: { completedRounds: 1, lastProgressedRoundNumber: 4, totalRounds: 3 },
+      progress: { completedRounds: 1, totalRounds: 3 },
       reference: { description: "doorway", kind: "environment" },
       status: "active",
     });
+    // The rollover never stamps the opportunity marker: stamping the round being entered closed
+    // the owner's opportunity for the whole of that round and every round after it (#344).
+    expect(duplicate[0]?.progress.lastProgressedRoundNumber).toBeUndefined();
     expect(duplicate[0]?.rollResult).toBeUndefined();
   });
 
