@@ -10,6 +10,9 @@ import {
   buildEncounterAccessMetadataViewFromPersistedSession,
   buildCombatRoundDeclaredAttackOpportunities,
   buildCombatProgressionProjection,
+  buildCombatHistorySourceViewFromState,
+  completedCombatRoundSchema,
+  projectCombatHistory,
   getCombatRoundOpenPerformTaskForParticipant,
   canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
@@ -28321,6 +28324,120 @@ describe("scenarios route contract", () => {
       text: "The winch groans and the portcullis lifts.",
       visibleToParticipantIds: ["encounter-participant-2"],
     });
+  });
+
+  /**
+   * A3, Forgejo issue #335 — parity checks **P3** and **P7**, Combat Panel Contract §12.15.
+   *
+   * Both are driven through the real canonical Perform Task lifecycle
+   * (`declare -> review -> resolve`, the shape production actually emits — no fabricated
+   * `advance -> resolve` chain, per the P1/P2 limit) and every assertion is made on the payload a
+   * viewer is served, never on the DOM. `GenericCombatActionPanel` renders nothing here: this
+   * runs entirely server-side, so the panel is unmounted by construction.
+   *
+   * - **P3** — the resolved task reaches the Combat Log, and is absent from the payload a
+   *   non-entitled player is served.
+   * - **P7** — the same entry is still readable once the round is archived into `rounds`.
+   */
+  it("projects a resolved Combat Task into the Combat Log, across archival, and withholds it from a non-entitled player", async () => {
+    const prepared = makePerformTaskFixture();
+    const participants = [
+      prepared.participants[0]!,
+      {
+        ...prepared.participants[1]!,
+        controlledByUserId: mocks.playerUser.id,
+      } as ScenarioParticipant,
+    ];
+    const mutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const review = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        duration: { kind: "round" },
+        rollKind: "none",
+      },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    const resultText = "The winch groans and the portcullis lifts.";
+    const resolve = await app.inject({
+      method: "POST",
+      payload: {
+        ...performTaskDescriptor(mutable.encounter),
+        resultText,
+        // Owner only. `encounter-participant-2` is the non-entitled viewer below.
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/resolve-combat-task",
+    });
+    expect(resolve.statusCode, resolve.body).toBe(200);
+    await app.close();
+
+    const resolvedState = combatRoundStateSchema.parse(mutable.encounter.combatRoundState);
+    expect(resolvedState.events.filter((entry) => entry.type === "task_resolved")).toHaveLength(1);
+
+    const logParticipants = resolvedState.participants.map((participant) => ({
+      displayName: participant.label,
+      participantId: participant.participantId,
+    }));
+    const projectLog = (state: CombatRoundState, revision: string) =>
+      projectCombatHistory({
+        participants: logParticipants,
+        source: buildCombatHistorySourceViewFromState({ revision, state }),
+        viewer: { kind: "gm" },
+      }).combatLog;
+
+    // P3 — present in the Combat Log the GM is served.
+    const gmLog = projectLog(resolvedState, mutable.encounter.updatedAt);
+    const resolvedEntry = gmLog?.events.find(
+      (entry) => entry.summaryFacts?.kind === "task_resolved",
+    );
+    expect(resolvedEntry?.summary).toContain(resultText);
+
+    // P3 — absent from the payload a non-entitled player is served, at the same projection the
+    // encounter routes serialize with.
+    const nonEntitled = buildPlayerSafeEncounterForUser({
+      encounter: mutable.encounter,
+      scenarioParticipants: participants,
+      userId: mocks.playerUser.id,
+    });
+    expect(JSON.stringify(nonEntitled)).not.toContain(resultText);
+    const nonEntitledLog = projectCombatHistory({
+      participants: logParticipants,
+      source: buildCombatHistorySourceViewFromState({
+        revision: nonEntitled.updatedAt,
+        state: combatRoundStateSchema.parse(nonEntitled.combatRoundState),
+      }),
+      viewer: {
+        controlledParticipantIds: new Set(["encounter-participant-2"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["encounter-participant-1", "encounter-participant-2"]),
+      },
+    }).combatLog;
+    expect(
+      nonEntitledLog?.events.filter((entry) => entry.summaryFacts?.kind === "task_resolved"),
+    ).toHaveLength(0);
+    expect(JSON.stringify(nonEntitledLog)).not.toContain(resultText);
+
+    // P7 — the round is archived into `rounds` and the entry is still readable. The archive is
+    // built from the round the lifecycle above actually produced, not from a hand-authored event.
+    const archived = combatRoundStateSchema.parse({
+      ...resolvedState,
+      events: [],
+      genericActions: [],
+      roundNumber: 2,
+      rounds: [completedCombatRoundSchema.parse(resolvedState)],
+    });
+    const archivedEntry = projectLog(archived, mutable.encounter.updatedAt)?.events.find(
+      (entry) => entry.summaryFacts?.kind === "task_resolved",
+    );
+    expect(archivedEntry?.summary).toContain(resultText);
+    expect(archivedEntry?.roundNumber).toBe(1);
   });
 
   /** Forgejo issue #340, acceptance criterion 4 — both finish commands at the opportunity. */
