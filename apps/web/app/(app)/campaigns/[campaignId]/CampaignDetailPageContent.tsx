@@ -35,6 +35,7 @@ import { ArtifactPanel } from "@/features/artifacts";
 import { ApiRequestError } from "@/lib/api/apiClient";
 import { CampaignHomeOverview } from "./CampaignHomeOverview";
 import { CampaignNotesPanel } from "./CampaignNotesPanel";
+import { CampaignMaterialPanel } from "./CampaignMaterialPanel";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
@@ -201,6 +202,7 @@ export default function CampaignDetailPageContent({
   const [error, setError] = useState<string>();
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
+  const [materialActive, setMaterialActive] = useState(false);
   const [allRosterEntries, setAllRosterEntries] = useState<CampaignRosterEntry[]>([]);
   const [roster, setRoster] = useState<CampaignRosterEntry[]>([]);
   const [rosterMembershipFilter, setRosterMembershipFilter] =
@@ -221,6 +223,25 @@ export default function CampaignDetailPageContent({
   const [scenarioName, setScenarioName] = useState("");
   const [scenarioDescription, setScenarioDescription] = useState("");
   const [continuesFromScenarioId, setContinuesFromScenarioId] = useState("");
+
+  useEffect(() => {
+    const syncHash = () => setMaterialActive(window.location.hash === "#campaign-material");
+    const followCampaignTask = (event: MouseEvent) => {
+      const link = (event.target as Element).closest("a[href*='#campaign-']");
+      if (link instanceof HTMLAnchorElement) {
+        setMaterialActive(new URL(link.href).hash === "#campaign-material");
+      }
+    };
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    window.addEventListener("popstate", syncHash);
+    document.addEventListener("click", followCampaignTask);
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      window.removeEventListener("popstate", syncHash);
+      document.removeEventListener("click", followCampaignTask);
+    };
+  }, []);
 
   const rosterBySourceKey = useMemo(() => {
     const entries = new Map<string, CampaignRosterEntry>();
@@ -731,19 +752,25 @@ export default function CampaignDetailPageContent({
             borderRadius: 12,
             display: "grid",
             gap: "0.65rem",
+            gridColumn: "1 / -1",
             padding: "1rem",
           }}
         >
-          <h2 style={{ margin: 0 }}>Notes, Items &amp; Artifacts</h2>
-          <p style={{ margin: 0 }}>
-            Use the Campaign to find related material, then manage each object in its established
-            home.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-            <Link href="#campaign-notes">Notes</Link>
-            <Link href={buildCampaignWorkspaceHref({ campaignId, tab: "items" })}>Items</Link>
-            <Link href="#campaign-artifacts">Artifacts</Link>
-          </div>
+          {materialActive ? (
+            <CampaignMaterialPanel campaignId={campaignId} scenarios={scenarios} />
+          ) : (
+            <>
+              <h2 style={{ margin: 0 }}>Notes, Items &amp; Artifacts</h2>
+              <p style={{ margin: 0 }}>
+                Open Notes &amp; material for the unified list, or manage a domain in its editor.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+                <Link href="#campaign-notes">Notes</Link>
+                <Link href={buildCampaignWorkspaceHref({ campaignId, tab: "items" })}>Items</Link>
+                <Link href="#campaign-artifacts">Artifacts</Link>
+              </div>
+            </>
+          )}
         </section>
       </div>
       {overview ? (
@@ -1063,10 +1090,11 @@ export default function CampaignDetailPageContent({
           <div>No Scenarios match the current filters.</div>
         )}
       </section>
-
-      <div id="campaign-artifacts">
-        <ArtifactPanel campaignId={campaignId} scenarios={scenarios} />
-      </div>
+      {!materialActive ? (
+        <div id="campaign-artifacts">
+          <ArtifactPanel campaignId={campaignId} scenarios={scenarios} />
+        </div>
+      ) : null}
     </section>
   );
 }
