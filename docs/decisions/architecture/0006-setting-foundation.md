@@ -2,6 +2,9 @@
 
 - Status: approved
 - Date: 2026-09-09
+- Amended: 2026-09-26 (Product Owner ruling, Chargen Alpha inspection — a
+  Setting-level competency availability constraint is recorded; self-amendment,
+  same record)
 - Decision owner: Product Owner / control plane
 - Functional areas: rules and content governance, Skills, Character lifecycle,
   Chargen, Campaign, reusable world content
@@ -78,6 +81,38 @@ local seed data or mutable database rows are not its sole authority.
 introduce a separate Universe abstraction now. A larger container may be split
 out later only if actual product requirements require multiple Settings within
 one larger Universe.
+
+### Setting-level competency availability — 2026-09-26 amendment
+
+Product Owner ruling, 2026-09-26, from the Chargen Alpha inspection. It records
+a **future constraint** on the Setting/availability layer. It authorizes no
+implementation and changes nothing else in this record.
+
+**Glantri-civilization identities must not be introduced into generic combat or
+competency-engine rules.** Iest, Lankhmar and other named civilizations belong
+to Setting content, exactly as the decision above already requires of generic
+Skills.
+
+The historical and desired Setting rule to be represented is:
+
+- **Fencing is normally available only at the Iest-level cultural or Setting
+  horizon.**
+- **Lankhmar is an explicit historical Setting exception** where the Fencing
+  tradition is also available.
+
+This is an **availability rule**, not a statement that Lankhmar generally has
+Iest-level structural properties. It is the kind of independent local condition
+that [Competency rules → Social Band](../../rules/competency-rules.md#social-band)
+already contemplates, and it is checked as availability, never as competence.
+
+Until the Setting implementation can represent it cleanly, the Product Owner or
+GM may **enforce Fencing availability manually**. **Do not build generalized
+exception machinery solely for this case.**
+
+The Fencing competency type itself is ruled separately in
+[rule decision 0010](../rules/0010-competency-classification-and-group-taught-specializations.md);
+this amendment concerns availability only and records no relationship strength,
+cost or competency change.
 
 ### Transitional Skill Reference
 
