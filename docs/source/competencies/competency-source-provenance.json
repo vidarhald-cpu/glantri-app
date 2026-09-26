@@ -1,0 +1,14 @@
+{
+  "originalFile": "Glantri_Complete_Competency_Catalogue_Reader_Prose.md",
+  "archiveFile": "Glantri_Complete_Competency_Catalogue_Reader_Prose.original.base64.txt",
+  "readableFile": "Glantri_Complete_Competency_Catalogue_Reader_Prose.md.txt",
+  "encoding": "base64",
+  "originalSha256": "0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376",
+  "originalBytes": 355963,
+  "normalizedSha256": "c9d9c8c395024d71289dadf97717f450868fa2cdf86da51017d6f8a9231e007b",
+  "normalizedBytes": 354629,
+  "normalization": "Remove trailing ASCII spaces and tabs from each line; preserve line breaks and all other bytes. The base64 archive remains the exact original string.",
+  "pinnedBy": "Forgejo #102 issue body pins originalSha256 and originalBytes; both match.",
+  "suppliedDate": "2026-09-10",
+  "originalSourceDirectory": "/Users/vidarhald/Documents/Glantri local/"
+}
