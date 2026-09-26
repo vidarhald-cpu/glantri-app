@@ -232,6 +232,11 @@ The authorization explicitly does **not** cover:
 - The V2 competency-reference experience, its publication requirements, and the
   bounded supersession of #252 are settled in
   [section 9](#9-v2-competency-reference-experience--product-owner-rulings-2026-09-26).
+- The Chargen Profession presentation order, Chargen training presentation, the
+  prohibition on implementation and provenance commentary in ordinary Chargen,
+  and the requirement for a player-facing Profession category taxonomy are
+  settled in
+  [section 10](#10-chargen-profession-and-acquisition-experience--product-owner-rulings-2026-09-26).
 
 ### Unresolved content dependencies
 
@@ -239,6 +244,9 @@ The authorization explicitly does **not** cover:
   Social Band, Setting, and S01/B1 content remain unfinished where the
   authoritative sources say so.
 - Missing contextual values must not be invented for the reference.
+- The concrete player-facing Profession category roster required by
+  [section 10.3](#103-profession-chooser) is not authored and awaits Product
+  Owner review.
 
 ## 8. Required next preparation
 
@@ -562,3 +570,128 @@ data and settled in the implementation contract. **Do not overdesign.**
 
 This section authorizes no implementation, no catalogue change, and no prose
 authoring.
+
+## 10. Chargen Profession and acquisition experience — Product Owner rulings, 2026-09-26
+
+**Status:** Product Owner approved, 2026-09-26.\
+**Scope:** the Chargen Profession selection, presentation and acquisition
+experience only.
+
+This section records a **successor refinement discovered by Alpha inspection of
+the running application**. It does not reopen
+[#251](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/251) or
+[#252](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/252): both
+delivered the scope they were approved for, and neither is characterized as
+failed. It is product and documentation authority and authorizes no
+implementation, no catalogue change and no prose authoring.
+
+It applies the controlling principle of
+[section 2](#2-game-documentation-and-reference-presentation) —
+_Glantri should explain Glantri, not explain its own interface_ — to Chargen,
+which section 2 already governs as an ordinary game surface. Where
+[section 9](#9-v2-competency-reference-experience--product-owner-rulings-2026-09-26)
+already settles the equivalent requirement for the reference experience, this
+section **cites** it rather than restating it.
+
+This section does not settle competency mechanics, acquisition arithmetic,
+Learning Group membership, Profession routes or Skill relationships. Learning
+Group overlap and acquisition are recorded in
+[`docs/rules/competency-rules.md`](../rules/competency-rules.md); competency
+classification is recorded in
+[rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md).
+
+### 10.1 Selected Profession presentation
+
+The selected-Profession experience progresses from explanation to mechanics, in
+this order:
+
+1. the proper full reader-facing Profession description;
+2. what the Profession can train;
+3. the training routes and the Skills they teach;
+4. the detailed acquisition controls.
+
+Chargen must **not lead with implementation-derived counts**. `Core reach`,
+`Favored reach`, `Included training packages`, `Special access` and a detached
+`Choice slots` are not acceptable ordinary player language. This is the same
+prohibition [section 9.8](#98-professions) already applies to the reference
+Profession Inspector, and the same principle as
+[section 2](#2-game-documentation-and-reference-presentation).
+
+Profession prose in Chargen comes from the **canonical V2 reader-content
+publication**, never from proposal or source markdown scraped at runtime, as
+[section 9.12](#912-prose-publication) already requires.
+
+Learning Group rows in Chargen likewise use the fuller published reader prose
+where appropriate rather than only a one-line label; the reader-facing prose
+layers are those of [section 9.12](#912-prose-publication).
+
+### 10.2 Training presentation in Chargen
+
+A player must not have to expand every Learning Group simply to discover what a
+Profession teaches.
+
+The selected Profession shows a compact structure of approximately
+`training route → the Skills and Specializations that route actually teaches`,
+followed by a **complete deduplicated reachable-Skills summary**.
+
+Training is ordered:
+
+1. the core or ordinary training route;
+2. alternative and additional routes;
+3. direct training.
+
+Choices appear **inside the relevant route in reader language** — for example
+"Choose one taught melee weapon family" — rather than exposing _choice slot_ as
+the primary concept. Where a Profession route is authored as `choose one`, it
+is an alternative and must be presented and enforced as one; see
+[`docs/rules/competency-rules.md`](../rules/competency-rules.md) for the
+acquisition rule.
+
+The detailed XP and purchase controls may remain in the later allocation
+portion of Chargen, but they use the **same canonical Profession → Learning
+Group → Skill model** rather than reconstructing a second interpretation of it.
+
+Any breadth or reach number shown to the player derives from the already-settled
+counting rules in [section 5.2](#52-effective-breadth-counting-rules), which
+this section does not restate or amend.
+
+### 10.3 Profession chooser
+
+**Implementation and provenance notes appearing in Profession cards are a
+player-facing defect.** No issue IDs, settlement notes, migration rationale,
+provenance notes or implementation commentary may appear in ordinary Chargen.
+Chargen uses reader-facing content fields only. This is the Chargen application
+of [section 2](#2-game-documentation-and-reference-presentation) and
+[section 9.3](#93-maintenance-and-provenance-concepts-leave-ordinary-browsing).
+
+The present **Profession-family filter is not useful**, because Profession
+families are close to a 1:1 restatement of Professions and so selecting one
+does not materially narrow the list.
+
+A separate **player-facing Profession category taxonomy** is required, analogous
+in purpose to Skill categories: a set of broad occupational categories small
+enough that selecting one materially narrows the Profession list.
+
+- **Profession family** remains structural identity where structure needs it.
+- **Profession category** is browsing taxonomy only. Like the navigation
+  categories of
+  [rule decision 0002](../decisions/rules/0002-skill-catalogue-qualitative-architecture.md),
+  it grants no competence and creates no relationship, cost, prerequisite or
+  availability effect.
+
+**The final category roster is not authored here and must not be invented in an
+implementation Builder.** Naming the categories is authoring work. If the
+roster is not already settled in accepted source material, it is prepared for
+Product Owner review before any implementation consumes it. This is an
+[open question](#104-what-this-section-does-not-settle).
+
+### 10.4 What this section does not settle
+
+- **The Profession category roster.** The requirement is settled; the concrete
+  list of categories is **unresolved** and awaits Product Owner review.
+- Concrete Chargen layouts, components, column sets and control placement are
+  not fixed as a schema here. **Do not overdesign.**
+- Nothing in this section authorizes a change to Chargen mechanics, to the
+  acquisition arithmetic of
+  [`docs/rules/pilot-skill-rules-v1.md`](../rules/pilot-skill-rules-v1.md), or
+  to canonical content.
