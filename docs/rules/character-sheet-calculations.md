@@ -189,10 +189,10 @@ Examples:
 Formula:
 
 ```text
-Total specialization = floor(parent group contribution / 2)
-  + Specialization XP
-  + Derived XP
+Total specialization = Specialization XP + Derived XP
 ```
+
+No Learning Group level is part of this total. A Learning Group that lists a specialization provides an access and training route only: Group cost and Group XP stay on the group's base skills, the specialization is acquired and progressed separately, there is no retroactive Group XP catch-up, and later group purchases add nothing to it ([rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md), ruling 3).
 
 `Derived XP` is included in `Total`.
 
