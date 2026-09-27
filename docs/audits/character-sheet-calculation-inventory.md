@@ -322,16 +322,16 @@ Suggested first manual page: "Character Sheet Calculations".
 
 Recommended sections:
 
-| Section                    | Contents                                                                                        |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
-| Character identity         | Stored fields, chargen rule-set snapshot, society/social class/profession labels                |
-| Characteristics and GMs    | Original/current stats, stat resolution, additive modifiers, displayed GM formula               |
-| Skill XP                   | Group XP, owned XP, derived XP, total XP, total skill level, best-group rule                    |
-| Specializations            | Parent skill contribution, owned specialization XP, bridge grants, total specialization formula |
-| Skill points and education | Spent/remaining pools, ordinary/flexible split, education formula                               |
-| Combat values              | Combat skill XP source, OB/DMB/DB/DM/parry/initiative formulas, workbook lookup tables          |
-| Equipment and encumbrance  | Personal load, armor encumbrance, capacity, encumbrance level, movement                         |
-| Known interim calculations | Perception/encumbrance note, legacy equipment summary, combined parry summary gap               |
+| Section                    | Contents                                                                                  |
+| -------------------------- | ----------------------------------------------------------------------------------------- |
+| Character identity         | Stored fields, chargen rule-set snapshot, society/social class/profession labels          |
+| Characteristics and GMs    | Original/current stats, stat resolution, additive modifiers, displayed GM formula         |
+| Skill XP                   | Group XP, owned XP, derived XP, total XP, total skill level, best-group rule              |
+| Specializations            | Parent skill gating, owned specialization XP, bridge grants, total specialization formula |
+| Skill points and education | Spent/remaining pools, ordinary/flexible split, education formula                         |
+| Combat values              | Combat skill XP source, OB/DMB/DB/DM/parry/initiative formulas, workbook lookup tables    |
+| Equipment and encumbrance  | Personal load, armor encumbrance, capacity, encumbrance level, movement                   |
+| Known interim calculations | Perception/encumbrance note, legacy equipment summary, combined parry summary gap         |
 
 For each calculation page, use a consistent mini-template:
 
