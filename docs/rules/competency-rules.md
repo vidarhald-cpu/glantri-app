@@ -245,9 +245,15 @@ Profession-specific alternatives under [Professions](#professions) — the route
 are alternatives and must be enforced as alternatives, not reconciled as
 overlap.
 
-A further question about Specializations that a Learning Group explicitly
-teaches remains open; see
-[rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md).
+The question of what a Learning Group's explicit Specialization membership provides
+mechanically is **settled for V1** by
+[rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md)
+ruling 3, which records this section's access-only position as the controlling rule rather than an
+interim one. Group cost and Group XP stay on the Group's base Skills and selected base-Skill
+choices. The listed Specialization is an authorized acquisition route, still subject to its normal
+parent and prerequisite rules, and is acquired and progressed separately: it receives no
+retroactive Group-XP catch-up, and further Group purchases add no Specialization Group XP.
+Competency relationships may still establish non-additive minima.
 
 ## Related concepts
 

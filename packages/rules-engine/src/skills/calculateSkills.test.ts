@@ -40,9 +40,7 @@ describe("calculateGroupLevel", () => {
   });
 
   it("treats missing gms as zero", () => {
-    expect(calculateGroupLevel({ ranks: 6 })).toBe(
-      calculateGroupLevel({ ranks: 6, gms: 0 }),
-    );
+    expect(calculateGroupLevel({ ranks: 6 })).toBe(calculateGroupLevel({ ranks: 6, gms: 0 }));
   });
 });
 
@@ -85,23 +83,31 @@ describe("calculateSkillLevel", () => {
 });
 
 describe("calculateSpecializationLevel", () => {
-  it("adds half the group level (floored) to the specialization level", () => {
-    expect(calculateSpecializationLevel({ groupLevel: 6, specializationLevel: 3 })).toBe(6);
-    expect(calculateSpecializationLevel({ groupLevel: 7, specializationLevel: 2 })).toBe(5);
+  // Rule decision 0010 ruling 3 clauses 1, 4, 5 and 6: Group cost and Group XP apply to a
+  // Learning Group's base Skills. A Specialization the Group teaches is acquired and
+  // progressed separately, receives no retroactive Group-XP catch-up, and gains nothing from
+  // further Group purchases. No Learning Group level is therefore an input to this value, and
+  // the function deliberately does not accept one.
+  it("is the Character's own Specialization XP, with no Learning Group term", () => {
+    expect(calculateSpecializationLevel({ ownedSpecializationXp: 3 })).toBe(3);
+    expect(calculateSpecializationLevel({ ownedSpecializationXp: 0 })).toBe(0);
   });
 
-  it("floors the group level half-contribution correctly", () => {
-    // groupLevel 5 → floor(5/2) = 2
-    expect(calculateSpecializationLevel({ groupLevel: 5, specializationLevel: 0 })).toBe(2);
-    // groupLevel 1 → floor(1/2) = 0
-    expect(calculateSpecializationLevel({ groupLevel: 1, specializationLevel: 4 })).toBe(4);
+  // Ruling 3 clause 7: relationships establish non-additive minima. The shared calculation in
+  // `deriveSkillRelationships` resolves the minimum into the shortfall that tops owned XP up to
+  // the floor, so the two terms compose without a second local formula and without stacking.
+  it("carries the non-additive relationship minimum supplied by the shared calculation", () => {
+    expect(
+      calculateSpecializationLevel({ ownedSpecializationXp: 1, relationshipGrantedXp: 4 }),
+    ).toBe(5);
+    expect(
+      calculateSpecializationLevel({ ownedSpecializationXp: 5, relationshipGrantedXp: 0 }),
+    ).toBe(5);
   });
 
-  it("returns only specialization level when group level is 0", () => {
-    expect(calculateSpecializationLevel({ groupLevel: 0, specializationLevel: 5 })).toBe(5);
-  });
-
-  it("returns 0 when both inputs are 0", () => {
-    expect(calculateSpecializationLevel({ groupLevel: 0, specializationLevel: 0 })).toBe(0);
+  it("returns 0 when nothing is owned and nothing is granted", () => {
+    expect(
+      calculateSpecializationLevel({ ownedSpecializationXp: 0, relationshipGrantedXp: 0 }),
+    ).toBe(0);
   });
 });

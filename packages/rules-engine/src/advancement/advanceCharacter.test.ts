@@ -642,6 +642,10 @@ describe("character progression state", () => {
     expect(resolved.build.progressionState?.checks).toHaveLength(0);
   });
 
+  // Rule decision 0010 ruling 3: the threshold is the Specialization's own XP. The fixture owns
+  // 2 ranks of `codes` and holds no relationship minimum on it, so 2 is the whole value. The
+  // previous expectation of 4 carried `floor(groupLevel / 2)` from the parent Skill's Learning
+  // Group, which clauses 1, 4, 5 and 6 forbid.
   it("uses specialization total as threshold", () => {
     const checked = addCharacterProgressionCheck({
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
@@ -662,9 +666,9 @@ describe("character progression state", () => {
     });
 
     expect(resolved.history[0]).toMatchObject({
-      beforeValue: 4,
+      beforeValue: 2,
       success: true,
-      threshold: 4,
+      threshold: 2,
     });
   });
 
