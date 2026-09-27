@@ -28,8 +28,8 @@ What is being trained is not a body of theory but a quality of attention
 sustained over a long watch, and the judgment of when that watch has turned
 into something that needs a physician.
 
-Attendance is taught in the household as often as in any organized place of
-care, and the household is part of the curriculum. An attendant works inside
+Attendance may be taught in a household as readily as in an organized place of
+care, and where it is, the household is part of the curriculum. An attendant works inside
 someone else's home, among their family, their servants and their griefs, and
 is expected to know how to conduct themselves there. A learner who nurses
 competently but blunders through the household does not last.
@@ -60,8 +60,7 @@ could manage alone.
 
 The practice does not teach the specialist care in isolation. A birth attendant
 who cannot assess a patient generally, care for her through a recovery, or deal
-with an immediate emergency is not a birth attendant, and a teaching tradition
-that produced one would be recognized as a poor tradition. The general medical
+with an immediate emergency is not a birth attendant. The general medical
 grounding is taught alongside the specialism because the specialism does not
 work without it.
 
@@ -149,10 +148,11 @@ having to. It is repetitive, deliberately unexciting training, because the
 practice being built is the ability to work calmly at depth rather than to
 reach it.
 
-Most of what a diver does below the surface is done with a rope. The line is
-signal, lifeline and working tackle at once — objects are secured and sent up
-on it, and the diver is retrieved on it. Handling rope well is not an adjacent
-convenience here; it is half the work, and it is taught to a working standard.
+Most of what a diver does below the surface is done with a rope. A line
+commonly serves as signal, lifeline and working tackle at once — objects may be
+secured and sent up on it, and it is the diver's link to the surface. Handling
+rope well is not an adjacent convenience here; it is half the work, and it is
+taught to a working standard.
 The other half is seeing: water gives poor light, deceptive distance and little
 time, and a diver is trained to find and recognize a thing under those
 conditions rather than to look around.
@@ -181,9 +181,10 @@ conditions that handling stops being deliberate.
 
 The practice is larger than steering. Everything in an open boat is held by
 rope, and the learner's knots are inspected until they are right. Everyone who
-works one is expected to be able to swim, and in many places is taught before
-being allowed aboard. And the decision that matters most is made ashore: a
-boat's crew learns to read the sky, the water and the season, and to judge
+works one is expected to be able to swim, and swimming is taught within the
+practice rather than assumed. And the decision that matters most is made
+ashore: a boat's crew learns to read the sky, the water and the season, and to
+judge
 whether to go out at all. These are taught together because the boat does not
 separate them.
 
@@ -273,9 +274,10 @@ The correction is collective and immediate, and much of what is being trained
 is the suppression of individual improvisation that would open a gap.
 
 A unit is drilled in the arms it is issued, and units are issued more than one.
-The line weapon is drilled, and so is whatever the unit throws or slings at an
-enemy it has not yet closed with, because the same men do both and are expected
-to change between them on command. Guard and defence are drilled too, in the
+Which arms those are depends on the unit: two families of line weapon in one,
+or a line weapon together with whatever the unit throws or slings at an enemy
+it has not yet closed with in another, where the same men are expected to
+change between them on command. Guard and defence are drilled too, in the
 particular narrow form that the ranks allow — there is little room to step aside
 in close order, and learning what one can and cannot do there is part of the
 drill.
@@ -299,9 +301,9 @@ Fighting on horseback cannot be taught to someone who is still thinking about
 the horse. The two are therefore taught as one course: the learner is put up,
 ridden hard enough that control becomes habitual, and then required to do
 something else while riding — reach, strike, turn, recover — with the teacher
-correcting horse and hand together. The horse's schooling and the rider's are
-part of the same work, because a mount that will not stand what is asked of it
-in a fight makes the rider's training useless.
+correcting seat and hand together. What is corrected is the rider's part of
+it — how the mount is asked, and what it can reasonably be asked for — rather
+than the schooling of the horse, which belongs to a different practice.
 
 What the practice trains is the coordination itself. A competent fighter on foot
 and a competent rider are not, between them, a mounted fighter; the timing of a
@@ -320,9 +322,9 @@ weapon with its own instruction.
 
 **Short description.** The lance, delivered in a formed body of horse.
 
-The lance is not an individual weapon. A single rider with a lance is a
-curiosity; a line of them arriving together is the point of the weapon, and the
-training reflects that. Learners are drilled at the lance and drilled in the
+The lance is drilled as a formation weapon. A line of riders arriving together
+is the point of the weapon, and the training reflects that. Learners are
+drilled at the lance and drilled in the
 formed body at the same time, riding knee to knee at increasing speed, taking a
 mark, and above all holding the line — because a charge that arrives ragged has
 failed whatever each individual rider did.
@@ -346,8 +348,9 @@ of horse, which is a separate thing from riding in one.
 **Short description.** Shooting in formation with the missile arm the unit is
 issued.
 
-Military shooting is drilled, not coached. Learners are formed up and shoot on
-command, together, at ranges and marks set for them, and are corrected as much
+Military shooting is usually drilled rather than individually coached. Learners
+are formed up and shoot on command, together, at ranges and marks set for them,
+and are corrected as much
 on timing and obedience as on aim — a volley loosed raggedly is a failure even
 if every shot was good. The drill continues until loading, presenting and
 loosing are done without thought, because they will have to be done while
@@ -375,8 +378,8 @@ experience of real action.
 **Short description.** Sustained instruction across several missile families.
 
 A shooting master's course is long and narrow: several kinds of missile weapon,
-taught properly and in turn, to someone who already shoots. The learner is taken
-past marksmanship into the differences between the arms — what each one does at
+taught properly and in turn. The learner is taken past marksmanship into the
+differences between the arms — what each one does at
 what distance, how each behaves in wind and wet, what each demands of the hand
 that holds it — and is corrected against a standard well above a soldier's.
 Range work is repeated past the point of competence, because the practice being
@@ -405,11 +408,14 @@ does not.
 
 This is not a course, and there is no teacher. What is described here is
 repeated service on campaign — seasons in the field, marches, camps, actions
-and the long stretches between them — and what a person reliably comes out of it
-having learned. The correction is supplied by consequence rather than by
-instruction, and it is supplied to everyone present regardless of rank or role.
+and the long stretches between them — and what such service can teach someone
+who does it. The correction is supplied by consequence rather than by
+instruction. Presence with a campaign is not itself the practice: what counts is
+repeated service of the qualifying kind, and someone whose duties keep them away
+from it may come out of a campaign having learned much less.
 
-Three things come of it together. Fighting stops being disorienting: noise,
+Where the service is of that kind, three things are learned together. Fighting
+stops being disorienting: noise,
 confusion and fear remain, but they no longer prevent the person from doing
 their work. A sense of the wider fight develops — where the danger is, what is
 about to happen on the flank, when a position has become untenable — which no
@@ -452,8 +458,8 @@ inspection, care and working service of weapons.
 
 **Boundaries and context.** Instructing is not exposure, and nothing here
 supplies the experience of real fighting. Nor is this a conditioning course or a
-weapon course in itself — it is the practice of teaching, learned by someone who
-can already fight.
+weapon course in itself — it is the practice of teaching, and fighting itself is
+learned elsewhere.
 
 ### M07 — Campaign staff practice
 
@@ -470,8 +476,9 @@ cumulative, and they are the practice.
 The four things that make up staff work are learned together because in a
 headquarters they are one problem. What the campaign is trying to achieve, what
 it will take to feed and move, what the army should do when it makes contact,
-and how all of it is recorded and passed on are decided in the same room by the
-same people. A plan that ignores supply is not a plan, and a decision that is
+and how all of it is recorded and passed on constrain one another too closely to
+be settled apart. A plan that ignores supply is not a plan, and a decision that
+is
 not properly recorded and transmitted did not happen.
 
 **What it teaches.** The planning and coordination of military operations toward
@@ -490,7 +497,7 @@ be a poor soldier. It plans and sustains the campaign.
 **Short description.** Designing and building the works a siege needs.
 
 Siege works are learned on sieges and on the fortifications that provoke them.
-The learner works under an engineer: surveying the ground, laying out an
+The learner works under an engineer: examining the ground, laying out an
 approach, designing a battery or a counterwork, and then watching it be built
 and fail or hold. The correction is emphatic, because the ground supplies it —
 a trench dug where it can be enfiladed, a platform that will not bear its
@@ -514,7 +521,8 @@ of buildings and sites for defence.
 
 **Boundaries and context.** This is the design and construction of works, not
 the serving of engines, which is a separate practice with its own crew and its
-own drill. It is not a command practice, and it teaches no weapon.
+own drill. It is not a command practice, it teaches no weapon, and the
+systematic measurement of ground is a separate competence taught elsewhere.
 
 ### M09 — Siege engine crew practice
 
@@ -530,8 +538,8 @@ of them, and the drill continues until the dangerous mistakes are gone.
 Two other things are drilled with it. An engine is a machine under great load,
 and the crew keeps it: cordage, timbers, mechanism and missiles are inspected,
 serviced and replaced by the men who work them, because nobody else is there to
-do it. And the crew serves in a formed body under fire, in a fixed position it
-cannot leave, which is its own discipline and is drilled as one.
+do it. And the crew serves in a formed body under fire, often tied to the
+engine's position, which is its own discipline and is drilled as one.
 
 **What it teaches.** The placement, coordinated working and routine operational
 management of siege engines; the practical analysis of forces, loads and motion
@@ -605,7 +613,7 @@ not conducting a trading house.
 
 ### C02 — Master artisan practice
 
-**Short description.** Guild- or master-level practice across several crafts,
+**Short description.** Guild- or master-level practice in one taught craft,
 with apprentices of one's own.
 
 Passing out of an apprenticeship is not the end of learning a craft. A craftsman
@@ -639,8 +647,9 @@ the teaching of a trade to apprentices in a workshop.
 
 A leather shop takes in raw hide and sends out goods, and an apprentice is
 walked through the whole of that passage. The early work is the unpleasant work —
-the soaking, scraping, dressing and drying that turns skin into leather — and it
-is where most of the correction falls, because a hide spoiled at that stage
+the preparation, by whatever stages the shop's methods use, that turns skin into
+leather — and it is where much of the correction falls, because a hide spoiled
+at that stage
 cannot be rescued later. Only afterwards does the learner get to cut, shape, join
 and finish, and there the corrections become exacting about fit and wear.
 
@@ -670,10 +679,11 @@ against bodies rather than patterns — a garment that measures correctly and ha
 wrong has failed, and the apprentice is made to see why. Cloth is expensive and a
 bad cut wastes it, so the correction here is immediate and remembered.
 
-Shops of this kind commonly make their own cloth or enough of it that the trade
-is taught, and in any case a tailor who does not understand weaving cannot judge
-what he is cutting. Apprentices therefore work the loom as well as the shears,
-and learn how a fabric is constructed, how it will behave when cut across or
+Some shops of this kind make their own cloth, or enough of it that the trade is
+taught alongside the cutting, and a tailor who does not understand weaving is
+poorly placed to judge what he is cutting. Apprentices in such a shop work the
+loom as well as the shears, and learn how a fabric is constructed, how it will
+behave when cut across or
 along, and how it will wear. Judging cloth and finished garments is the third
 constant: what this bolt is, what it is worth, and whether the work in front of
 them is good.
@@ -694,9 +704,10 @@ practice again.
 A sail loft is a floor, and the work is done on it. Apprentices learn by seaming
 first, hour after hour, then by helping lay out and cut, and eventually by
 working a sail through from cloth to finished article under the sailmaker's eye.
-The corrections are about shape and strength: a sail is cut to hold a curve under
-wind, and one that is merely flat and neat is wrong. What passes is judged by how
-the sail sets and how long it lasts, not by its appearance in the loft.
+The corrections are about shape and strength: a sail has to set as its vessel and
+rig require, and work that is merely neat has not met that test. What passes is
+judged by how the sail sets and how long it lasts, not by its appearance in the
+loft.
 
 Canvas is a heavy fabric and the loft prepares and handles its own — an
 apprentice learns the fibre, the thread and the twine as part of learning the
@@ -738,8 +749,8 @@ into stable construction, and the creation of expressive three-dimensional forms
 in a learned material practice.
 
 **Boundaries and context.** This is working the stone, not winning it. Extraction
-at the face is a different practice, learned by different people in a different
-place, and a mason is not by that fact a miner.
+at the face is a different practice, learned in a different place and taught in
+its own right, and a mason is not by that fact a miner.
 
 ### C07 — Mine and quarry apprenticeship
 
@@ -782,9 +793,9 @@ wrong in its door is useless.
 The shop teaches the understanding behind the work as well as the work. A lock is
 a mechanism, and the apprentice is taught to reason about mechanisms generally —
 what moves what, what bears the load, where the wear will come, why this
-arrangement will bind. And everything in it is metal the shop makes: an
-apprentice works at the forge and the bench, shaping, joining and repairing the
-parts, because a locksmith who cannot make a spring or a ward cannot make a lock.
+arrangement will bind. And its parts are metal the shop works itself: an
+apprentice works at the forge and the bench, shaping, joining and repairing
+them, because a locksmith who cannot make a spring or a ward cannot make a lock.
 
 **What it teaches.** The making, fitting and repair of locks and their working
 parts; the practical analysis of forces, loads and motion in structures and
@@ -858,8 +869,8 @@ supplies. Growing it is a different practice, and wine is made in its own.
 
 **Short description.** Growing the fruit and making the wine from it.
 
-Wine is made twice a year for the whole of a working life, and it cannot be
-learned any faster. A learner joins a vineyard through its full round — pruning,
+Wine is made vintage by vintage, and the practice is learned across repeated
+ones. A learner joins a vineyard through its full round — pruning,
 tending, watching the fruit, picking at the moment judged right, and then the
 pressing, fermentation and long maturation — and does it again, and again. The
 correction is annual and unanswerable: what is in the cask a year later is the
@@ -885,8 +896,9 @@ practices that teach the cooking it rests on.
 **Short description.** Sustained alchemical operation with the apparatus it
 needs.
 
-An alchemical workshop is a working place with fires, glass and long operations,
-and it is learned by tending them. The apprentice starts by keeping the heat,
+An alchemical workshop is a working place of sustained heats, vessels and long
+operations, and it is learned by tending them. The apprentice starts by keeping
+the heat,
 watching a vessel and recording what happens, which is the greater part of the
 work, and is corrected on attention and record before ever being trusted with a
 preparation. The instruction is within a particular tradition — its
@@ -924,9 +936,9 @@ carries messages, attends, keeps a record and is present at a great deal they do
 not yet understand, and the teaching is done by the officers above them in short
 and pointed corrections: that request goes to a different officer, that man's
 opinion carries more weight than his office suggests, that matter is not
-unresolved but waiting, you addressed the wrong person first. Nobody sets it out
-systematically, and the learner is expected to assemble it by attending
-carefully.
+unresolved but waiting, you addressed the wrong person first. Much of it is
+never set out systematically, and the learner is expected to assemble it by
+attending carefully.
 
 Most of court service is ordinary work done dependably. Business recurs,
 obligations fall due, offices divide responsibility, and somebody has to keep all
@@ -995,11 +1007,10 @@ nothing to watch.
 
 A corpus is memorised alongside it. Such traditions carry a body of material that
 must be held accurately and recalled in order, and they teach deliberate method
-for holding it rather than leaving it to raw memory. The third element comes of
-the other two and is trained just as deliberately: someone who has spent years
-attending closely, in a community where people live at close quarters and speak
-carefully, becomes markedly better at reading what people actually mean, and
-elders draw that out and correct it rather than let it remain instinct.
+for holding it rather than leaving it to raw memory. The third element is
+trained just as deliberately and alongside the other two: in a community where
+people live at close quarters and speak carefully, reading what people actually
+mean is drawn out and corrected by elders rather than left to instinct.
 
 **What it teaches.** A trained discipline for entering and maintaining a mental
 state suited to ceremonies, rituals and other demanding practices; the deliberate
@@ -1059,8 +1070,8 @@ Two other things are learned in the same company. Knowing what is worth taking i
 half the trade, and it is taught: what that is, what it will fetch, what is
 traceable and what is not worth the risk, judged at a glance and corrected
 afterwards by what it actually fetched. And reaching things is the other half —
-walls, roofs, sills and stairs, ascended and descended quietly using whatever
-supports are there. The particular specialist practice of lifting from what
+walls, roofs, sills and stairs, ascended and descended using whatever supports
+are there. The particular specialist practice of lifting from what
 somebody is carrying, with its own demands of access, timing and unobtrusive
 handling, is taught within this same company.
 
@@ -1126,9 +1137,9 @@ contacts, opportunities and conventions of an urban milieu or settlement; and th
 selection and arrangement of a hiding place that keeps an object from ordinary
 discovery.
 
-**Boundaries and context.** One milieu, in one place: its conventions do not
-transfer to another city's. This is association and knowledge, not a trade in
-itself — it teaches no theft, no entry and no violence.
+**Boundaries and context.** One milieu, in one place: its conventions transfer
+imperfectly, if at all, to another city's. This is association and knowledge,
+not a trade in itself — it teaches no theft, no entry and no violence.
 
 ### K17 — Gaming-house practice
 
@@ -1143,10 +1154,11 @@ under stake becomes steady rather than hopeful.
 
 The other half of the house is the people. Reading a player — what they are
 holding, what they can afford, whether they mean it — is where the advantage
-lies, and it is taught explicitly, discussed between hands and corrected against
-what the cards turn out to be. And hands are trained: a gaming house's trade
-involves fine control of small objects, and whether that control is used to deal
-cleanly or otherwise, it is learned in the same room from the same people.
+lies, and it is taught explicitly, discussed between rounds and corrected
+against what the play turns out to have been. And hands are trained: a gaming
+house's trade involves fine control of small objects, and whether that control
+is used honestly or otherwise, it is learned in the same room from the same
+people.
 
 **What it teaches.** The practiced understanding and play of games in which
 participants stake something on an uncertain result; the interpretation of
@@ -1174,9 +1186,10 @@ The reproduction is then trained against the real thing. The learner copies,
 compares, is shown what gave the attempt away and does it again: the wrong
 formula, the hand that belongs to the wrong decade, the material that is right
 for the wrong office. Judging the material is the third competence and it is
-inseparable from the other two, since the practitioner must assess parchment,
-ink, seal and workmanship as closely as an examiner would, and know what the
-genuine article is worth to whoever wants the copy.
+inseparable from the other two, since the practitioner must assess the
+materials, marks and workmanship of the documents in question as closely as an
+examiner would, and know what the genuine article is worth to whoever wants the
+copy.
 
 **What it teaches.** The creation or alteration of documents and credentials
 intended to pass as genuine examples of a particular documentary practice; the
@@ -1194,7 +1207,8 @@ inspection.
 
 **Short description.** Finding, holding and checking what is already known.
 
-Scholarly study is an apprenticeship like any other, conducted over books. The
+Scholarly study is an apprenticeship like any other, conducted over whatever
+sources the tradition works from. The
 learner is set a question and sent to answer it, and the answer is taken apart:
 where did this come from, what does it actually say, what does it rest on, why do
 you believe it rather than the other account. The corrections are almost entirely
@@ -1262,10 +1276,10 @@ Observation without calculation is only a diary, and the two are taught as one
 practice. The learner is worked through the methods needed to derive something
 from what was recorded — positions, intervals, recurrences — and is held to them
 until the reckoning is dependable, since an error in the arithmetic is
-indistinguishable from an error in the sky. The same nightly attention produces
-the third competence almost unavoidably: someone who watches the sky every night
-across the seasons learns to read weather from it, and a working observatory
-teaches that too, because it decides whether there will be an observation at all.
+indistinguishable from an error in the sky. The third competence is taught
+alongside the other two, in the same nightly attention: reading the weather
+decides whether there will be an observation at all, so a working observatory
+instructs its learners in it and corrects them on it.
 
 **What it teaches.** The systematic observation and understanding of celestial
 bodies and their recurring motions; the use of learned methods to reason about
@@ -1478,12 +1492,13 @@ of this. The correction is about technique and about conditioning together, sinc
 the point is not a single performance but a body that can be relied on to perform
 repeatedly.
 
-The training is not confined to the track. Someone conditioned this way is
-trained to move over whatever is in the way, and the ground supplies height and
+The training is not confined to the track. A programme of this kind sets
+learners to move over whatever is in the way, and the ground supplies height and
 water as readily as distance. Getting up and down difficult surfaces securely,
-and moving and supporting oneself in water, are trained as part of the same
-programme and by the same trainer, because they are the same conditioning applied
-to different obstacles.
+and moving and supporting oneself in water, are trained within the same
+programme — but each has its own techniques and its own practice environment,
+and each is corrected in its own right. Conditioning carries across them;
+technique does not.
 
 **What it teaches.** Trained performance in running, including speed, pacing,
 efficient movement and sustained effort over terrain; trained body control for
@@ -1491,27 +1506,33 @@ jumping, vaulting, balancing and related athletic movement; trained movement and
 support of the body in water; and the trained ascent and descent of difficult
 surfaces using secure movement and suitable supports.
 
-**Boundaries and context.** Conditioning and movement. It is not a fighting
-practice of any kind, and it teaches no craft: what it produces is a body trained
-to cover ground.
+**Boundaries and context.** Conditioning and movement, with each technique
+learned in its own right. Dance requires a movement tradition and expressive or
+formal performance instruction, and is not taught here. It is not a fighting
+practice of any kind — neither unarmed fighting nor trained evasion is supplied
+by general athletic movement — and it teaches no craft: what it produces is a
+body trained to cover ground.
 
 ### F09 — Rigged-vessel deck apprenticeship
 
 **Short description.** Deck and rigging work on a rigged vessel.
 
-A deck apprentice learns at sea, from the hands. The work is handling the vessel
+A deck apprentice learns aboard, from the hands. The work is handling the vessel
 and running its routines — watches, sail handling, ground tackle, the ordinary
 labour of keeping a ship working — and the correction is immediate, public and
 unsentimental, because on a rigged vessel a slow or wrong hand is a danger to
 other people. Competence is established by being trusted with progressively more
-of the work rather than by anything being certified.
+of the work.
 
 A rigged vessel runs on rope and is worked from aloft, and both are trained
 accordingly. Every line has a purpose, a place and a knot proper to it, and the
-apprentice is drilled on cordage until the right one is made correctly in the
-dark. Going aloft is likewise taught rather than assumed: climbing the rigging
-and working there safely and with both hands occupied is learned under
-instruction, on a moving ship. And the ship's people read the weather constantly,
+apprentice is drilled until the right one is made correctly in the dark — and
+drilled as thoroughly on inspecting a working line, diagnosing why one has
+failed, and splicing it. Going aloft is likewise taught rather than assumed:
+climbing the rigging and working there safely is learned under instruction
+rather than picked up. Vessels and rigging traditions differ, and what an
+apprentice is drilled on is the practice of the ship they learn in. And the
+ship's people read the weather constantly,
 because sail is set and shortened on that judgment; an apprentice is brought into
 it and corrected on it long before ever being asked to make the decision.
 
@@ -1523,4 +1544,6 @@ environmental signs and recurring conditions to judge likely weather.
 
 **Boundaries and context.** The deck and the rigging of a rigged vessel. It is
 not navigation — finding the way is a separate practice with separate
-instruction — and it is not shipbuilding.
+instruction — and it is not shipbuilding. Making cordage is a manufacturing
+trade rather than the working of finished rope, and the design and construction
+of sails is another practice again.
