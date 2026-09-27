@@ -159,7 +159,7 @@ no bridge.
   single purchase** — the case ruled separately under "Specialization-access-only
   Learning Groups" below and under Ruling item 3 above (`ceil` of a bundle that
   gains no useful competence prices at `0`). It never produces a cost
-  *reduction*: there is no bundle it reprices downward while other training
+  _reduction_: there is no bundle it reprices downward while other training
   stays fixed. Every reachable cost reduction under this record instead comes
   from a **different rule** — relationship floors between **different** Skills,
   exactly the `weapon-instructor`/`F35`/`G08` mechanism in the example above.
@@ -182,7 +182,6 @@ no bridge.
   (`apps/web/src/features/chargen/components/TrainingCostChangeNotice.tsx:42-43`)
   are the canonical player-facing wording and are checkably in agreement with
   this record:
-
   - reduction: "This training also improves related skills, so some points
     previously needed elsewhere are no longer needed."
   - increase (mirror, on removal): "Removing this training also removes its
