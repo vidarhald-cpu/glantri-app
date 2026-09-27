@@ -1,13 +1,17 @@
-# PROPOSED, NOT ACCEPTED SOURCE — Player-facing Profession categories v1
+# Player-facing Profession browsing categories v1 — approved
 
-**Status:** authored content proposal, awaiting Product Owner review. Not
-accepted source, not digest-protected, not consumable by any runtime, gate, or
-test.
+**Status:** approved by the Product Owner on 2026-09-27 as the **approved
+player-facing browsing taxonomy for Forgejo #372**. See [rule decision
+0011](../../decisions/rules/0011-profession-browsing-taxonomy-approval.md).
+This is a presentation/browsing layer only: it carries no cost, level, XP,
+progression, eligibility, or acquisition rule, and it is not yet wired to any
+runtime, gate, or test.
 
 **Purpose:** unblock Forgejo #372 (Chargen Profession and acquisition
-presentation), which is blocked on a Profession browsing roster. The 2026-09-26
-ruling states this roster must not be invented by an implementation Builder, so
-it is authored here and comes to the Product Owner for a decision.
+presentation), which was blocked on a Profession browsing roster. The
+2026-09-26 ruling stated this roster must not be invented by an implementation
+Builder, so it was authored here and brought to the Product Owner for a
+decision. The 2026-09-27 ruling recorded below discharges that block.
 
 ## What this is, and what it is not
 
@@ -238,6 +242,43 @@ The roster above keeps them separate because a reader distinguishes a town guard
 from a soldier, a scribe from a philosopher, and a priest from an astronomer,
 and because a maximum category size of eight narrows better than eleven. Either
 shape is coherent; the choice is the Product Owner's.
+
+**Correction, recorded at Product Owner ruling (2026-09-27).** The figure
+above — "thirteen categories with a largest size of eleven" — is wrong. Two
+categories fold into Learning and Inquiry, not one: **Letters and Teaching**
+(3) and **Religion and Divination** (3) both move there, on top of its
+existing 8, giving 8 + 3 + 3 = **14**, not 11. **Military Service** alone
+receives **Guarding and Arms Training**, becoming 8 + 3 = 11. The corrected
+13-category distribution is 14, 11, 7, 6, 6, 6, 6, 5, 5, 5, 5, 4, 4.
+
+### Product Owner ruling — 2026-09-27
+
+**Approved: the 16-category taxonomy above, exactly as authored in §§1-4.**
+**Rejected: the fold to 13 categories considered in this section.** Grounds:
+
+- The corrected arithmetic gives a largest category of 14 (Learning and
+  Inquiry: 8 + 3 + 3), not the 11 this section originally stated — a 14-item
+  list is close to twice the maximum of 8 that the 16-category roster
+  achieves, which materially weakens the case for folding rather than
+  supporting it.
+- 8 of the 9 moved Professions conflict with the receiving category's own
+  stated "Does not belong here" boundary:
+  - Into **Military Service** (excludes "Civil guarding"): P14 Guard, Watcher
+    and Escort; P15 Enforcer; P82 Weapon Instructor.
+  - Into **Learning and Inquiry** (excludes "Teaching it to others"): P64
+    Teacher; P65 Scribe and Copyist; P66 Translator and Interpreter.
+  - Into **Learning and Inquiry** (excludes "religious or divinatory
+    interpretation"): P74 Religious Practitioner; P75 Diviner.
+  - Only **P71 Astrologer** (Religion and Divination → Learning and Inquiry)
+    moves cleanly — it also resolves an existing §4 ambiguous case rather than
+    creating a new conflict. One clean move is not sufficient reason to
+    distort the taxonomy.
+
+This ruling does not re-author any category name, scope statement, or family
+placement. The roster in §§1-4 stands exactly as authored, now as approved
+content. See [rule decision
+0011](../../decisions/rules/0011-profession-browsing-taxonomy-approval.md)
+for the complete record.
 
 ## 6. Verification performed
 
