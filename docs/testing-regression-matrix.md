@@ -193,31 +193,42 @@ baseline corrected below.
 
 ### Pre-existing Playwright failure baseline — recorded 2026-09-26
 
-**Corrected 2026-09-26 against `3a91c867`. The baseline is four failures, not
-six.** This supersedes the six-failure baseline this section first recorded; what
-was believed, and why it stopped being true, is kept below because that is the
-durable lesson.
+**Corrected 2026-09-26 against `2a18d1bf0525a0f9bc6a887ef61aad3e8cdc872b`. The baseline is two
+failures, not four.** This is the third baseline this section has recorded — six, then four, now
+two. It supersedes the four-failure baseline this section previously recorded, which itself
+superseded the original six-failure baseline. What was believed at each stage, and why it
+stopped being true, is kept below because that succession is itself the durable lesson.
 
-The current baseline was established by an independent floor-class QA lane using
-a **controlled base-versus-head comparison**: a second worktree at
-`5c34b1f0`, its own disposable database, and its own stack on its own derived
-ports, running the contested specs on both sides.
+The four-failure baseline was established by an independent floor-class QA lane using a
+**controlled base-versus-head comparison**: a second worktree at `5c34b1f0`, its own disposable
+database, and its own stack on its own derived ports, running the contested specs on both sides.
 
-Two in the `apps/web/playwright.config.ts` end-to-end project:
+The current two-failure baseline was confirmed by the independent floor-class QA lane that
+verified #363 (merged as PR #378). That change fixed the two
+`apps/web/browser-tests/skill-reference.spec.mts` viewport-case failures the four-failure
+baseline listed below. **Those two cases were stale assertions, not product failures**, and must
+no longer be presented as a baseline a lane may ignore.
+
+Two failures, both driven by `apps/web/playwright.config.ts`, in specs under `apps/web/e2e`:
 
 | Spec                                      | Case                                                                              |
 | ----------------------------------------- | --------------------------------------------------------------------------------- |
 | `apps/web/e2e/artifactImports.spec.ts:10` | creates, reuses, revises, retires and imports through review at narrow width      |
 | `apps/web/e2e/artifacts.spec.ts:16`       | publishes a safe visual Artifact to entitled players without exposing GM controls |
 
-Two in the `apps/web/browser-tests/playwright.config.ts` project: **both
-viewport cases** of `apps/web/browser-tests/skill-reference.spec.mts` — "Skill
-reference stays usable at 1440px" and the same check at 390px.
+**The `apps/web/browser-tests/playwright.config.ts` project has zero pre-existing failures.**
+Because it has none, any `apps/web/browser-tests` failure is a real regression and must be
+treated as one.
 
-**A lane is not accountable for these four; it is accountable for not adding a
-fifth.**
+**A lane is not accountable for these two; it is accountable for not adding a
+third.**
 
 #### What was superseded, and why it went stale
+
+The two `apps/web/browser-tests/skill-reference.spec.mts` viewport cases previously listed here
+as part of the four-failure baseline — "Skill reference stays usable at 1440px" and the same
+check at 390px — were **stale assertions, not product failures**. #363 (merged as PR #378) fixed
+them, and they must no longer appear as a baseline a lane may ignore.
 
 The two `apps/web/e2e/character-lifecycle-recovery.spec.ts` cases previously
 listed here — `:85` "keeps canonical truth visible while a failed identity draft

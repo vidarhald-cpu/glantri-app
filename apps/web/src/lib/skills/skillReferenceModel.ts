@@ -12,8 +12,38 @@ export type ReferenceRelationship = {
   bridge?: { threshold: number; parentExcessOffset: number; reverseFactor: number };
 };
 
+/**
+ * The reader-facing prose layers #361 publishes onto canonical V2 runtime content.
+ *
+ * `description` is the FULL Inspector prose and is `undefined` where it has not been authored yet;
+ * it is never a copy of `shortDescription`. `shortDescription` is published only for the subset of
+ * Learning Groups whose prose is accepted, so a consumer must fall back to the canonical one-line
+ * `description` for the rest rather than render an empty summary.
+ */
+export type ReferenceReaderContent = {
+  shortDescription?: string;
+  description?: string;
+  typicalActivities?: string[];
+  boundaries?: string[];
+};
+/** One canonical Society Level x Social Band availability cell, reflected without reinterpretation. */
+export type ReferenceAccessCell = {
+  societyLevel: number;
+  socialBand: string;
+  availableGroupIds: string[];
+  validPathIds: string[];
+  reachableCompetencyIds: string[];
+};
+export type ReferenceAccessGrid = {
+  authoredCeiling: number;
+  societyLevels: number[];
+  socialBands: { id: string; name: string }[];
+  cells: ReferenceAccessCell[];
+};
+
 export type SkillReferenceSkill = ReferenceLink & {
   description: string;
+  shortDescription: string;
   type: "Skill" | "Specialization" | "Spoken language" | "Written tradition";
   category: string;
   linkedStats: string[];
@@ -33,7 +63,9 @@ export type SkillReferenceSkill = ReferenceLink & {
   relationships: ReferenceRelationship[];
 };
 export type SkillReferenceGroup = ReferenceLink & {
+  /** The established canonical one-line summary. Retained with its existing meaning. */
   description: string;
+  readerContent: ReferenceReaderContent;
   fixedSkills: ReferenceLink[];
   selectionSlots: { id: string; label: string; chooseCount: number; candidates: ReferenceLink[] }[];
   specializations: ReferenceLink[];
@@ -42,6 +74,8 @@ export type SkillReferenceGroup = ReferenceLink & {
 };
 export type SkillReferenceProfession = ReferenceLink & {
   familyId: string;
+  familyCode?: string;
+  readerContent: ReferenceReaderContent;
   coreAlternatives: {
     id: string;
     label: string;
@@ -91,6 +125,12 @@ export type SkillReferenceModel = {
   grouplessSkills: ReferenceLink[];
   relationships: ReferenceRelationship[];
   authoredCeiling: number;
+  access: ReferenceAccessGrid;
+  readerContentCoverage: {
+    groups: { canonical: number; published: number; awaiting: number };
+    families: { canonical: number; published: number; awaiting: number };
+    groupsAwaitingProse: { id: string; name: string }[];
+  };
   sourceDigest: string;
   inventory: { learningGroups: number; professionPaths: number; professionFamilies: number };
 };
@@ -127,6 +167,18 @@ function required(map: Map<string, ReferenceLink>, id: string): ReferenceLink {
 function byName<T extends { name: string }>(a: T, b: T): number {
   return a.name.localeCompare(b.name);
 }
+/**
+ * Carries the published reader layers through unchanged. A missing full `description` stays missing:
+ * the Inspector has to be able to say the prose is unpublished instead of showing a summary as prose.
+ */
+function readerContentOf(value: ReferenceReaderContent | undefined): ReferenceReaderContent {
+  return {
+    shortDescription: value?.shortDescription,
+    description: value?.description,
+    typicalActivities: value?.typicalActivities ? [...value.typicalActivities] : undefined,
+    boundaries: value?.boundaries ? [...value.boundaries] : undefined,
+  };
+}
 
 export function buildSkillReferenceModel(
   source: CompetencyV2ReferenceSource = getCompetencyV2ReferenceSource(),
@@ -140,6 +192,9 @@ export function buildSkillReferenceModel(
   const groupById = new Map(source.groups.map((row) => [row.id, row]));
   const familyById = new Map(source.families.map((row) => [row.id, row]));
   const professionById = new Map(source.professions.map((row) => [row.id, row]));
+  const familyReaderById = new Map(
+    source.families.map((row) => [row.id, { code: row.code, readerContent: row.readerContent }]),
+  );
   const categoryById = new Map(source.categories.map((row) => [row.competencyId, row.categoryId]));
   const groupDescriptionById = new Map(
     source.groupDescriptions.map((row) => [row.id, row.description]),
@@ -203,6 +258,8 @@ export function buildSkillReferenceModel(
       return {
         ...linkProfession(path.id),
         familyId: path.familyId,
+        familyCode: familyReaderById.get(path.familyId)?.code,
+        readerContent: readerContentOf(familyReaderById.get(path.familyId)?.readerContent),
         coreAlternatives: path.coreRoutes.map((core) => ({
           id: core.id,
           label: core.label,
@@ -229,6 +286,7 @@ export function buildSkillReferenceModel(
       return {
         ...linkGroup(group.id),
         description: groupDescriptionById.get(group.id) ?? group.description ?? "",
+        readerContent: readerContentOf(group.readerContent),
         fixedSkills: group.fixedSkillIds.map(linkSkill).sort(byName),
         selectionSlots: group.selectionSlots.map((slot) => ({
           id: slot.id,
@@ -328,6 +386,7 @@ export function buildSkillReferenceModel(
       return {
         ...linkSkill(id),
         description: entry.description ?? runtimeSkill?.shortDescription ?? "",
+        shortDescription: runtimeSkill?.shortDescription ?? entry.description ?? "",
         type: (specialization
           ? "Specialization"
           : kind === "spoken-language"
@@ -436,6 +495,37 @@ export function buildSkillReferenceModel(
       .filter((row) => row.type === "Skill" && !groupMembershipIds.has(row.id))
       .map((row) => ({ id: row.id, key: row.key, name: row.name })),
     authoredCeiling: source.availability.authoredCeiling,
+    access: {
+      authoredCeiling: source.availability.authoredCeiling,
+      societyLevels: [...new Set(source.availability.cells.map((cell) => cell.societyLevel))].sort(
+        (a, b) => a - b,
+      ),
+      socialBands: source.availability.socialBands.map((band) => ({
+        id: band.id,
+        name: band.name,
+      })),
+      cells: source.availability.cells.map((cell) => ({
+        societyLevel: cell.societyLevel,
+        socialBand: cell.socialBand,
+        availableGroupIds: [...cell.availableGroupIds],
+        validPathIds: [...cell.validPathIds],
+        /* The canonical reachable competencies of this cell, kept as one set because a reader asks
+           "can this be learned here", not "which of three canonical arrays listed it". */
+        reachableCompetencyIds: [
+          ...cell.reachableBaseSkillIds,
+          ...cell.reachableSpecializationIds,
+          ...cell.reachableWrittenCompetencyIds,
+        ],
+      })),
+    },
+    readerContentCoverage: {
+      groups: { ...source.readerContentCoverage.groups },
+      families: { ...source.readerContentCoverage.families },
+      groupsAwaitingProse: source.readerContentCoverage.groupsAwaitingProse.map((row) => ({
+        id: row.id,
+        name: row.name,
+      })),
+    },
     sourceDigest: source.sourceDigest,
     inventory: {
       learningGroups: groups.length,

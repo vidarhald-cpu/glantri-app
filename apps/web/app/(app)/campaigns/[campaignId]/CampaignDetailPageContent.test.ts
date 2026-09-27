@@ -100,16 +100,17 @@ describe("CampaignDetailPageContent roster UI", () => {
     expect(source).toContain("filteredScenarios.map");
   });
 
-  it("provides task-shell destinations without duplicating domain management", () => {
+  it("provides task-shell destinations with the unified material workbench", () => {
     const source = readCampaignDetailSource();
 
     expect(source).toContain('id="campaign-create-material"');
     expect(source).toContain('id="campaign-material"');
     expect(source).toContain('id="campaign-membership"');
     expect(source).toContain('id="campaign-scenarios"');
-    expect(source).toContain('id="campaign-artifacts"');
     expect(source).toContain("Start in the domain that owns the new material.");
-    expect(source).toContain("manage each object in its established");
+    expect(source).toContain(
+      "<CampaignMaterialPanel campaignId={campaignId} scenarios={scenarios} />",
+    );
     expect(source).toContain("buildCampaignScenarioHref");
   });
 });
