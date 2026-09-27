@@ -249,8 +249,11 @@ Skill group cost = ceil(2/3 * weightedUseful)
 The ceiling is applied **once** to the complete bundle of purchased Learning Groups, never
 per group and never per rank, so the price of a purchase is the change in the bundle price.
 A Group contribution that yields no useful competence yields no price. A Learning Group that
-teaches no base membership and exists only to open authored Specialization access keeps a flat
-cost of `1` per purchase.
+teaches no base membership and exists only to open authored Specialization access has a Group
+purchase cost of `0` and carries no Group purchase action at all: eligibility through the Group
+exposes the Specialization, which is purchased and progressed separately under its own costs.
+The incidental flat cost of `1` it formerly carried is retired (Product Owner ruling,
+2026-09-27).
 
 This is the shared canonical Learning Group acquisition arithmetic in
 [`pilot-skill-rules-v1.md`](./pilot-skill-rules-v1.md) section 4, which both the

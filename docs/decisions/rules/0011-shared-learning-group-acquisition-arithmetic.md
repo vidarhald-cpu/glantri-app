@@ -156,9 +156,11 @@ no bridge.
   mechanism. "Overlapping training does not stack"
   ([`docs/rules/competency-rules.md`](../../rules/competency-rules.md)) governs
   **one Skill taught by several Learning Groups**, and it produces a **zero-cost
-  single purchase** — the case ruled separately under "Specialization-access-only
-  Learning Groups" below and under Ruling item 3 above (`ceil` of a bundle that
-  gains no useful competence prices at `0`). It never produces a cost
+  single purchase** — the case ruled under Ruling item 3 above (`ceil` of a
+  bundle that gains no useful competence prices at `0`). That is a _different_
+  mechanism from the Specialization-access-only Group priced at `0` below: there
+  the Group has no base membership at all, whereas here a real membership is
+  fully supplied by a stronger Group already held. It never produces a cost
   _reduction_: there is no bundle it reprices downward while other training
   stays fixed. Every reachable cost reduction under this record instead comes
   from a **different rule** — relationship floors between **different** Skills,
@@ -219,7 +221,10 @@ definitions and never from purchased Group ranks
 (`resolveCompetencyV2Path.ts`, `resolveEffectiveProfessionPackage.ts`,
 `validateTargetChargenBuild.ts`).
 
-No approved canonical Learning Group reaches this case — all 59 approved groups
-have at least one fixed membership — so the shape is reachable only in legacy
-content. A legacy draft holding purchased ranks on such a Group reprices to `0`
+No approved canonical Learning Group reaches this case in either catalogue —
+every group has at least one fixed membership in the 95-group
+`withCompetencyContentV2(...)` projection that Chargen actually loads and in the
+legacy 59-group approved catalogue retained for `/skills` (see
+[`docs/testing-regression-matrix.md`](../../testing-regression-matrix.md)) — so
+the shape is reachable only in legacy draft content. A legacy draft holding purchased ranks on such a Group reprices to `0`
 under the draft-state consequence above.

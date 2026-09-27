@@ -423,11 +423,16 @@ export function getActiveGroupSkillPurchaseCost(input: {
  *
  * - `ordinary` — the cost moved the same way the training did, or did not move.
  * - `reduced-by-overlap` — training was added and the build's Learning Group cost went
- *   *down*, because the added training overlaps training the Character already had and
- *   overlapping Groups do not stack, so competence the earlier training was priced for is
- *   now supplied without it.
+ *   *down*, because the added training raised a relationship floor between **different**
+ *   Skills, so competence an earlier Group was priced for is now supplied by the
+ *   relationship instead and the rebundled price is lower.
  * - `raised-by-overlap` — the mirror: training was removed and the cost went *up*, because
- *   the overlap that was absorbing part of the earlier price is gone.
+ *   the relationship effect that was absorbing part of the earlier price is gone.
+ *
+ * This is **not** the "overlapping training does not stack" rule, which governs one Skill
+ * taught by several Learning Groups: that rule produces a zero-cost single purchase and
+ * never a reduction, and is classified `ordinary` here. The two must not be unified (rule
+ * decision 0011).
  *
  * Both non-ordinary shapes are canonical and intended (rule decision 0011, Product Owner
  * 2026-09-27). This classification belongs to the rules layer so no presentation surface has
