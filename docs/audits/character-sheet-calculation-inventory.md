@@ -131,7 +131,7 @@ Skill rows are omitted when `totalXp <= 0`. Specialization-only skill definition
 | Parent skill | Specializations table | `CharacterDetail.tsx` | `primaryAllocation.ts` | Derived label | `specializationView.parentSkillName` | None | Missing |
 | Owned XP | Specializations table | `CharacterDetail.tsx` | `primaryAllocation.ts` | Stored-derived | `specializationView.secondaryRanks` | None | Missing |
 | Derived XP | Not currently a visible column | `characterSheet.ts` stores `grantedXp` | `deriveSkillRelationships.ts` | Derived | `relationshipGrantedSpecializationLevel` | Uses floors and thresholds | Missing; hidden from table |
-| Total | Specializations table | `CharacterDetail.tsx` | `calculateSpecializationLevel.ts` | Derived | `floor(parentGroupLevel / 2) + ownedSpecializationXp + relationshipGrant` | `Math.floor(groupLevel / 2)` | Missing |
+| Total | Specializations table | `CharacterDetail.tsx` | `calculateSpecializationLevel.ts` | Derived | `ownedSpecializationXp + relationshipGrant` | None | [Rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md) ruling 3 |
 
 ### Legacy Sheet Combat Summary
 
@@ -254,13 +254,20 @@ non-relationship base XP
   -> effectiveSkillNumber / effectiveSpecializationNumber
 ```
 
+**Correction, 2026-09-27 (Forgejo #382).** The two Specialization entries above are corrected in
+place. This audit originally recorded a `floor(parentGroupLevel / 2)` term in the Specializations
+"Total", drawn from the strongest active Learning Group of the Specialization's **parent Skill** —
+not from the Group that taught the Specialization. It had no rule backing, which is why the
+original row read "Missing". [Rule decision 0010](../decisions/rules/0010-competency-classification-and-group-taught-specializations.md)
+ruling 3 settles for V1 that a Group-taught Specialization receives an acquisition and training
+route only and no Group XP, so the term is removed rather than documented.
+
 Specialization dependency chain:
 
 ```text
-parent skill active group contribution
-  -> floor(parentGroupLevel / 2)
-  -> plus owned specialization XP
-  -> plus relationship granted specialization XP
+owned specialization XP
+  -> plus relationship granted specialization XP (a non-additive minimum, resolved as the
+     shortfall to the floor by resolveRelationshipMinimumGrants)
   -> specialization total
 ```
 

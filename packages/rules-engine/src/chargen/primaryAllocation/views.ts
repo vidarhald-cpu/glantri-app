@@ -420,31 +420,9 @@ export function buildChargenDraftView(input: {
       const parentSpecializationDefinition = definition
         ? getSpecializationById(input.content, definition.skillId)
         : undefined;
-      const groupView = parentSkillDefinition
-        ? selectBestSkillGroupContribution(
-            getActiveSkillGroupIds({
-              progression,
-              skill: parentSkillDefinition,
-              skillGroups: input.content.skillGroups,
-            })
-              .map((groupId) => {
-                const groupView = groupViewById.get(groupId);
-                const groupDefinition = getSkillGroupDefinition(input.content, groupId);
-
-                if (!groupView) {
-                  return null;
-                }
-
-                return {
-                  groupId,
-                  groupLevel: groupView.groupLevel,
-                  name: groupView.name,
-                  sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER,
-                };
-              })
-              .filter(isDefined),
-          )
-        : undefined;
+      // No Learning Group of the parent Skill is resolved here. Rule decision 0010 ruling 3
+      // clauses 1, 4, 5 and 6 keep Group XP on the Group's base Skills, so a Specialization
+      // takes nothing from any Group — including the one that teaches it.
 
       if (!definition || (!parentSkillDefinition && !parentSpecializationDefinition)) {
         return null;
@@ -460,14 +438,13 @@ export function buildChargenDraftView(input: {
         progressionSpecialization?.relationshipGrantSourceType === "specialization-bridge-parent"
           ? progressionSpecialization.relationshipGrantSourceType
           : undefined;
-      const specializationLevel =
-        (progressionSpecialization?.secondaryRanks ?? 0) + relationshipGrantedSpecializationLevel;
+      const specializationLevel = calculateSpecializationLevel({
+        ownedSpecializationXp: progressionSpecialization?.secondaryRanks ?? 0,
+        relationshipGrantedXp: relationshipGrantedSpecializationLevel,
+      });
 
       const view: ChargenSpecializationView = {
-        effectiveSpecializationNumber: calculateSpecializationLevel({
-          groupLevel: groupView?.groupLevel ?? 0,
-          specializationLevel,
-        }),
+        effectiveSpecializationNumber: specializationLevel,
         relationshipGrantedPreviewLevel,
         relationshipGrantedSourceSkillId: shouldSurfaceRelationshipSource
           ? (relationshipGrant?.sourceSkillId ??
