@@ -53,7 +53,9 @@ describe("combined target Chargen", () => {
       secondaryRanks: 0,
     });
     expect(group.progression.primaryPoolSpent).toBe(0);
-    expect(group.progression.secondaryPoolSpent).toBe(4);
+    // ceil(2/3 * weightedUseful) from the shared canonical Learning Group arithmetic
+    // (docs/rules/pilot-skill-rules-v1.md section 4).
+    expect(group.progression.secondaryPoolSpent).toBe(6);
     const direct = allocateChargenPoint({
       ...context,
       progression,
@@ -68,7 +70,7 @@ describe("combined target Chargen", () => {
   });
   it("prices only base memberships and refunds symmetrically", () => {
     const progression = createChargenProgression();
-    expect(getActiveGroupSkillCost({ content, groupId: "F07", progression }).cost).toBe(2);
+    expect(getActiveGroupSkillCost({ content, groupId: "F07", progression }).cost).toBe(3);
     const input = { ...context, progression, targetId: "G03", targetType: "group" as const };
     const purchased = allocateChargenPoint(input);
     expect(purchased.error).toBeUndefined();

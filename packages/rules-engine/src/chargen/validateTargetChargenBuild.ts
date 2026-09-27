@@ -5,7 +5,7 @@ import type { CanonicalContentShape } from "./primaryAllocation/_helpers";
 import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
 import { evaluateSkillSelection } from "../skills/evaluateSkillSelection";
 import { buildChargenMotherTongueSummary } from "./selectionStructure";
-import { getActiveGroupSkillCost, getOrdinaryPoolTotal } from "./primaryAllocation/costs";
+import { getChargenGroupBundleCost, getOrdinaryPoolTotal } from "./primaryAllocation/costs";
 import { buildChargenCoreRouteStatus } from "./coreRouteSelection";
 
 /** Validate target Chargen purchases against server-resolved content, never caller packages. */
@@ -126,14 +126,21 @@ export function validateTargetChargenBuild(
       errors.push(`No Profession access to Learning Group ${group.groupId}.`);
     if (group.grantedRanks !== 0 || group.ranks !== group.primaryRanks + group.secondaryRanks)
       errors.push(`Invalid unpurchased group ranks: ${group.groupId}.`);
-    const quote = getActiveGroupSkillCost({ content, groupId: group.groupId, progression: p });
-    if (quote.cost === undefined) errors.push(quote.error ?? "Invalid group quote.");
-    else {
-      if (group.secondaryRanks > 0)
-        errors.push(`Invalid flexible-rank attribution for Learning Group ${group.groupId}.`);
-      ordinaryEligibleCost += (group.primaryRanks + group.secondaryRanks) * quote.cost;
-    }
+    if (group.secondaryRanks > 0)
+      errors.push(`Invalid flexible-rank attribution for Learning Group ${group.groupId}.`);
   }
+  // Learning Groups are priced once as a complete bundle through the shared canonical
+  // arithmetic, never per group and never per rank (Forgejo #381).
+  const groupBundle = getChargenGroupBundleCost({
+    chargeableGroupIds: access.normalSkillGroupIds,
+    content,
+    progression: p,
+  });
+  for (const group of p.skillGroups) {
+    const groupError = groupBundle.bundle.errorsByGroupId.get(group.groupId);
+    if (groupError) errors.push(groupError);
+  }
+  ordinaryEligibleCost += groupBundle.cost;
   for (const skill of p.skills) {
     if (skill.sourceTag === "mother-tongue") {
       const mother = buildChargenMotherTongueSummary({

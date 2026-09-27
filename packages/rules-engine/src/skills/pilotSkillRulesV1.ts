@@ -29,6 +29,7 @@ import {
   enforcePilotSpecializationPrerequisites,
   sumPilotSkillAcquisitions,
 } from "./pilotSkillRulesV1Acquisitions";
+import { calculateLearningGroupAcquisition } from "./learningGroupAcquisition";
 
 export * from "./pilotSkillRulesV1Contracts";
 export * from "./pilotSkillRulesV1Support";
@@ -309,57 +310,38 @@ export function calculatePilotLearningGroupBundle(input: {
     competencyById,
     relationships: input.relationships ?? [],
   });
-  const byCompetencyId: Record<string, PilotSkillGroupCompetencyExplanation> = {};
-  const memberships: PilotSkillGroupMembershipExplanation[] = [];
-  let weightedUsefulIncrement = 0;
-
-  for (const competencyId of [...groupCandidatesByCompetencyId.keys()].sort()) {
-    const competency = competencyById.get(competencyId)!;
-    const candidates = groupCandidatesByCompetencyId.get(competencyId)!;
-    const best = candidates[0]!;
-    const relationshipFloor =
-      relationshipCandidatesByTargetId.get(competencyId)?.[0]?.candidateCompetence ?? 0;
-    const usefulIncrementalCompetence = Math.max(0, best.groupLevel - relationshipFloor);
-    const weightedUseful = usefulIncrementalCompetence * competency.weight!;
-    weightedUsefulIncrement += weightedUseful;
-    byCompetencyId[competencyId] = {
-      bestGroupContribution: best.groupLevel,
+  // The arithmetic itself lives in the shared canonical calculation, which the Chargen
+  // acquisition path consumes as well (Forgejo #381). Pilot v1 supplies the validated group
+  // candidates and its own relationship floors and keeps no separate copy of the arithmetic.
+  const acquisition = calculateLearningGroupAcquisition({
+    competencies: [...groupCandidatesByCompetencyId.keys()].map((competencyId) => ({
       competencyId,
-      relationshipFloorBeforeOwnGroupContribution: relationshipFloor,
-      usefulIncrementalCompetence,
-      weightedUsefulIncrement: weightedUseful,
-    };
+      relationshipFloor:
+        relationshipCandidatesByTargetId.get(competencyId)?.[0]?.candidateCompetence ?? 0,
+      weight: competencyById.get(competencyId)!.weight!,
+    })),
+    memberships: [...groupCandidatesByCompetencyId.values()].flat(),
+  });
+  const byCompetencyId: Record<string, PilotSkillGroupCompetencyExplanation> = {};
 
-    for (const candidate of candidates) {
-      const selectedAsStrongest = candidate === best;
-      memberships.push({
-        competencyId,
-        groupId: candidate.groupId,
-        groupLevel: candidate.groupLevel,
-        groupName: candidate.groupName,
-        relationshipOverlapCompetence: selectedAsStrongest
-          ? Math.min(best.groupLevel, relationshipFloor)
-          : 0,
-        selectedAsStrongest,
-        suppressedByGroupId: selectedAsStrongest ? undefined : best.groupId,
-        suppressedByGroupLevel: selectedAsStrongest ? undefined : best.groupLevel,
-        usefulIncrementalCompetence: selectedAsStrongest ? usefulIncrementalCompetence : 0,
-        weightedUsefulIncrement: selectedAsStrongest ? weightedUseful : 0,
-      });
-    }
+  for (const result of Object.values(acquisition.byCompetencyId)) {
+    byCompetencyId[result.competencyId] = {
+      bestGroupContribution: result.bestGroupContribution,
+      competencyId: result.competencyId,
+      relationshipFloorBeforeOwnGroupContribution:
+        result.relationshipFloorBeforeOwnGroupContribution,
+      usefulIncrementalCompetence: result.usefulIncrementalCompetence,
+      weightedUsefulIncrement: result.weightedUsefulIncrement,
+    };
   }
 
-  memberships.sort(
-    (left, right) =>
-      left.groupId.localeCompare(right.groupId) ||
-      left.competencyId.localeCompare(right.competencyId),
-  );
-
   return {
-    bundleCost: Math.ceil((2 * weightedUsefulIncrement) / 3),
+    bundleCost: acquisition.bundleCost,
     byCompetencyId,
-    memberships,
-    weightedUsefulIncrement,
+    memberships: acquisition.memberships.map<PilotSkillGroupMembershipExplanation>(
+      (membership) => ({ ...membership }),
+    ),
+    weightedUsefulIncrement: acquisition.weightedUsefulIncrement,
   };
 }
 

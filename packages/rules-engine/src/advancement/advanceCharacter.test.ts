@@ -12,7 +12,7 @@ import {
   requestCharacterProgressionCheck,
   resolveCharacterProgressionAttempts,
   rollOpenEndedProgressionD20,
-  spendAdvancementPoint
+  spendAdvancementPoint,
 } from "./advanceCharacter";
 import { buildCharacterSheetSummary } from "../sheets/buildCharacterSheetSummary";
 
@@ -25,7 +25,7 @@ const content = validateCanonicalContent({
       id: "scholarly",
       name: "Scholarly",
       skillMemberships: [{ relevance: "core", skillId: "lore" }],
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       id: "slot_group",
@@ -36,18 +36,18 @@ const content = validateCanonicalContent({
           chooseCount: 1,
           id: "slot_choice",
           label: "Choose one",
-          required: true
-        }
+          required: true,
+        },
       ],
       skillMemberships: [{ relevance: "core", skillId: "focus" }],
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       id: "physical_group",
       name: "Physical Group",
       skillMemberships: [{ relevance: "core", skillId: "swim" }],
-      sortOrder: 3
-    }
+      sortOrder: 3,
+    },
   ],
   skills: [
     {
@@ -61,7 +61,7 @@ const content = validateCanonicalContent({
       linkedStats: ["int"],
       name: "Lore",
       requiresLiteracy: "no",
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       allowsSpecializations: false,
@@ -74,7 +74,7 @@ const content = validateCanonicalContent({
       linkedStats: ["dex"],
       name: "Knife",
       requiresLiteracy: "no",
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       allowsSpecializations: false,
@@ -87,7 +87,7 @@ const content = validateCanonicalContent({
       linkedStats: ["int"],
       name: "Focus",
       requiresLiteracy: "no",
-      sortOrder: 3
+      sortOrder: 3,
     },
     {
       allowsSpecializations: false,
@@ -100,8 +100,8 @@ const content = validateCanonicalContent({
       linkedStats: ["str"],
       name: "Swim",
       requiresLiteracy: "no",
-      sortOrder: 4
-    }
+      sortOrder: 4,
+    },
   ],
   societyLevels: [],
   specializations: [
@@ -111,9 +111,9 @@ const content = validateCanonicalContent({
       minimumParentLevel: 1,
       name: "Codes",
       skillId: "lore",
-      sortOrder: 1
-    }
-  ]
+      sortOrder: 1,
+    },
+  ],
 });
 
 function createBuild(): CharacterBuild {
@@ -125,7 +125,7 @@ function createBuild(): CharacterBuild {
       availablePoints: 0,
       checks: [],
       history: [],
-      pendingAttempts: []
+      pendingAttempts: [],
     },
     profile: {
       distractionLevel: 3,
@@ -142,7 +142,7 @@ function createBuild(): CharacterBuild {
         pow: 10,
         siz: 10,
         str: 10,
-        will: 10
+        will: 10,
       },
       rolledStats: {
         cha: 10,
@@ -155,9 +155,9 @@ function createBuild(): CharacterBuild {
         pow: 10,
         siz: 10,
         str: 10,
-        will: 10
+        will: 10,
       },
-      societyLevel: 0
+      societyLevel: 0,
     },
     progression: {
       chargenMode: "standard",
@@ -166,11 +166,11 @@ function createBuild(): CharacterBuild {
           {
             groupId: "slot_group",
             selectedSkillIds: ["knife"],
-            slotId: "slot_choice"
-          }
+            slotId: "slot_choice",
+          },
         ],
         selectedLanguageIds: [],
-        selectedSkillIds: []
+        selectedSkillIds: [],
       },
       educationPoints: 0,
       flexiblePointFactor: 1,
@@ -186,7 +186,7 @@ function createBuild(): CharacterBuild {
           groupId: "scholarly",
           primaryRanks: 5,
           ranks: 5,
-          secondaryRanks: 0
+          secondaryRanks: 0,
         },
         {
           gms: 0,
@@ -194,8 +194,8 @@ function createBuild(): CharacterBuild {
           groupId: "slot_group",
           primaryRanks: 1,
           ranks: 1,
-          secondaryRanks: 0
-        }
+          secondaryRanks: 0,
+        },
       ],
       skills: [
         {
@@ -208,8 +208,8 @@ function createBuild(): CharacterBuild {
           ranks: 12,
           relationshipGrantedRanks: 4,
           secondaryRanks: 0,
-          skillId: "lore"
-        }
+          skillId: "lore",
+        },
       ],
       specializations: [
         {
@@ -217,10 +217,10 @@ function createBuild(): CharacterBuild {
           ranks: 2,
           secondaryRanks: 2,
           skillId: "lore",
-          specializationId: "codes"
-        }
-      ]
-    }
+          specializationId: "codes",
+        },
+      ],
+    },
   };
 }
 
@@ -234,7 +234,7 @@ describe("character progression rolls", () => {
     { d10s: [], d20: 12, total: 12 },
     { d10s: [4], d20: 20, total: 24 },
     { d10s: [10, 1], d20: 20, total: 31 },
-    { d10s: [10, 10, 5], d20: 20, total: 45 }
+    { d10s: [10, 10, 5], d20: 20, total: 45 },
   ])("rolls open-ended d20 totals", ({ d10s, d20, total }) => {
     const result = rollOpenEndedProgressionD20(rngFromRolls(d20, d10s));
 
@@ -246,18 +246,18 @@ describe("character progression rolls", () => {
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const resolved = resolveCharacterProgressionAttempts({
       build: purchased.build,
       content,
-      rng: rngFromRolls(12)
+      rng: rngFromRolls(12),
     });
 
     expect(purchased.error).toBeUndefined();
@@ -267,7 +267,7 @@ describe("character progression rolls", () => {
       rollD20: 12,
       rollTotal: 12,
       success: true,
-      threshold: 12
+      threshold: 12,
     });
   });
 
@@ -276,18 +276,18 @@ describe("character progression rolls", () => {
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const resolved = resolveCharacterProgressionAttempts({
       build: purchased.build,
       content,
-      rng: rngFromRolls(11)
+      rng: rngFromRolls(11),
     });
 
     expect(resolved.history[0]).toMatchObject({
@@ -296,7 +296,7 @@ describe("character progression rolls", () => {
       rollD20: 11,
       rollTotal: 11,
       success: false,
-      threshold: 12
+      threshold: 12,
     });
   });
 
@@ -305,37 +305,42 @@ describe("character progression rolls", () => {
     { d10s: [4], d20: 20, threshold: 24, success: true },
     { d10s: [10, 1], d20: 20, threshold: 31, success: true },
     { d10s: [10, 10, 5], d20: 20, threshold: 45, success: true },
-    { d10s: [10, 10, 4], d20: 20, threshold: 45, success: false }
-  ])("records open-ended success and failure against threshold", ({ d10s, d20, success, threshold }) => {
-    const build = createBuild();
-    build.progression.skillGroups[0] = {
-      ...build.progression.skillGroups[0]!,
-      primaryRanks: threshold,
-      ranks: threshold
-    };
-    const checked = addCharacterProgressionCheck({
-      build: grantCharacterProgressionPoints({ amount: 1, build }),
-      content,
-      targetId: "scholarly",
-      targetType: "skillGroup"
-    });
-    const purchased = buyCharacterProgressionAttempt({
-      build: checked,
-      content,
-      targetId: "scholarly",
-      targetType: "skillGroup"
-    });
-    const resolved = resolveCharacterProgressionAttempts({
-      build: purchased.build,
-      content,
-      rng: rngFromRolls(d20, d10s)
-    });
+    { d10s: [10, 10, 4], d20: 20, threshold: 45, success: false },
+  ])(
+    "records open-ended success and failure against threshold",
+    ({ d10s, d20, success, threshold }) => {
+      const build = createBuild();
+      build.progression.skillGroups[0] = {
+        ...build.progression.skillGroups[0]!,
+        primaryRanks: threshold,
+        ranks: threshold,
+      };
+      const checked = addCharacterProgressionCheck({
+        // The Learning Group price now comes from the shared canonical bundle arithmetic, so
+        // it varies with group level; this case is about the open-ended roll, not the price.
+        build: grantCharacterProgressionPoints({ amount: 3, build }),
+        content,
+        targetId: "scholarly",
+        targetType: "skillGroup",
+      });
+      const purchased = buyCharacterProgressionAttempt({
+        build: checked,
+        content,
+        targetId: "scholarly",
+        targetType: "skillGroup",
+      });
+      const resolved = resolveCharacterProgressionAttempts({
+        build: purchased.build,
+        content,
+        rng: rngFromRolls(d20, d10s),
+      });
 
-    expect(resolved.history[0]).toMatchObject({
-      success,
-      threshold
-    });
-  });
+      expect(resolved.history[0]).toMatchObject({
+        success,
+        threshold,
+      });
+    },
+  );
 });
 
 describe("character progression state", () => {
@@ -345,25 +350,25 @@ describe("character progression state", () => {
       build,
       content,
       targetId: "missing_skill",
-      targetType: "skill"
+      targetType: "skill",
     });
     const withInvalidGroup = addCharacterProgressionCheck({
       build: withInvalidSkill,
       content,
       targetId: "missing_group",
-      targetType: "skillGroup"
+      targetType: "skillGroup",
     });
     const withInvalidSpecialization = addCharacterProgressionCheck({
       build: withInvalidGroup,
       content,
       targetId: "missing_specialization",
-      targetType: "specialization"
+      targetType: "specialization",
     });
     const withInvalidStat = addCharacterProgressionCheck({
       build: withInvalidSpecialization,
       content,
       targetId: "not_a_stat",
-      targetType: "stat"
+      targetType: "stat",
     });
 
     expect(withInvalidStat.progressionState?.checks ?? []).toHaveLength(0);
@@ -375,19 +380,19 @@ describe("character progression state", () => {
       build: unchecked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const checked = addCharacterProgressionCheck({
       build: unchecked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(rejected.error).toContain("GM-approved check");
@@ -399,13 +404,19 @@ describe("character progression state", () => {
   it("shows full progression rows even before checks exist", () => {
     const view = buildCharacterProgressionView({
       build: createBuild(),
-      content
+      content,
     });
 
     expect(view.rows.some((row) => row.targetType === "stat" && row.targetId === "str")).toBe(true);
-    expect(view.rows.some((row) => row.targetType === "skillGroup" && row.targetId === "scholarly")).toBe(true);
-    expect(view.rows.some((row) => row.targetType === "skill" && row.targetId === "lore")).toBe(true);
-    expect(view.rows.some((row) => row.targetType === "specialization" && row.targetId === "codes")).toBe(true);
+    expect(
+      view.rows.some((row) => row.targetType === "skillGroup" && row.targetId === "scholarly"),
+    ).toBe(true);
+    expect(view.rows.some((row) => row.targetType === "skill" && row.targetId === "lore")).toBe(
+      true,
+    );
+    expect(
+      view.rows.some((row) => row.targetType === "specialization" && row.targetId === "codes"),
+    ).toBe(true);
   });
 
   it("lets players request checks but requires GM approval before buying attempts", () => {
@@ -413,47 +424,49 @@ describe("character progression state", () => {
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const requestedView = buildCharacterProgressionView({ build: requested, content });
     const requestedRow = requestedView.rows.find(
-      (row) => row.targetType === "skill" && row.targetId === "lore"
+      (row) => row.targetType === "skill" && row.targetId === "lore",
     );
     const rejected = buyCharacterProgressionAttempt({
       build: requested,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const approved = approveCharacterProgressionCheck({
       build: requested,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const approvedView = buildCharacterProgressionView({ build: approved, content });
     const approvedRow = approvedView.rows.find(
-      (row) => row.targetType === "skill" && row.targetId === "lore"
+      (row) => row.targetType === "skill" && row.targetId === "lore",
     );
     const purchased = buyCharacterProgressionAttempt({
       build: approved,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(requested.progressionState?.checks[0]).toMatchObject({ status: "requested" });
     expect(requestedRow).toMatchObject({
       approved: false,
       checked: false,
-      requested: true
+      requested: true,
     });
-    expect(rejected.error).toBe("This target needs a GM-approved check before buying a progression attempt.");
+    expect(rejected.error).toBe(
+      "This target needs a GM-approved check before buying a progression attempt.",
+    );
     expect(approved.progressionState?.checks[0]).toMatchObject({ status: "approved" });
     expect(approvedRow).toMatchObject({
       approved: true,
       checked: true,
-      requested: false
+      requested: false,
     });
     expect(purchased.error).toBeUndefined();
     expect(purchased.build.progressionState?.availablePoints).toBe(0);
@@ -465,21 +478,21 @@ describe("character progression state", () => {
       content,
       provisional: true,
       targetId: "swim",
-      targetType: "skill"
+      targetType: "skill",
     });
     const requestedView = buildCharacterProgressionView({ build: requested, content });
     const requestedRow = requestedView.rows.find(
-      (row) => row.targetType === "skill" && row.targetId === "swim"
+      (row) => row.targetType === "skill" && row.targetId === "swim",
     );
     const approved = approveCharacterProgressionCheck({
       build: requested,
       content,
       targetId: "swim",
-      targetType: "skill"
+      targetType: "skill",
     });
     const approvedView = buildCharacterProgressionView({ build: approved, content });
     const approvedRow = approvedView.rows.find(
-      (row) => row.targetType === "skill" && row.targetId === "swim"
+      (row) => row.targetType === "skill" && row.targetId === "swim",
     );
 
     expect(requestedRow).toMatchObject({
@@ -487,14 +500,14 @@ describe("character progression state", () => {
       currentValue: 0,
       label: "Swim",
       provisional: true,
-      requested: true
+      requested: true,
     });
     expect(approvedRow).toMatchObject({
       approved: true,
       currentValue: 0,
       label: "Swim",
       provisional: true,
-      requested: false
+      requested: false,
     });
   });
 
@@ -503,19 +516,19 @@ describe("character progression state", () => {
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const rejected = spendAdvancementPoint({
       build: purchased.build,
       content,
       targetId: "swim",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(purchased.attempt?.cost).toBe(2);
@@ -535,18 +548,21 @@ describe("character progression state", () => {
       build: grantCharacterProgressionPoints({ amount: 3, build: createBuild() }),
       content,
       targetId: "slot_group",
-      targetType: "skillGroup"
+      targetType: "skillGroup",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "slot_group",
-      targetType: "skillGroup"
+      targetType: "skillGroup",
     });
 
     expect(purchased.error).toBeUndefined();
-    expect(purchased.build.progressionState?.availablePoints).toBe(2);
-    expect(purchased.build.progressionState?.pendingAttempts[0]?.cost).toBe(1);
+    // slot_group's active membership is focus (weight 1) plus the selected slot Skill lore
+    // (weight 2) at group level 1, so weightedUseful is 3 and the canonical bundle price is
+    // ceil(2/3 * 3) = 2 (docs/rules/pilot-skill-rules-v1.md section 4).
+    expect(purchased.build.progressionState?.availablePoints).toBe(1);
+    expect(purchased.build.progressionState?.pendingAttempts[0]?.cost).toBe(2);
   });
 
   it("shows provisional skill checks with 0 XP and makes them real on success", () => {
@@ -555,22 +571,22 @@ describe("character progression state", () => {
       content,
       provisional: true,
       targetId: "swim",
-      targetType: "skill"
+      targetType: "skill",
     });
     const view = buildCharacterProgressionView({
       build: checked,
-      content
+      content,
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "swim",
-      targetType: "skill"
+      targetType: "skill",
     });
     const resolved = resolveCharacterProgressionAttempts({
       build: purchased.build,
       content,
-      rng: rngFromRolls(1)
+      rng: rngFromRolls(1),
     });
 
     expect(view.rows).toEqual(
@@ -579,16 +595,18 @@ describe("character progression state", () => {
           currentValue: 0,
           label: "Swim",
           provisional: true,
-          targetId: "swim"
-        })
-      ])
+          targetId: "swim",
+        }),
+      ]),
     );
     expect(resolved.history[0]).toMatchObject({
       afterValue: 1,
       beforeValue: 0,
-      success: true
+      success: true,
     });
-    expect(resolved.build.progression.skills.find((skill) => skill.skillId === "swim")?.ranks).toBe(1);
+    expect(resolved.build.progression.skills.find((skill) => skill.skillId === "swim")?.ranks).toBe(
+      1,
+    );
   });
 
   it("records failed provisional skill attempts without creating a direct skill row and consumes the check", () => {
@@ -599,26 +617,28 @@ describe("character progression state", () => {
       content,
       provisional: true,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
     const resolved = resolveCharacterProgressionAttempts({
       build: purchased.build,
       content,
-      rng: rngFromRolls(4)
+      rng: rngFromRolls(4),
     });
 
     expect(resolved.history[0]).toMatchObject({
       beforeValue: 5,
       success: false,
-      threshold: 5
+      threshold: 5,
     });
-    expect(resolved.build.progression.skills.find((skill) => skill.skillId === "lore")).toBeUndefined();
+    expect(
+      resolved.build.progression.skills.find((skill) => skill.skillId === "lore"),
+    ).toBeUndefined();
     expect(resolved.build.progressionState?.checks).toHaveLength(0);
   });
 
@@ -627,24 +647,24 @@ describe("character progression state", () => {
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
       content,
       targetId: "codes",
-      targetType: "specialization"
+      targetType: "specialization",
     });
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "codes",
-      targetType: "specialization"
+      targetType: "specialization",
     });
     const resolved = resolveCharacterProgressionAttempts({
       build: purchased.build,
       content,
-      rng: rngFromRolls(4)
+      rng: rngFromRolls(4),
     });
 
     expect(resolved.history[0]).toMatchObject({
       beforeValue: 4,
       success: true,
-      threshold: 4
+      threshold: 4,
     });
   });
 
@@ -653,26 +673,26 @@ describe("character progression state", () => {
       build: grantCharacterProgressionPoints({ amount: 2, build: createBuild() }),
       content,
       targetId: "str",
-      targetType: "stat"
+      targetType: "stat",
     });
     const view = buildCharacterProgressionView({
       build: checked,
-      content
+      content,
     });
     const row = view.rows.find(
-      (candidate) => candidate.targetType === "stat" && candidate.targetId === "str"
+      (candidate) => candidate.targetType === "stat" && candidate.targetId === "str",
     );
     const purchased = buyCharacterProgressionAttempt({
       build: checked,
       content,
       targetId: "str",
-      targetType: "stat"
+      targetType: "stat",
     });
 
     expect(row).toMatchObject({
       checked: true,
       currentValue: 10,
-      disabledReason: "Stat advancement is not enabled yet."
+      disabledReason: "Stat advancement is not enabled yet.",
     });
     expect(purchased.error).toBe("Stat advancement is not enabled yet.");
   });
@@ -682,7 +702,7 @@ describe("character progression state", () => {
       build: createBuild(),
       content,
       targetId: "str",
-      targetType: "stat"
+      targetType: "stat",
     });
     const statCheck = checked.progressionState?.checks[0];
     const malformed = {
@@ -700,16 +720,16 @@ describe("character progression state", () => {
                 purchasedAt: "2026-01-01T00:00:00.000Z",
                 targetId: "str",
                 targetLabel: "STR",
-                targetType: "stat" as const
-              }
+                targetType: "stat" as const,
+              },
             ]
-          : []
-      }
+          : [],
+      },
     };
     const resolved = resolveCharacterProgressionAttempts({
       build: malformed,
       content,
-      rng: rngFromRolls(20, [10, 10, 5])
+      rng: rngFromRolls(20, [10, 10, 5]),
     });
 
     expect(resolved.history[0]).toMatchObject({
@@ -717,7 +737,7 @@ describe("character progression state", () => {
       beforeValue: 10,
       rollTotal: 45,
       success: false,
-      threshold: 10
+      threshold: 10,
     });
     expect(resolved.build.progressionState?.pendingAttempts).toHaveLength(0);
     expect(resolved.build.progressionState?.checks).toHaveLength(0);
@@ -729,7 +749,7 @@ describe("character progression state", () => {
       progression: {
         ...createBuild().progression,
         primaryPoolSpent: 10,
-        secondaryPoolSpent: 3
+        secondaryPoolSpent: 3,
       },
       progressionState: {
         availablePoints: 99,
@@ -748,7 +768,7 @@ describe("character progression state", () => {
             targetId: "lore",
             targetLabel: "Lore",
             targetType: "skill",
-            threshold: 12
+            threshold: 12,
           },
           {
             afterValue: 12,
@@ -763,8 +783,8 @@ describe("character progression state", () => {
             targetId: "lore",
             targetLabel: "Lore",
             targetType: "skill",
-            threshold: 12
-          }
+            threshold: 12,
+          },
         ],
         pendingAttempts: [
           {
@@ -774,17 +794,17 @@ describe("character progression state", () => {
             purchasedAt: "2026-01-01T00:00:00.000Z",
             targetId: "codes",
             targetLabel: "Codes",
-            targetType: "specialization"
-          }
-        ]
-      }
+            targetType: "specialization",
+          },
+        ],
+      },
     };
     const summary = buildCharacterSheetSummary({ build, content });
 
     expect(summary.skillPoints).toEqual({
       current: 15,
       original: 13,
-      successfulProgressionGains: 2
+      successfulProgressionGains: 2,
     });
   });
 });

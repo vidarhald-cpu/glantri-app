@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { getApprovedTargetChargenContent } from "@glantri/content";
 
-import { allocateChargenPoint, createChargenProgression } from "./primaryAllocation";
+import {
+  allocateChargenPoint,
+  buildChargenDraftView,
+  createChargenProgression,
+} from "./primaryAllocation";
 import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
 import { getActiveGroupSkillCost } from "./primaryAllocation/costs";
 import { getBestPurchasedParentGroup } from "./primaryAllocation/_helpers";
+import { validateTargetChargenBuild } from "./validateTargetChargenBuild";
 
 const content = getApprovedTargetChargenContent();
 /**
@@ -36,8 +41,9 @@ describe("overlapping Learning Group pricing (#381)", () => {
     expect(access.normalSkillGroupIds).toContain(SUPERSET_GROUP_ID);
     expect(access.normalSkillGroupIds).toContain(SUBSET_GROUP_ID);
     const superset = new Set(
-      (content.skillGroups.find((group) => group.id === SUPERSET_GROUP_ID)!.skillMemberships ?? [])
-        .map((membership) => membership.skillId),
+      (
+        content.skillGroups.find((group) => group.id === SUPERSET_GROUP_ID)!.skillMemberships ?? []
+      ).map((membership) => membership.skillId),
     );
     const subset = (
       content.skillGroups.find((group) => group.id === SUBSET_GROUP_ID)!.skillMemberships ?? []
@@ -83,5 +89,42 @@ describe("overlapping Learning Group pricing (#381)", () => {
 
     expect(progression.primaryPoolSpent).toBe(forward.primaryPoolSpent);
     expect(spentAfterSubset).toBeGreaterThan(0);
+  });
+
+  it("reports the suppressed Group's zero useful increment through the draft view seam", () => {
+    let progression = createChargenProgression();
+    progression = buy(progression, SUPERSET_GROUP_ID).progression;
+    progression = buy(progression, SUPERSET_GROUP_ID).progression;
+    progression = buy(progression, SUBSET_GROUP_ID).progression;
+
+    const view = buildChargenDraftView({ ...context, progression });
+    const superset = view.groups.find((group) => group.groupId === SUPERSET_GROUP_ID)!;
+    const subset = view.groups.find((group) => group.groupId === SUBSET_GROUP_ID)!;
+
+    expect(superset.usefulWeightedIncrement).toBeGreaterThan(0);
+    expect(superset.marginalPurchaseCost).toBeGreaterThan(0);
+    expect(subset.usefulWeightedIncrement).toBe(0);
+    expect(subset.marginalPurchaseCost).toBe(0);
+  });
+
+  it("keeps the recorded spend the finalize-time validator recomputes", () => {
+    let progression = createChargenProgression();
+    progression = buy(progression, SUPERSET_GROUP_ID).progression;
+    progression = buy(progression, SUPERSET_GROUP_ID).progression;
+    progression = buy(progression, SUBSET_GROUP_ID).progression;
+
+    const errors = validateTargetChargenBuild(
+      {
+        civilizationId: "scandia",
+        professionId: context.professionId,
+        progression,
+        societyLevel: 1,
+      } as never,
+      content,
+    );
+
+    expect(errors).not.toContain(
+      "Recorded Chargen spending does not match authoritative purchase prices.",
+    );
   });
 });

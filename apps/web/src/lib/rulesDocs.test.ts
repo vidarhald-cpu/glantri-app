@@ -206,7 +206,7 @@ describe("rules documentation registry", () => {
     );
     expect(model.selectedDocument.markdown).toContain("GM = trunc((Current - 11) / 2)");
     expect(model.selectedDocument.markdown).toContain(
-      "Skill group cost = floor(0.6 * total individual cost of active group skills)",
+      "Skill group cost = ceil(2/3 * weightedUseful)",
     );
     expect(model.selectedDocument.markdown).not.toContain(
       "Character Detail does not show Derived XP",
@@ -231,7 +231,7 @@ describe("rules documentation registry", () => {
       "Flexible points = floor((resolved INT + resolved LCK) * flexible point factor)",
     );
     expect(model.selectedDocument.markdown).toContain(
-      "Skill group cost = floor(0.6 * total individual cost of active group skills)",
+      "Skill group cost = ceil(2/3 * weightedUseful)",
     );
   });
 

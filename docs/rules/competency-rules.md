@@ -233,9 +233,11 @@ never multiply the purchase, discount, or resulting competency" above, state the
 same rule for membership and for purchase.
 
 The exact persistence, calculation and marginal-cost formulation for the current
-acquisition architecture is **not settled by this ruling and must be verified
-against that architecture before implementation**. It must not be invented in
-the UI.
+acquisition architecture was **not settled by this ruling**. It is settled by
+[rule decision 0011](../decisions/rules/0011-shared-learning-group-acquisition-arithmetic.md):
+both acquisition paths consume one shared deterministic Learning Group acquisition
+arithmetic, the complete purchased bundle is priced once, and the price of a single
+purchase is the change in that bundle price. It must not be invented in the UI.
 
 **Mutually exclusive Profession routes are a separate concept from ordinary
 overlap.** Where the Profession reference says `choose one` — as for the two

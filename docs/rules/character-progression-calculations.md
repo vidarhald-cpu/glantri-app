@@ -44,9 +44,22 @@ Progression costs match chargen purchase costs where applicable.
 Skill group cost:
 
 ```text
-Skill group cost = floor(0.6 * total individual cost of active group skills)
-Minimum cost = 1 when at least one active skill exists
+G_s            = highest active group contribution to Skill s
+usefulGroup_s  = max(0, G_s - relationshipFloor_s)
+weightedUseful = sum(individual cost of s * usefulGroup_s)
+Skill group cost = ceil(2/3 * weightedUseful)
 ```
+
+The ceiling is applied **once** to the complete bundle of purchased Learning Groups, never
+per group and never per rank, so the price of a purchase is the change in the bundle price.
+A Group contribution that yields no useful competence yields no price. A Learning Group that
+teaches no base membership and exists only to open authored Specialization access keeps a flat
+cost of `1` per purchase.
+
+This is the shared canonical Learning Group acquisition arithmetic in
+[`pilot-skill-rules-v1.md`](./pilot-skill-rules-v1.md) section 4, which both the
+Pilot/runtime acquisition path and the Chargen path now consume (Forgejo #381). It replaces
+the former Chargen-local `floor(0.6 * total individual cost)` scalar with its minimum of `1`.
 
 Active group skills are fixed group skills plus selected choice-slot skills. Unselected slot candidates do not count.
 

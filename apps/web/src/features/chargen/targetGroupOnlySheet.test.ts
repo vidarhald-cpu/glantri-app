@@ -82,7 +82,10 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         });
       }
       expect(JSON.stringify(build)).toBe(before);
-      expect(build.progression.primaryPoolSpent).toBe(direct ? 7 : 5);
+      // Learning Groups are priced once as a complete bundle through the shared canonical
+      // acquisition arithmetic, ceil(2/3 * weightedUseful)
+      // (docs/rules/pilot-skill-rules-v1.md section 4).
+      expect(build.progression.primaryPoolSpent).toBe(direct ? 9 : 7);
     });
   it("rejects forged group/member and source metadata in summary and UI projections", () => {
     for (const mutate of [
@@ -125,7 +128,8 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         ),
       ).toBe(true);
     }
-    expect(build.progression.primaryPoolSpent).toBe(7);
+    // Canonical bundle price, as above.
+    expect(build.progression.primaryPoolSpent).toBe(9);
   });
   it("keeps a historical build readable with its original content and spend", () => {
     const build = characterBuildSchema.parse(characterPayload("historical", "Historical").build);
