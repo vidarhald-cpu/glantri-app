@@ -403,6 +403,13 @@ export function assertApprovedTargetProgression(progression: CharacterProgressio
 }
 
 export function getApprovedTargetChargenContent(): CanonicalContent {
-  // Retained solely for /skills until #252. Runtime and Character paths use the V2 accessor.
+  /*
+   * NO LIVE CALLER. This is the legacy 59-group projection; `/skills` goes through
+   * `getCompetencyV2ReferenceSource()`, and every Chargen and Character path uses the V2 accessor
+   * `getApprovedV2RuntimeContent()`. Retiring or fencing off this accessor is issue #387.
+   *
+   * Do not use it to establish player-facing behaviour: it has produced repeated wrong conclusions
+   * because it loads a catalogue no Chargen path loads.
+   */
   return withTargetLearningGroupsAndProfessions(trustedContent());
 }

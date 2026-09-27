@@ -74,29 +74,12 @@ export function projectCompetencyV2ReferenceRelationships(
     const skillId = mapEndpoint(skill.id);
     return skillId ? [{ skillId, ...skill.meleeCrossTraining }] : [];
   });
-  const bridges = relationshipContent.specializations.flatMap((specialization) => {
-    const bridge = specialization.specializationBridge;
-    if (!bridge) return [];
-    const specializationId = mapEndpoint(specialization.id);
-    const parentSkillId = mapEndpoint(bridge.parentSkillId);
-    return specializationId && parentSkillId
-      ? [
-          {
-            specializationId,
-            parentSkillId,
-            reverseFactor: bridge.reverseFactor,
-            threshold: bridge.threshold,
-            parentExcessOffset: bridge.parentExcessOffset,
-          },
-        ]
-      : [];
-  });
   if (mappingGaps.size) {
     throw new Error(
       `Unmapped canonical V2 relationship endpoints: ${[...mappingGaps].sort().join(", ")}`,
     );
   }
-  return { grants, meleeSources, bridges };
+  return { grants, meleeSources };
 }
 
 export function getCompetencyV2ReferenceSource() {

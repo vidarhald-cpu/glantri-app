@@ -30,7 +30,7 @@ describe("canonical V2 competency reference", () => {
     ).toBe(true);
   });
 
-  it("projects explicit approved mechanics onto V2 endpoints without flattening bridges", () => {
+  it("projects explicit approved mechanics onto V2 endpoints and publishes no bridge row", () => {
     expect(competencyV2RelationshipIdentityMap.medicine).toBe("skill:medicine");
     expect(competencyV2RelationshipIdentityMap.first_aid).toBe("skill:first-aid");
     expect(source.relationships.grants).toContainEqual({
@@ -46,19 +46,21 @@ describe("canonical V2 competency reference", () => {
         factor: 1,
       }),
     );
-    for (const [parentId, specializationId] of [
-      ["bow", "longbow"],
-      ["one_handed_edged", "fencing"],
-    ]) {
-      expect(model.relationships).toContainEqual(
-        expect.objectContaining({
-          source: expect.objectContaining({ id: parentId }),
-          target: expect.objectContaining({ id: specializationId }),
-          mechanism: "Specialization bridge",
-          bridge: { threshold: 6, parentExcessOffset: 5, reverseFactor: 1 },
-        }),
-      );
+    /* Rule decision 0010 ruling 5 deletes the `specializationBridge` mechanism, so the reference
+       publishes no bridge row and no numeric factor for either competency. The authored qualitative
+       `helpful` Bow dependency is preserved as authored and is NOT a relationship row here: it stays
+       a dependency, never a graded transfer. */
+    expect(model.relationships.map((row) => row.mechanism as string)).not.toContain(
+      "Specialization bridge",
+    );
+    for (const id of ["longbow", "fencing"]) {
+      expect(
+        model.relationships.filter((row) => row.source.id === id || row.target.id === id),
+      ).toEqual([]);
     }
+    expect(
+      defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")!.dependencies,
+    ).toEqual([{ skillId: "bow", strength: "helpful" }]);
     expect(model.relationships.some((row) => row.mechanism === "Melee cross-training")).toBe(true);
     expect(model.relationships.every((row) => row.factor !== 0.25)).toBe(true);
     const mapped = (id: string) => competencyV2RelationshipIdentityMap[id]!;
@@ -85,41 +87,15 @@ describe("canonical V2 competency reference", () => {
             })
           : [],
       ),
-      ...defaultCanonicalContent.specializations.flatMap((specialization) =>
-        specialization.specializationBridge
-          ? [
-              [
-                "Specialization bridge",
-                mapped(specialization.specializationBridge.parentSkillId),
-                mapped(specialization.id),
-                specialization.specializationBridge.threshold,
-                specialization.specializationBridge.parentExcessOffset,
-                specialization.specializationBridge.reverseFactor,
-              ],
-            ]
-          : [],
-      ),
     ]
       .map((row) => JSON.stringify(row))
       .sort();
     const actual = model.relationships
-      .map((row) =>
-        JSON.stringify(
-          row.bridge
-            ? [
-                row.mechanism,
-                row.source.id,
-                row.target.id,
-                row.bridge.threshold,
-                row.bridge.parentExcessOffset,
-                row.bridge.reverseFactor,
-              ]
-            : [row.mechanism, row.source.id, row.target.id, row.factor],
-        ),
-      )
+      .map((row) => JSON.stringify([row.mechanism, row.source.id, row.target.id, row.factor]))
       .sort();
     expect(actual).toEqual(expected);
-    expect(actual).toHaveLength(33);
+    /* 31, not 33: the two bridge rows are gone and nothing replaced them. */
+    expect(actual).toHaveLength(31);
   });
 
   it("names an unmapped endpoint and withholds the reference projection", () => {
@@ -175,14 +151,18 @@ describe("canonical V2 competency reference", () => {
     ).toBe(true);
   });
 
-  it("retains the unchanged V2 source digest", () => {
+  it("records the V2 source digest the authorized corpus corrections produce", () => {
     expect(model.sourceDigest).toBe(source.sourceDigest);
     // Digest intentionally moved by Product Owner ruling (2026-09-27, issue #365): C02's
     // canonical short description said "across several crafts", contradicting its own
     // settled choose-one membership/note. Fixing the short description text changed the
     // corpus digest. This is authorized content correction, not silent drift.
+    //
+    // Moved again by issue #389 (rule decision 0010 rulings 1, 2 and 5): Fencing and Longbow are
+    // base combat Skills, F30 and F41 teach them directly, Longbow joins the M04/M05 pools, and the
+    // `specializationBridge` mechanism and its two bridge rows are deleted. Recomputed, not relaxed.
     expect(source.sourceDigest).toBe(
-      "sha256:7ebabe692d142a7a09ddec01bb848847334a7679f5961e034f410ce600461656",
+      "sha256:9896c39a895a3f3dd54dab96ada8c968d24f9a8237c3733f3ee67f65a67b294e",
     );
   });
 });

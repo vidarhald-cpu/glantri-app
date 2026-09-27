@@ -24,37 +24,45 @@ describe("synthetic target and historical Chargen drafts", () => {
       characterPayload(legacyId, "Historical synthetic").build,
     );
     const content = getApprovedV2RuntimeContent();
+    /* The Soldier's route to Longbow is M04, not F41: rule decision 0010 ruling 2 keeps the military
+       longbow path out of the civilian hunting apprenticeship, and issue #389 removes F41 from the
+       Soldier package. Longbow is chosen in M04's approved missile slot. */
+    const selections = {
+      selectedCoreRouteId: "profession:soldier:core:missile",
+      selectedLanguageIds: [],
+      selectedSkillIds: [],
+      selectedGroupSlots: [
+        { groupId: "M04", slotId: "missile-family", selectedSkillIds: ["longbow"] },
+        { groupId: "M01", slotId: "melee-family", selectedSkillIds: ["one_handed_edged"] },
+      ],
+    };
     const archer = allocateChargenPoint({
       content,
       professionId: "profession:soldier",
       societyId: "pastoral_clan_nomadic",
       societyLevel: 1,
-      progression: createChargenProgression(),
+      progression: { ...createChargenProgression(), chargenSelections: selections },
       targetType: "group",
-      targetId: "F41",
+      targetId: "M04",
     });
     expect(archer.error).toBeUndefined();
+    expect(
+      allocateChargenPoint({
+        content,
+        professionId: "profession:soldier",
+        societyId: "pastoral_clan_nomadic",
+        societyLevel: 1,
+        progression: { ...createChargenProgression(), chargenSelections: selections },
+        targetType: "group",
+        targetId: "F41",
+      }).error,
+    ).toBe("This skill group is not part of the selected profession and society access.");
     const bought = allocateChargenPoint({
       content,
       professionId: "profession:soldier",
       societyId: "pastoral_clan_nomadic",
       societyLevel: 1,
-      progression: {
-        ...archer.progression,
-        chargenSelections: {
-          ...archer.progression.chargenSelections,
-          selectedCoreRouteId: "profession:soldier:core:contingent",
-          selectedLanguageIds: archer.progression.chargenSelections?.selectedLanguageIds ?? [],
-          selectedSkillIds: archer.progression.chargenSelections?.selectedSkillIds ?? [],
-          selectedGroupSlots: [
-            {
-              groupId: "M01",
-              slotId: "melee-family",
-              selectedSkillIds: ["one_handed_edged"],
-            },
-          ],
-        },
-      },
+      progression: archer.progression,
       targetType: "group",
       targetId: "M01",
     });
@@ -97,8 +105,14 @@ describe("synthetic target and historical Chargen drafts", () => {
       expect(loaded?.selectedProfessionId).toBe("profession:soldier");
       expect(loaded?.progression).toEqual(bought.progression);
       expect(loaded?.progression.skillGroups[0].targetDefinition?.name).toBe(
-        "Longbow hunting apprenticeship",
+        "Military missile and formation practice",
       );
+      /* The soldier reached Longbow without acquiring Hunting: M04 teaches no Hunting at all. */
+      expect(
+        loaded?.progression.skillGroups[0].targetDefinition?.skillMemberships?.map(
+          (row) => row.skillId,
+        ),
+      ).not.toContain("skill:hunting");
       const group = defaultCanonicalContent.skillGroups.find(
         (g) => !content.chargenCatalogue!.groupIds!.includes(g.id),
       )!;

@@ -94,7 +94,6 @@ const skills: SkillDefinition[] = [
     linkedStats: ["dex"],
     name: "Longbow",
     requiresLiteracy: "no",
-    specializationOfSkillId: "bow",
     societyLevel: 1,
     sortOrder: 5,
   },
@@ -137,12 +136,6 @@ const longbowSpecialization = {
   name: "Longbow",
   skillId: "bow",
   sortOrder: 5,
-  specializationBridge: {
-    parentExcessOffset: 5,
-    parentSkillId: "bow",
-    reverseFactor: 1,
-    threshold: 6,
-  },
 };
 
 const fencingSpecialization = {
@@ -152,12 +145,6 @@ const fencingSpecialization = {
   name: "Fencing",
   skillId: "one_handed_edged",
   sortOrder: 6,
-  specializationBridge: {
-    parentExcessOffset: 5,
-    parentSkillId: "one_handed_edged",
-    reverseFactor: 1,
-    threshold: 6,
-  },
 };
 
 const skillGroups: SkillGroupDefinition[] = [
@@ -445,7 +432,10 @@ describe("buildCharacterSheetSkillRows", () => {
     });
   });
 
-  it("shows specialization-bridge specializations on the sheet", () => {
+  it("shows Longbow on the sheet as a Skill row, not as a Bow Specialization", () => {
+    /* THE VANISHING TEST on the character sheet. Rule decision 0010 ruling 2 makes Longbow a base
+       combat Skill and ruling 5 deletes the bridge. Buying Bow derives nothing for Longbow, and a
+       purchased Longbow must still appear — on the Skill rows. */
     const build: CharacterBuild = {
       ...baseBuild,
       progression: {
@@ -461,30 +451,34 @@ describe("buildCharacterSheetSkillRows", () => {
             secondaryRanks: 0,
             skillId: "bow",
           },
+          {
+            category: "secondary",
+            grantedRanks: 0,
+            groupId: "combat_group",
+            level: 4,
+            primaryRanks: 4,
+            ranks: 4,
+            secondaryRanks: 0,
+            skillId: "longbow",
+          },
         ],
       },
     };
-    const sheetSummary = buildCharacterSheetSummary({
-      build,
-      content,
-    });
-    const rows = buildCharacterSheetSpecializationRows({
-      content,
-      sheetSummary,
-    });
+    const sheetSummary = buildCharacterSheetSummary({ build, content });
 
-    expect(rows).toContainEqual(
-      expect.objectContaining({
-        grantedSourceLabel: "Specialized from Bow",
-        grantedXp: 5,
-        specializationName: "Longbow",
-        total: 5,
-        xp: 0,
-      }),
-    );
+    expect(
+      buildCharacterSheetSpecializationRows({ content, sheetSummary }).some(
+        (row) => row.specializationId === "longbow",
+      ),
+    ).toBe(false);
+    expect(
+      buildCharacterSheetSkillRows({ build, content, sheetSummary })
+        .flatMap((bucket) => bucket.rows)
+        .find((row) => row.skillId === "longbow"),
+    ).toMatchObject({ skillName: "Longbow" });
   });
 
-  it("keeps directly purchased specializations visible on the sheet alongside relationship grants", () => {
+  it("keeps a directly purchased Specialization visible on the sheet", () => {
     const build: CharacterBuild = {
       ...baseBuild,
       progression: {
@@ -503,9 +497,9 @@ describe("buildCharacterSheetSkillRows", () => {
         ],
         specializations: [
           {
-            level: 5,
-            ranks: 5,
-            relationshipGrantedRanks: 3,
+            level: 2,
+            ranks: 2,
+            relationshipGrantedRanks: 0,
             secondaryRanks: 2,
             skillId: "one_handed_edged",
             specializationId: "fencing",
@@ -513,24 +507,15 @@ describe("buildCharacterSheetSkillRows", () => {
         ],
       },
     };
-    const sheetSummary = buildCharacterSheetSummary({
-      build,
-      content,
-    });
-    const rows = buildCharacterSheetSpecializationRows({
-      content,
-      sheetSummary,
-    });
+    const sheetSummary = buildCharacterSheetSummary({ build, content });
 
-    expect(rows).toContainEqual(
-      expect.objectContaining({
-        grantedSourceLabel: "Specialized from 1-h edged",
-        grantedXp: 3,
-        specializationName: "Fencing",
-        total: 5,
-        xp: 2,
-      }),
-    );
+    /* No relationship grant remains for a Specialization: the bridge was its only source, so the
+       row shows exactly what was purchased and no invented coefficient. */
+    expect(
+      buildCharacterSheetSpecializationRows({ content, sheetSummary }).find(
+        (row) => row.specializationId === "fencing",
+      ),
+    ).toMatchObject({ grantedXp: 0, specializationName: "Fencing", total: 2, xp: 2 });
   });
 
   it("does not show unresolved provisional skills on the Character Sheet", () => {

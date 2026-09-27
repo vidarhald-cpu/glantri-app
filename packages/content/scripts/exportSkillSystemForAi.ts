@@ -288,8 +288,8 @@ function mapSkillGroup(
         selectionSlots.length === 0 ? dynamicGroupCost(fixedIndividualCostTotal) : null,
       note:
         selectionSlots.length === 0
-          ? "No active choice slots; dynamic group cost can be computed from fixed skills."
-          : "Dynamic group cost depends on active selected slot skills. Unselected slot candidates do not count.",
+          ? "No active choice slots; dynamic group cost can be computed from fixed skills. NOTE: `dynamicGroupCost` is the RETIRED floor(0.6 x individual cost) scalar and is not the controlling price. See the Skill-Group Economics section."
+          : "Dynamic group cost depends on active selected slot skills. Unselected slot candidates do not count. NOTE: `dynamicGroupCost` is the RETIRED floor(0.6 x individual cost) scalar and is not the controlling price. See the Skill-Group Economics section.",
     },
     allowedSmallGroupReason: ALLOWED_SMALL_GROUP_REASONS[group.id] ?? null,
     adminWarnings: warnings,
@@ -309,15 +309,6 @@ function mapSpecialization(
     minimumGroupLevel: specialization.minimumGroupLevel,
     description: specialization.description ?? null,
     isSelectableAsNormalSkill: false,
-    accessNotes: specialization.specializationBridge
-      ? {
-          parentSkillId: specialization.specializationBridge.parentSkillId,
-          parentSkillName: getSkillName(content, specialization.specializationBridge.parentSkillId),
-          threshold: specialization.specializationBridge.threshold,
-          parentExcessOffset: specialization.specializationBridge.parentExcessOffset,
-          reverseFactor: specialization.specializationBridge.reverseFactor,
-        }
-      : null,
   };
 }
 
@@ -627,50 +618,6 @@ function buildDerivedRules(content: CanonicalContent): JsonRecord[] {
         notes: "Melee cross-training is computed from attack style and hand class.",
       });
     }
-
-    if (sourceSkill.specializationBridge) {
-      rules.push({
-        source: entity(
-          "skill",
-          sourceSkill.specializationBridge.parentSkillId,
-          getSkillName(content, sourceSkill.specializationBridge.parentSkillId),
-        ),
-        target: entity("skill", sourceSkill.id, sourceSkill.name),
-        factor: 1,
-        threshold: sourceSkill.specializationBridge.threshold,
-        ruleLabel: "specialization-bridge-parent",
-        description: `${getSkillName(content, sourceSkill.specializationBridge.parentSkillId)} can bridge into ${sourceSkill.name}.`,
-        contributesDerivedXp: true,
-        notes: {
-          parentExcessOffset: sourceSkill.specializationBridge.parentExcessOffset,
-          reverseFactor: sourceSkill.specializationBridge.reverseFactor,
-        },
-      });
-    }
-  }
-
-  for (const specialization of content.specializations) {
-    if (!specialization.specializationBridge) {
-      continue;
-    }
-
-    rules.push({
-      source: entity(
-        "skill",
-        specialization.specializationBridge.parentSkillId,
-        getSkillName(content, specialization.specializationBridge.parentSkillId),
-      ),
-      target: entity("specialization", specialization.id, specialization.name),
-      factor: 1,
-      threshold: specialization.specializationBridge.threshold,
-      ruleLabel: "specialization-bridge-parent",
-      description: `${getSkillName(content, specialization.specializationBridge.parentSkillId)} can bridge into ${specialization.name}.`,
-      contributesDerivedXp: true,
-      notes: {
-        parentExcessOffset: specialization.specializationBridge.parentExcessOffset,
-        reverseFactor: specialization.specializationBridge.reverseFactor,
-      },
-    });
   }
 
   return rules.sort(
@@ -923,7 +870,7 @@ This export is for AI review/modeling and possible later import proposals. It is
 - Concrete languages are materialized rather than relying on a raw generic Language skill.
 
 ## Skill-Group Economics
-- Dynamic group cost: floor(0.6 × total individual cost of active group skills), minimum 1.
+- Learning Group price: ceil(2/3 × weighted useful competence), charged ONCE for the complete purchased bundle — never per group and never per rank. Rule decision 0011 retired the earlier floor(0.6 x total individual cost) group scalar; packages/rules-engine/src/skills/learningGroupAcquisition.ts is the single shared calculation.
 - Active group skills = fixed group skills + selected slot skills.
 - Unselected slot candidates do not count.
 - Normal groups should usually represent about 6+ weighted skill points unless deliberately narrow/allowed.
@@ -933,7 +880,7 @@ This export is for AI review/modeling and possible later import proposals. It is
 - Any group containing Dodge or Parry must include melee weapon context.
 - Combat support groups such as Defensive Soldiering and Veteran Soldiering should contain non-combat/military support skills, not ordinary weapon/Dodge/Parry fundamentals.
 - Weapon slots should not include specialization-only entries.
-- Longbow is specialization of Bow, not a missile skill choice.
+- Longbow is a base combat Skill related to Bow by an authored qualitative "helpful" dependency, with no numeric transfer in either direction. It is taught by F41 (with Hunting) and is a candidate in the M04 and M05 military missile slots, but it is deliberately NOT a candidate in the legacy basic/advanced missile training slots.
 
 ## Profession/Package Principles
 - Profession reach measures unique skills reachable from granted groups plus direct grants not already covered by groups.

@@ -63,9 +63,7 @@
       "motherTongueLanguageName": "Common",
       "name": "Glantri",
       "notes": "Glantri-facing core feudal analogue with knightly households, castles, and landed obligations.",
-      "optionalLanguageNames": [
-        "Old Common"
-      ],
+      "optionalLanguageNames": ["Old Common"],
       "period": "c. 800-1100 CE",
       "shortDescription": "Feudal landed culture of noble households, retainers, and local obligations.",
       "spokenLanguageName": "Common",
@@ -948,12 +946,7 @@
       ],
       "selectionSlots": [
         {
-          "candidateSkillIds": [
-            "throwing",
-            "sling",
-            "bow",
-            "crossbow"
-          ],
+          "candidateSkillIds": ["throwing", "sling", "bow", "crossbow"],
           "chooseCount": 1,
           "id": "missile_weapon_choice",
           "label": "Choose one missile weapon skill",
@@ -990,12 +983,7 @@
       ],
       "selectionSlots": [
         {
-          "candidateSkillIds": [
-            "throwing",
-            "sling",
-            "bow",
-            "crossbow"
-          ],
+          "candidateSkillIds": ["throwing", "sling", "bow", "crossbow"],
           "chooseCount": 3,
           "id": "advanced_missile_weapon_choices",
           "label": "Choose three missile weapon skills",
@@ -1520,6 +1508,10 @@
         },
         {
           "relevance": "core",
+          "skillId": "fencing"
+        },
+        {
+          "relevance": "core",
           "skillId": "crossbow"
         },
         {
@@ -1953,12 +1945,7 @@
       "skillMemberships": [],
       "selectionSlots": [
         {
-          "candidateSkillIds": [
-            "stoneworking",
-            "carpentry",
-            "smithing",
-            "mechanics"
-          ],
+          "candidateSkillIds": ["stoneworking", "carpentry", "smithing", "mechanics"],
           "chooseCount": 2,
           "id": "construction_specialty_choices",
           "label": "Choose two construction specialties",
@@ -2291,17 +2278,10 @@
       "dependencySkillIds": [],
       "description": "Literacy Read and write a script used by the character’s culture. Gateway skill for learned and administrative roles.",
       "groupId": "literate_foundation",
-      "groupIds": [
-        "literate_foundation",
-        "civic_learning",
-        "humanities"
-      ],
+      "groupIds": ["literate_foundation", "civic_learning", "humanities"],
       "id": "literacy",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Literacy",
       "requiresLiteracy": "no",
       "shortDescription": "Read and write a script used by the character’s culture.",
@@ -2316,16 +2296,10 @@
       "dependencySkillIds": [],
       "description": "Language Speak and understand a language. Spoken language is universal; written use depends on Literacy.",
       "groupId": "literate_foundation",
-      "groupIds": [
-        "literate_foundation",
-        "humanities"
-      ],
+      "groupIds": ["literate_foundation", "humanities"],
       "id": "language",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Language",
       "requiresLiteracy": "no",
       "shortDescription": "Speak and understand a language.",
@@ -2349,18 +2323,10 @@
       "dependencySkillIds": [],
       "description": "History Know remembered past events, lineages, places, and major developments. Exists orally and textually; becomes broader in literate societies.",
       "groupId": "literate_foundation",
-      "groupIds": [
-        "literate_foundation",
-        "sacred_learning",
-        "humanities",
-        "scholarly_formation"
-      ],
+      "groupIds": ["literate_foundation", "sacred_learning", "humanities", "scholarly_formation"],
       "id": "history",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "History",
       "requiresLiteracy": "no",
       "shortDescription": "Know remembered past events, lineages, places, and major developments.",
@@ -2384,18 +2350,10 @@
       "dependencySkillIds": [],
       "description": "Theology Know religious belief, doctrine, rites, and sacred tradition. More formal in organized sacred cultures.",
       "groupId": "sacred_learning",
-      "groupIds": [
-        "sacred_learning",
-        "humanities",
-        "mortuary_practice",
-        "temple_service"
-      ],
+      "groupIds": ["sacred_learning", "humanities", "mortuary_practice", "temple_service"],
       "id": "theology",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Theology",
       "requiresLiteracy": "no",
       "shortDescription": "Know religious belief, doctrine, rites, and sacred tradition.",
@@ -2416,21 +2374,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "literacy"
-      ],
+      "dependencySkillIds": ["literacy"],
       "description": "Use structured reasoning about ethics, logic, metaphysics, and knowledge. High-culture intellectual skill.",
       "groupId": "humanities",
-      "groupIds": [
-        "humanities",
-        "scholarly_formation"
-      ],
+      "groupIds": ["humanities", "scholarly_formation"],
       "id": "philosophy",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Philosophy",
       "requiresLiteracy": "required",
       "shortDescription": "Use structured reasoning about ethics, logic, metaphysics, and knowledge.",
@@ -2459,10 +2409,7 @@
       ],
       "id": "law",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Law",
       "requiresLiteracy": "recommended",
       "shortDescription": "Know legal rules, disputes, property, obligations, and judgment.",
@@ -2487,23 +2434,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "literacy"
-      ],
+      "dependencySkillIds": ["literacy"],
       "description": "Write formal records, reports, decrees, petitions, and official correspondence. Narrower than full literate culture; ideal half-cost support skill.",
       "groupId": "civic_learning",
-      "groupIds": [
-        "civic_learning",
-        "commercial_administration",
-        "operations",
-        "legal_practice"
-      ],
+      "groupIds": ["civic_learning", "commercial_administration", "operations", "legal_practice"],
       "id": "bureaucratic_writing",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Bureaucratic Writing",
       "requiresLiteracy": "required",
       "shortDescription": "Write formal records, reports, decrees, petitions, and official correspondence.",
@@ -2528,24 +2465,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "literacy",
-        "language"
-      ],
+      "dependencySkillIds": ["literacy", "language"],
       "description": "Compose persuasive, formal, or elegant argument. Elite text/speech support skill.",
       "groupId": "civic_learning",
-      "groupIds": [
-        "civic_learning",
-        "humanities",
-        "legal_practice",
-        "scholarly_formation"
-      ],
+      "groupIds": ["civic_learning", "humanities", "legal_practice", "scholarly_formation"],
       "id": "rhetorical_composition",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Rhetorical Composition",
       "requiresLiteracy": "required",
       "shortDescription": "Compose persuasive, formal, or elegant argument.",
@@ -2560,17 +2486,10 @@
       "dependencySkillIds": [],
       "description": "Apply length, area, weight, volume, and proportion in practical use. Practical learned gateway.",
       "groupId": "technical_measurement",
-      "groupIds": [
-        "technical_measurement",
-        "maritime_navigation",
-        "physical_science"
-      ],
+      "groupIds": ["technical_measurement", "maritime_navigation", "physical_science"],
       "id": "measurement",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Measurement",
       "requiresLiteracy": "no",
       "shortDescription": "Apply length, area, weight, volume, and proportion in practical use.",
@@ -2590,17 +2509,10 @@
       "dependencySkillIds": [],
       "description": "Mathematics Use number, proportion, calculation, and quantitative reasoning. Broad technical/scholarly core.",
       "groupId": "technical_measurement",
-      "groupIds": [
-        "technical_measurement",
-        "learned_natural_inquiry",
-        "physical_science"
-      ],
+      "groupIds": ["technical_measurement", "learned_natural_inquiry", "physical_science"],
       "id": "mathematics",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Mathematics",
       "requiresLiteracy": "no",
       "shortDescription": "Use number, proportion, calculation, and quantitative reasoning.",
@@ -2624,16 +2536,10 @@
       "dependencySkillIds": [],
       "description": "Understand celestial movement for calendar, orientation, or study. Learned sky science.",
       "groupId": "learned_natural_inquiry",
-      "groupIds": [
-        "learned_natural_inquiry",
-        "physical_science"
-      ],
+      "groupIds": ["learned_natural_inquiry", "physical_science"],
       "id": "astronomy",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Astronomy",
       "requiresLiteracy": "no",
       "shortDescription": "Understand celestial movement for calendar, orientation, or study.",
@@ -2661,16 +2567,10 @@
       "dependencySkillIds": [],
       "description": "Work with substances, transformations, mixtures, and proto-chemical theory. Advanced-setting learned craft/science skill.",
       "groupId": "learned_natural_inquiry",
-      "groupIds": [
-        "learned_natural_inquiry",
-        "physical_science"
-      ],
+      "groupIds": ["learned_natural_inquiry", "physical_science"],
       "id": "alchemy",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Alchemy",
       "requiresLiteracy": "no",
       "shortDescription": "Work with substances, transformations, mixtures, and proto-chemical theory.",
@@ -2691,22 +2591,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "literacy",
-        "philosophy"
-      ],
+      "dependencySkillIds": ["literacy", "philosophy"],
       "description": "Reason about nature, matter, and the physical world. Better as an elite support skill than a base profession skill.",
       "groupId": "learned_natural_inquiry",
-      "groupIds": [
-        "learned_natural_inquiry",
-        "physical_science"
-      ],
+      "groupIds": ["learned_natural_inquiry", "physical_science"],
       "id": "natural_philosophy",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Natural Philosophy",
       "requiresLiteracy": "required",
       "shortDescription": "Reason about nature, matter, and the physical world.",
@@ -2723,21 +2614,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "measurement"
-      ],
+      "dependencySkillIds": ["measurement"],
       "description": "Measure land, boundaries, gradients, and layout in the field. Practical land-measurement and site-layout skill for builders, engineers, roads, estates, and fortifications.",
       "groupId": "technical_measurement",
-      "groupIds": [
-        "technical_measurement",
-        "physical_science"
-      ],
+      "groupIds": ["technical_measurement", "physical_science"],
       "id": "surveying",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Surveying",
       "requiresLiteracy": "no",
       "shortDescription": "Measure land, boundaries, gradients, and layout in the field.",
@@ -2761,17 +2644,10 @@
       "dependencySkillIds": [],
       "description": "Understand simple machines, force transfer, moving parts, and practical mechanisms. Applied technical skill for devices, structural motion, simple machines, and engineering problem-solving.",
       "groupId": "physical_science",
-      "groupIds": [
-        "physical_science",
-        "construction_specialty",
-        "mining_extraction"
-      ],
+      "groupIds": ["physical_science", "construction_specialty", "mining_extraction"],
       "id": "mechanics",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "int"
-      ],
+      "linkedStats": ["int", "int"],
       "name": "Mechanics",
       "requiresLiteracy": "no",
       "shortDescription": "Understand simple machines, force transfer, moving parts, and practical mechanisms.",
@@ -2794,10 +2670,7 @@
       ],
       "id": "bargaining",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Bargaining",
       "requiresLiteracy": "no",
       "shortDescription": "Negotiate prices, terms, favors, and exchanges.",
@@ -2812,15 +2685,10 @@
       "dependencySkillIds": [],
       "description": "Gambling Understand games of chance, betting behavior, and risk-taking. Flavorful, broad social/practical skill.",
       "groupId": "operations",
-      "groupIds": [
-        "operations"
-      ],
+      "groupIds": ["operations"],
       "id": "gambling",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Gambling",
       "requiresLiteracy": "no",
       "shortDescription": "Understand games of chance, betting behavior, and risk-taking.",
@@ -2852,10 +2720,7 @@
       ],
       "id": "trading",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Trading",
       "requiresLiteracy": "no",
       "shortDescription": "Manage regular exchange of goods across households, markets, or routes.",
@@ -2880,22 +2745,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "literacy",
-        "trading",
-        "bookkeeping"
-      ],
+      "dependencySkillIds": ["literacy", "trading", "bookkeeping"],
       "description": "Handle credit, deposits, transfers, loans, and financial instruments. High-society commercial core.",
       "groupId": "operations",
-      "groupIds": [
-        "operations"
-      ],
+      "groupIds": ["operations"],
       "id": "banking",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Banking",
       "requiresLiteracy": "required",
       "shortDescription": "Handle credit, deposits, transfers, loans, and financial instruments.",
@@ -2912,9 +2768,7 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "literacy"
-      ],
+      "dependencySkillIds": ["literacy"],
       "description": "Run offices, records, logistics, and institutional routine. Core official, steward, and governance skill.",
       "groupId": "commercial_administration",
       "groupIds": [
@@ -2926,10 +2780,7 @@
       ],
       "id": "administration",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Administration",
       "requiresLiteracy": "required",
       "shortDescription": "Run offices, records, logistics, and institutional routine.",
@@ -2957,16 +2808,10 @@
       "dependencySkillIds": [],
       "description": "Work within covert politics, factions, patronage, and hidden agendas. Court and political professional core.",
       "groupId": "political_acumen",
-      "groupIds": [
-        "political_acumen",
-        "operations"
-      ],
+      "groupIds": ["political_acumen", "operations"],
       "id": "intrigue",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Intrigue",
       "requiresLiteracy": "no",
       "shortDescription": "Work within covert politics, factions, patronage, and hidden agendas.",
@@ -2987,22 +2832,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "literacy"
-      ],
+      "dependencySkillIds": ["literacy"],
       "description": "Keep structured records of quantities, payments, inventories, and obligations. Ideal half-cost commercial support skill.",
       "groupId": "commercial_administration",
-      "groupIds": [
-        "commercial_administration",
-        "operations",
-        "fiscal_administration"
-      ],
+      "groupIds": ["commercial_administration", "operations", "fiscal_administration"],
       "id": "bookkeeping",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Bookkeeping",
       "requiresLiteracy": "required",
       "shortDescription": "Keep structured records of quantities, payments, inventories, and obligations.",
@@ -3034,10 +2870,7 @@
       ],
       "id": "appraisal",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Appraisal",
       "requiresLiteracy": "no",
       "shortDescription": "Estimate quality, authenticity, condition, and value of goods.",
@@ -3052,17 +2885,10 @@
       "dependencySkillIds": [],
       "description": "Know expected manners, forms of respect, and socially correct behavior. Broad elite-social core.",
       "groupId": "courtly_formation",
-      "groupIds": [
-        "courtly_formation",
-        "humanities",
-        "temple_service"
-      ],
+      "groupIds": ["courtly_formation", "humanities", "temple_service"],
       "id": "etiquette",
       "isTheoretical": true,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Etiquette",
       "requiresLiteracy": "no",
       "shortDescription": "Know expected manners, forms of respect, and socially correct behavior.",
@@ -3079,21 +2905,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "etiquette"
-      ],
+      "dependencySkillIds": ["etiquette"],
       "description": "Heralrdy Recognize arms, badges, lineages, and formal symbols of status. Distinct noble and military identity skill.",
       "groupId": "courtly_formation",
-      "groupIds": [
-        "courtly_formation",
-        "humanities"
-      ],
+      "groupIds": ["courtly_formation", "humanities"],
       "id": "heraldry",
       "isTheoretical": true,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Heraldry",
       "requiresLiteracy": "no",
       "shortDescription": "Recognize arms, badges, lineages, and formal symbols of status.",
@@ -3110,21 +2928,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "etiquette"
-      ],
+      "dependencySkillIds": ["etiquette"],
       "description": "Manage precedence, audiences, titles, and ceremonial court behavior. Narrow but strong elite support skill.",
       "groupId": "courtly_formation",
-      "groupIds": [
-        "courtly_formation",
-        "humanities"
-      ],
+      "groupIds": ["courtly_formation", "humanities"],
       "id": "courtly_protocol",
       "isTheoretical": true,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Courtly Protocol",
       "requiresLiteracy": "no",
       "shortDescription": "Manage precedence, audiences, titles, and ceremonial court behavior.",
@@ -3150,10 +2960,7 @@
       ],
       "id": "insight",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Insight",
       "requiresLiteracy": "no",
       "shortDescription": "Read mood, intention, sincerity, fear, uncertainty, or emotional state.",
@@ -3170,23 +2977,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "insight"
-      ],
+      "dependencySkillIds": ["insight"],
       "description": "Notice status cues, alliances, tension, and interpersonal dynamics in groups. Group-reading support skill.",
       "groupId": "political_acumen",
-      "groupIds": [
-        "political_acumen",
-        "social_reading",
-        "humanities",
-        "watch_civic_guard"
-      ],
+      "groupIds": ["political_acumen", "social_reading", "humanities", "watch_civic_guard"],
       "id": "social_perception",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Social Perception",
       "requiresLiteracy": "no",
       "shortDescription": "Notice status cues, alliances, tension, and interpersonal dynamics in groups.",
@@ -3207,21 +3004,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "insight"
-      ],
+      "dependencySkillIds": ["insight"],
       "description": "Judge whether speech or behavior suggests deception or concealment. Narrow but strong support skill.",
       "groupId": "social_reading",
-      "groupIds": [
-        "social_reading",
-        "humanities"
-      ],
+      "groupIds": ["social_reading", "humanities"],
       "id": "detect_lies",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Detect Lies",
       "requiresLiteracy": "no",
       "shortDescription": "Judge whether speech or behavior suggests deception or concealment.",
@@ -3242,20 +3031,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "insight"
-      ],
+      "dependencySkillIds": ["insight"],
       "description": "Seduction Influence attraction or intimacy through timing, attention, and emotional reading. Attractive but niche social support skill.",
       "groupId": "humanities",
-      "groupIds": [
-        "humanities"
-      ],
+      "groupIds": ["humanities"],
       "id": "seduction",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Seduction",
       "requiresLiteracy": "no",
       "shortDescription": "Influence attraction or intimacy through timing, attention, and emotional reading.",
@@ -3270,16 +3052,10 @@
       "dependencySkillIds": [],
       "description": "Use the voice for song, pitch, rhythm, and expression. Broad expressive and social primary.",
       "groupId": "performance_basics",
-      "groupIds": [
-        "performance_basics",
-        "performance_group"
-      ],
+      "groupIds": ["performance_basics", "performance_group"],
       "id": "singing",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Singing",
       "requiresLiteracy": "no",
       "shortDescription": "Use the voice for song, pitch, rhythm, and expression.",
@@ -3294,16 +3070,10 @@
       "dependencySkillIds": [],
       "description": "Dancing Perform structured or improvised movement for ritual, celebration, or display. Broad expressive and social primary.",
       "groupId": "performance_basics",
-      "groupIds": [
-        "performance_basics",
-        "performance_group"
-      ],
+      "groupIds": ["performance_basics", "performance_group"],
       "id": "dancing",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Dancing",
       "requiresLiteracy": "no",
       "shortDescription": "Perform structured or improvised movement for ritual, celebration, or display.",
@@ -3318,16 +3088,10 @@
       "dependencySkillIds": [],
       "description": "Hold attention through spoken narrative, pacing, memory, and dramatic delivery. Strong oral-performance core.",
       "groupId": "performance_basics",
-      "groupIds": [
-        "performance_basics",
-        "performance_group"
-      ],
+      "groupIds": ["performance_basics", "performance_group"],
       "id": "storytelling",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Storytelling",
       "requiresLiteracy": "no",
       "shortDescription": "Hold attention through spoken narrative, pacing, memory, and dramatic delivery.",
@@ -3342,16 +3106,10 @@
       "dependencySkillIds": [],
       "description": "Play or perform structured instrumental music. Performance profession core.",
       "groupId": "performance_basics",
-      "groupIds": [
-        "performance_basics",
-        "performance_group"
-      ],
+      "groupIds": ["performance_basics", "performance_group"],
       "id": "music",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Music",
       "requiresLiteracy": "no",
       "shortDescription": "Play or perform structured instrumental music.",
@@ -3371,17 +3129,10 @@
       "dependencySkillIds": [],
       "description": "Acting Adopt role, gesture, emotion, and presentation for staged or social performance. Strong performer and infiltrator support skill.",
       "groupId": "formal_performance",
-      "groupIds": [
-        "formal_performance",
-        "performance_group",
-        "arena_training"
-      ],
+      "groupIds": ["formal_performance", "performance_group", "arena_training"],
       "id": "acting",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Acting",
       "requiresLiteracy": "no",
       "shortDescription": "Adopt role, gesture, emotion, and presentation for staged or social performance.",
@@ -3401,16 +3152,10 @@
       "dependencySkillIds": [],
       "description": "Deliver memorized text, verse, doctrine, or formal speech with control. Good formal-performance support skill.",
       "groupId": "formal_performance",
-      "groupIds": [
-        "formal_performance",
-        "performance_group"
-      ],
+      "groupIds": ["formal_performance", "performance_group"],
       "id": "recitation",
       "isTheoretical": false,
-      "linkedStats": [
-        "cha",
-        "int"
-      ],
+      "linkedStats": ["cha", "int"],
       "name": "Recitation",
       "requiresLiteracy": "no",
       "shortDescription": "Deliver memorized text, verse, doctrine, or formal speech with control.",
@@ -3431,9 +3176,7 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "language"
-      ],
+      "dependencySkillIds": ["language"],
       "description": "Oratory Deliver persuasive public speech to assemblies, courts, or elites. Strong elite public-speaking support skill.",
       "groupId": "formal_performance",
       "groupIds": [
@@ -3446,10 +3189,7 @@
       ],
       "id": "oratory",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "cha"
-      ],
+      "linkedStats": ["int", "cha"],
       "name": "Oratory",
       "requiresLiteracy": "no",
       "shortDescription": "Deliver persuasive public speech to assemblies, courts, or elites.",
@@ -3473,10 +3213,7 @@
       ],
       "id": "concentration",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Concentration",
       "requiresLiteracy": "no",
       "shortDescription": "Sustain attention and mental focus under distraction or pressure.",
@@ -3491,17 +3228,10 @@
       "dependencySkillIds": [],
       "description": "Retain, recall, and organize learned details or patterns. Broad cognitive core.",
       "groupId": "mental_discipline",
-      "groupIds": [
-        "mental_discipline",
-        "mental_group",
-        "scholarly_formation"
-      ],
+      "groupIds": ["mental_discipline", "mental_group", "scholarly_formation"],
       "id": "memory",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Memory",
       "requiresLiteracy": "no",
       "shortDescription": "Retain, recall, and organize learned details or patterns.",
@@ -3516,16 +3246,10 @@
       "dependencySkillIds": [],
       "description": "Govern impulse, fear, pain response, and emotional reaction under pressure. Broad mental and emotional control core.",
       "groupId": "mental_discipline",
-      "groupIds": [
-        "mental_discipline",
-        "mental_group"
-      ],
+      "groupIds": ["mental_discipline", "mental_group"],
       "id": "self_control",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Self-Control",
       "requiresLiteracy": "no",
       "shortDescription": "Govern impulse, fear, pain response, and emotional reaction under pressure.",
@@ -3542,21 +3266,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "concentration"
-      ],
+      "dependencySkillIds": ["concentration"],
       "description": "Use disciplined stillness, breath, or contemplation to regulate inner state. Good niche mental support skill.",
       "groupId": "mental_discipline",
-      "groupIds": [
-        "mental_discipline",
-        "mental_group"
-      ],
+      "groupIds": ["mental_discipline", "mental_group"],
       "id": "meditation",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Meditation",
       "requiresLiteracy": "no",
       "shortDescription": "Use disciplined stillness, breath, or contemplation to regulate inner state.",
@@ -3591,10 +3307,7 @@
       ],
       "id": "perception",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Perception",
       "requiresLiteracy": "no",
       "shortDescription": "Notice relevant details, threats, movement, and hidden information.",
@@ -3621,10 +3334,7 @@
       ],
       "id": "animal_care",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Animal care",
       "requiresLiteracy": "no",
       "shortDescription": "Feed, calm, house, and maintain animals in routine condition.",
@@ -3641,23 +3351,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "animal_care"
-      ],
+      "dependencySkillIds": ["animal_care"],
       "description": "Train animals to obey commands or perform useful tasks. Broad trainer role.",
       "groupId": "animal_husbandry",
-      "groupIds": [
-        "animal_husbandry",
-        "mounted_service",
-        "animal_handling",
-        "wilderness_group"
-      ],
+      "groupIds": ["animal_husbandry", "mounted_service", "animal_handling", "wilderness_group"],
       "id": "animal_training",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Animal Training",
       "requiresLiteracy": "no",
       "shortDescription": "Train animals to obey commands or perform useful tasks.",
@@ -3686,10 +3386,7 @@
       ],
       "id": "herding",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Herding",
       "requiresLiteracy": "no",
       "shortDescription": "Manage grazing animals and control flock or herd behavior.",
@@ -3719,10 +3416,7 @@
       ],
       "id": "riding",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Riding",
       "requiresLiteracy": "no",
       "shortDescription": "Ride and control a trained mount in travel, stress, or basic action.",
@@ -3751,10 +3445,7 @@
       ],
       "id": "teamstering",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Teamstering",
       "requiresLiteracy": "no",
       "shortDescription": "Handle draft animals and direct wagons, carts, teams, or pack trains.",
@@ -3771,21 +3462,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "animal_training"
-      ],
+      "dependencySkillIds": ["animal_training"],
       "description": "Keep, train, and work birds of prey for hunting, display, or status use. Narrow attractive secondary.",
       "groupId": "animal_handling",
-      "groupIds": [
-        "animal_handling",
-        "wilderness_group"
-      ],
+      "groupIds": ["animal_handling", "wilderness_group"],
       "id": "falconry",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Falconry",
       "requiresLiteracy": "no",
       "shortDescription": "Keep, train, and work birds of prey for hunting, display, or status use.",
@@ -3810,10 +3493,7 @@
       ],
       "id": "sailing",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Sailing",
       "requiresLiteracy": "no",
       "shortDescription": "Handle sails and work aboard a vessel under routine maritime conditions.",
@@ -3834,22 +3514,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "sailing"
-      ],
+      "dependencySkillIds": ["sailing"],
       "description": "Navigation Determine route, direction, and position at sea or on major waters. Distinct captain and pilot core.",
       "groupId": "maritime_navigation",
-      "groupIds": [
-        "maritime_navigation",
-        "wilderness_group",
-        "ship_command"
-      ],
+      "groupIds": ["maritime_navigation", "wilderness_group", "ship_command"],
       "id": "navigation",
       "isTheoretical": true,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Navigation",
       "requiresLiteracy": "no",
       "shortDescription": "Determine route, direction, and position at sea or on major waters.",
@@ -3869,17 +3540,10 @@
       "dependencySkillIds": [],
       "description": "Tie, maintain, and use lines, knots, and rigging. Excellent shipboard support skill.",
       "groupId": "maritime_crew_training",
-      "groupIds": [
-        "maritime_crew_training",
-        "wilderness_group",
-        "coastal_fishing"
-      ],
+      "groupIds": ["maritime_crew_training", "wilderness_group", "coastal_fishing"],
       "id": "ropework",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Ropework",
       "requiresLiteracy": "no",
       "shortDescription": "Tie, maintain, and use lines, knots, and rigging.",
@@ -3899,17 +3563,10 @@
       "dependencySkillIds": [],
       "description": "Maneuver small craft or directly control a vessel in tight or rough conditions. Strong practical support skill.",
       "groupId": "maritime_crew_training",
-      "groupIds": [
-        "maritime_crew_training",
-        "wilderness_group",
-        "coastal_fishing"
-      ],
+      "groupIds": ["maritime_crew_training", "wilderness_group", "coastal_fishing"],
       "id": "boat_handling",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Boat Handling",
       "requiresLiteracy": "no",
       "shortDescription": "Maneuver small craft or directly control a vessel in tight or rough conditions.",
@@ -3932,10 +3589,7 @@
       ],
       "id": "climb",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "str"
-      ],
+      "linkedStats": ["dex", "str"],
       "name": "Climb",
       "requiresLiteracy": "no",
       "shortDescription": "Climb natural or built surfaces safely and efficiently.",
@@ -3958,10 +3612,7 @@
       ],
       "id": "run",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "str"
-      ],
+      "linkedStats": ["dex", "str"],
       "name": "Run",
       "requiresLiteracy": "no",
       "shortDescription": "Sprint, pace, pursue, and move rapidly on foot.",
@@ -3976,16 +3627,10 @@
       "dependencySkillIds": [],
       "description": "Leap gaps, obstacles, and vertical distances with control. Broad movement core.",
       "groupId": "athletic_conditioning",
-      "groupIds": [
-        "athletic_conditioning",
-        "athletics"
-      ],
+      "groupIds": ["athletic_conditioning", "athletics"],
       "id": "jump",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "str"
-      ],
+      "linkedStats": ["dex", "str"],
       "name": "Jump",
       "requiresLiteracy": "no",
       "shortDescription": "Leap gaps, obstacles, and vertical distances with control.",
@@ -4000,16 +3645,10 @@
       "dependencySkillIds": [],
       "description": "Swim Move safely and effectively through water. Broad physical survival and adventure core.",
       "groupId": "athletics",
-      "groupIds": [
-        "athletics",
-        "coastal_fishing"
-      ],
+      "groupIds": ["athletics", "coastal_fishing"],
       "id": "swim",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "str"
-      ],
+      "linkedStats": ["dex", "str"],
       "name": "Swim",
       "requiresLiteracy": "no",
       "shortDescription": "Move safely and effectively through water.",
@@ -4024,16 +3663,10 @@
       "dependencySkillIds": [],
       "description": "Keep footing on narrow, unstable, moving, or slippery surfaces. Cheap narrow movement enhancer.",
       "groupId": "athletic_conditioning",
-      "groupIds": [
-        "athletic_conditioning",
-        "athletics"
-      ],
+      "groupIds": ["athletic_conditioning", "athletics"],
       "id": "balance",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "str"
-      ],
+      "linkedStats": ["dex", "str"],
       "name": "Balance",
       "requiresLiteracy": "no",
       "shortDescription": "Keep footing on narrow, unstable, moving, or slippery surfaces.",
@@ -4057,15 +3690,10 @@
       "dependencySkillIds": [],
       "description": "Acrobatics Tumble, roll, control falls, and use advanced body control. Stylish secondary; should stay narrower than core athletics.",
       "groupId": "athletics",
-      "groupIds": [
-        "athletics"
-      ],
+      "groupIds": ["athletics"],
       "id": "acrobatics",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "str"
-      ],
+      "linkedStats": ["dex", "str"],
       "name": "Acrobatics",
       "requiresLiteracy": "no",
       "shortDescription": "Tumble, roll, control falls, and use advanced body control.",
@@ -4092,10 +3720,7 @@
       ],
       "id": "search",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Search",
       "requiresLiteracy": "no",
       "shortDescription": "Search persons, containers, rooms, or sites for hidden items or traces.",
@@ -4115,17 +3740,10 @@
       "dependencySkillIds": [],
       "description": "Hide small items on the body, in baggage, or in surroundings. Good narrow support skill.",
       "groupId": "street_theft",
-      "groupIds": [
-        "street_theft",
-        "security",
-        "smuggling_illicit_trade"
-      ],
+      "groupIds": ["street_theft", "security", "smuggling_illicit_trade"],
       "id": "conceal_object",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Conceal Object",
       "requiresLiteracy": "no",
       "shortDescription": "Hide small items on the body, in baggage, or in surroundings.",
@@ -4142,21 +3760,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "search"
-      ],
+      "dependencySkillIds": ["search"],
       "description": "Detect, avoid, disarm, or set traps and trigger mechanisms. Useful narrow technical secondary.",
       "groupId": "covert_entry",
-      "groupIds": [
-        "covert_entry",
-        "security"
-      ],
+      "groupIds": ["covert_entry", "security"],
       "id": "trap_handling",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Trap Handling",
       "requiresLiteracy": "no",
       "shortDescription": "Detect, avoid, disarm, or set traps and trigger mechanisms.",
@@ -4173,21 +3783,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "search"
-      ],
+      "dependencySkillIds": ["search"],
       "description": "Pick lock Open locks without the proper key using tools and tactile knowledge. Strong classic rogue support skill.",
       "groupId": "covert_entry",
-      "groupIds": [
-        "covert_entry",
-        "security"
-      ],
+      "groupIds": ["covert_entry", "security"],
       "id": "lockpicking",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Pick lock",
       "requiresLiteracy": "no",
       "shortDescription": "Open locks without the proper key using tools and tactile knowledge.",
@@ -4207,16 +3809,10 @@
       "dependencySkillIds": [],
       "description": "Steal small items from a person without immediate detection. Strong narrow urban support skill.",
       "groupId": "street_theft",
-      "groupIds": [
-        "street_theft",
-        "security"
-      ],
+      "groupIds": ["street_theft", "security"],
       "id": "pickpocket",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Pickpocket",
       "requiresLiteracy": "no",
       "shortDescription": "Steal small items from a person without immediate detection.",
@@ -4240,10 +3836,7 @@
       ],
       "id": "stealth",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Stealth",
       "requiresLiteracy": "no",
       "shortDescription": "Move quietly, stay unnoticed, and avoid attention while approaching or withdrawing.",
@@ -4260,22 +3853,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "stealth"
-      ],
+      "dependencySkillIds": ["stealth"],
       "description": "Use cover, terrain, darkness, or clutter to remain unseen. Good narrow stealth support skill.",
       "groupId": "covert_entry",
-      "groupIds": [
-        "covert_entry",
-        "fieldcraft_stealth",
-        "stealth_group"
-      ],
+      "groupIds": ["covert_entry", "fieldcraft_stealth", "stealth_group"],
       "id": "hide",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Hide",
       "requiresLiteracy": "no",
       "shortDescription": "Use cover, terrain, darkness, or clutter to remain unseen.",
@@ -4292,21 +3876,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "stealth"
-      ],
+      "dependencySkillIds": ["stealth"],
       "description": "Blend clothing, gear, and body into terrain or surroundings. Strong terrain-focused support skill.",
       "groupId": "fieldcraft_stealth",
-      "groupIds": [
-        "fieldcraft_stealth",
-        "stealth_group"
-      ],
+      "groupIds": ["fieldcraft_stealth", "stealth_group"],
       "id": "camouflage",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Camouflage",
       "requiresLiteracy": "no",
       "shortDescription": "Blend clothing, gear, and body into terrain or surroundings.",
@@ -4327,20 +3903,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "stealth"
-      ],
+      "dependencySkillIds": ["stealth"],
       "description": "Disguise Alter appearance, manner, and presentation to pass as another type of person. Good social-infiltration support skill.",
       "groupId": "stealth_group",
-      "groupIds": [
-        "stealth_group"
-      ],
+      "groupIds": ["stealth_group"],
       "id": "disguise",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Disguise",
       "requiresLiteracy": "no",
       "shortDescription": "Alter appearance, manner, and presentation to pass as another type of person.",
@@ -4355,17 +3924,10 @@
       "dependencySkillIds": [],
       "description": "Shape, fire, and finish clay vessels and ceramic goods. Very early settled craft.",
       "groupId": "craft_group",
-      "groupIds": [
-        "craft_group",
-        "craft_specialty",
-        "craft_specialty_advanced"
-      ],
+      "groupIds": ["craft_group", "craft_specialty", "craft_specialty_advanced"],
       "id": "pottery",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Pottery",
       "requiresLiteracy": "no",
       "shortDescription": "Shape, fire, and finish clay vessels and ceramic goods.",
@@ -4380,17 +3942,10 @@
       "dependencySkillIds": [],
       "description": "Produce woven cloth, bands, and simple textiles. Very early settled craft.",
       "groupId": "craft_group",
-      "groupIds": [
-        "craft_group",
-        "craft_specialty",
-        "craft_specialty_advanced"
-      ],
+      "groupIds": ["craft_group", "craft_specialty", "craft_specialty_advanced"],
       "id": "weaving",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Weaving",
       "requiresLiteracy": "no",
       "shortDescription": "Produce woven cloth, bands, and simple textiles.",
@@ -4405,17 +3960,10 @@
       "dependencySkillIds": [],
       "description": "Cut, cure, shape, and repair leather goods and hide equipment. Broad practical craft core.",
       "groupId": "craft_group",
-      "groupIds": [
-        "craft_group",
-        "craft_specialty",
-        "craft_specialty_advanced"
-      ],
+      "groupIds": ["craft_group", "craft_specialty", "craft_specialty_advanced"],
       "id": "leatherworking",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Leatherworking",
       "requiresLiteracy": "no",
       "shortDescription": "Cut, cure, shape, and repair leather goods and hide equipment.",
@@ -4440,10 +3988,7 @@
       ],
       "id": "carpentry",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Carpentry",
       "requiresLiteracy": "no",
       "shortDescription": "Make and repair wooden structures, fittings, tools, and objects.",
@@ -4463,17 +4008,10 @@
       "dependencySkillIds": [],
       "description": "Cut, fit, alter, and finish garments. Attractive support craft.",
       "groupId": "craft_group",
-      "groupIds": [
-        "craft_group",
-        "craft_specialty",
-        "craft_specialty_advanced"
-      ],
+      "groupIds": ["craft_group", "craft_specialty", "craft_specialty_advanced"],
       "id": "tailoring",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Tailoring",
       "requiresLiteracy": "no",
       "shortDescription": "Cut, fit, alter, and finish garments.",
@@ -4496,10 +4034,7 @@
       ],
       "id": "baking",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Baking",
       "requiresLiteracy": "no",
       "shortDescription": "Prepare and bake bread and staple oven foods reliably.",
@@ -4522,10 +4057,7 @@
       ],
       "id": "brewing",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Brewing",
       "requiresLiteracy": "no",
       "shortDescription": "Produce fermented drink from grain, fruit, honey, or similar materials.",
@@ -4549,10 +4081,7 @@
       ],
       "id": "stoneworking",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Stoneworking",
       "requiresLiteracy": "no",
       "shortDescription": "Cut, dress, shape, and fit stone for tools, structures, and finishes.",
@@ -4575,10 +4104,7 @@
       ],
       "id": "smithing",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Smithing",
       "requiresLiteracy": "no",
       "shortDescription": "Forge, shape, and repair metal tools, fittings, and simple equipment.",
@@ -4610,10 +4136,7 @@
       ],
       "id": "weapon_maintenance",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "int"
-      ],
+      "linkedStats": ["dex", "int"],
       "name": "Weapon Maintenance",
       "requiresLiteracy": "no",
       "shortDescription": "Maintain, repair, and keep weapons serviceable in field or garrison use.",
@@ -4633,17 +4156,10 @@
       "dependencySkillIds": [],
       "description": "Medicine Diagnose and treat disease, injury, and bodily disorders using organized medical practice. Core physician and healer profession skill.",
       "groupId": "healing_practice",
-      "groupIds": [
-        "healing_practice",
-        "medicine_group",
-        "mortuary_practice"
-      ],
+      "groupIds": ["healing_practice", "medicine_group", "mortuary_practice"],
       "id": "medicine",
       "isTheoretical": true,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Medicine",
       "requiresLiteracy": "recommended",
       "shortDescription": "Diagnose and treat disease, injury, and bodily disorders using organized medical practice.",
@@ -4672,10 +4188,7 @@
       ],
       "id": "first_aid",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "First aid",
       "requiresLiteracy": "no",
       "shortDescription": "Give immediate practical treatment to stabilize wounds, bleeding, shock, and urgent injury.",
@@ -4690,16 +4203,10 @@
       "dependencySkillIds": [],
       "description": "Herb lore Know medicinal, harmful, and useful plants and their common uses. Strong low-tech or hybrid healing core.",
       "groupId": "herb_and_remedy_craft",
-      "groupIds": [
-        "herb_and_remedy_craft",
-        "medicine_group"
-      ],
+      "groupIds": ["herb_and_remedy_craft", "medicine_group"],
       "id": "herb_lore",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Herb lore",
       "requiresLiteracy": "no",
       "shortDescription": "Know medicinal, harmful, and useful plants and their common uses.",
@@ -4723,16 +4230,10 @@
       "dependencySkillIds": [],
       "description": "Poison Lore Know poisons, toxins, symptoms, preparation, and antidotal principles. Broad enough to define roles on its own.",
       "groupId": "herb_and_remedy_craft",
-      "groupIds": [
-        "herb_and_remedy_craft",
-        "medicine_group"
-      ],
+      "groupIds": ["herb_and_remedy_craft", "medicine_group"],
       "id": "poison_lore",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Poison Lore",
       "requiresLiteracy": "no",
       "shortDescription": "Know poisons, toxins, symptoms, preparation, and antidotal principles.",
@@ -4760,17 +4261,10 @@
       "dependencySkillIds": [],
       "description": "Prepare, compound, preserve, and dispense remedies and medical substances. Strong support secondary.",
       "groupId": "herb_and_remedy_craft",
-      "groupIds": [
-        "herb_and_remedy_craft",
-        "medicine_group",
-        "mortuary_practice"
-      ],
+      "groupIds": ["herb_and_remedy_craft", "medicine_group", "mortuary_practice"],
       "id": "pharmacy",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Pharmacy",
       "requiresLiteracy": "recommended",
       "shortDescription": "Prepare, compound, preserve, and dispense remedies and medical substances.",
@@ -4790,16 +4284,10 @@
       "dependencySkillIds": [],
       "description": "Give ongoing care, monitoring, hygiene, and recovery support. Good practical support skill.",
       "groupId": "healing_practice",
-      "groupIds": [
-        "healing_practice",
-        "medicine_group"
-      ],
+      "groupIds": ["healing_practice", "medicine_group"],
       "id": "nursing",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "dex"
-      ],
+      "linkedStats": ["int", "dex"],
       "name": "Nursing",
       "requiresLiteracy": "no",
       "shortDescription": "Give ongoing care, monitoring, hygiene, and recovery support.",
@@ -4814,16 +4302,10 @@
       "dependencySkillIds": [],
       "description": "Interpret signs, omens, visions, or ritual indicators for hidden meaning. Broad mystical core.",
       "groupId": "omen_and_ritual_practice",
-      "groupIds": [
-        "omen_and_ritual_practice",
-        "mystical_group"
-      ],
+      "groupIds": ["omen_and_ritual_practice", "mystical_group"],
       "id": "divination",
       "isTheoretical": false,
-      "linkedStats": [
-        "pow",
-        "int"
-      ],
+      "linkedStats": ["pow", "int"],
       "name": "Divination",
       "requiresLiteracy": "no",
       "shortDescription": "Interpret signs, omens, visions, or ritual indicators for hidden meaning.",
@@ -4840,21 +4322,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "divination"
-      ],
+      "dependencySkillIds": ["divination"],
       "description": "Read natural signs, chance events, or behavior as meaningful omens. Narrow attractive mystical support skill.",
       "groupId": "omen_and_ritual_practice",
-      "groupIds": [
-        "omen_and_ritual_practice",
-        "mystical_group"
-      ],
+      "groupIds": ["omen_and_ritual_practice", "mystical_group"],
       "id": "omen_reading",
       "isTheoretical": true,
-      "linkedStats": [
-        "pow",
-        "int"
-      ],
+      "linkedStats": ["pow", "int"],
       "name": "Omen Reading",
       "requiresLiteracy": "no",
       "shortDescription": "Read natural signs, chance events, or behavior as meaningful omens.",
@@ -4875,9 +4349,7 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "divination"
-      ],
+      "dependencySkillIds": ["divination"],
       "description": "Interpret ritual forms, sacred procedures, and prescribed signs. Institutional mystical support skill.",
       "groupId": "sacred_learning",
       "groupIds": [
@@ -4889,10 +4361,7 @@
       ],
       "id": "ritual_interpretation",
       "isTheoretical": true,
-      "linkedStats": [
-        "pow",
-        "int"
-      ],
+      "linkedStats": ["pow", "int"],
       "name": "Ritual Interpretation",
       "requiresLiteracy": "no",
       "shortDescription": "Interpret ritual forms, sacred procedures, and prescribed signs.",
@@ -4917,20 +4386,13 @@
           "strength": "helpful"
         }
       ],
-      "dependencySkillIds": [
-        "divination"
-      ],
+      "dependencySkillIds": ["divination"],
       "description": "Use heavenly bodies and sign systems to interpret destiny, timing, or influence. Learned mystical support skill.",
       "groupId": "mystical_group",
-      "groupIds": [
-        "mystical_group"
-      ],
+      "groupIds": ["mystical_group"],
       "id": "astrology",
       "isTheoretical": true,
-      "linkedStats": [
-        "pow",
-        "int"
-      ],
+      "linkedStats": ["pow", "int"],
       "name": "Astrology",
       "requiresLiteracy": "no",
       "shortDescription": "Use heavenly bodies and sign systems to interpret destiny, timing, or influence.",
@@ -4953,10 +4415,7 @@
       ],
       "id": "dodge",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Dodge",
       "requiresLiteracy": "no",
       "shortDescription": "Avoid attacks through movement, timing, and body positioning.",
@@ -4979,10 +4438,7 @@
       ],
       "id": "parry",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Parry",
       "requiresLiteracy": "no",
       "shortDescription": "Defend with weapon or shield by turning aside or controlling an attack.",
@@ -4997,17 +4453,10 @@
       "dependencySkillIds": [],
       "description": "Brawling Fight effectively with punches, kicks, grapples, and rough unarmed violence. Baseline unarmed attack skill.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_melee_training",
-        "advanced_melee_training"
-      ],
+      "groupIds": ["combat_group", "basic_melee_training", "advanced_melee_training"],
       "id": "brawling",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "Brawling",
       "requiresLiteracy": "no",
       "shortDescription": "Fight effectively with punches, kicks, grapples, and rough unarmed violence.",
@@ -5030,10 +4479,7 @@
       ],
       "id": "one_handed_edged",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "1-h edged",
       "requiresLiteracy": "no",
       "shortDescription": "Fight with one-handed bladed weapons.",
@@ -5048,17 +4494,10 @@
       "dependencySkillIds": [],
       "description": "1-h conc./axe Fight with one-handed crushing or chopping weapons such as maces and axes. Core melee attack family.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_melee_training",
-        "advanced_melee_training"
-      ],
+      "groupIds": ["combat_group", "basic_melee_training", "advanced_melee_training"],
       "id": "one_handed_concussion_axe",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "1-h conc./axe",
       "requiresLiteracy": "no",
       "shortDescription": "Fight with one-handed crushing or chopping weapons such as maces and axes.",
@@ -5073,17 +4512,10 @@
       "dependencySkillIds": [],
       "description": "2-h edged Fight with large two-handed bladed weapons using strength, reach, and committed technique. Heavy cutting or slashing weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_melee_training",
-        "advanced_melee_training"
-      ],
+      "groupIds": ["combat_group", "basic_melee_training", "advanced_melee_training"],
       "id": "two_handed_edged",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "2-h edged",
       "requiresLiteracy": "no",
       "shortDescription": "Fight with large two-handed bladed weapons using strength, reach, and committed technique.",
@@ -5098,17 +4530,10 @@
       "dependencySkillIds": [],
       "description": "Polearms Fight with spears and longer pole weapons used at reach. Very important common-soldier weapon family.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_melee_training",
-        "advanced_melee_training"
-      ],
+      "groupIds": ["combat_group", "basic_melee_training", "advanced_melee_training"],
       "id": "polearms",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "Polearms",
       "requiresLiteracy": "no",
       "shortDescription": "Fight with spears and longer pole weapons used at reach.",
@@ -5123,17 +4548,10 @@
       "dependencySkillIds": [],
       "description": "2-h conc./axe Fight with large two-handed crushing or chopping weapons such as great axes, hammers, or mauls. Heavy impact/chopping weapon family. Split from the former broad 2-handed Weapons row to align better with the source combat structure.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_melee_training",
-        "advanced_melee_training"
-      ],
+      "groupIds": ["combat_group", "basic_melee_training", "advanced_melee_training"],
       "id": "two_handed_concussion_axe",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "2-h conc./axe",
       "requiresLiteracy": "no",
       "shortDescription": "Fight with large two-handed crushing or chopping weapons such as great axes, hammers, or mauls.",
@@ -5161,10 +4579,7 @@
       ],
       "id": "lance",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "Lance",
       "requiresLiteracy": "no",
       "shortDescription": "Fight with lance-type weapons, especially in mounted or reach-based military use.",
@@ -5179,17 +4594,10 @@
       "dependencySkillIds": [],
       "description": "Throwing Attack accurately with thrown weapons such as javelins, knives, or axes. Practical ranged family.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_missile_training",
-        "advanced_missile_training"
-      ],
+      "groupIds": ["combat_group", "basic_missile_training", "advanced_missile_training"],
       "id": "throwing",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Throwing",
       "requiresLiteracy": "no",
       "shortDescription": "Attack accurately with thrown weapons such as javelins, knives, or axes.",
@@ -5204,17 +4612,10 @@
       "dependencySkillIds": [],
       "description": "Sling Use sling-based missile weapons effectively in combat or hunting. Distinct missile family.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_missile_training",
-        "advanced_missile_training"
-      ],
+      "groupIds": ["combat_group", "basic_missile_training", "advanced_missile_training"],
       "id": "sling",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Sling",
       "requiresLiteracy": "no",
       "shortDescription": "Use sling-based missile weapons effectively in combat or hunting.",
@@ -5229,17 +4630,10 @@
       "dependencySkillIds": [],
       "description": "Bow Use ordinary bows effectively in combat or hunting. Core ranged family.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_missile_training",
-        "advanced_missile_training"
-      ],
+      "groupIds": ["combat_group", "basic_missile_training", "advanced_missile_training"],
       "id": "bow",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Bow",
       "requiresLiteracy": "no",
       "shortDescription": "Use ordinary bows effectively in combat or hunting.",
@@ -5259,15 +4653,10 @@
       "dependencySkillIds": [],
       "description": "Longbow Use powerful longbows requiring strength, discipline, and trained missile technique. More specialized than ordinary bow use.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group"
-      ],
+      "groupIds": ["combat_group"],
       "id": "longbow",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Longbow",
       "requiresLiteracy": "no",
       "shortDescription": "Use powerful longbows requiring strength, discipline, and trained missile technique.",
@@ -5282,17 +4671,10 @@
       "dependencySkillIds": [],
       "description": "Crossbow Use mechanically spanned missile weapons effectively in combat. Later-society missile family.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "basic_missile_training",
-        "advanced_missile_training"
-      ],
+      "groupIds": ["combat_group", "basic_missile_training", "advanced_missile_training"],
       "id": "crossbow",
       "isTheoretical": false,
-      "linkedStats": [
-        "dex",
-        "dex"
-      ],
+      "linkedStats": ["dex", "dex"],
       "name": "Crossbow",
       "requiresLiteracy": "no",
       "shortDescription": "Use mechanically spanned missile weapons effectively in combat.",
@@ -5317,10 +4699,7 @@
       ],
       "id": "combat_experience",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Combat Experience",
       "requiresLiteracy": "no",
       "shortDescription": "Stay functional and rational under lethal danger and battlefield shock.",
@@ -5337,9 +4716,7 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "perception"
-      ],
+      "dependencySkillIds": ["perception"],
       "description": "Read immediate battlefield danger, openings, movement, and changing threats under pressure. Military layer above general Perception.",
       "groupId": "veteran_soldiering",
       "groupIds": [
@@ -5350,10 +4727,7 @@
       ],
       "id": "battlefield_awareness",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Battlefield Awareness",
       "requiresLiteracy": "no",
       "shortDescription": "Read immediate battlefield danger, openings, movement, and changing threats under pressure.",
@@ -5373,16 +4747,10 @@
       "dependencySkillIds": [],
       "description": "Hold place and fight coherently within a rank, line, shield wall, or drilled group. Key line-troop skill.",
       "groupId": "defensive_soldiering",
-      "groupIds": [
-        "defensive_soldiering",
-        "military_group"
-      ],
+      "groupIds": ["defensive_soldiering", "military_group"],
       "id": "formation_fighting",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Formation Fighting",
       "requiresLiteracy": "no",
       "shortDescription": "Hold place and fight coherently within a rank, line, shield wall, or drilled group.",
@@ -5399,22 +4767,13 @@
           "strength": "required"
         }
       ],
-      "dependencySkillIds": [
-        "riding"
-      ],
+      "dependencySkillIds": ["riding"],
       "description": "Fight effectively while mounted and control attack timing, position, and weapon use in motion. Mounted support skill.",
       "groupId": "combat_group",
-      "groupIds": [
-        "combat_group",
-        "military_group",
-        "mounted_warrior_training"
-      ],
+      "groupIds": ["combat_group", "military_group", "mounted_warrior_training"],
       "id": "mounted_combat",
       "isTheoretical": false,
-      "linkedStats": [
-        "str",
-        "dex"
-      ],
+      "linkedStats": ["str", "dex"],
       "name": "Mounted Combat",
       "requiresLiteracy": "no",
       "shortDescription": "Fight effectively while mounted and control attack timing, position, and weapon use in motion.",
@@ -5438,16 +4797,10 @@
       "dependencySkillIds": [],
       "description": "Understand battlefield positioning, timing, coordination, and practical combat plans. Officer and planner skill distinct from direct troop-control.",
       "groupId": "veteran_leadership",
-      "groupIds": [
-        "veteran_leadership",
-        "military_group"
-      ],
+      "groupIds": ["veteran_leadership", "military_group"],
       "id": "tactics",
       "isTheoretical": false,
-      "linkedStats": [
-        "int",
-        "pow"
-      ],
+      "linkedStats": ["int", "pow"],
       "name": "Tactics",
       "requiresLiteracy": "no",
       "shortDescription": "Understand battlefield positioning, timing, coordination, and practical combat plans.",
@@ -5475,22 +4828,33 @@
       "dependencySkillIds": [],
       "description": "Captaincy Lead fighters, maintain order, and get people to act coherently under pressure. Practical troop-control and morale skill; distinct from Tactics.",
       "groupId": "veteran_leadership",
-      "groupIds": [
-        "veteran_leadership",
-        "military_group",
-        "ship_command"
-      ],
+      "groupIds": ["veteran_leadership", "military_group", "ship_command"],
       "id": "captaincy",
       "isTheoretical": false,
-      "linkedStats": [
-        "pow",
-        "pow"
-      ],
+      "linkedStats": ["pow", "pow"],
       "name": "Captaincy",
       "requiresLiteracy": "no",
       "shortDescription": "Lead fighters, maintain order, and get people to act coherently under pressure.",
       "societyLevel": 2,
       "sortOrder": 218
+    },
+    {
+      "allowsSpecializations": false,
+      "category": "secondary",
+      "categoryId": "combat",
+      "dependencies": [],
+      "dependencySkillIds": [],
+      "description": "Fencing Fight with fast refined civilian or dueling blades such as rapier and related weapons. Established swashbuckling tradition.",
+      "groupId": "combat_group",
+      "groupIds": ["combat_group"],
+      "id": "fencing",
+      "isTheoretical": false,
+      "linkedStats": ["str", "dex"],
+      "name": "Fencing",
+      "requiresLiteracy": "no",
+      "shortDescription": "Fight with fast refined civilian or dueling blades such as rapier and related weapons.",
+      "societyLevel": 1,
+      "sortOrder": 219
     }
   ],
   "specializations": [
@@ -5601,15 +4965,6 @@
       "name": "Augury",
       "skillId": "omen_reading",
       "sortOrder": 164
-    },
-    {
-      "description": "Fencing Fight with fast refined civilian or dueling blades such as rapier and related weapons. Advanced level-6 style branch.",
-      "id": "fencing",
-      "minimumGroupLevel": 6,
-      "minimumParentLevel": 6,
-      "name": "Fencing",
-      "skillId": "one_handed_edged",
-      "sortOrder": 219
     },
     {
       "description": "Fight using a main blade with an active off-hand defensive or companion weapon. Future style branch.",
@@ -10689,9 +10044,7 @@
   ],
   "societies": [
     {
-      "baselineLanguageIds": [
-        "tuu_language"
-      ],
+      "baselineLanguageIds": ["tuu_language"],
       "historicalReference": "England/Stonehenge",
       "id": "forager_ritual_tribal",
       "name": "Forager / ritual-tribal",
@@ -10700,9 +10053,7 @@
       "societyLevel": 1
     },
     {
-      "baselineLanguageIds": [
-        "scythian_language"
-      ],
+      "baselineLanguageIds": ["scythian_language"],
       "glantriExamples": "Scandia",
       "historicalReference": "old Norse, England 600s",
       "id": "pastoral_clan_nomadic",
@@ -10711,9 +10062,7 @@
       "societyLevel": 2
     },
     {
-      "baselineLanguageIds": [
-        "old_latin_language"
-      ],
+      "baselineLanguageIds": ["old_latin_language"],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "early_agrarian_proto_state",
       "name": "Early agrarian chiefdom / proto-state",
@@ -10722,9 +10071,7 @@
       "societyLevel": 2
     },
     {
-      "baselineLanguageIds": [
-        "mycenaean_greek_language"
-      ],
+      "baselineLanguageIds": ["mycenaean_greek_language"],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "bronze_age_palace_state",
       "name": "Bronze Age palace state",
@@ -10733,9 +10080,7 @@
       "societyLevel": 3
     },
     {
-      "baselineLanguageIds": [
-        "sumerian_language"
-      ],
+      "baselineLanguageIds": ["sumerian_language"],
       "historicalReference": "Ancient Sumer, Ancient crete",
       "id": "temple_state_literate",
       "name": "Temple-state / early literate agrarian state",
@@ -10744,9 +10089,7 @@
       "societyLevel": 3
     },
     {
-      "baselineLanguageIds": [
-        "old_persian_language"
-      ],
+      "baselineLanguageIds": ["old_persian_language"],
       "historicalReference": "Ancient Egypt, newer kingdom",
       "id": "imperial_agrarian_bureaucracy",
       "name": "Imperial agrarian bureaucracy",
@@ -10754,9 +10097,7 @@
       "societyLevel": 4
     },
     {
-      "baselineLanguageIds": [
-        "common_language"
-      ],
+      "baselineLanguageIds": ["common_language"],
       "glantriExamples": "Glantri",
       "historicalReference": "medevieal feudals",
       "id": "feudal_manorial_kingdom",
@@ -10765,9 +10106,7 @@
       "societyLevel": 4
     },
     {
-      "baselineLanguageIds": [
-        "old_common_language"
-      ],
+      "baselineLanguageIds": ["old_common_language"],
       "glantriExamples": "Scyria",
       "historicalReference": "Athens 300bc",
       "id": "classical_polis_city_state",
@@ -10776,9 +10115,7 @@
       "societyLevel": 5
     },
     {
-      "baselineLanguageIds": [
-        "phoenician_language"
-      ],
+      "baselineLanguageIds": ["phoenician_language"],
       "glantriExamples": "Thyasis",
       "historicalReference": "late rome, byszantine empire",
       "id": "imperial_classical_high_civ",
@@ -10787,9 +10124,7 @@
       "societyLevel": 5
     },
     {
-      "baselineLanguageIds": [
-        "old_common_language"
-      ],
+      "baselineLanguageIds": ["old_common_language"],
       "glantriExamples": "Thyasis",
       "historicalReference": "late rome, byszantine empire",
       "id": "court_bureaucratic_empire",
@@ -10799,9 +10134,7 @@
       "societyLevel": 5
     },
     {
-      "baselineLanguageIds": [
-        "common_language"
-      ],
+      "baselineLanguageIds": ["common_language"],
       "glantriExamples": "Iest",
       "historicalReference": "italian city states",
       "id": "renaissance_city_state",

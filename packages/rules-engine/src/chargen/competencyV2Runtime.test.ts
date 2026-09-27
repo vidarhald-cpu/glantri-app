@@ -51,7 +51,9 @@ describe("canonical V2 runtime projection", () => {
     expect(getApprovedTargetChargenContent().skillGroups).toHaveLength(59);
   });
 
-  it("reaches all 42 offered Specialization and parent pairs from projected paths", () => {
+  it("reaches all 38 offered Specialization and parent pairs from projected paths", () => {
+    /* 38, not 42: rule decision 0010 rulings 1 and 2 make Fencing and Longbow base combat Skills, so
+       F30 and F41 no longer offer them as Specializations and the four former pairs are gone. */
     const specializations = new Map(content.specializations.map((row) => [row.id, row]));
     let pairs = 0;
     for (const path of projection.paths) {
@@ -77,7 +79,7 @@ describe("canonical V2 runtime projection", () => {
         pairs++;
       }
     }
-    expect(pairs).toBe(42);
+    expect(pairs).toBe(38);
   });
 
   it("resolves all written competencies and a Civilization with and without writing", () => {

@@ -4,8 +4,8 @@
 
 | Competency type | Authored entries | Count treatment |
 | --- | ---: | --- |
-| Base Skill | 131 | Includes Armoring and Sailmaking as base Skills |
-| Specialization | 26 | Includes Falconry and Steppe Remount Training; Sailmaking removed from this type |
+| Base Skill | 133 | Includes Armoring and Sailmaking as base Skills, and Fencing and Longbow reclassified from Specializations by the 2026-09-27 rulings |
+| Specialization | 24 | Includes Falconry and Steppe Remount Training; Sailmaking removed from this type, and Fencing and Longbow reclassified as base Skills |
 | Spoken Language | 12 | Separate contextual competency type |
 | Written Tradition | 3 | Separate contextual competency type |
 | **Total authored acquirable competency entries** | **172** | No compatibility duplicate or support-only script counted |
@@ -35,7 +35,7 @@ The generic Concrete Skill page remains primary. An Arch Society is an optional 
 
 ## Base Skills
 
-**131 entries.** IDs are the selected Revision 2 target IDs unless the final amendments require a new provisional target ID. Source identities remain in the review annotations.
+**133 entries.** IDs are the selected Revision 2 target IDs unless the final amendments require a new provisional target ID. Source identities remain in the review annotations.
 
 ### Social Interaction
 
@@ -2412,7 +2412,7 @@ This is the broad weapon-family competence. The weapons within it have different
 **Boundaries**
 
 - Two-handed edged weapons retain their separate family Skill.
-- Fencing is a narrower swashbuckling tradition.
+- Fencing is a separate base Skill for the narrower swashbuckling tradition.
 - Parry, Dodge and weapon-making crafts remain separate competences.
 
 **Review annotations**
@@ -2495,7 +2495,7 @@ The competence concerns the established family and its handling demands. It is n
 
 - The one-handed edged family remains separate.
 - Parry and Dodge are not absorbed into this Skill.
-- Fencing retains its existing, narrower tradition rather than expanding to all sword use.
+- Fencing remains a separate base Skill for its narrower tradition rather than expanding to all sword use.
 
 **Review annotations**
 
@@ -2524,7 +2524,7 @@ Bow is the trained use of a bow to send an arrow toward an intended target.
 
 A capable archer handles bow and arrow consistently, coordinates the draw with posture and release, and judges the conditions affecting a shot. They recognize disruptions to their practiced technique and maintain controlled use of familiar equipment under changing circumstances.
 
-Bows differ in their form and the demands they place on their users. Learning to shoot includes understanding those practical differences, while Longbow develops a more specific practice within the broader bow competence.
+Bows differ in their form and the demands they place on their users. Learning to shoot includes understanding those practical differences, while Longbow is a separate base Skill for the more specific longbow practice.
 
 **Typical uses**
 
@@ -2534,7 +2534,7 @@ Bows differ in their form and the demands they place on their users. Learning to
 
 **Boundaries**
 
-- Longbow adds a narrower practice under Bow.
+- Longbow is a separate base Skill for a narrower weapon practice.
 - Hunting concerns finding and approaching quarry rather than supplying archery technique.
 - Making bows and maintaining weapons are distinct work.
 
@@ -5606,16 +5606,14 @@ Visual work may be representational, decorative or symbolic. The competence conc
 
 ## Specializations
 
-**26 entries.** A parent identifies the broader competence being specialized. It supplies no prerequisite level, cost, transfer or automatic Learning Group membership. Falconry has the explicitly selected Specialization parent Animal Training; its parent is not silently flattened.
+**24 entries.** A parent identifies the broader competence being specialized. It supplies no prerequisite level, cost, transfer or automatic Learning Group membership. Falconry has the explicitly selected Specialization parent Animal Training; its parent is not silently flattened.
 
 ### Fencing
 
 **ID:** `fencing`
 **Name:** Fencing
-**Competency type:** Specialization
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
-
-**Parent:** 1-h edged — `one_handed_edged`
 
 **Short description**
 
@@ -5625,7 +5623,7 @@ Fencing is the established swashbuckling practice of refined blade handling, dis
 
 A capable fencer develops the control, timing and judgment of distance characteristic of this tradition. They read an exchange, keep blade and body movement coordinated and work through its practiced combinations rather than relying on a weapon's ordinary handling alone.
 
-This is Glantri's swashbuckling fencing tradition, including its sword-and-buckler and main-gauche practice. It is not modern competitive sport fencing, and its place under 1-h edged does not turn every form of sword use into Fencing.
+This is Glantri's swashbuckling fencing tradition, including its sword-and-buckler and main-gauche practice. It is not modern competitive sport fencing, and its relation to 1-h edged does not turn every form of sword use into Fencing.
 
 **Typical uses**
 
@@ -5635,7 +5633,7 @@ This is Glantri's swashbuckling fencing tradition, including its sword-and-buckl
 
 **Boundaries**
 
-- The parent supplies the broader one-handed edged weapon practice.
+- 1-h edged remains the separate, broader one-handed edged weapon practice.
 - Parry and Dodge retain their established defensive identities.
 - Weapon making and maintenance do not follow from fencing practice.
 
@@ -5922,10 +5920,8 @@ The specialization extends Battle Tactics into engagements shaped by fortificati
 
 **ID:** `longbow`
 **Name:** Longbow
-**Competency type:** Specialization
+**Competency type:** Base Skill
 **Domain:** Weapon Practice
-
-**Parent:** Bow — `bow`
 
 **Short description**
 
@@ -5935,7 +5931,7 @@ Longbow is the specialist bow practice associated with the longbows covered by t
 
 A capable practitioner develops consistent handling of the longbow's particular form and working demands. They maintain coordinated posture, draw and release over repeated practice and recognize how departures from the familiar technique affect control.
 
-The specialization deepens Bow for this weapon practice. Its additional work lies in sustained command of the longbow's particular handling demands, rather than in supplying a different form of general archery.
+Longbow is a distinct weapon practice alongside Bow rather than a broader form of archery. Its additional work lies in sustained command of the longbow's particular handling demands, rather than in supplying a different form of general archery.
 
 **Typical uses**
 
@@ -5945,13 +5941,13 @@ The specialization deepens Bow for this weapon practice. Its additional work lie
 
 **Boundaries**
 
-- Bow remains the broader parent competence.
+- Bow remains the separate, broader archery competence.
 - Weapon construction and maintenance remain separate work.
 - Hunting remains separate from the technique of shooting a longbow.
 
 **Review annotations**
 
-**Context:** Longbow weapon practice; existing Bow parent and operational identity retained.
+**Context:** Longbow weapon practice; existing operational identity retained.
 
 **Learning Groups:** None authored.
 
@@ -7559,7 +7555,7 @@ A1 locators such as `C:5526` and `P:625` refer to the investigator's accepted ba
 | Q | docs/decisions/rules/0002-skill-catalogue-qualitative-architecture.md | Accepted qualitative authority and 19 Domains. Does not supersede the live Combat freeze. |
 | I | docs/decisions/rules/0003-skill-documentation-and-release-integrity.md | Separate language/writing identities; the Pilot is bounded, not the eventual complete catalogue. |
 | W | packages/content/src/data/weaponTemplates.json | Exact names and weaponSkill strings are compatibility evidence. Embedded workbook metadata is not a fresh workbook comparison. |
-| M | packages/content/src/skillRelationshipMetadata.ts | Synthetic Longbow Specialization and Fencing bridge. Their parameters are not Pilot transfer values. |
+| M | packages/content/src/skillRelationshipMetadata.ts | Formerly carried the synthetic Longbow Specialization and the Fencing bridge. Their parameters were never Pilot transfer values and were never approved; the mechanism was deleted by the 2026-09-27 rulings and the recovered values are retained as provenance in rule decision 0010 ruling 5 only. |
 | K | packages/content/src/validators/constants.ts | Frozen live Combat fundamentals and weapon bases. |
 | T | packages/content/src/equipment/themistogenesThrownWeaponMerge.ts | Exactly seven approved thrown-template merges; no additional pairings inferred. |
 | B | packages/rules-engine/src/combat/deriveCombatValues.ts | Exact weaponSkill lookup and explicit Throwing use for thrown modes. |

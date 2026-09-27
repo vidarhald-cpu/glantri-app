@@ -35,9 +35,9 @@ Both sides of the comparison are measured by the same code path, so the before/a
 | Median               |                  3 |                  8 |                     8 |
 | Upper quartile       |                  7 |                  9 |                     9 |
 | Maximum              |                 17 |                 16 |                    14 |
-| Mean                 |               4.39 |               8.59 |                  8.16 |
-| Paths at or above 10 |                 10 |                 22 |                    19 |
-| Paths below 10       |                 89 |                 64 |                    67 |
+| Mean                 |               4.43 |               8.58 |                  8.15 |
+| Paths at or above 10 |                 12 |                 22 |                    19 |
+| Paths below 10       |                 87 |                 64 |                    67 |
 
 The worst-case column assumes every single slot selection duplicates a Skill the path already teaches.
 That never happens by design — no slot offers a Skill its own group already fixes — but it bounds the figure honestly.
@@ -52,11 +52,11 @@ That never happens by design — no slot offers a Skill its own group already fi
 | Approved  |                              3 |           6 |
 | Approved  |                              4 |           5 |
 | Approved  |                              5 |           6 |
-| Approved  |                              6 |           6 |
-| Approved  |                              7 |           4 |
-| Approved  |                              8 |           5 |
-| Approved  |                              9 |           8 |
-| Approved  |                             10 |           2 |
+| Approved  |                              6 |           5 |
+| Approved  |                              7 |           5 |
+| Approved  |                              8 |           4 |
+| Approved  |                              9 |           7 |
+| Approved  |                             10 |           4 |
 | Approved  |                             11 |           4 |
 | Approved  |                             12 |           1 |
 | Approved  |                             13 |           1 |
@@ -67,12 +67,12 @@ That never happens by design — no slot offers a Skill its own group already fi
 | Proposal  |                              7 |          28 |
 | Proposal  |                              8 |          13 |
 | Proposal  |                              9 |          17 |
-| Proposal  |                             10 |          10 |
-| Proposal  |                             11 |           5 |
+| Proposal  |                             10 |           9 |
+| Proposal  |                             11 |           6 |
 | Proposal  |                             12 |           3 |
-| Proposal  |                             14 |           1 |
+| Proposal  |                             14 |           2 |
 | Proposal  |                             15 |           1 |
-| Proposal  |                             16 |           2 |
+| Proposal  |                             16 |           1 |
 
 ## Paths flagged for coherence review (below 7)
 
@@ -104,9 +104,9 @@ measured as fixed members plus slot selections.
 | Effective size | Approved groups | Proposed groups |
 | -------------: | --------------: | --------------: |
 |              1 |               4 |               0 |
-|              2 |              36 |              40 |
+|              2 |              35 |              40 |
 |              3 |              10 |              40 |
-|              4 |               5 |              12 |
+|              4 |               6 |              12 |
 |              5 |               1 |               3 |
 |              6 |               1 |               0 |
 |              7 |               2 |               0 |
@@ -115,4 +115,4 @@ Approved: 59 groups. Proposal: 95 groups — 52 in the 3-4 preferred centre, 40 
 
 ## Direct-grant review
 
-The first draft carried 283 direct Profession Skill grants; 106 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).
+The first draft carried 283 direct Profession Skill grants; 107 remain. The withdrawals and the reasons for each retention are recorded in the [direct-grant review](./direct-grant-review.md).

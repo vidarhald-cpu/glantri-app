@@ -111,9 +111,14 @@ Two Profession-specific alternatives apply:
   Working a boat for that purchase; the fuller rigged-vessel route replaces
   the smaller route on that path.
 - Guard, Watcher and Escort offers either Swashbuckling fencing instruction or
-  One-handed edged close-combat practice for that purchase. Guard and
-  rough-fighting drill may still be combined with One-handed edged
-  close-combat practice when both are genuinely taught.
+  ordinary close-combat instruction for that purchase. Since Swashbuckling
+  fencing instruction teaches Fencing itself, and Fencing is a base combat
+  Skill, the two are **alternative Profession training routes** rather than a
+  choice inside the fencing group: one Profession may reach either curriculum,
+  and a Character who genuinely trains in both buys both. The retired
+  One-handed edged close-combat group is **not** revived to express this
+  alternative; in the current corpus the ordinary close-combat route is Guard
+  and rough-fighting drill.
 
 These alternatives do not create tracks, prohibit independent purchases, or
 apply to other Professions.

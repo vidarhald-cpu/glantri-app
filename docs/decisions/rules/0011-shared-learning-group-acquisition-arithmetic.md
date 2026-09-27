@@ -103,6 +103,17 @@ derivation is the natural closure and belongs to whichever issue settles the bri
 then the true position is the one stated above, and canonical content must continue to author
 no bridge.
 
+> **2026-09-27 update — the seam above is closed, and closed by removal.** The paragraphs above
+> are preserved exactly as recorded, because the reading they correct is the useful provenance.
+> [Rule decision 0010 ruling 5](0010-competency-classification-and-group-taught-specializations.md#5-resolved-delete--the-existing-specializationbridge-coefficients)
+> is now **resolved as delete**, and Forgejo #389 deleted the mechanism outright: both authored
+> objects, `specializationBridgeSchema`, the `specializationBridge` field on both content schemas,
+> and every reader including the `deriveSkillRelationships.ts` derivation this record describes.
+> The Chargen floor derivation therefore no longer has a bridge path to exclude — the natural
+> closure named above was taken by deletion rather than by exclusion. **No coefficient was
+> invented, and no deleted parameter was replaced by another number.** Nothing here changes the
+> shared acquisition arithmetic this record settles.
+
 ## Consequences
 
 - Chargen group prices change. `floor(0.6 * x)` with a minimum of `1` becomes

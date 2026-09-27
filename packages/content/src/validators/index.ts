@@ -1,6 +1,9 @@
 import { normalizeSkillGroupId } from "@glantri/domain";
 
-import { applySkillRelationshipMetadata, applySpecializationRelationshipMetadata } from "../skillRelationshipMetadata";
+import {
+  applySkillRelationshipMetadata,
+  applySpecializationRelationshipMetadata,
+} from "../skillRelationshipMetadata";
 import { canonicalContentSchema, type CanonicalContent } from "../types";
 import { normalizeLanguages, validateLanguages } from "./languageValidators";
 import { validateProfessionRelationships } from "./professionValidators";
@@ -37,14 +40,13 @@ export function validateCanonicalContent(input: unknown): CanonicalContent {
       skills: normalizedSkills,
       specializations: applySpecializationRelationshipMetadata(
         parsedContent.specializations,
-        normalizedSkills,
       ).filter((specialization) => specialization.skillId !== "language"),
       civilizations:
         typeof input === "object" &&
         input !== null &&
         Array.isArray((input as { civilizations?: unknown[] }).civilizations)
           ? ((input as { civilizations: CanonicalContent["civilizations"] }).civilizations ?? [])
-          : parsedContent.civilizations ?? [],
+          : (parsedContent.civilizations ?? []),
     }),
   );
 

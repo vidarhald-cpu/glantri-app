@@ -1258,11 +1258,7 @@ export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPoint
     };
   }
 
-  if (
-    !("catalogueSource" in specializationDefinition) &&
-    !specializationDefinition.specializationBridge &&
-    parentSkillDefinition
-  ) {
+  if (!("catalogueSource" in specializationDefinition) && parentSkillDefinition) {
     const allowedParentGroupIds = getSkillDefinitionGroupIds(parentSkillDefinition).filter(
       (groupId) => allowedGroupIds.includes(groupId),
     );

@@ -43,9 +43,8 @@ export function SkillReferenceAuditContent() {
           Canonical Competency V2 source digest: <code>{source.sourceDigest}</code>
         </p>
         <p>
-          Relationships: {source.relationships.grants.length} derived grants,{" "}
-          {source.relationships.meleeSources.length} melee source records, and{" "}
-          {source.relationships.bridges.length} Specialization bridges. Their endpoints are
+          Relationships: {source.relationships.grants.length} derived grants and{" "}
+          {source.relationships.meleeSources.length} melee source records. Their endpoints are
           projected onto canonical V2 identities for reference presentation.
         </p>
       </AdminPanel>

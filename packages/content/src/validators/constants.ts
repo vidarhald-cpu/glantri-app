@@ -13,13 +13,32 @@ export const RETIRED_SKILL_GROUP_IDS = [
 export const COMBAT_FUNDAMENTAL_SKILL_IDS = ["dodge", "parry", "brawling"] as const;
 export const MELEE_WEAPON_SKILL_IDS = [
   "one_handed_edged",
+  "fencing",
   "one_handed_concussion_axe",
   "two_handed_edged",
   "two_handed_concussion_axe",
   "polearms",
   "lance",
 ] as const;
-export const MISSILE_WEAPON_SKILL_IDS = ["throwing", "sling", "bow", "crossbow"] as const;
+export const MISSILE_WEAPON_SKILL_IDS = [
+  "throwing",
+  "sling",
+  "bow",
+  "crossbow",
+  "longbow",
+] as const;
+/**
+ * The legacy `basic_missile_training` / `advanced_missile_training` slots keep their own frozen
+ * four-family pool. They are NOT derived from `MISSILE_WEAPON_SKILL_IDS`, because Longbow joins
+ * that weapon-family list for the active V2 M04/M05 pools only; issue #389 rules that legacy and
+ * historical missile groups stay exactly as they are.
+ */
+export const LEGACY_MISSILE_SELECTION_SLOT_CANDIDATES = [
+  "throwing",
+  "sling",
+  "bow",
+  "crossbow",
+] as const;
 export const WEAPON_SKILL_IDS = [...MELEE_WEAPON_SKILL_IDS, ...MISSILE_WEAPON_SKILL_IDS] as const;
 
 export const ALLOWED_SMALL_SKILL_GROUP_REASONS: Partial<Record<string, string>> = {
@@ -37,12 +56,15 @@ export const ALLOWED_SMALL_SKILL_GROUP_REASONS: Partial<Record<string, string>> 
 };
 
 export const ALLOWED_WEAPON_PACKAGE_REASONS: Partial<Record<string, string>> = {
-  advanced_melee_training: "Coherent melee package with Dodge, Parry, Brawling, and melee weapon choices.",
+  advanced_melee_training:
+    "Coherent melee package with Dodge, Parry, Brawling, and melee weapon choices.",
   advanced_missile_training: "Weapon-choice missile package.",
-  basic_melee_training: "Coherent melee package with Dodge, Parry, Brawling, and a melee weapon choice.",
+  basic_melee_training:
+    "Coherent melee package with Dodge, Parry, Brawling, and a melee weapon choice.",
   basic_missile_training: "Weapon-choice missile package.",
   combat_group: "Broad combat taxonomy group.",
-  mounted_warrior_training: "Coherent mounted combat package with Dodge, Parry, and fixed mounted weapons.",
+  mounted_warrior_training:
+    "Coherent mounted combat package with Dodge, Parry, and fixed mounted weapons.",
 };
 
 export const MILITARY_SUPPORT_GROUP_IDS = ["defensive_soldiering", "veteran_soldiering"] as const;
@@ -78,15 +100,16 @@ export const REMOVED_SKILL_GROUP_IDS_BY_SKILL_ID: Partial<Record<string, string[
     "defensive_soldiering",
     "veteran_soldiering",
   ],
-  longbow: ["basic_missile_training", "advanced_missile_training"],
   parry: ["defensive_soldiering", "veteran_soldiering"],
 };
 
-export const CANONICAL_SELECTION_SLOT_CANDIDATES: Partial<Record<string, Record<string, string[]>>> = {
+export const CANONICAL_SELECTION_SLOT_CANDIDATES: Partial<
+  Record<string, Record<string, string[]>>
+> = {
   advanced_missile_training: {
-    advanced_missile_weapon_choices: [...MISSILE_WEAPON_SKILL_IDS],
+    advanced_missile_weapon_choices: [...LEGACY_MISSILE_SELECTION_SLOT_CANDIDATES],
   },
   basic_missile_training: {
-    missile_weapon_choice: [...MISSILE_WEAPON_SKILL_IDS],
+    missile_weapon_choice: [...LEGACY_MISSILE_SELECTION_SLOT_CANDIDATES],
   },
 };

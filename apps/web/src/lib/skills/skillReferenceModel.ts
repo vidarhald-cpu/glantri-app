@@ -7,9 +7,8 @@ export type ReferenceBound = { minSocietyLevel: number; minSocialBand: string; r
 export type ReferenceRelationship = {
   source: ReferenceLink;
   target: ReferenceLink;
-  mechanism: "Derived grant" | "Melee cross-training" | "Specialization bridge";
+  mechanism: "Derived grant" | "Melee cross-training";
   factor?: number;
-  bridge?: { threshold: number; parentExcessOffset: number; reverseFactor: number };
 };
 
 /**
@@ -338,16 +337,6 @@ export function buildSkillReferenceModel(
           : [];
       }),
     ),
-    ...source.relationships.bridges.map((bridge) => ({
-      source: linkSkill(bridge.parentSkillId),
-      target: linkSkill(bridge.specializationId),
-      mechanism: "Specialization bridge" as const,
-      bridge: {
-        threshold: bridge.threshold,
-        parentExcessOffset: bridge.parentExcessOffset,
-        reverseFactor: bridge.reverseFactor,
-      },
-    })),
   ];
   const languageContextById = new Map<string, SkillReferenceSkill["languageContexts"]>();
   for (const row of source.civilizationLanguages) {

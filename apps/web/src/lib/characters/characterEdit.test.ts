@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  CharacterBuild,
-  SkillDefinition,
-  SkillGroupDefinition,
-  SkillSpecialization,
-} from "@glantri/domain";
+import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
 import { glantriCharacteristicLabels, glantriCharacteristicOrder } from "@glantri/domain";
 
 import {
@@ -25,7 +20,6 @@ import {
   setCharacterCurrentStatValue,
   setCharacterOriginalStatValue,
   setCharacterNotes,
-  setCharacterSpecializationXp,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp,
   setCharacterTitle,
@@ -137,7 +131,6 @@ const skills: SkillDefinition[] = [
     linkedStats: ["dex"],
     name: "Longbow",
     requiresLiteracy: "no",
-    specializationOfSkillId: "bow",
     societyLevel: 1,
     sortOrder: 7,
   },
@@ -240,29 +233,8 @@ const content = {
       name: "Longbow",
       skillId: "bow",
       sortOrder: 7,
-      specializationBridge: {
-        parentExcessOffset: 5,
-        parentSkillId: "bow",
-        reverseFactor: 1,
-        threshold: 6,
-      },
     },
   ],
-};
-
-const fencingSpecialization: SkillSpecialization = {
-  id: "fencing",
-  minimumGroupLevel: 6,
-  minimumParentLevel: 6,
-  name: "Fencing",
-  skillId: "one_handed_edged",
-  sortOrder: 1,
-  specializationBridge: {
-    parentExcessOffset: 5,
-    parentSkillId: "one_handed_edged",
-    reverseFactor: 1,
-    threshold: 6,
-  },
 };
 
 describe("characterEdit helpers", () => {
@@ -606,7 +578,10 @@ describe("characterEdit helpers", () => {
     });
   });
 
-  it("shows specialization-bridge specializations in edit rows", () => {
+  it("edits Longbow as an ordinary Skill row and not as a Specialization row", () => {
+    /* Rule decision 0010 ruling 2 makes Longbow a base combat Skill and ruling 5 deletes the bridge
+       that used to project it as a Specialization receiving derived XP from Bow. Buying Bow now
+       grants Longbow nothing, and LONGBOW MUST STILL BE EDITABLE — as a Skill row. */
     const build = {
       ...baseBuild,
       progression: {
@@ -626,96 +601,27 @@ describe("characterEdit helpers", () => {
       },
     };
     const summary = getCharacterEditSheetSummary(build, content);
-    const rows = buildCharacterEditSpecializationRows({
-      build,
+
+    expect(
+      buildCharacterEditSpecializationRows({ build, content, sheetSummary: summary }).some(
+        (row) => row.specializationId === "longbow",
+      ),
+    ).toBe(false);
+
+    const longbowSkill = skills.find((skill) => skill.id === "longbow")!;
+    const withLongbow = setCharacterSkillXp({
+      build: addCharacterSkill(build, longbowSkill),
       content,
-      sheetSummary: summary,
+      skill: longbowSkill,
+      xp: 4,
     });
 
-    expect(rows).toContainEqual(
-      expect.objectContaining({
-        grantedSourceLabel: "Specialized from Bow",
-        grantedXp: 5,
-        specializationName: "Longbow",
-        total: 5,
-        xp: 0,
-      }),
-    );
-  });
-
-  it("allows visible specialization-bridge rows to be directly adjusted without reducing committed bridge grants later", () => {
-    const bridgeContent = {
-      ...content,
-      specializations: [fencingSpecialization],
-    };
-    const sourcedBuild = setCharacterSkillXp({
-      build: addCharacterSkill(baseBuild, skills[7]),
-      content: bridgeContent,
-      skill: skills[7],
-      xp: 8,
-    });
-    const sourcedSummary = getCharacterEditSheetSummary(sourcedBuild, bridgeContent);
-    const sourcedRows = buildCharacterEditSpecializationRows({
-      build: sourcedBuild,
-      content: bridgeContent,
-      sheetSummary: sourcedSummary,
-    });
-
-    expect(sourcedRows).toContainEqual(
-      expect.objectContaining({
-        canIncreaseDirectXp: true,
-        grantedSourceLabel: "Specialized from 1-h edged",
-        grantedXp: 3,
-        parentSkillName: "1-h edged",
-        requiredParentLevel: 6,
-        specializationName: "Fencing",
-        total: 3,
-        xp: 0,
-      }),
-    );
-
-    const addedDirect = setCharacterSpecializationXp({
-      build: sourcedBuild,
-      content: bridgeContent,
-      specialization: fencingSpecialization,
-      xp: 2,
-    });
-
-    expect(addedDirect.error).toBeUndefined();
-
-    const addedSummary = getCharacterEditSheetSummary(addedDirect.build, bridgeContent);
-    const addedRow = buildCharacterEditSpecializationRows({
-      build: addedDirect.build,
-      content: bridgeContent,
-      sheetSummary: addedSummary,
-    }).find((row) => row.specializationId === "fencing");
-
-    expect(addedRow).toMatchObject({
-      grantedXp: 3,
-      total: 5,
-      xp: 2,
-    });
-
-    const loweredSource = setCharacterSkillXp({
-      build: addedDirect.build,
-      content: bridgeContent,
-      skill: skills[7],
-      xp: 5,
-    });
-    const loweredSummary = getCharacterEditSheetSummary(loweredSource, bridgeContent);
-    const loweredRow = buildCharacterEditSpecializationRows({
-      build: loweredSource,
-      content: bridgeContent,
-      sheetSummary: loweredSummary,
-    }).find((row) => row.specializationId === "fencing");
-
-    expect(loweredRow).toMatchObject({
-      blockingMessage: "Fencing requires 1-h edged level 6 or higher (current 5).",
-      canDecreaseDirectXp: true,
-      canIncreaseDirectXp: false,
-      grantedXp: 3,
-      total: 5,
-      xp: 2,
-    });
+    expect(
+      buildCharacterEditSkillRows({
+        build: withLongbow,
+        content,
+        sheetSummary: getCharacterEditSheetSummary(withLongbow, content),
+      }).find((row) => row.skillId === "longbow"),
+    ).toMatchObject({ skillName: "Longbow", xp: 4 });
   });
 });

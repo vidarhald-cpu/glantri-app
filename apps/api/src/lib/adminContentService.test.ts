@@ -13,9 +13,14 @@ describe("admin competency reference service", () => {
       targetId: "skill:first-aid",
       factor: 1,
     });
-    expect(source.relationships.bridges.map((row) => row.specializationId)).toEqual(
-      expect.arrayContaining(["longbow", "fencing"]),
-    );
+    /* Rule decision 0010 ruling 5 deletes the `specializationBridge` mechanism, so the reference
+       projection publishes no `bridges` collection at all and no numeric factor for either
+       reclassified competency. Rulings 1 and 2 make both base Skills instead. */
+    expect(source.relationships).not.toHaveProperty("bridges");
+    for (const id of ["longbow", "fencing"]) {
+      expect(source.skills.some((row) => row.id === id)).toBe(true);
+      expect(source.specializations.some((row) => row.id === id)).toBe(false);
+    }
     expect(source.skills.some((row) => row.id === "medicine" || row.id === "first_aid")).toBe(
       false,
     );

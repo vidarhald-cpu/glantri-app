@@ -1,14 +1,21 @@
 # Rule decision 0010: Competency classification — Fencing, Longbow, the limited Specialization audit, and group-taught Specializations
 
-- Status: approved. Both questions left unresolved at first recording are settled
-  by the 2026-09-26 final competency rulings amendment below. One new question —
-  the existing `specializationBridge` coefficients — is recorded open and blocks
-  implementation.
+- Status: approved, and **fully resolved**. Both questions left unresolved at first
+  recording are settled by the 2026-09-26 final competency rulings amendment below, and
+  the one question that amendment left open — the existing `specializationBridge`
+  coefficients — is **settled by the 2026-09-27 amendment: delete the mechanism.**
+  Nothing in this record is open, and nothing in it blocks implementation any longer.
 - Date: 2026-09-26
 - Amended: 2026-09-26 (Product Owner final competency rulings — Longbow settled as
   a base Skill, Fencing reinforced, group-taught Specializations settled for V1, the
   existing overlap rule confirmed as not open design, and the `specializationBridge`
   seam recorded open; self-amendment, same record)
+- Amended: 2026-09-27 (Product Owner rulings — Fencing's base-Skill metadata, weapon
+  binding activation, F30/F41 memberships, the M04/M05 military Longbow route,
+  **ruling 5 RESOLVED as delete**, and the two follow-up rulings of the same date on
+  ordinary Bow's civilian route and F30's generic availability; self-amendment, same
+  record. Implemented by Forgejo #389, which supersedes the implementation halves of
+  #373 and #374.)
 - Product owner: Vidar Hald
 - Related issues/PRs: recorded from the Product Owner's 2026-09-26 Chargen
   Alpha inspection of the running application; no implementation issue is
@@ -165,7 +172,7 @@ One-handed edged close-combat practice.
 > not restated**, and the named civilization identities deliberately stay in the
 > Setting record rather than entering this generic competency record. Implementation
 > remains unauthorized and is additionally blocked by
-> [ruling 5](#5-open-and-implementation-blocking--the-existing-specializationbridge-coefficients).
+> [ruling 5](#5-resolved-delete--the-existing-specializationbridge-coefficients).
 
 ### 2. Limited Specialization classification audit
 
@@ -225,7 +232,7 @@ Settled terms:
   authored, not re-derived.
 - **No numerical Longbow ↔ Bow relationship coefficient is approved, and none may be
   inferred** — not from this record, and not from data that already exists. See
-  [ruling 5](#5-open-and-implementation-blocking--the-existing-specializationbridge-coefficients).
+  [ruling 5](#5-resolved-delete--the-existing-specializationbridge-coefficients).
 
 Curriculum consequences, settled:
 
@@ -240,7 +247,7 @@ Curriculum consequences, settled:
 
 **This reclassification is not implemented or scheduled by this record**, on the same
 terms as ruling 1, and it is additionally blocked by
-[ruling 5](#5-open-and-implementation-blocking--the-existing-specializationbridge-coefficients).
+[ruling 5](#5-resolved-delete--the-existing-specializationbridge-coefficients).
 
 #### Longbow reclassification — consequences established by inspection
 
@@ -385,9 +392,16 @@ that existing rule is to be verified.** Divergence found in implementation is a
 **defect**, repaired against the recorded rule. It is **not a new Product Owner
 decision and not an occasion to reopen the rule.**
 
-### 5. Open and implementation-blocking — the existing `specializationBridge` coefficients
+### 5. RESOLVED (delete) — the existing `specializationBridge` coefficients
 
-**Open. Not resolved by this record. It blocks implementation of rulings 1 and 2.**
+> **2026-09-27 amendment — RESOLVED. The Product Owner chose option 1: delete the bridge.**
+> The paragraphs below are preserved exactly as first recorded, as provenance of what was open
+> and of the three options weighed. The settled answer is
+> [Ruling 5 settled — delete the mechanism](#ruling-5-settled--delete-the-mechanism-2026-09-27-amendment)
+> immediately after them. **Ruling 5 no longer blocks rulings 1 and 2.**
+
+**Open as first recorded. Not resolved by the 2026-09-26 record. It blocked implementation of
+rulings 1 and 2 until the 2026-09-27 amendment below.**
 
 Rulings 1 and 2 both state that **no numerical relationship coefficient is approved
 and none may be inferred.** An Orchestrator architecture inspection at this
@@ -423,6 +437,125 @@ from the ordering above.** Until the Product Owner decides, rulings 1 and 2 rema
 unimplementable: an implementation contract for either **must carry this decision**
 before it may touch `packages/content/src/skillRelationshipMetadata.ts`.
 
+#### Ruling 5 settled — delete the mechanism, 2026-09-27 amendment
+
+**The Product Owner ruled on 2026-09-27:**
+
+> Delete `specializationBridge` from the target/runtime model, including
+> `specializationBridgeSchema` and both schema fields, provided the verified no-consumer finding
+> still holds. Preserve recovered bridge values as provenance only; no compatibility/runtime
+> behavior remains.
+
+**Option 1 above is chosen. Options 2 and 3 are rejected**: keeping the bridge would contradict
+base-Skill status, and converting it would require approving coefficients both rulings withhold.
+**No deleted numeric parameter is replaced by another number**, and the deletion creates no
+relationship in either direction.
+
+The authorization was **conditional on the no-consumer finding still holding at dispatch**. It was
+re-verified against `dev` `8bc14f31b92663a652e8d398277b935537029ad1` and **holds**: exactly two
+authored bridge objects existed repository-wide, the field was never persisted in any database
+column, every live read recomputed present-tense values from content definitions with no version
+gate, legacy flag or migration branch, and `validateCanonicalContent` re-applies the relationship
+appliers to any stored canonical-content snapshot, so a stored value is recomputed rather than read
+as legacy data.
+
+**Recovered parameters, preserved here as provenance only — never as runtime data, schema or
+approved rule.** These are the values the deleted objects carried at
+`packages/content/src/skillRelationshipMetadata.ts`. **They were never approved, they are not Pilot
+transfer values, and nothing may be derived from them:**
+
+| Deleted bridge | Parent             | `threshold` | `parentExcessOffset` | `reverseFactor` |
+| -------------- | ------------------ | ----------: | -------------------: | --------------: |
+| `longbow`      | `bow`              |           6 |                    5 |               1 |
+| `fencing`      | `one_handed_edged` |           6 |                    5 |               1 |
+
+`longbow` additionally carried `specializationOfSkillId: "bow"`, which is deleted with it.
+**`specializationOfSkillId` itself is retained** as generic Specialization plumbing; only Longbow's
+use of it is removed.
+
+What is deleted with the mechanism: both authored objects, the
+`specializationRelationshipMetadataById` map and the synthetic-Specialization projection built on it,
+`specializationBridgeSchema` and the `specializationBridge` field on **both** the Skill and
+Specialization schemas, and every reader — the derived-relationship and selection-evaluation paths in
+`packages/rules-engine`, the Chargen primary-allocation draft state, the V2 competency reference and
+its `bridges` field, the web skill-reference and admin skill view-models, the Chargen wizard's
+bridge-overlap suppression, and the AI-export script. The persisted progression schema keeps
+accepting the retired `specialization-bridge-child` / `specialization-bridge-parent`
+`relationshipGrantSourceType` values so stored rows still parse, but no code can produce one and no
+surface displays one.
+
+**Consequence for Longbow's tie to Bow.** The authored qualitative `helpful` dependency is preserved
+byte-identical, exactly as ruling 2 requires. Deleting the bridge therefore removes a numeric
+transfer that was never approved and leaves the relationship qualitative in both directions. Fencing
+gains no dependency at all, because no Fencing ↔ one-handed edged relationship is approved in either
+direction.
+
+### Fencing's base-Skill metadata — 2026-09-27 amendment
+
+Ruling 1 approved Fencing's reclassification without stating the metadata a base Skill needs. The
+Product Owner settled it on 2026-09-27:
+
+- **Base combat Skill.**
+- **Linked stats STR / DEX — the same as one-handed edged.**
+- **No elevated generic Society-Level restriction.** Fencing's availability horizon belongs to
+  future Setting logic, not to generic combat — see
+  [architecture decision 0006](../architecture/0006-setting-foundation.md), "Setting-level competency
+  availability". Where the schema requires a generic numeric value, it takes **the same value as
+  one-handed edged**.
+- **Sorted immediately after one-handed edged** in Combat ordering.
+
+No value here is invented: each is one-handed edged's own recorded value.
+
+### Curriculum memberships and the military route — 2026-09-27 amendment
+
+- **F30 teaches Fencing, Dodge and Parry.** `one_handed_edged` is removed; it was present only to
+  satisfy the retired Specialization-parent model, and charging it alongside Fencing is the double
+  investment ruling 1 removes.
+- Where a Profession offers ordinary close combat versus Fencing, that is an **alternative Profession
+  training route, not a choice inside F30**, and the retired one-handed-edged close-combat group is
+  **not revived** to express it.
+- **F41 teaches Longbow and Hunting** and charges **no Bow**. It is the civilian and hunting route.
+- **F41 is not a Soldier route.** Independent access through some other Character history remains
+  possible; it is simply not part of the Soldier package.
+- **Military Longbow training comes directly through M04 and M05**, whose approved candidate pools
+  gain `longbow`. This changes the **pool, not the count**: both slots keep
+  `chooseCountStatus: "approved"` with their approved choose-one and choose-three counts.
+- **No Hunting is granted to a military Longbow specialist** merely to obtain Longbow.
+- **Legacy and historical missile groups are unchanged**, including the legacy
+  `basic_missile_training` and `advanced_missile_training` candidate pools, which are frozen to their
+  own four-family list rather than derived from the weapon-family constant.
+
+### Weapon binding activation — 2026-09-27 amendment
+
+Weapon templates and modes **already authored** as `Fencing` or `Longbow` resolve to those base
+Skills after reclassification. Before it they resolved to `null`, because the combat inputs are built
+only from the sheet's Skills and the weapon's skill is looked up by display name while
+`specializationOfSkillId` excluded both competencies from every Skill surface. **That activation is
+the intended repair of an existing gap, and it must not spread: ordinary one-handed-edged weapons are
+not rebound to Fencing and ordinary bows are not rebound to Longbow.**
+
+### Ordinary Bow's civilian route and F30's generic availability — 2026-09-27 rulings
+
+Implementation surfaced two consequences of the rulings above, which the Product Owner settled the
+same day.
+
+**Ordinary Bow keeps a civilian route.** Because F41 no longer charges Bow, ordinary Bow would have
+been taught by no civilian curriculum and would have become unreachable at Society Level 1. The
+ruling: **restore `bow` as the accepted direct Hunter and Trapper ordinary-archery route**, which the
+approved Profession catalogue already justifies for the non-longbow bow-hunting branch. Bow is **not**
+recorded as a deliberate Society Level 1 absence and **not** flagged as a route gap — the route
+exists, so the absence record must not mention it. Bow is **not** restored to F41.
+
+**Fencing carries no elevated generic Society-Level restriction, and neither does F30.** F30 formerly
+carried a Society Level 3 floor whose recorded reason was that swashbuckling fencing is a named school
+of a specific urban fencing tradition. That is precisely the cultural/Setting restriction that must
+**not** be encoded in generic combat content. The ruling: **F30's generic availability matches the
+ordinary one-handed-edged route.** That route's controlling value is Society Level 1, because the
+ordinary close-combat group carries no availability bound at all, so **F30's bound is withdrawn
+entirely** rather than restated as an explicit floor. Fencing is **not** recorded as a Society Level 1
+absence either. The close-order-drill group keeps its own bound, whose reason is force structure
+rather than culture, and is untouched.
+
 ### Preserved relationship semantics
 
 Relationship semantics are **existing architecture and are not changed by this
@@ -454,7 +587,7 @@ strength in either direction, and none may be inferred from it.
 > inferred.** The preserved `helpful` dependency on Bow is a **qualitative**
 > relationship and is preserved as such. The live numeric bridge parameters that
 > already exist for both competencies are **not** an approval — see
-> [ruling 5](#5-open-and-implementation-blocking--the-existing-specializationbridge-coefficients).
+> [ruling 5](#5-resolved-delete--the-existing-specializationbridge-coefficients).
 
 ## Reasoning
 
@@ -550,8 +683,14 @@ As amended:
   Chargen or UI behaviour change needs its own authorized contract.
 - Ruling 4 authorizes **verification only** — a conformance check against an existing
   recorded rule, with any divergence handled as a defect.
-- **Ruling 5 blocks rulings 1 and 2.** Neither reclassification may be implemented
-  until the Product Owner decides the `specializationBridge` question.
+- **Ruling 5 no longer blocks rulings 1 and 2.** The 2026-09-27 amendment resolves it as
+  **delete**, which is what unblocked implementation. Rulings 1, 2 and 5 are implemented
+  together as one atomic change by **Forgejo #389**, because the catalogue builders throw at
+  module load if a declared group member's type disagrees with the catalogue, so no partial
+  state builds; and because deleting the bridge alone would have removed the synthetic
+  Specialization row while `specializationOfSkillId` still excluded Longbow from every
+  base-Skill surface — **the failure mode is that Longbow silently disappears, not that it
+  appears twice.**
 
 ## Verification and traceability
 
@@ -588,3 +727,15 @@ As amended:
 - The existing Learning Group overlap rule is **cited, not restated**:
   [Pilot Skill Rules v1](../../rules/pilot-skill-rules-v1.md) section 4, lines 50, 57
   and 67.
+- **2026-09-27 amendment authority:** the Product Owner's Fencing/Longbow implementation
+  rulings of 2026-09-27, including the conditional bridge-deletion authorization and the two
+  follow-up rulings on ordinary Bow's civilian route and F30's generic availability.
+- Amendment facts verified at `dev` baseline
+  `8bc14f31b92663a652e8d398277b935537029ad1`. The no-consumer precondition was re-verified by
+  repository-wide search plus inspection of every reader and of the canonical-content snapshot
+  path, and by confirming that no bridge-related file changed between the 2026-09-26 amendment's
+  baseline and this one. Fencing's Combat ordering, Longbow's preserved `helpful` Bow dependency,
+  the F30/F41 memberships, the M04/M05 pools, ordinary Bow's Society Level 1 reachability and
+  F30's withdrawn bound were all verified by **executing** the real Chargen consumer
+  construction, `withCompetencyContentV2(buildTargetRuntimeContent(createTargetCompetencyChargenSource(...)))`,
+  not the legacy 59-group accessor.

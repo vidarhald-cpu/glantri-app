@@ -58,7 +58,17 @@ and the exact rule. Decoding the archive reproduces the supplied file byte-for-b
 | -------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------- |
 | Supplied original `Glantri_Complete_Competency_Catalogue_Reader_Prose.md`                                                  | 355,963 | 0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376 |
 | [Exact archive](Glantri_Complete_Competency_Catalogue_Reader_Prose.original.base64.txt) (base64; decodes to the row above) | 480,865 | 0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376 |
-| [Readable copy](Glantri_Complete_Competency_Catalogue_Reader_Prose.md.txt) (trailing spaces/tabs stripped per line)        | 354,629 | c9d9c8c395024d71289dadf97717f450868fa2cdf86da51017d6f8a9231e007b |
+| [Readable copy](Glantri_Complete_Competency_Catalogue_Reader_Prose.md.txt) (normalized, plus the 2026-09-27 amendment)     | 354,978 | 5dd3af7a39aecfcf337e2ca5d063e1f724a3a14cfd93d21a6ff82ae1d0e187ad |
+
+**Amended 2026-09-27 (Forgejo #389).** The readable copy additionally carries the authorized
+Fencing/Longbow reclassification — both are now `Competency type: Base Skill` with no `Parent:`
+clause — so it is **no longer a pure normalization of the supplied original**, and its digest above
+moved accordingly. The base64 archive and the supplied-original digest are **unchanged**: the archive
+still decodes to the supplied file byte-for-byte. The readable copy is a reader convenience and is
+**not** the controlling source; the controlling source is
+`packages/content/src/skillContentPlatform/fullSkillCatalogueProposalSource.ts`, whose own pinned
+digest and byte size were recomputed by the same change. A difference between the readable copy and
+the supplied original is therefore expected and is not drift.
 
 Original source directory: `/Users/vidarhald/Documents/Glantri local/`. Supplied file date:
 10 September 2026. The original digest and byte length above match the values pinned in

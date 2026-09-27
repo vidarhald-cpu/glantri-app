@@ -108,10 +108,7 @@ export function RelationshipRow({
     <li>
       <ReferenceLinkView item={relationship.source} tab="skills" navigate={navigate} /> →{" "}
       <ReferenceLinkView item={relationship.target} tab="skills" navigate={navigate} /> ·{" "}
-      <strong>{relationship.mechanism}</strong>.{" "}
-      {relationship.bridge
-        ? `Parent threshold ${relationship.bridge.threshold}; parent excess offset ${relationship.bridge.parentExcessOffset}; reverse factor ${factor(relationship.bridge.reverseFactor)} from the Specialization to its parent.`
-        : `Factor ${factor(relationship.factor!)}.`}
+      <strong>{relationship.mechanism}</strong>. {`Factor ${factor(relationship.factor!)}.`}
     </li>
   );
 }

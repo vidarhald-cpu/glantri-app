@@ -30,10 +30,10 @@ describe("approved target Learning Groups", () => {
     expect(buildTargetLearningGroupCatalogue()).toEqual(catalogue);
     expect(catalogue.manifest).toMatchObject({
       groups: 59,
-      baseMemberships: 151,
-      specializationMemberships: 9,
+      baseMemberships: 153,
+      specializationMemberships: 7,
       totalMemberships: 160,
-      groupedBaseSkills: 90,
+      groupedBaseSkills: 92,
       grouplessBaseSkills: 41,
       pilotGroups: 18,
       pilotLinks: 46,
@@ -61,6 +61,14 @@ describe("approved target Learning Groups", () => {
         .members.map((member) => member.competencyId);
     expect(ids("G08")).toEqual(["one_handed_edged", "dodge", "parry"]);
     expect(ids("F30")).toEqual(["one_handed_edged", "dodge", "parry", "fencing"]);
+    // Rule decision 0010 rulings 1 and 2: both are base-Skill memberships, not Specialization
+    // memberships, and neither declares a parent.
+    const member = (groupId: string, competencyId: string) =>
+      catalogue.groups
+        .find((group) => group.id === groupId)!
+        .members.find((value) => value.competencyId === competencyId)!;
+    expect(member("F30", "fencing")).toMatchObject({ kind: "base-skill", parentId: undefined });
+    expect(member("F41", "longbow")).toMatchObject({ kind: "base-skill", parentId: undefined });
     expect(ids("F31")).toEqual([
       "polearms",
       "one_handed_edged",
@@ -137,7 +145,7 @@ describe("approved target Learning Groups", () => {
       ),
     );
     expect(catalogue.grouplessBaseSkillIds.every((id) => !grouped.has(id))).toBe(true);
-    expect(new Set([...grouped, ...catalogue.grouplessBaseSkillIds]).size).toBe(131);
+    expect(new Set([...grouped, ...catalogue.grouplessBaseSkillIds]).size).toBe(133);
   });
   it("rejects unknown IDs, changed types, parents and duplicate membership instead of guessing", () => {
     for (const source of [

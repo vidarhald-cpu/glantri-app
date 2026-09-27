@@ -93,35 +93,35 @@ reached by the **union** of every valid route.
 
 | Society Level | Social Band               | Learning Groups | Professions | Valid paths | Base Skills reached |
 | ------------: | ------------------------- | --------------: | ----------: | ----------: | ------------------: |
-|             1 | L1 Common Folk            |              44 |          42 |          42 |                  80 |
-|             1 | L2 Trades and Guilds      |              44 |          42 |          42 |                  80 |
-|             1 | L3 Established Households |              44 |          42 |          42 |                  80 |
-|             1 | L4 Court and Elite        |              44 |          42 |          42 |                  80 |
-|             2 | L1 Common Folk            |              55 |          48 |          50 |                  94 |
-|             2 | L2 Trades and Guilds      |              72 |          63 |          65 |                 110 |
-|             2 | L3 Established Households |              72 |          63 |          65 |                 110 |
-|             2 | L4 Court and Elite        |              72 |          63 |          65 |                 110 |
-|             3 | L1 Common Folk            |              78 |          69 |          71 |                 118 |
-|             3 | L2 Trades and Guilds      |              95 |          84 |          86 |                 130 |
-|             3 | L3 Established Households |              95 |          84 |          86 |                 130 |
-|             3 | L4 Court and Elite        |              95 |          84 |          86 |                 130 |
-|             4 | L1 Common Folk            |              78 |          69 |          71 |                 118 |
-|             4 | L2 Trades and Guilds      |              95 |          84 |          86 |                 130 |
-|             4 | L3 Established Households |              95 |          84 |          86 |                 130 |
-|             4 | L4 Court and Elite        |              95 |          84 |          86 |                 130 |
-|             5 | L1 Common Folk            |              78 |          69 |          71 |                 118 |
-|             5 | L2 Trades and Guilds      |              95 |          84 |          86 |                 130 |
-|             5 | L3 Established Households |              95 |          84 |          86 |                 130 |
-|             5 | L4 Court and Elite        |              95 |          84 |          86 |                 130 |
-|             6 | L1 Common Folk            |              78 |          69 |          71 |                 118 |
-|             6 | L2 Trades and Guilds      |              95 |          84 |          86 |                 130 |
-|             6 | L3 Established Households |              95 |          84 |          86 |                 130 |
-|             6 | L4 Court and Elite        |              95 |          84 |          86 |                 130 |
+|             1 | L1 Common Folk            |              45 |          42 |          42 |                  82 |
+|             1 | L2 Trades and Guilds      |              45 |          42 |          42 |                  82 |
+|             1 | L3 Established Households |              45 |          42 |          42 |                  82 |
+|             1 | L4 Court and Elite        |              45 |          42 |          42 |                  82 |
+|             2 | L1 Common Folk            |              56 |          48 |          50 |                  96 |
+|             2 | L2 Trades and Guilds      |              73 |          63 |          65 |                 112 |
+|             2 | L3 Established Households |              73 |          63 |          65 |                 112 |
+|             2 | L4 Court and Elite        |              73 |          63 |          65 |                 112 |
+|             3 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             3 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
+|             3 | L3 Established Households |              95 |          84 |          86 |                 132 |
+|             3 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
+|             4 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             4 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
+|             4 | L3 Established Households |              95 |          84 |          86 |                 132 |
+|             4 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
+|             5 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             5 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
+|             5 | L3 Established Households |              95 |          84 |          86 |                 132 |
+|             5 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
+|             6 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             6 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
+|             6 | L3 Established Households |              95 |          84 |          86 |                 132 |
+|             6 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
 
 ## Inherent Learning Group minimums
 
-44 of the 95 proposed Learning Groups carry no bound at all and are available at Society Level 1,
-Social Band L1. 28 first exist at Society Level 2, and 23 do not exist at Society Level 1 or 2.
+45 of the 95 proposed Learning Groups carry no bound at all and are available at Society Level 1,
+Social Band L1. 28 first exist at Society Level 2, and 22 do not exist at Society Level 1 or 2.
 
 A bound is authored here only where **the training itself** genuinely requires it. Two shapes are
 used: a Society Level alone, where the society must have the thing but the training is then ordinary
@@ -153,7 +153,6 @@ stratum.
 | F27   | Timber millwright apprenticeship          |             2 | L1          | level only             | Timber mechanism work is the making and keeping of machines — mill gear, windlass, lifting frame — and needs a society that builds them. Ordinary woodwork is not this practice.                                                                                                                                      |
 | F28   | Building design and site surveying        |             2 | L2          | Trades and Guilds tier | Designed building, and the setting out that goes with it, is a building trade. Stone working itself is deliberately NOT restricted: the Society Level 1 society's own canonical reference is a megalithic monument.                                                                                                   |
 | F29   | Field surgical apprenticeship             |             2 | L1          | level only             | A field surgical apprenticeship is learned where an organised force carries its wounded back to an operator. Society Level 1 fighting is not organised that way. Ordinary operative care is a separate route and is not restricted.                                                                                   |
-| F30   | Swashbuckling fencing instruction         |             3 | L1          | level only             | Swashbuckling fencing is a named school of a specific urban fencing tradition.                                                                                                                                                                                                                                        |
 | F33   | Concealed field reconnaissance practice   |             2 | L2          | Trades and Guilds tier | Reconnaissance reported for military decisions requires a force that makes them and a scouting arm it keeps.                                                                                                                                                                                                          |
 | G05   | Mounted travel and animal care            |             2 | L1          | level only             | Riding is taught on kept riding stock. The Society Level 1 forager and ritual-tribal society keeps none, so the practice has nothing to be taught on. From Society Level 2 it is ordinary work at every band: a pastoral clan's common folk ride.                                                                     |
 | G07   | Passage navigation                        |             2 | L1          | level only             | Entrusted passage work presupposes regular voyages somebody is answerable for. Below Society Level 2 there is no such traffic to be entrusted with.                                                                                                                                                                   |
@@ -277,7 +276,7 @@ Keeping one's own weapons serviceable is not a trade, and a Society Level 1 figh
 
 ## Every Skill absent at Society Level 1, accounted for
 
-51 of the 131 base Skills have no route at Society Level 1. The set is asserted exactly, so the
+51 of the 133 base Skills have no route at Society Level 1. The set is asserted exactly, so the
 authored consequence of this pass cannot drift, and each entry is either a **deliberate** statement
 about the society or a flagged **route gap**.
 

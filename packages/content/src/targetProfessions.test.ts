@@ -38,10 +38,13 @@ describe("approved target Profession projection", () => {
       buildTargetRuntimeContent(createTargetCompetencyProjectionSource(defaultCanonicalContent)),
     );
     expect(content.skillGroups).toHaveLength(59);
-    expect(content.skillGroups.flatMap((g) => g.skillMemberships ?? [])).toHaveLength(151);
-    expect(content.skillGroups.flatMap((g) => g.specializationIds ?? [])).toHaveLength(9);
+    /* 153/7, not 151/9: rule decision 0010 rulings 1 and 2 turn F30's Fencing membership and F41's
+       Longbow membership into base-Skill memberships. Two memberships moved between kinds; none was
+       added or removed. */
+    expect(content.skillGroups.flatMap((g) => g.skillMemberships ?? [])).toHaveLength(153);
+    expect(content.skillGroups.flatMap((g) => g.specializationIds ?? [])).toHaveLength(7);
     expect(targetProfessionCatalogue.manifest.digest).toBe(
-      "sha256:11fb66385c82db84ca1097ee8be63638d5bf64470795e100f8eb93040e648a48",
+      "sha256:a0309587ccf27e7e96cac4a09c2c13a9f24fc16e142142fe2b9415113d22cfd0",
     );
   });
   it("retains additive P01 and distinct archer and longbow packages", () => {

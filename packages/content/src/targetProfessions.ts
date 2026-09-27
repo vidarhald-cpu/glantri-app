@@ -12,8 +12,22 @@ import { targetLearningGroupCatalogue } from "./skillContentPlatform/targetLearn
 import type { CanonicalContent } from "./types";
 
 export const TARGET_PROFESSION_SOURCE_DIGEST =
-  "548a81ec323321609fb7af1a2a78459450556dc32a4df5818965c10b2b48def6";
-/** Bounded PO ruling for #206; these pairs do not imply additional tracks or exclusions. */
+  "ae3d2d515a9abc3b434198c6a429dacdcbe575198d99f39a1ba9e04bf40e06be";
+/**
+ * Bounded PO ruling for #206; these pairs do not imply additional tracks or exclusions.
+ *
+ * LEGACY ONLY. These pairs reach a Character exclusively through the legacy 59-group projection in
+ * `withTargetLearningGroupsAndProfessions`; the canonical V2 runtime
+ * (`withCompetencyContentV2`) projects no `exclusiveLearningGroupPairs` at all. `G08` therefore names
+ * the pre-V2 One-handed edged close-combat group, which V2 superseded with `M01`.
+ *
+ * Issue #389: F30 now teaches Fencing rather than charging `one_handed_edged`, so the alternative it
+ * takes part in is between the fencing tradition and ordinary close-combat instruction. That is an
+ * ALTERNATIVE PROFESSION TRAINING ROUTE, not a choice inside F30, and legacy `G08` is deliberately
+ * NOT revived in current V2 to express it — see `docs/rules/competency-rules.md` and rule decision
+ * 0010 ruling 1. The pair below is left on its legacy members because rewriting it would change a
+ * legacy-only relationship for no current runtime effect.
+ */
 export const TARGET_PROFESSION_EXCLUSIVE_GROUP_PAIRS: Record<string, [string, string][]> = {
   "profession:sailor": [["F09", "G06"]],
   "profession:guard-escort": [["F30", "G08"]],
@@ -122,7 +136,10 @@ export function buildTargetProfessionCatalogue() {
       .filter((o) =>
         o.kind === "group"
           ? groupIds.has(o.targetId)
-          : o.targetId !== "longbow" || name === "Military longbow specialist",
+          : // Rule decision 0010 ruling 2: the military longbow path must not pull in F41, the
+            // civilian hunting route, merely to obtain Longbow. This match encodes TRACK
+            // COMPOSITION, not competency type, so it survives Longbow becoming a base Skill.
+            o.targetId !== "longbow" || name === "Military longbow specialist",
       )
       .map((o) => o.id);
     for (const groupId of groupIds)

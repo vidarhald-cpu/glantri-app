@@ -140,11 +140,13 @@ in prose: a catalogue that broke either would fail to build.
 - **F34** — _Trapline service_
 - **G04** — _Season away from settlement_
 - **F41** — _Longbow hunting tradition_
-- _Taught directly by the hunter one works beside_: Animal Lore
+- _Taught directly by the hunter one works beside_: Bow, Animal Lore
 
 | Valid path         | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ------------------ | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Hunter and Trapper |                             10 |                        0 |                                       10 |
+| Hunter and Trapper |                             11 |                        0 |                                       11 |
+
+> Bow is the accepted direct ordinary-archery route the approved Profession catalogue already justifies for the non-longbow bow-hunting branch: repeated coached shooting develops Bow, which neither F38's formation practice nor F41's longbow tradition necessarily teaches. It is restored here by the 2026-09-27 ruling, because F41 now teaches Longbow rather than charging Bow (rule decision 0010 ruling 2). Ordinary Bow therefore keeps a civilian route and is not an absent Skill at any Society Level.
 
 ### P02 — Wild Plant Gatherer
 
@@ -417,13 +419,12 @@ Mutually exclusive tracks:
 - **M01** — _Contingent fighting drill_
 - **M03** — _Formation arms drill_
 - **M04** — _Issued missile arm and formation drill_
-- **F41** — _Longbow tradition brought into service_
 
 | Valid path | Effective distinct base Skills | of which slot selections | Worst case if every selection duplicates |
 | ---------- | -----------------------------: | -----------------------: | ---------------------------------------: |
-| Soldier    |                             16 |                        4 |                                       12 |
+| Soldier    |                             14 |                        4 |                                       10 |
 
-> The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is experiential competence earned by real service, available to the soldier who sees it and not required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the breadth ruling asks for.
+> The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. F41 is no longer a Soldier route: rule decision 0010 ruling 2 keeps the military longbow path out of the civilian hunting apprenticeship, and Longbow is reached through M04 or M05 without acquiring Hunting. Independent access to F41 through some other Character history remains possible; it is simply not part of the Soldier package. Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is experiential competence earned by real service, available to the soldier who sees it and not required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the breadth ruling asks for.
 
 ### P23 — Mounted Soldier and Lancer
 

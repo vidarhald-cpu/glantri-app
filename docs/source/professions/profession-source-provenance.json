@@ -3,7 +3,7 @@
   "archiveFile": "Glantri_Full_Profession_Catalogue_PO_Proposal.original.base64.txt",
   "readableFile": "Glantri_Full_Profession_Catalogue_PO_Proposal.md.txt",
   "encoding": "base64",
-  "originalSha256": "548a81ec323321609fb7af1a2a78459450556dc32a4df5818965c10b2b48def6",
-  "normalizedSha256": "f200f55a5479a627dda85554ed26e3be0e59029393441bcb8c0af949b8c868cf",
+  "originalSha256": "ae3d2d515a9abc3b434198c6a429dacdcbe575198d99f39a1ba9e04bf40e06be",
+  "normalizedSha256": "bf99bfda17212438c6d0722ebfc839e1ec2b3c4a174e00bc4c269114153b25c0",
   "normalization": "Remove trailing ASCII spaces and tabs from each line; preserve line breaks and all other bytes. Runtime targetProfessionSource remains the exact original string."
 }

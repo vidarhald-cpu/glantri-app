@@ -10,7 +10,6 @@ import {
   finalizeChargenDraft,
   getPrimaryPurchaseCostForSkill,
   getSecondaryPurchaseCostForSkill,
-  getSecondaryPurchaseCostForSpecialization,
   reviewChargenDraft,
   spendPrimaryPoint,
   spendSecondaryPoint,
@@ -271,208 +270,6 @@ describe("derived skill relationships in chargen drafts", () => {
     });
   });
 
-  it("materializes specialization-bridge specializations from parent base XP without surfacing proxy skills as ordinary rows", () => {
-    const bridgeContent = validateCanonicalContent({
-      skillGroups: [
-        {
-          id: "combat_group",
-          name: "Combat",
-          sortOrder: 1,
-        },
-      ],
-      skills: [
-        {
-          allowsSpecializations: false,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "bow",
-          linkedStats: ["dex"],
-          name: "Bow",
-          requiresLiteracy: "no",
-          sortOrder: 1,
-        },
-        {
-          allowsSpecializations: false,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "crossbow",
-          linkedStats: ["dex"],
-          name: "Crossbow",
-          requiresLiteracy: "no",
-          sortOrder: 2,
-        },
-        {
-          allowsSpecializations: false,
-          category: "secondary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "longbow",
-          linkedStats: ["dex"],
-          name: "Longbow",
-          requiresLiteracy: "no",
-          sortOrder: 3,
-          specializationOfSkillId: "bow",
-        },
-        {
-          allowsSpecializations: false,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "one_handed_edged",
-          linkedStats: ["dex"],
-          name: "1-h edged",
-          requiresLiteracy: "no",
-          sortOrder: 4,
-        },
-      ],
-      specializations: [
-        {
-          id: "longbow",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Longbow",
-          skillId: "bow",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "bow",
-            reverseFactor: 1,
-            threshold: 6,
-          },
-        },
-        {
-          id: "fencing",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Fencing",
-          skillId: "one_handed_edged",
-          sortOrder: 2,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "one_handed_edged",
-            reverseFactor: 1,
-            threshold: 6,
-          },
-        },
-      ],
-      professionFamilies: [{ id: "soldier", name: "Soldier" }],
-      professions: [
-        { id: "soldier", familyId: "soldier", name: "Soldier", subtypeName: "Soldier" },
-      ],
-      professionSkills: [
-        {
-          grantType: "group",
-          isCore: true,
-          professionId: "soldier",
-          scope: "family",
-          skillGroupId: "combat_group",
-        },
-      ],
-      societyLevels: [
-        {
-          professionIds: ["soldier"],
-          skillGroupIds: ["combat_group"],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 1,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: ["soldier"],
-          skillGroupIds: ["combat_group"],
-          skillIds: [],
-          socialClass: "Guild",
-          societyId: "glantri",
-          societyLevel: 2,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: ["soldier"],
-          skillGroupIds: ["combat_group"],
-          skillIds: [],
-          socialClass: "Patrician",
-          societyId: "glantri",
-          societyLevel: 3,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: ["soldier"],
-          skillGroupIds: ["combat_group"],
-          skillIds: [],
-          socialClass: "Noble",
-          societyId: "glantri",
-          societyLevel: 4,
-          societyName: "Glantri",
-        },
-      ],
-    });
-    const progression = createChargenProgression();
-    progression.skills = [
-      {
-        category: "ordinary",
-        grantedRanks: 0,
-        groupId: "combat_group",
-        level: 10,
-        primaryRanks: 10,
-        ranks: 10,
-        secondaryRanks: 0,
-        skillId: "bow",
-      },
-      {
-        category: "ordinary",
-        grantedRanks: 0,
-        groupId: "combat_group",
-        level: 10,
-        primaryRanks: 10,
-        ranks: 10,
-        secondaryRanks: 0,
-        skillId: "one_handed_edged",
-      },
-    ];
-
-    const draftView = buildChargenDraftView({
-      content: bridgeContent,
-      professionId: "soldier",
-      progression,
-      societyId: "glantri",
-      societyLevel: 1,
-    });
-
-    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
-    expect(
-      draftView.specializations.find(
-        (specialization) => specialization.specializationId === "longbow",
-      ),
-    ).toMatchObject({
-      relationshipGrantedSourceSkillId: "bow",
-      relationshipGrantedSourceType: "specialization-bridge-parent",
-      relationshipGrantedSpecializationLevel: 5,
-      specializationLevel: 5,
-    });
-    expect(
-      draftView.specializations.find(
-        (specialization) => specialization.specializationId === "fencing",
-      ),
-    ).toMatchObject({
-      relationshipGrantedSourceSkillId: "one_handed_edged",
-      relationshipGrantedSourceType: "specialization-bridge-parent",
-      relationshipGrantedSpecializationLevel: 5,
-      specializationLevel: 5,
-    });
-    expect(draftView.secondaryPoolAvailable).toBe(0);
-  });
-
   it("uses individual skill pricing rather than relationship grants when deriving ordinary skill purchase cost", () => {
     const progression = createChargenProgression();
     progression.skills = [
@@ -663,7 +460,7 @@ describe("derived skill relationships in chargen drafts", () => {
     ).toBe(2);
   });
 
-  it("treats Longbow as a Bow specialization rather than a missile weapon slot choice", () => {
+  it("keeps Longbow an ordinary base combat Skill outside the legacy missile weapon slot", () => {
     const lightInfantryRow = defaultCanonicalContent.societyLevels.find(
       (societyLevel) =>
         societyLevel.professionIds.includes("light_infantry") &&
@@ -680,10 +477,19 @@ describe("derived skill relationships in chargen drafts", () => {
       "bow",
       "crossbow",
     ]);
+    /* The legacy slot keeps its own frozen four-family pool even though Longbow is now a weapon
+       Skill: issue #389 leaves legacy and historical missile groups exactly as they are. */
     expect(basicMissileTraining?.selectionSlots?.[0]?.candidateSkillIds).not.toContain("longbow");
-    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")).toMatchObject({
-      specializationOfSkillId: "bow",
-    });
+    /* Rule decision 0010 ruling 2: Longbow is a base combat Skill, so it carries no Specialization
+       parent, and ruling 5 deletes the bridge that used to project it as a Specialization row. */
+    const longbow = defaultCanonicalContent.skills.find((skill) => skill.id === "longbow");
+    expect(longbow).toBeDefined();
+    expect(longbow!.specializationOfSkillId).toBeUndefined();
+    expect(
+      defaultCanonicalContent.specializations.some(
+        (specialization) => specialization.id === "longbow",
+      ),
+    ).toBe(false);
 
     const progression = {
       ...createChargenProgression(),
@@ -722,15 +528,14 @@ describe("derived skill relationships in chargen drafts", () => {
       groupId: "basic_missile_training",
       skillId: "bow",
     });
-    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
+    /* No synthetic Longbow Specialization row is manufactured any more, and buying Bow derives
+       nothing for Longbow: the authored tie is the qualitative `helpful` dependency only. */
     expect(
       draftView.specializations.find(
         (specialization) => specialization.specializationId === "longbow",
       ),
-    ).toMatchObject({
-      relationshipGrantedSourceSkillId: "bow",
-      relationshipGrantedSourceType: "specialization-bridge-parent",
-    });
+    ).toBeUndefined();
+    expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
   });
 
   it("blocks required-slot group purchases until required choices are selected", () => {
@@ -864,356 +669,7 @@ describe("derived skill relationships in chargen drafts", () => {
     expect(purchase.spentCost).toBe(2);
   });
 
-  it("allows specialization-bridge purchases without the legacy society-level specialization block when the bridge parent gate is satisfied", () => {
-    const bridgePurchaseContent = validateCanonicalContent({
-      skillGroups: [
-        {
-          id: "combat_group",
-          name: "Combat",
-          sortOrder: 1,
-        },
-      ],
-      skills: [
-        {
-          allowsSpecializations: true,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "one_handed_edged",
-          linkedStats: ["dex"],
-          name: "1-h edged",
-          requiresLiteracy: "no",
-          sortOrder: 1,
-        },
-      ],
-      specializations: [
-        {
-          id: "fencing",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Fencing",
-          skillId: "one_handed_edged",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "one_handed_edged",
-            reverseFactor: 1,
-            threshold: 6,
-          },
-        },
-      ],
-      professionFamilies: [],
-      professions: [],
-      professionSkills: [],
-      societyLevels: [
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 1,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Guild",
-          societyId: "glantri",
-          societyLevel: 2,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Patrician",
-          societyId: "glantri",
-          societyLevel: 3,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Noble",
-          societyId: "glantri",
-          societyLevel: 4,
-          societyName: "Glantri",
-        },
-      ],
-    });
-    const progression = createChargenProgression();
-    progression.secondaryPoolTotal = 10;
-    progression.skillGroups = [
-      {
-        gms: 0,
-        grantedRanks: 0,
-        groupId: "combat_group",
-        primaryRanks: 8,
-        ranks: 8,
-        secondaryRanks: 0,
-      },
-    ];
-    progression.skills = [
-      {
-        category: "ordinary",
-        grantedRanks: 0,
-        groupId: "combat_group",
-        level: 8,
-        primaryRanks: 8,
-        ranks: 8,
-        secondaryRanks: 0,
-        skillId: "one_handed_edged",
-      },
-    ];
-
-    const result = spendSecondaryPoint({
-      content: bridgePurchaseContent,
-      progression,
-      societyId: "glantri",
-      societyLevel: 1,
-      targetId: "fencing",
-      targetType: "specialization",
-    });
-
-    expect(result.error).toBeUndefined();
-    expect(result.progression.specializations).toContainEqual(
-      expect.objectContaining({
-        ranks: 1,
-        secondaryRanks: 1,
-        skillId: "one_handed_edged",
-        specializationId: "fencing",
-      }),
-    );
-    expect(result.warnings).toEqual([]);
-  });
-
-  it("does not count derived specialization XP as flexible-point spend and uses the same profile-based flexible pool as the page summary", () => {
-    const bridgePurchaseContent = validateCanonicalContent({
-      skillGroups: [
-        {
-          id: "combat_group",
-          name: "Combat",
-          sortOrder: 1,
-        },
-      ],
-      skills: [
-        {
-          allowsSpecializations: true,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "one_handed_edged",
-          linkedStats: ["dex"],
-          name: "1-h edged",
-          requiresLiteracy: "no",
-          sortOrder: 1,
-        },
-      ],
-      specializations: [
-        {
-          id: "fencing",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Fencing",
-          skillId: "one_handed_edged",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "one_handed_edged",
-            reverseFactor: 1,
-            threshold: 6,
-          },
-        },
-      ],
-      professionFamilies: [],
-      professions: [],
-      professionSkills: [],
-      societyLevels: [
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 1,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Guild",
-          societyId: "glantri",
-          societyLevel: 2,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Patrician",
-          societyId: "glantri",
-          societyLevel: 3,
-          societyName: "Glantri",
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Noble",
-          societyId: "glantri",
-          societyLevel: 4,
-          societyName: "Glantri",
-        },
-      ],
-    });
-    const progression = createChargenProgression();
-    progression.skillGroups = [
-      {
-        gms: 0,
-        grantedRanks: 0,
-        groupId: "combat_group",
-        primaryRanks: 6,
-        ranks: 6,
-        secondaryRanks: 0,
-      },
-    ];
-    progression.skills = [
-      {
-        category: "ordinary",
-        grantedRanks: 0,
-        groupId: "combat_group",
-        level: 6,
-        primaryRanks: 6,
-        ranks: 6,
-        secondaryRanks: 0,
-        skillId: "one_handed_edged",
-      },
-    ];
-    const flexibleProfile = {
-      distractionLevel: 0,
-      id: "profile-fencer",
-      label: "Fencer",
-      rolledStats: {
-        cha: 10,
-        com: 10,
-        con: 10,
-        dex: 10,
-        health: 10,
-        int: 20,
-        lck: 13,
-        pow: 10,
-        siz: 10,
-        str: 10,
-        will: 10,
-      },
-      societyLevel: 0,
-    };
-
-    const beforeDraft = buildChargenDraftView({
-      content: bridgePurchaseContent,
-      professionId: undefined,
-      profile: flexibleProfile,
-      progression,
-      societyId: "glantri",
-      societyLevel: 1,
-    });
-
-    expect(beforeDraft.secondaryPoolAvailable).toBe(33);
-    expect(
-      beforeDraft.specializations.find(
-        (specialization) => specialization.specializationId === "fencing",
-      ),
-    ).toMatchObject({
-      secondaryRanks: 0,
-    });
-    expect(progression.secondaryPoolSpent).toBe(0);
-    expect(
-      getSecondaryPurchaseCostForSpecialization(
-        progression,
-        bridgePurchaseContent.specializations[0]!,
-      ),
-    ).toBe(4);
-
-    const firstPurchase = spendSecondaryPoint({
-      content: bridgePurchaseContent,
-      profile: flexibleProfile,
-      progression,
-      societyId: "glantri",
-      societyLevel: 1,
-      targetId: "fencing",
-      targetType: "specialization",
-    });
-
-    expect(firstPurchase.error).toBeUndefined();
-    expect(firstPurchase.spentCost).toBe(4);
-    expect(firstPurchase.progression.secondaryPoolSpent).toBe(4);
-
-    const afterFirstDraft = buildChargenDraftView({
-      content: bridgePurchaseContent,
-      professionId: undefined,
-      profile: flexibleProfile,
-      progression: firstPurchase.progression,
-      societyId: "glantri",
-      societyLevel: 1,
-    });
-
-    expect(afterFirstDraft.secondaryPoolAvailable).toBe(29);
-    expect(
-      afterFirstDraft.specializations.find(
-        (specialization) => specialization.specializationId === "fencing",
-      ),
-    ).toMatchObject({
-      secondaryRanks: 1,
-      effectiveSpecializationNumber: expect.any(Number),
-    });
-    expect(
-      getSecondaryPurchaseCostForSpecialization(
-        firstPurchase.progression,
-        bridgePurchaseContent.specializations[0]!,
-      ),
-    ).toBe(2);
-
-    const secondPurchase = spendSecondaryPoint({
-      content: bridgePurchaseContent,
-      profile: flexibleProfile,
-      progression: firstPurchase.progression,
-      societyId: "glantri",
-      societyLevel: 1,
-      targetId: "fencing",
-      targetType: "specialization",
-    });
-
-    expect(secondPurchase.error).toBeUndefined();
-    expect(secondPurchase.spentCost).toBe(2);
-    expect(secondPurchase.progression.secondaryPoolSpent).toBe(6);
-
-    const exhausted = spendSecondaryPoint({
-      content: bridgePurchaseContent,
-      profile: flexibleProfile,
-      progression: {
-        ...progression,
-        secondaryPoolSpent: 33,
-      },
-      societyId: "glantri",
-      societyLevel: 1,
-      targetId: "fencing",
-      targetType: "specialization",
-    });
-
-    expect(exhausted.error).toBe(
-      "Not enough secondary points remaining for that specialization purchase.",
-    );
-  });
-
-  it("returns a clearer legacy specialization access message for non-bridge rows", () => {
+  it("returns a clearer legacy specialization access message for ordinary Specialization rows", () => {
     const content = validateCanonicalContent({
       skillGroups: [
         {
