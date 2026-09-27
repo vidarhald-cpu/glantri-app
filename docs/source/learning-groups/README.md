@@ -18,6 +18,8 @@ before the final `.txt` suffix. Do not format the raw evidence.
 
 Original source directory: `/Users/vidarhald/Documents/Glantri local/`.
 
+The canonical V2 catalogue has grown beyond the roster these files describe. Newly authored reader prose for the canonical V2 Learning Groups these accepted sources do not cover is proposed separately in [`proposed/`](proposed/README.md); it is **not** accepted source material.
+
 `packages/content/src/skillContentPlatform/targetLearningGroupsSource.ts` embeds
 these same strings for deterministic packaging without filesystem dependencies.
 The focused test checks both copies against these hashes. The parser consumes

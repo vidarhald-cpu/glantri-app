@@ -177,8 +177,12 @@ describe("canonical V2 competency reference", () => {
 
   it("retains the unchanged V2 source digest", () => {
     expect(model.sourceDigest).toBe(source.sourceDigest);
+    // Digest intentionally moved by Product Owner ruling (2026-09-27, issue #365): C02's
+    // canonical short description said "across several crafts", contradicting its own
+    // settled choose-one membership/note. Fixing the short description text changed the
+    // corpus digest. This is authorized content correction, not silent drift.
     expect(source.sourceDigest).toBe(
-      "sha256:3ba5d13ae4f423d6646d5e4ed2013f1367e94e05dfd7be4e4355a3a454ffcb39",
+      "sha256:7ebabe692d142a7a09ddec01bb848847334a7679f5961e034f410ce600461656",
     );
   });
 });
