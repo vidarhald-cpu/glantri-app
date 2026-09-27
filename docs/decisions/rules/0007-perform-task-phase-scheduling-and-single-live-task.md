@@ -2,6 +2,9 @@
 
 - Status: approved
 - Date: 2026-09-22
+- Amended: 2026-09-26 (Product Owner, documentation maintenance — ruling 3's stated scope extended
+  to `{kind: "rounds", N}` durations; scope statement only, no requirement change; self-amendment,
+  same record)
 - Product owner: Vidar Hald, Product Owner ruling on Forgejo issue #287, work item A1a
 - Related issues/PRs: Forgejo #287 (Combat consolidation), work item A1a (Combat task lifecycle
   convergence)
@@ -140,6 +143,25 @@ primary actions across the two phases"` test protects exactly this.
   declaration-surface control invokes it today. A1b must carry this requirement; this ruling does
   not design the control, specify a UI, or otherwise widen A1b's scope.
 
+> **2026-09-26 scope clarification.** Ruling 3's text above is preserved exactly as originally
+> approved, and it is written about `{kind: "phase"}` durations. Its stated scope also covers
+> `{kind: "rounds", N}` durations: an unresolved multi-round Perform Task likewise persists across
+> a round rollover and never silently expires, and its recurring advance is the one primary-action
+> opportunity its owner already holds, never an additional one.
+>
+> This states scope only and changes no requirement. `phase` durations behave exactly as before.
+> Ruling 1 still decides which opportunity a duration is open at, so a `rounds`-duration task is
+> still never open at Phase 2. The "recurrence never grants an additional primary action"
+> constraint is carried for `rounds: N` by the same opportunity gate, which closes on
+> `lastProgressedRoundNumber` and refuses a second advance within one round. The reasoning below is
+> already general rather than phase-specific: a silent expiry would discard a GM-declared task with
+> "no `task_resolved` event, no command, and no undo record", which is unaudited combat behaviour
+> whatever duration kind the task carries.
+>
+> Provenance: Forgejo #344 (PR #352, `dev@17b6627262cb781d5d143b97cf31ddb17dc33f43`) restored the
+> audited path for `rounds: N`, which is why the principle is now worth stating in scope. The
+> mechanics of that repair belong to its own record, not here.
+
 ## Reasoning
 
 All three rulings correct implementation gaps against settled intent rather than inventing new
@@ -233,6 +255,10 @@ round's canonical Combat Task and declare a replacement in the same round"`, and
 - Documentation: [Combat task integration matrix](../../architecture/combat-task-integration-matrix.md),
   Perform Task lifecycle row and narrative; [Combat Panel Contract §12.18](../../product/combat-panel-contract.md#1218-phase-2-perform-task-recurrence-versus-expiry--settled)
   now records ruling 3 as settled rather than open.
+- 2026-09-26 scope-clarification authority: Product Owner, documentation maintenance approved on
+  the express condition that no semantic change is introduced; established by independent
+  floor-class QA and confirmed by the Development Orchestrator. No requirement, test, or code
+  change follows from it.
 - Raised as a documentation-durability gap by independent QA of branch
   `codex/287-a1a-task-lifecycle`, finding F1: rulings 1 and 2 appeared in no repository document
   before the original version of this record; they survived only in Forgejo issue #287 comments

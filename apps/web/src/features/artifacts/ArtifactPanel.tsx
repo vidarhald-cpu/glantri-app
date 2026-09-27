@@ -46,9 +46,19 @@ type AccessFilter = "" | (typeof accessFilterOptions)[number]["value"];
 
 export function ArtifactPanel({
   campaignId,
+  focusedArtifactId,
+  intakeOnly = false,
+  onChanged,
+  readOnlyAssociations = false,
   scenarios,
 }: {
   campaignId: string;
+  /** Reuse the canonical Artifact controls inside Campaign Material's Inspector. */
+  focusedArtifactId?: string;
+  /** Preserve the existing upload/import controls without a second material list. */
+  intakeOnly?: boolean;
+  onChanged?: () => void;
+  readOnlyAssociations?: boolean;
   scenarios: Scenario[];
 }) {
   const [artifacts, setArtifacts] = useState<Array<ArtifactCommonDto | ArtifactGmDto>>([]);
@@ -77,6 +87,11 @@ export function ArtifactPanel({
     setReferences(result.mode === "gm" ? result.references : []);
   }, [campaignId]);
 
+  const refreshAndNotify = async () => {
+    await refresh();
+    onChanged?.();
+  };
+
   useEffect(() => {
     setLoading(true);
     void refresh()
@@ -97,6 +112,7 @@ export function ArtifactPanel({
     try {
       await action();
       await refresh();
+      onChanged?.();
       setFeedback(success);
     } catch (caught) {
       if (caught instanceof ApiRequestError && caught.status === 409) {
@@ -120,52 +136,62 @@ export function ArtifactPanel({
   if (loading) return <section aria-busy="true">Loading Artifacts…</section>;
 
   return (
-    <section aria-label="Artifact library" style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        <label>
-          Find Artifacts{" "}
-          <input value={search} onChange={(event) => setSearch(event.target.value)} type="search" />
-        </label>
-        <label>
-          Filter by kind{" "}
-          <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
-            <option value="">All kinds</option>
-            {["image", "map", "portrait", "document", "handout"].map((kind) => (
-              <option key={kind}>{kind}</option>
-            ))}
-          </select>
-        </label>
-        {mode === "gm" ? (
+    <section
+      aria-label={intakeOnly ? "Artifact upload" : "Artifact library"}
+      style={{ display: "grid", gap: "1rem", minWidth: 0 }}
+    >
+      {intakeOnly ? <h2 style={{ margin: 0 }}>Upload Artifacts</h2> : null}
+      {!focusedArtifactId && !intakeOnly ? (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <label>
-            Lifecycle{" "}
-            <select
-              value={lifecycleFilter}
-              onChange={(event) => setLifecycleFilter(event.target.value)}
-            >
-              <option value="active">Active</option>
-              <option value="archived">Retired</option>
-              <option value="">All</option>
-            </select>
+            Find Artifacts{" "}
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              type="search"
+            />
           </label>
-        ) : null}
-        {mode === "gm" ? (
           <label>
-            Access{" "}
-            <select
-              onChange={(event) => setAccessFilter(event.target.value as AccessFilter)}
-              value={accessFilter}
-            >
-              <option value="">All access</option>
-              {accessFilterOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
+            Filter by kind{" "}
+            <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value)}>
+              <option value="">All kinds</option>
+              {["image", "map", "portrait", "document", "handout"].map((kind) => (
+                <option key={kind}>{kind}</option>
               ))}
             </select>
           </label>
-        ) : null}
-      </div>
-      {activeAccessFilter ? (
+          {mode === "gm" ? (
+            <label>
+              Lifecycle{" "}
+              <select
+                value={lifecycleFilter}
+                onChange={(event) => setLifecycleFilter(event.target.value)}
+              >
+                <option value="active">Active</option>
+                <option value="archived">Retired</option>
+                <option value="">All</option>
+              </select>
+            </label>
+          ) : null}
+          {mode === "gm" ? (
+            <label>
+              Access{" "}
+              <select
+                onChange={(event) => setAccessFilter(event.target.value as AccessFilter)}
+                value={accessFilter}
+              >
+                <option value="">All access</option>
+                {accessFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+      {!focusedArtifactId && !intakeOnly && activeAccessFilter ? (
         <ul
           aria-label="Active filters"
           style={{
@@ -184,23 +210,29 @@ export function ArtifactPanel({
           </li>
         </ul>
       ) : null}
-      <div>
-        <h2 style={{ marginBottom: "0.25rem" }}>Artifacts</h2>
-        <p style={{ color: "#5e5a50", margin: 0 }}>
-          {mode === "gm"
-            ? "Upload privately, preview, then share with the Campaign or a Scenario."
-            : "Maps, images, and handouts deliberately shared with you."}
-        </p>
-      </div>
+      {!focusedArtifactId && !intakeOnly ? (
+        <div>
+          <h2 style={{ marginBottom: "0.25rem" }}>Artifacts</h2>
+          <p style={{ color: "#5e5a50", margin: 0 }}>
+            {mode === "gm"
+              ? "Upload privately, preview, then share with the Campaign or a Scenario."
+              : "Maps, images, and handouts deliberately shared with you."}
+          </p>
+        </div>
+      ) : null}
 
       {error ? <div role="alert">{error}</div> : null}
       {feedback ? <div role="status">{feedback}</div> : null}
 
-      {mode === "gm" ? (
-        <OrdinaryArtifactUploadPanel campaignId={campaignId} onAccepted={refresh} />
+      {!focusedArtifactId && mode === "gm" ? (
+        <OrdinaryArtifactUploadPanel campaignId={campaignId} onAccepted={refreshAndNotify} />
       ) : null}
-      {mode === "gm" ? <AiIntakePanel campaignId={campaignId} onAccepted={refresh} /> : null}
-      {mode === "gm" ? <ArtifactImportPanel campaignId={campaignId} onAccepted={refresh} /> : null}
+      {!focusedArtifactId && mode === "gm" ? (
+        <AiIntakePanel campaignId={campaignId} onAccepted={refreshAndNotify} />
+      ) : null}
+      {!focusedArtifactId && mode === "gm" ? (
+        <ArtifactImportPanel campaignId={campaignId} onAccepted={refreshAndNotify} />
+      ) : null}
 
       <div
         style={{
@@ -212,15 +244,19 @@ export function ArtifactPanel({
         {artifacts
           .filter(
             (artifact) =>
-              `${artifact.title} ${artifact.description ?? ""}`
-                .toLowerCase()
-                .includes(search.toLowerCase()) &&
-              (!kindFilter || artifact.artifactKind === kindFilter) &&
-              (!isManagedArtifact(artifact) ||
-                !lifecycleFilter ||
-                artifact.lifecycle === lifecycleFilter) &&
-              (!accessFilter ||
-                (isManagedArtifact(artifact) && artifact.audience === accessFilter)),
+              !intakeOnly &&
+              (focusedArtifactId
+                ? artifact.id === focusedArtifactId
+                : `${artifact.title} ${artifact.description ?? ""}`
+                    .toLowerCase()
+                    .includes(search.toLowerCase())) &&
+              (focusedArtifactId ||
+                ((!kindFilter || artifact.artifactKind === kindFilter) &&
+                  (!isManagedArtifact(artifact) ||
+                    !lifecycleFilter ||
+                    artifact.lifecycle === lifecycleFilter) &&
+                  (!accessFilter ||
+                    (isManagedArtifact(artifact) && artifact.audience === accessFilter)))),
           )
           .map((artifact) => {
             const managed = isManagedArtifact(artifact) ? artifact : undefined;
@@ -400,7 +436,7 @@ export function ArtifactPanel({
                             : "Share with Campaign"}
                         </button>
 
-                        {activeScenarios.length > 0 ? (
+                        {!readOnlyAssociations && activeScenarios.length > 0 ? (
                           <div style={{ display: "grid", gap: "0.35rem" }}>
                             <label>
                               Scenario
@@ -483,6 +519,34 @@ export function ArtifactPanel({
                             )}
                           </div>
                         ) : null}
+                        {readOnlyAssociations ? (
+                          <div>
+                            <strong>Scenario associations</strong>
+                            {references.filter(
+                              (entry) =>
+                                entry.artifactId === managed.id && entry.state !== "withdrawn",
+                            ).length ? (
+                              <ul>
+                                {references
+                                  .filter(
+                                    (entry) =>
+                                      entry.artifactId === managed.id &&
+                                      entry.state !== "withdrawn",
+                                  )
+                                  .map((entry) => (
+                                    <li key={entry.id}>
+                                      {scenarios.find(
+                                        (scenario) => scenario.id === entry.scenarioId,
+                                      )?.name ?? "Scenario"}{" "}
+                                      · {entry.state}
+                                    </li>
+                                  ))}
+                              </ul>
+                            ) : (
+                              <p>No current Scenario association.</p>
+                            )}
+                          </div>
+                        ) : null}
                       </>
                     ) : null}
 
@@ -516,7 +580,9 @@ export function ArtifactPanel({
             );
           })}
       </div>
-      {artifacts.length === 0 ? <div>No shared Artifacts yet.</div> : null}
+      {!focusedArtifactId && !intakeOnly && artifacts.length === 0 ? (
+        <div>No shared Artifacts yet.</div>
+      ) : null}
       {inspected ? (
         <ArtifactInspectionDialog artifact={inspected} onExit={() => setInspected(undefined)} />
       ) : null}

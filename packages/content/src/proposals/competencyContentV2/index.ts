@@ -7,3 +7,4 @@
  */
 export * from "./competencyContentV2Source";
 export * from "./competencyContentV2";
+export * from "./competencyContentV2ReaderProse";

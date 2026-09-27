@@ -121,7 +121,6 @@ import {
   buildFeintSkillPreview,
   FeintSkillPreview,
 } from "@/features/player-combat/FeintSkillPreview";
-import { GenericCombatActionPanel } from "@/features/combat-generic-actions/GenericCombatActionPanel";
 import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";
 import {
   buildCombatParticipantCandidates,
@@ -5186,34 +5185,6 @@ export default function ScenarioPlayerCombatPageContent({
             tableRef={trackerRef}
           />
         </section>
-      ) : null}
-
-      {encounterSession && selectedRoundParticipant ? (
-        isGameMaster ? (
-          <GenericCombatActionPanel
-            encounter={encounterSession}
-            isGm
-            key={`${encounterSession.id}:${projectionCacheKey}`}
-            onEncounterUpdated={(nextEncounter) => {
-              acceptEncounterSession(nextEncounter);
-            }}
-            participantId={selectedRoundParticipant.participantId}
-            scenarioParticipants={selectableParticipants}
-            skills={content?.skills}
-          />
-        ) : (
-          <GenericCombatActionPanel
-            encounter={encounterSession}
-            isGm={false}
-            key={`${encounterSession.id}:${projectionCacheKey}`}
-            onEncounterUpdated={(nextEncounter) => {
-              acceptEncounterSession(nextEncounter);
-            }}
-            participantId={selectedRoundParticipant.participantId}
-            scenarioParticipants={selectableParticipants}
-            showGenericDeclarationControls={false}
-          />
-        )
       ) : null}
 
       {historyInspection ? (

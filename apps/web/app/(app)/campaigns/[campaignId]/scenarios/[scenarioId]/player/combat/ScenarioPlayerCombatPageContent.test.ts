@@ -24,14 +24,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
   it("keeps Player and GM Player combat in tracker, workspace, log, ancillary order", () => {
     const source = readSource();
     const tracker = source.indexOf("<CombatTracker");
-    const genericActions = source.indexOf("<GenericCombatActionPanel", tracker);
     const historicalWorkspace = source.indexOf("<PlayerCombatHistoryInspector", tracker);
     const activeWorkspace = source.indexOf("<div style={playerCombatTopPanelRowStyle}", tracker);
     const combatLog = source.indexOf("<CombatLog", tracker);
     const ancillaryTools = source.indexOf("<EquipmentLoadoutModule", combatLog);
 
     expect(tracker).toBeGreaterThan(-1);
-    expect(genericActions).toBeGreaterThan(tracker);
+    // A3, Forgejo issue #335 — the standalone `GenericCombatActionPanel` that used to sit between
+    // the tracker and the workspace is gone from both this surface's audiences.
+    expect(source).not.toContain("<GenericCombatActionPanel");
     expect(historicalWorkspace).toBeGreaterThan(tracker);
     expect(activeWorkspace).toBeGreaterThan(tracker);
     expect(combatLog).toBeGreaterThan(historicalWorkspace);
@@ -43,33 +44,35 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain('? "Resume current task"');
   });
 
-  it("keeps the generic task adjudication panel GM-only on the ordinary player surface", () => {
+  /**
+   * A3, Forgejo issue #335 — Combat Panel Contract §12.15. The retired
+   * `GenericCombatActionPanel` carried the declaration intent for this surface's GM branch. The
+   * §12.4 destination for intent text is the Action Selector, and that wiring is what survives
+   * here; no adjudication panel of its own remains on the player surface.
+   */
+  it("keeps the declaration intent wiring on the Action Selector and mounts no generic action panel", () => {
     const source = readSource();
-    const panel = source.indexOf("<GenericCombatActionPanel");
 
-    expect(panel).toBeGreaterThan(-1);
-    expect(source.slice(Math.max(0, panel - 180), panel)).toContain("isGameMaster ? (");
+    expect(source).not.toContain("GenericCombatActionPanel");
     expect(source).toContain("declarationIntent={declarationIntent}");
     expect(source).toContain("onDeclarationIntentChange={(intent) => {");
     expect(source).toContain("setDeclarationIntent(intent)");
   });
 
-  it("keeps player Combat Item controls with readable history but without generic declarations", () => {
+  /**
+   * A3, Forgejo issue #335 — the two §12.4 rows the retired read-only "Items and task history"
+   * render used to carry on this surface. Item operations now reach the player through the Action
+   * Selector mount of `CombatItemInteractionPanel` (#356), and action and task history is read
+   * from the Combat Log, its §12.4 destination. Neither is a render of the retired panel.
+   */
+  it("routes player Item operations to the Action Selector and task history to the Combat Log", () => {
     const source = readSource();
-    const gmPanel = source.indexOf("<GenericCombatActionPanel");
-    const playerItemHistoryPanel = source.indexOf("<GenericCombatActionPanel", gmPanel + 1);
 
-    expect(gmPanel).toBeGreaterThan(-1);
-    expect(playerItemHistoryPanel).toBeGreaterThan(gmPanel);
-    expect(source.slice(gmPanel, playerItemHistoryPanel)).toContain(") : (");
-    expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
-      "isGm={false}",
-    );
-    expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
-      "participantId={selectedRoundParticipant.participantId}",
-    );
-    expect(source.slice(playerItemHistoryPanel, playerItemHistoryPanel + 500)).toContain(
-      "showGenericDeclarationControls={false}",
+    expect(source).not.toContain("showGenericDeclarationControls");
+    expect(source).toContain("<CombatItemInteractionPanel");
+    expect(source).toContain("<CombatLog");
+    expect(source.indexOf("<CombatItemInteractionPanel")).toBeGreaterThan(
+      source.indexOf("<PlayerCombatActionSelectorPanel"),
     );
   });
 

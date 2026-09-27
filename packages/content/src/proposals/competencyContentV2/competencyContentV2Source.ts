@@ -744,7 +744,7 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     id: "C02",
     name: "Master artisan practice",
     shortDescription:
-      "Guild- or master-level practice across several crafts, with apprentices of one's own.",
+      "Guild- or master-level practice in one taught craft, with apprentices of one's own.",
     disposition: "new",
     fixedSkillIds: ["skill:appraisal", "skill:bargaining", "skill:teaching"],
     selectionSlots: [
