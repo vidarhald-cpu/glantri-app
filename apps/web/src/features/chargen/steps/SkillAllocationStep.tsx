@@ -1,4 +1,5 @@
 import { TargetGroupDetails } from "../components/TargetPackageDetails";
+import { TrainingCostChangeNotice } from "../components/TrainingCostChangeNotice";
 import {
   allocateChargenPoint,
   isSpecializationAccessOnlyChargenGroup,
@@ -120,6 +121,8 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
             <div>Profession: {selectedProfession?.name ?? "Not selected"}</div>
           </div>
           <div
+            aria-label="Ordinary points"
+            role="group"
             style={{
               background: "#fbfaf5",
               border: "1px solid #e7e2d7",
@@ -135,30 +138,12 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
               {draftView.primaryPoolAvailable}
             </div>
             {groupTrainingCostChange ? (
-              <div
-                role="status"
-                style={{
-                  borderTop: "1px solid #e7e2d7",
-                  color: "#4a4638",
-                  fontSize: "0.85rem",
-                  marginTop: "0.35rem",
-                  paddingTop: "0.35rem",
-                }}
-              >
-                <strong>
-                  {groupTrainingCostChange.shift === "reduced-by-overlap"
-                    ? "Training cost went down"
-                    : "Training cost went up"}
-                  : {groupTrainingCostChange.previousTotal} &rarr; {groupTrainingCostChange.total}{" "}
-                  ordinary points.
-                </strong>{" "}
-                {groupTrainingCostChange.shift === "reduced-by-overlap"
-                  ? "Overlapping training does not stack. The new training covers ground the earlier training was already priced for, so this build costs less than before."
-                  : "Overlapping training does not stack. With that training gone there is less overlap left, so the rest of this build costs more than before."}
-              </div>
+              <TrainingCostChangeNotice change={groupTrainingCostChange} />
             ) : null}
           </div>
           <div
+            aria-label="Flexible points"
+            role="group"
             style={{
               background: "#fbfaf5",
               border: "1px solid #e7e2d7",
