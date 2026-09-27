@@ -33,16 +33,33 @@ import {
   isDefined,
   recalculateProgression,
 } from "./_helpers";
-import { getFlexiblePoolTotal, getOrdinaryPoolTotal } from "./costs";
+import {
+  calculateChargenGroupBundle,
+  getActiveGroupSkillCost,
+  getFlexiblePoolTotal,
+  getOrdinaryPoolTotal,
+} from "./costs";
 
 export interface ChargenGroupView {
   gms: number;
   groupId: string;
   groupLevel: number;
+  /**
+   * Price of one further rank in this Learning Group, from the shared canonical acquisition
+   * arithmetic. `0` means the Group's whole contribution is already supplied by a stronger
+   * Group or a relationship floor, so a further rank would buy no competence.
+   */
+  marginalPurchaseCost: number;
   name: string;
   primaryRanks: number;
   secondaryRanks: number;
   totalRanks: number;
+  /**
+   * Weighted useful group competence this Learning Group actually delivers, after the
+   * strongest-Group and relationship-floor rules. `0` means the membership is fully
+   * suppressed. Presentation of this figure is Forgejo #372 section 7.
+   */
+  usefulWeightedIncrement: number;
 }
 
 export interface ChargenSkillView {
@@ -234,6 +251,9 @@ export function buildChargenDraftView(input: {
     }),
   );
 
+  // Carry the useful-increment figure from the shared canonical Learning Group arithmetic
+  // into the view model (Forgejo #381). What the UI renders from it is Forgejo #372 section 7.
+  const groupBundle = calculateChargenGroupBundle({ content: input.content, progression });
   const groups = progression.skillGroups
     .map((group) => {
       const definition = input.content.skillGroups.find((item) => item.id === group.groupId);
@@ -245,10 +265,18 @@ export function buildChargenDraftView(input: {
           gms: group.gms,
           ranks: group.ranks,
         }),
+        marginalPurchaseCost:
+          getActiveGroupSkillCost({
+            content: input.content,
+            groupId: group.groupId,
+            progression,
+          }).cost ?? 0,
         name: definition?.name ?? group.groupId,
         primaryRanks: group.primaryRanks,
         secondaryRanks: group.secondaryRanks,
         totalRanks: group.ranks,
+        usefulWeightedIncrement:
+          groupBundle.weightedUsefulIncrementByGroupId.get(group.groupId) ?? 0,
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name));

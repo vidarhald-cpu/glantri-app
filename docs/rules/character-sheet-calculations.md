@@ -240,9 +240,25 @@ Some groups have fixed skills. These are always part of the group. Other groups 
 Formula:
 
 ```text
-Skill group cost = floor(0.6 * total individual cost of active group skills)
-Minimum cost = 1 when at least one active skill exists
+G_s            = highest active group contribution to Skill s
+usefulGroup_s  = max(0, G_s - relationshipFloor_s)
+weightedUseful = sum(individual cost of s * usefulGroup_s)
+Skill group cost = ceil(2/3 * weightedUseful)
 ```
+
+The ceiling is applied **once** to the complete bundle of purchased Learning Groups, never
+per group and never per rank, so the price of a purchase is the change in the bundle price.
+A Group contribution that yields no useful competence yields no price. A Learning Group that
+teaches no base membership and exists only to open authored Specialization access has a Group
+purchase cost of `0` and carries no Group purchase action at all: eligibility through the Group
+exposes the Specialization, which is purchased and progressed separately under its own costs.
+The incidental flat cost of `1` it formerly carried is retired (Product Owner ruling,
+2026-09-27).
+
+This is the shared canonical Learning Group acquisition arithmetic in
+[`pilot-skill-rules-v1.md`](./pilot-skill-rules-v1.md) section 4, which both the
+Pilot/runtime acquisition path and the Chargen path now consume (Forgejo #381). It replaces
+the former Chargen-local `floor(0.6 * total individual cost)` scalar with its minimum of `1`.
 
 ```text
 Active group skills = fixed group skills + skills currently selected in choice slots
@@ -258,12 +274,16 @@ Choice examples:
 
 Cost examples:
 
-| Group shape                                                                              | Individual-cost total |                   Group cost |
-| ---------------------------------------------------------------------------------------- | --------------------: | ---------------------------: |
-| Three ordinary skills                                                                    |       `2 + 2 + 2 = 6` |         `floor(0.6 * 6) = 3` |
-| Dodge, Parry, Brawling, and one selected secondary weapon                                |   `1 + 1 + 1 + 1 = 4` |         `floor(0.6 * 4) = 2` |
-| Perception, Concentration, Weapon Maintenance, and one selected secondary missile weapon |   `2 + 2 + 1 + 1 = 6` |         `floor(0.6 * 6) = 3` |
-| One selected ordinary craft skill                                                        |                   `2` | `max(1, floor(0.6 * 2)) = 1` |
+Examples below are for a single group bought to level `1` with no overlap and no
+relationship floor, so `weightedUseful` equals the individual-cost total.
+
+| Group shape                                                                              | Weighted useful total |          Group cost |
+| ---------------------------------------------------------------------------------------- | --------------------: | ------------------: |
+| Three ordinary skills                                                                    |       `2 + 2 + 2 = 6` | `ceil(2/3 * 6) = 4` |
+| Dodge, Parry, Brawling, and one selected secondary weapon                                |   `1 + 1 + 1 + 1 = 4` | `ceil(2/3 * 4) = 3` |
+| Perception, Concentration, Weapon Maintenance, and one selected secondary missile weapon |   `2 + 2 + 1 + 1 = 6` | `ceil(2/3 * 6) = 4` |
+| One selected ordinary craft skill                                                        |                   `2` | `ceil(2/3 * 2) = 2` |
+| A Skill whose whole Group contribution a stronger Group already supplies                 |                   `0` |                 `0` |
 
 ### Skill points summary
 
@@ -310,6 +330,6 @@ Education = base education
 
 New target Chargen uses the approved 59-group graph and 84 Profession families. A selected explicit track preserves its family and concrete identity; other family opportunities form an additive access menu. Profession selection supplies no ranks, XP or points. Contextual #113 restrictions and legacy Society/Social Band availability are not applied to these unbound choices.
 
-An accessible Learning Group costs `max(1, floor(sum(base-member ordinary costs) * 0.6))` per purchase. The nine explicit Specialization memberships are excluded from that sum and group contribution: they provide access only, with separate initial 4 / increase 2 costs and immediate-parent eligibility. Flexible funding does not authorize an otherwise inaccessible group. Overlapping groups still use the existing best-contribution calculation for one competency identity.
+An accessible Learning Group is priced through the shared canonical acquisition arithmetic: the complete purchased bundle costs `ceil(2/3 * weightedUseful)`, where `weightedUseful` sums each base member's individual cost times `max(0, G_s - relationshipFloor_s)`. The nine explicit Specialization memberships are excluded from that sum and group contribution: they provide access only, with separate initial 4 / increase 2 costs and immediate-parent eligibility. A group that teaches no base membership and exists only to open Specialization access has a Group purchase cost of `0` and carries no Group purchase action at all: eligibility through the group exposes the Specialization, which is purchased and progressed separately (Product Owner ruling, 2026-09-27). Flexible funding does not authorize an otherwise inaccessible group. Overlapping groups use the best-contribution calculation for one competency identity, and a membership that produces no useful competence produces no price (Forgejo #381).
 
 Target builds retain family/track/source identity and approved group definitions for later display. Historical builds retain their actual identities, levels and recorded expenditure; this change performs no migration or retroactive repricing. Server validation resolves the approved catalogue and rejects forged membership, family/track or purchase-price claims.

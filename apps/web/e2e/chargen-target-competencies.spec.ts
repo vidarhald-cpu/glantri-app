@@ -44,7 +44,7 @@ test("target competencies through existing Chargen and authoritative persistence
     .locator("section")
     .filter({ hasText: "Running and athletic field practice" })
     .last();
-  await footCourierGroup.getByRole("button", { name: "Buy / raise skill group" }).click();
+  await footCourierGroup.getByRole("button", { name: "Add training", exact: true }).click();
   await expect(page.getByText(/Selected core route complete/)).toBeVisible();
   const individualSkills = page
     .locator("section")

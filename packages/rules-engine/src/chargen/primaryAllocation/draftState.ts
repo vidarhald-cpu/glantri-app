@@ -34,6 +34,7 @@ import {
   NEW_SPECIALIZATION_COST,
   getActiveGroupSkillCost,
   getAvailableFlexiblePoolTotal,
+  getChargenGroupBundleCost,
   chooseChargenPool,
   getOrdinaryPoolTotal,
   getSkillSpendCost,
@@ -97,17 +98,19 @@ function reallocateTargetChargenPools(input: {
   for (const group of progression.skillGroups) {
     const purchasedRanks = group.primaryRanks + group.secondaryRanks;
     if (purchasedRanks <= 0) continue;
-    const quote = getActiveGroupSkillCost({
-      content: input.content,
-      groupId: group.groupId,
-      progression,
-    });
-    if (quote.cost === undefined || !normalGroupIds.has(group.groupId)) continue;
+    if (!normalGroupIds.has(group.groupId)) continue;
     group.primaryRanks = purchasedRanks;
     group.secondaryRanks = 0;
     group.ranks = group.grantedRanks + purchasedRanks;
-    ordinaryEligibleCost += purchasedRanks * quote.cost;
   }
+  // The complete Learning Group bundle is priced once through the shared canonical
+  // arithmetic, so an overlapping membership that yields no useful competence yields no
+  // price either (Forgejo #381).
+  ordinaryEligibleCost += getChargenGroupBundleCost({
+    chargeableGroupIds: normalGroupIds,
+    content: input.content,
+    progression,
+  }).cost;
 
   for (const skill of progression.skills) {
     if (skill.sourceTag === "mother-tongue") continue;
@@ -863,10 +866,14 @@ export function removeChargenPoint(input: AllocateChargenPointInput): SpendPoint
       };
     }
 
+    // Quoted before the rank is removed, so the refund is the marginal value of the rank
+    // that is about to go.
     const groupCost = getActiveGroupSkillCost({
+      chargeableGroupIds: access.normalSkillGroupIds,
       content: input.content,
       groupId: input.targetId,
       progression,
+      rankDelta: -1,
     });
     const refundCost = groupCost.cost;
 

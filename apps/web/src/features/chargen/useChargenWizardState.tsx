@@ -33,6 +33,7 @@ import {
   buildChargenSelectableSkillSummary,
   buildChargenSkillAccessSummary,
   createChargenStatAdjustmentState,
+  describeChargenGroupTrainingChange,
   createChargenMethodPolicy,
   createChargenProgression,
   evaluateSkillSelection,
@@ -136,6 +137,19 @@ export function useChargenWizardState() {
   >({});
   const [progression, setProgression] = useState<CharacterProgression>(createChargenProgression());
   const [rowActionFeedback, setRowActionFeedback] = useState<Record<string, string>>({});
+  /**
+   * Set when a Learning Group training change moved the build's training cost the opposite
+   * way to the training itself. Rule decision 0011 makes that canonical, so the interface
+   * must show the before/after cost and say why rather than let the number move unexplained.
+   */
+  const [groupTrainingCostChange, setGroupTrainingCostChange] = useState<
+    | {
+        previousTotal: number;
+        shift: "raised-by-overlap" | "reduced-by-overlap";
+        total: number;
+      }
+    | undefined
+  >(undefined);
   const [rolledProfiles, setRolledProfiles] = useState<RolledCharacterProfile[]>([]);
   const [selectedProfileId, setSelectedProfileId] = useState<string>();
   const [selectedCivilizationId, setSelectedCivilizationId] = useState<string>();
@@ -871,6 +885,7 @@ export function useChargenWizardState() {
     setShowProfessionChooser(true);
     setProgression(createChargenProgression("standard", chargenRuleSet));
     setRowActionFeedback({});
+    setGroupTrainingCostChange(undefined);
     setExpandedSkillDetails([]);
     setFeedback([
       "Changing civilization changed the inferred society, so profession access and point allocation were reset.",
@@ -889,6 +904,7 @@ export function useChargenWizardState() {
       }),
     );
     setRowActionFeedback({});
+    setGroupTrainingCostChange(undefined);
     setExpandedSkillDetails([]);
     setFeedback(["Profession access loaded. Skill allocation, education, and review are ready."]);
   }
@@ -1047,6 +1063,7 @@ export function useChargenWizardState() {
     setSelectedProfileId(profileId);
     setShowRolledProfileOptions(false);
     setRowActionFeedback({});
+    setGroupTrainingCostChange(undefined);
   }
 
   function handleResetStatAdjustments() {
@@ -1138,6 +1155,7 @@ export function useChargenWizardState() {
     setFeedback([]);
     setProgression(createChargenProgression("standard", chargenRuleSet));
     setRowActionFeedback({});
+    setGroupTrainingCostChange(undefined);
     setSelectedProfileId(undefined);
     setSelectedProfessionId(undefined);
     setSelectedCivilizationId(undefined);
@@ -1176,6 +1194,32 @@ export function useChargenWizardState() {
     setHasStartedChargen(true);
   }
 
+  /**
+   * Record a Learning Group training change whose cost moved the opposite way to the
+   * training itself, so the interface can show the before/after build cost and explain it.
+   * The classification comes from the rules layer; nothing here re-derives the rule.
+   */
+  function recordGroupTrainingCostChange(
+    previousProgression: CharacterProgression,
+    nextProgression: CharacterProgression,
+  ) {
+    const change = describeChargenGroupTrainingChange({
+      content,
+      previousProgression,
+      progression: nextProgression,
+    });
+
+    setGroupTrainingCostChange(
+      change.shift === "ordinary"
+        ? undefined
+        : {
+            previousTotal: previousProgression.primaryPoolSpent,
+            shift: change.shift,
+            total: nextProgression.primaryPoolSpent,
+          },
+    );
+  }
+
   function handleAllocate(
     targetId: string,
     targetType: "group" | "skill",
@@ -1184,6 +1228,8 @@ export function useChargenWizardState() {
     if (!skillAllocationContext) {
       return;
     }
+
+    setGroupTrainingCostChange(undefined);
 
     const result = allocateChargenPoint({
       ...skillAllocationContext,
@@ -1225,12 +1271,21 @@ export function useChargenWizardState() {
       return next;
     });
     setProgression(result.progression);
-    setFeedback([
-      `Allocated ${result.spentCost ?? 0} point to ${
-        targetType === "group" ? "the skill group" : "the skill"
-      }.`,
-      ...result.warnings,
-    ]);
+
+    if (targetType === "group") {
+      recordGroupTrainingCostChange(progression, result.progression);
+      setFeedback([
+        (result.spentCost ?? 0) > 0
+          ? `Training added for ${result.spentCost} ordinary ${
+              result.spentCost === 1 ? "point" : "points"
+            }.`
+          : "Training added at no extra cost.",
+        ...result.warnings,
+      ]);
+      return;
+    }
+
+    setFeedback([`Allocated ${result.spentCost ?? 0} point to the skill.`, ...result.warnings]);
   }
 
   function handleRemoveAllocation(
@@ -1241,6 +1296,8 @@ export function useChargenWizardState() {
     if (!skillAllocationContext) {
       return;
     }
+
+    setGroupTrainingCostChange(undefined);
 
     const result = removeChargenPoint({
       ...skillAllocationContext,
@@ -1282,12 +1339,14 @@ export function useChargenWizardState() {
       return next;
     });
     setProgression(result.progression);
-    setFeedback([
-      `Removed ${result.spentCost ?? 0} point from ${
-        targetType === "group" ? "the skill group" : "the skill"
-      }.`,
-      ...result.warnings,
-    ]);
+
+    if (targetType === "group") {
+      recordGroupTrainingCostChange(progression, result.progression);
+      setFeedback(["Training removed.", ...result.warnings]);
+      return;
+    }
+
+    setFeedback([`Removed ${result.spentCost ?? 0} point from the skill.`, ...result.warnings]);
   }
 
   function handleAllocateSpecialization(specializationId: string) {
@@ -1734,6 +1793,7 @@ export function useChargenWizardState() {
     progression,
     renderSkillRowsTable,
     review,
+    groupTrainingCostChange,
     rowActionFeedback,
     selectableSkillSummary,
     selectedAdjustment,

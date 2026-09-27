@@ -61,6 +61,10 @@ group bundle cost = ceil(2/3 × weightedUseful)
 
 The ceiling is applied once to the complete bundle. Direct purchases happen on top of the strongest group contribution and are not used to discount the group price.
 
+Two consequences follow from pricing the bundle once rather than per rank, both approved (Product Owner, 2026-09-27) and recorded in [rule decision 0011](../decisions/rules/0011-shared-learning-group-acquisition-arithmetic.md). The marginal price of one further rank in the same group **varies** with the group's current level instead of being constant. And adding a group may **lower** the bundle price, where the new group's contribution raises a relationship floor that supplies competence an earlier group was priced for; the calculation stays order-independent and history-free, and the lower recomputed price is correct.
+
+This group-bundle arithmetic is the **shared canonical calculation**. The Chargen acquisition path consumes the same calculation, supplying its own economic weights and its own relationship floors; it holds no second implementation. See [rule decision 0011](../decisions/rules/0011-shared-learning-group-acquisition-arithmetic.md).
+
 Examples:
 
 - City Watch grants Sword `4`; Veteran Campaign visibly includes Sword `2`. Sword group competence is `4`. The second membership remains explainable but adds zero competence and zero price.

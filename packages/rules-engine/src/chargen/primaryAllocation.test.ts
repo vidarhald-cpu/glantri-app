@@ -13,7 +13,7 @@ import {
   getSecondaryPurchaseCostForSpecialization,
   reviewChargenDraft,
   spendPrimaryPoint,
-  spendSecondaryPoint
+  spendSecondaryPoint,
 } from "./primaryAllocation";
 
 const chargenTestContent = validateCanonicalContent({
@@ -21,8 +21,8 @@ const chargenTestContent = validateCanonicalContent({
     {
       id: "scholarly",
       name: "Scholarly",
-      sortOrder: 1
-    }
+      sortOrder: 1,
+    },
   ],
   skills: [
     {
@@ -36,7 +36,7 @@ const chargenTestContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 1,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "archives",
@@ -49,7 +49,7 @@ const chargenTestContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "required",
       sortOrder: 2,
-      allowsSpecializations: false
+      allowsSpecializations: false,
     },
     {
       id: "lore",
@@ -62,8 +62,8 @@ const chargenTestContent = validateCanonicalContent({
       category: "ordinary",
       requiresLiteracy: "no",
       sortOrder: 3,
-      allowsSpecializations: false
-    }
+      allowsSpecializations: false,
+    },
   ],
   specializations: [
     {
@@ -72,22 +72,22 @@ const chargenTestContent = validateCanonicalContent({
       name: "Codes",
       minimumGroupLevel: 1,
       minimumParentLevel: 1,
-      sortOrder: 1
-    }
+      sortOrder: 1,
+    },
   ],
   professionFamilies: [
     {
       id: "scholar",
-      name: "Scholar"
-    }
+      name: "Scholar",
+    },
   ],
   professions: [
     {
       id: "scribe",
       familyId: "scholar",
       name: "Scribe",
-      subtypeName: "Scribe"
-    }
+      subtypeName: "Scribe",
+    },
   ],
   professionSkills: [
     {
@@ -95,8 +95,8 @@ const chargenTestContent = validateCanonicalContent({
       scope: "family",
       grantType: "group",
       skillGroupId: "scholarly",
-      isCore: true
-    }
+      isCore: true,
+    },
   ],
   societyLevels: [
     {
@@ -105,7 +105,7 @@ const chargenTestContent = validateCanonicalContent({
       societyName: "Glantri",
       socialClass: "Common",
       professionIds: ["scribe"],
-      skillGroupIds: ["scholarly"]
+      skillGroupIds: ["scholarly"],
     },
     {
       societyId: "glantri",
@@ -113,7 +113,7 @@ const chargenTestContent = validateCanonicalContent({
       societyName: "Glantri",
       socialClass: "Guild",
       professionIds: ["scribe"],
-      skillGroupIds: ["scholarly"]
+      skillGroupIds: ["scholarly"],
     },
     {
       societyId: "glantri",
@@ -121,7 +121,7 @@ const chargenTestContent = validateCanonicalContent({
       societyName: "Glantri",
       socialClass: "Patrician",
       professionIds: ["scribe"],
-      skillGroupIds: ["scholarly"]
+      skillGroupIds: ["scholarly"],
     },
     {
       societyId: "glantri",
@@ -129,9 +129,9 @@ const chargenTestContent = validateCanonicalContent({
       societyName: "Glantri",
       socialClass: "Noble",
       professionIds: ["scribe"],
-      skillGroupIds: ["scholarly"]
-    }
-  ]
+      skillGroupIds: ["scholarly"],
+    },
+  ],
 });
 
 describe("derived skill relationships in chargen drafts", () => {
@@ -141,8 +141,8 @@ describe("derived skill relationships in chargen drafts", () => {
         {
           id: "medicine_group",
           name: "Medicine",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -157,7 +157,7 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["int"],
           name: "Medicine",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -170,20 +170,22 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["int"],
           name: "First aid",
           requiresLiteracy: "no",
-          sortOrder: 2
-        }
+          sortOrder: 2,
+        },
       ],
       specializations: [],
       professionFamilies: [{ id: "scholar", name: "Scholar" }],
-      professions: [{ id: "physician", familyId: "scholar", name: "Physician", subtypeName: "Physician" }],
+      professions: [
+        { id: "physician", familyId: "scholar", name: "Physician", subtypeName: "Physician" },
+      ],
       professionSkills: [
         {
           grantType: "group",
           isCore: true,
           professionId: "scholar",
           scope: "family",
-          skillGroupId: "medicine_group"
-        }
+          skillGroupId: "medicine_group",
+        },
       ],
       societyLevels: [
         {
@@ -193,7 +195,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["physician"],
@@ -202,7 +204,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["physician"],
@@ -211,7 +213,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["physician"],
@@ -220,9 +222,9 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
     const progression = createChargenProgression();
     progression.skills = [
@@ -234,7 +236,7 @@ describe("derived skill relationships in chargen drafts", () => {
         primaryRanks: 10,
         ranks: 10,
         secondaryRanks: 0,
-        skillId: "medicine"
+        skillId: "medicine",
       },
       {
         category: "ordinary",
@@ -244,8 +246,8 @@ describe("derived skill relationships in chargen drafts", () => {
         primaryRanks: 3,
         ranks: 3,
         secondaryRanks: 0,
-        skillId: "first_aid"
-      }
+        skillId: "first_aid",
+      },
     ];
 
     const draftView = buildChargenDraftView({
@@ -253,19 +255,19 @@ describe("derived skill relationships in chargen drafts", () => {
       professionId: "physician",
       progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "medicine")).toMatchObject({
       effectiveSkillNumber: 10,
       relationshipGrantedSkillLevel: 0,
-      specificSkillLevel: 10
+      specificSkillLevel: 10,
     });
     expect(draftView.skills.find((skill) => skill.skillId === "first_aid")).toMatchObject({
       effectiveSkillNumber: 10,
       relationshipGrantedSkillLevel: 7,
       relationshipSourceSkillId: "medicine",
-      specificSkillLevel: 3
+      specificSkillLevel: 3,
     });
   });
 
@@ -275,8 +277,8 @@ describe("derived skill relationships in chargen drafts", () => {
         {
           id: "combat_group",
           name: "Combat",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -290,7 +292,7 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["dex"],
           name: "Bow",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -303,7 +305,7 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["dex"],
           name: "Crossbow",
           requiresLiteracy: "no",
-          sortOrder: 2
+          sortOrder: 2,
         },
         {
           allowsSpecializations: false,
@@ -317,7 +319,7 @@ describe("derived skill relationships in chargen drafts", () => {
           name: "Longbow",
           requiresLiteracy: "no",
           sortOrder: 3,
-          specializationOfSkillId: "bow"
+          specializationOfSkillId: "bow",
         },
         {
           allowsSpecializations: false,
@@ -330,8 +332,8 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["dex"],
           name: "1-h edged",
           requiresLiteracy: "no",
-          sortOrder: 4
-        }
+          sortOrder: 4,
+        },
       ],
       specializations: [
         {
@@ -345,8 +347,8 @@ describe("derived skill relationships in chargen drafts", () => {
             parentExcessOffset: 5,
             parentSkillId: "bow",
             reverseFactor: 1,
-            threshold: 6
-          }
+            threshold: 6,
+          },
         },
         {
           id: "fencing",
@@ -359,20 +361,22 @@ describe("derived skill relationships in chargen drafts", () => {
             parentExcessOffset: 5,
             parentSkillId: "one_handed_edged",
             reverseFactor: 1,
-            threshold: 6
-          }
-        }
+            threshold: 6,
+          },
+        },
       ],
       professionFamilies: [{ id: "soldier", name: "Soldier" }],
-      professions: [{ id: "soldier", familyId: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      professions: [
+        { id: "soldier", familyId: "soldier", name: "Soldier", subtypeName: "Soldier" },
+      ],
       professionSkills: [
         {
           grantType: "group",
           isCore: true,
           professionId: "soldier",
           scope: "family",
-          skillGroupId: "combat_group"
-        }
+          skillGroupId: "combat_group",
+        },
       ],
       societyLevels: [
         {
@@ -382,7 +386,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["soldier"],
@@ -391,7 +395,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["soldier"],
@@ -400,7 +404,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["soldier"],
@@ -409,9 +413,9 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
     const progression = createChargenProgression();
     progression.skills = [
@@ -423,7 +427,7 @@ describe("derived skill relationships in chargen drafts", () => {
         primaryRanks: 10,
         ranks: 10,
         secondaryRanks: 0,
-        skillId: "bow"
+        skillId: "bow",
       },
       {
         category: "ordinary",
@@ -433,8 +437,8 @@ describe("derived skill relationships in chargen drafts", () => {
         primaryRanks: 10,
         ranks: 10,
         secondaryRanks: 0,
-        skillId: "one_handed_edged"
-      }
+        skillId: "one_handed_edged",
+      },
     ];
 
     const draftView = buildChargenDraftView({
@@ -442,23 +446,29 @@ describe("derived skill relationships in chargen drafts", () => {
       professionId: "soldier",
       progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
     expect(
-      draftView.specializations.find((specialization) => specialization.specializationId === "longbow")
+      draftView.specializations.find(
+        (specialization) => specialization.specializationId === "longbow",
+      ),
     ).toMatchObject({
       relationshipGrantedSourceSkillId: "bow",
       relationshipGrantedSourceType: "specialization-bridge-parent",
       relationshipGrantedSpecializationLevel: 5,
-      specializationLevel: 5
+      specializationLevel: 5,
     });
-    expect(draftView.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
+    expect(
+      draftView.specializations.find(
+        (specialization) => specialization.specializationId === "fencing",
+      ),
+    ).toMatchObject({
       relationshipGrantedSourceSkillId: "one_handed_edged",
       relationshipGrantedSourceType: "specialization-bridge-parent",
       relationshipGrantedSpecializationLevel: 5,
-      specializationLevel: 5
+      specializationLevel: 5,
     });
     expect(draftView.secondaryPoolAvailable).toBe(0);
   });
@@ -475,18 +485,21 @@ describe("derived skill relationships in chargen drafts", () => {
         ranks: 8,
         relationshipGrantedRanks: 8,
         secondaryRanks: 0,
-        skillId: "lore"
-      }
+        skillId: "lore",
+      },
     ];
 
     expect(
-      getPrimaryPurchaseCostForSkill(progression, chargenTestContent.skills.find((skill) => skill.id === "lore")!)
+      getPrimaryPurchaseCostForSkill(
+        progression,
+        chargenTestContent.skills.find((skill) => skill.id === "lore")!,
+      ),
     ).toBe(2);
     expect(
       getSecondaryPurchaseCostForSkill(
         progression,
-        chargenTestContent.skills.find((skill) => skill.id === "lore")!
-      )
+        chargenTestContent.skills.find((skill) => skill.id === "lore")!,
+      ),
     ).toBe(2);
 
     const purchased = spendPrimaryPoint({
@@ -496,7 +509,7 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "lore",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(purchased.error).toBeUndefined();
@@ -504,8 +517,8 @@ describe("derived skill relationships in chargen drafts", () => {
     expect(
       getPrimaryPurchaseCostForSkill(
         purchased.progression,
-        chargenTestContent.skills.find((skill) => skill.id === "lore")!
-      )
+        chargenTestContent.skills.find((skill) => skill.id === "lore")!,
+      ),
     ).toBe(2);
   });
 
@@ -519,9 +532,9 @@ describe("derived skill relationships in chargen drafts", () => {
           groupId: "scholarly",
           primaryRanks: 1,
           ranks: 1,
-          secondaryRanks: 0
-        }
-      ]
+          secondaryRanks: 0,
+        },
+      ],
     };
     const literacy = chargenTestContent.skills.find((skill) => skill.id === "literacy")!;
 
@@ -534,7 +547,7 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "scholarly",
-      targetType: "group"
+      targetType: "group",
     });
     const skillPurchase = allocateChargenPoint({
       content: chargenTestContent,
@@ -543,11 +556,14 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "literacy",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(groupPurchase.error).toBeUndefined();
-    expect(groupPurchase.spentCost).toBe(3);
+    // Learning Groups are priced through the shared canonical arithmetic:
+    // ceil(2/3 * weightedUseful) over the complete bundle
+    // (docs/rules/pilot-skill-rules-v1.md section 4).
+    expect(groupPurchase.spentCost).toBe(4);
     expect(skillPurchase.error).toBeUndefined();
     expect(skillPurchase.spentCost).toBe(2);
   });
@@ -557,7 +573,7 @@ describe("derived skill relationships in chargen drafts", () => {
       const row = defaultCanonicalContent.societyLevels.find(
         (societyLevel) =>
           societyLevel.professionIds.includes(professionId) &&
-          societyLevel.skillGroupIds.includes(groupId)
+          societyLevel.skillGroupIds.includes(groupId),
       );
 
       expect(row).toBeDefined();
@@ -567,7 +583,9 @@ describe("derived skill relationships in chargen drafts", () => {
     const buyGroup = (input: {
       groupId: string;
       professionId: string;
-      selectedGroupSlots?: NonNullable<CharacterProgression["chargenSelections"]>["selectedGroupSlots"];
+      selectedGroupSlots?: NonNullable<
+        CharacterProgression["chargenSelections"]
+      >["selectedGroupSlots"];
     }) => {
       const row = rowFor(input.professionId, input.groupId);
       const progression = {
@@ -575,8 +593,8 @@ describe("derived skill relationships in chargen drafts", () => {
         chargenSelections: {
           selectedGroupSlots: input.selectedGroupSlots ?? [],
           selectedLanguageIds: [],
-          selectedSkillIds: []
-        }
+          selectedSkillIds: [],
+        },
       };
 
       return allocateChargenPoint({
@@ -586,60 +604,73 @@ describe("derived skill relationships in chargen drafts", () => {
         societyId: row.societyId,
         societyLevel: row.societyLevel,
         targetId: input.groupId,
-        targetType: "group"
+        targetType: "group",
       });
     };
 
-    expect(buyGroup({
-      groupId: "mercantile_practice",
-      professionId: "master_craftsmen"
-    }).spentCost).toBe(3);
-    expect(buyGroup({
-      groupId: "technical_measurement",
-      professionId: "master_craftsmen"
-    }).spentCost).toBe(3);
-    expect(buyGroup({
-      groupId: "basic_melee_training",
-      professionId: "light_infantry",
-      selectedGroupSlots: [
-        {
-          groupId: "basic_melee_training",
-          selectedSkillIds: ["polearms"],
-          slotId: "melee_weapon_choice"
-        }
-      ]
-    }).spentCost).toBe(2);
-    expect(buyGroup({
-      groupId: "basic_missile_training",
-      professionId: "light_infantry",
-      selectedGroupSlots: [
-        {
-          groupId: "basic_missile_training",
-          selectedSkillIds: ["bow"],
-          slotId: "missile_weapon_choice"
-        }
-      ]
-    }).spentCost).toBe(3);
-    expect(buyGroup({
-      groupId: "craft_specialty_advanced",
-      professionId: "master_craftsmen",
-      selectedGroupSlots: [
-        {
-          groupId: "craft_specialty_advanced",
-          selectedSkillIds: ["smithing"],
-          slotId: "advanced_craft_specialty_choices"
-        }
-      ]
-    }).spentCost).toBe(1);
+    // ceil(2/3 * weightedUseful) over the complete bundle, from the shared canonical
+    // Learning Group arithmetic (docs/rules/pilot-skill-rules-v1.md section 4).
+    expect(
+      buyGroup({
+        groupId: "mercantile_practice",
+        professionId: "master_craftsmen",
+      }).spentCost,
+    ).toBe(4);
+    expect(
+      buyGroup({
+        groupId: "technical_measurement",
+        professionId: "master_craftsmen",
+      }).spentCost,
+    ).toBe(4);
+    expect(
+      buyGroup({
+        groupId: "basic_melee_training",
+        professionId: "light_infantry",
+        selectedGroupSlots: [
+          {
+            groupId: "basic_melee_training",
+            selectedSkillIds: ["polearms"],
+            slotId: "melee_weapon_choice",
+          },
+        ],
+      }).spentCost,
+    ).toBe(3);
+    expect(
+      buyGroup({
+        groupId: "basic_missile_training",
+        professionId: "light_infantry",
+        selectedGroupSlots: [
+          {
+            groupId: "basic_missile_training",
+            selectedSkillIds: ["bow"],
+            slotId: "missile_weapon_choice",
+          },
+        ],
+      }).spentCost,
+    ).toBe(4);
+    expect(
+      buyGroup({
+        groupId: "craft_specialty_advanced",
+        professionId: "master_craftsmen",
+        selectedGroupSlots: [
+          {
+            groupId: "craft_specialty_advanced",
+            selectedSkillIds: ["smithing"],
+            slotId: "advanced_craft_specialty_choices",
+          },
+        ],
+      }).spentCost,
+    ).toBe(2);
   });
 
   it("treats Longbow as a Bow specialization rather than a missile weapon slot choice", () => {
-    const lightInfantryRow = defaultCanonicalContent.societyLevels.find((societyLevel) =>
-      societyLevel.professionIds.includes("light_infantry") &&
-      societyLevel.skillGroupIds.includes("basic_missile_training")
+    const lightInfantryRow = defaultCanonicalContent.societyLevels.find(
+      (societyLevel) =>
+        societyLevel.professionIds.includes("light_infantry") &&
+        societyLevel.skillGroupIds.includes("basic_missile_training"),
     );
     const basicMissileTraining = defaultCanonicalContent.skillGroups.find(
-      (group) => group.id === "basic_missile_training"
+      (group) => group.id === "basic_missile_training",
     );
 
     expect(lightInfantryRow).toBeDefined();
@@ -647,11 +678,11 @@ describe("derived skill relationships in chargen drafts", () => {
       "throwing",
       "sling",
       "bow",
-      "crossbow"
+      "crossbow",
     ]);
     expect(basicMissileTraining?.selectionSlots?.[0]?.candidateSkillIds).not.toContain("longbow");
     expect(defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")).toMatchObject({
-      specializationOfSkillId: "bow"
+      specializationOfSkillId: "bow",
     });
 
     const progression = {
@@ -661,11 +692,11 @@ describe("derived skill relationships in chargen drafts", () => {
           {
             groupId: "basic_missile_training",
             selectedSkillIds: ["bow"],
-            slotId: "missile_weapon_choice"
-          }
+            slotId: "missile_weapon_choice",
+          },
         ],
         selectedLanguageIds: [],
-        selectedSkillIds: []
+        selectedSkillIds: [],
       },
       skillGroups: [
         {
@@ -674,29 +705,31 @@ describe("derived skill relationships in chargen drafts", () => {
           groupId: "basic_missile_training",
           primaryRanks: 6,
           ranks: 6,
-          secondaryRanks: 0
-        }
-      ]
+          secondaryRanks: 0,
+        },
+      ],
     };
     const draftView = buildChargenDraftView({
       content: defaultCanonicalContent,
       professionId: "light_infantry",
       progression,
       societyId: lightInfantryRow!.societyId,
-      societyLevel: lightInfantryRow!.societyLevel
+      societyLevel: lightInfantryRow!.societyLevel,
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "bow")).toMatchObject({
       groupLevel: 6,
       groupId: "basic_missile_training",
-      skillId: "bow"
+      skillId: "bow",
     });
     expect(draftView.skills.find((skill) => skill.skillId === "longbow")).toBeUndefined();
     expect(
-      draftView.specializations.find((specialization) => specialization.specializationId === "longbow")
+      draftView.specializations.find(
+        (specialization) => specialization.specializationId === "longbow",
+      ),
     ).toMatchObject({
       relationshipGrantedSourceSkillId: "bow",
-      relationshipGrantedSourceType: "specialization-bridge-parent"
+      relationshipGrantedSourceType: "specialization-bridge-parent",
     });
   });
 
@@ -704,7 +737,7 @@ describe("derived skill relationships in chargen drafts", () => {
     const row = defaultCanonicalContent.societyLevels.find(
       (societyLevel) =>
         societyLevel.professionIds.includes("master_craftsmen") &&
-        societyLevel.skillGroupIds.includes("craft_specialty_advanced")
+        societyLevel.skillGroupIds.includes("craft_specialty_advanced"),
     );
 
     expect(row).toBeDefined();
@@ -716,7 +749,7 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: row!.societyId,
       societyLevel: row!.societyLevel,
       targetId: "craft_specialty_advanced",
-      targetType: "group"
+      targetType: "group",
     });
 
     expect(purchase.spentCost).toBeUndefined();
@@ -728,7 +761,7 @@ describe("derived skill relationships in chargen drafts", () => {
       exchangeCount: 2,
       flexiblePointFactor: 0.5,
       ordinarySkillPoints: 40,
-      statRollCount: 20
+      statRollCount: 20,
     });
     const profile = {
       distractionLevel: 0,
@@ -745,9 +778,9 @@ describe("derived skill relationships in chargen drafts", () => {
         pow: 10,
         siz: 10,
         str: 10,
-        will: 10
+        will: 10,
       },
-      societyLevel: 0
+      societyLevel: 0,
     };
 
     const draftView = buildChargenDraftView({
@@ -756,7 +789,7 @@ describe("derived skill relationships in chargen drafts", () => {
       profile,
       progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(progression.primaryPoolTotal).toBe(40);
@@ -773,8 +806,8 @@ describe("derived skill relationships in chargen drafts", () => {
         {
           id: "courtly",
           name: "Courtly",
-          sortOrder: 2
-        }
+          sortOrder: 2,
+        },
       ],
       skills: [
         ...chargenTestContent.skills,
@@ -789,9 +822,9 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["cha"],
           name: "Etiquette",
           requiresLiteracy: "no",
-          sortOrder: 4
-        }
-      ]
+          sortOrder: 4,
+        },
+      ],
     });
     const progression = createChargenProgression();
     const ordinaryOtherSkill = otherSkillContent.skills.find((skill) => skill.id === "etiquette")!;
@@ -816,15 +849,15 @@ describe("derived skill relationships in chargen drafts", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression,
       societyId: "glantri",
       societyLevel: 1,
       targetId: "etiquette",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(purchase.error).toBeUndefined();
@@ -837,8 +870,8 @@ describe("derived skill relationships in chargen drafts", () => {
         {
           id: "combat_group",
           name: "Combat",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -852,8 +885,8 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["dex"],
           name: "1-h edged",
           requiresLiteracy: "no",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       specializations: [
         {
@@ -867,9 +900,9 @@ describe("derived skill relationships in chargen drafts", () => {
             parentExcessOffset: 5,
             parentSkillId: "one_handed_edged",
             reverseFactor: 1,
-            threshold: 6
-          }
-        }
+            threshold: 6,
+          },
+        },
       ],
       professionFamilies: [],
       professions: [],
@@ -882,7 +915,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -891,7 +924,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -900,7 +933,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -909,9 +942,9 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
     const progression = createChargenProgression();
     progression.secondaryPoolTotal = 10;
@@ -922,8 +955,8 @@ describe("derived skill relationships in chargen drafts", () => {
         groupId: "combat_group",
         primaryRanks: 8,
         ranks: 8,
-        secondaryRanks: 0
-      }
+        secondaryRanks: 0,
+      },
     ];
     progression.skills = [
       {
@@ -934,8 +967,8 @@ describe("derived skill relationships in chargen drafts", () => {
         primaryRanks: 8,
         ranks: 8,
         secondaryRanks: 0,
-        skillId: "one_handed_edged"
-      }
+        skillId: "one_handed_edged",
+      },
     ];
 
     const result = spendSecondaryPoint({
@@ -944,7 +977,7 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "fencing",
-      targetType: "specialization"
+      targetType: "specialization",
     });
 
     expect(result.error).toBeUndefined();
@@ -953,8 +986,8 @@ describe("derived skill relationships in chargen drafts", () => {
         ranks: 1,
         secondaryRanks: 1,
         skillId: "one_handed_edged",
-        specializationId: "fencing"
-      })
+        specializationId: "fencing",
+      }),
     );
     expect(result.warnings).toEqual([]);
   });
@@ -965,8 +998,8 @@ describe("derived skill relationships in chargen drafts", () => {
         {
           id: "combat_group",
           name: "Combat",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -980,8 +1013,8 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["dex"],
           name: "1-h edged",
           requiresLiteracy: "no",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       specializations: [
         {
@@ -995,9 +1028,9 @@ describe("derived skill relationships in chargen drafts", () => {
             parentExcessOffset: 5,
             parentSkillId: "one_handed_edged",
             reverseFactor: 1,
-            threshold: 6
-          }
-        }
+            threshold: 6,
+          },
+        },
       ],
       professionFamilies: [],
       professions: [],
@@ -1010,7 +1043,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1019,7 +1052,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1028,7 +1061,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1037,9 +1070,9 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
     const progression = createChargenProgression();
     progression.skillGroups = [
@@ -1049,8 +1082,8 @@ describe("derived skill relationships in chargen drafts", () => {
         groupId: "combat_group",
         primaryRanks: 6,
         ranks: 6,
-        secondaryRanks: 0
-      }
+        secondaryRanks: 0,
+      },
     ];
     progression.skills = [
       {
@@ -1061,8 +1094,8 @@ describe("derived skill relationships in chargen drafts", () => {
         primaryRanks: 6,
         ranks: 6,
         secondaryRanks: 0,
-        skillId: "one_handed_edged"
-      }
+        skillId: "one_handed_edged",
+      },
     ];
     const flexibleProfile = {
       distractionLevel: 0,
@@ -1079,9 +1112,9 @@ describe("derived skill relationships in chargen drafts", () => {
         pow: 10,
         siz: 10,
         str: 10,
-        will: 10
+        will: 10,
       },
-      societyLevel: 0
+      societyLevel: 0,
     };
 
     const beforeDraft = buildChargenDraftView({
@@ -1090,16 +1123,23 @@ describe("derived skill relationships in chargen drafts", () => {
       profile: flexibleProfile,
       progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(beforeDraft.secondaryPoolAvailable).toBe(33);
-    expect(beforeDraft.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
-      secondaryRanks: 0
+    expect(
+      beforeDraft.specializations.find(
+        (specialization) => specialization.specializationId === "fencing",
+      ),
+    ).toMatchObject({
+      secondaryRanks: 0,
     });
     expect(progression.secondaryPoolSpent).toBe(0);
     expect(
-      getSecondaryPurchaseCostForSpecialization(progression, bridgePurchaseContent.specializations[0]!)
+      getSecondaryPurchaseCostForSpecialization(
+        progression,
+        bridgePurchaseContent.specializations[0]!,
+      ),
     ).toBe(4);
 
     const firstPurchase = spendSecondaryPoint({
@@ -1109,7 +1149,7 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "fencing",
-      targetType: "specialization"
+      targetType: "specialization",
     });
 
     expect(firstPurchase.error).toBeUndefined();
@@ -1122,19 +1162,23 @@ describe("derived skill relationships in chargen drafts", () => {
       profile: flexibleProfile,
       progression: firstPurchase.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(afterFirstDraft.secondaryPoolAvailable).toBe(29);
-    expect(afterFirstDraft.specializations.find((specialization) => specialization.specializationId === "fencing")).toMatchObject({
+    expect(
+      afterFirstDraft.specializations.find(
+        (specialization) => specialization.specializationId === "fencing",
+      ),
+    ).toMatchObject({
       secondaryRanks: 1,
-      effectiveSpecializationNumber: expect.any(Number)
+      effectiveSpecializationNumber: expect.any(Number),
     });
     expect(
       getSecondaryPurchaseCostForSpecialization(
         firstPurchase.progression,
-        bridgePurchaseContent.specializations[0]!
-      )
+        bridgePurchaseContent.specializations[0]!,
+      ),
     ).toBe(2);
 
     const secondPurchase = spendSecondaryPoint({
@@ -1144,7 +1188,7 @@ describe("derived skill relationships in chargen drafts", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "fencing",
-      targetType: "specialization"
+      targetType: "specialization",
     });
 
     expect(secondPurchase.error).toBeUndefined();
@@ -1156,15 +1200,17 @@ describe("derived skill relationships in chargen drafts", () => {
       profile: flexibleProfile,
       progression: {
         ...progression,
-        secondaryPoolSpent: 33
+        secondaryPoolSpent: 33,
       },
       societyId: "glantri",
       societyLevel: 1,
       targetId: "fencing",
-      targetType: "specialization"
+      targetType: "specialization",
     });
 
-    expect(exhausted.error).toBe("Not enough secondary points remaining for that specialization purchase.");
+    expect(exhausted.error).toBe(
+      "Not enough secondary points remaining for that specialization purchase.",
+    );
   });
 
   it("returns a clearer legacy specialization access message for non-bridge rows", () => {
@@ -1173,8 +1219,8 @@ describe("derived skill relationships in chargen drafts", () => {
         {
           id: "medicine_group",
           name: "Medicine",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -1189,8 +1235,8 @@ describe("derived skill relationships in chargen drafts", () => {
           linkedStats: ["int"],
           name: "Surgery Parent",
           requiresLiteracy: "no",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       specializations: [
         {
@@ -1199,8 +1245,8 @@ describe("derived skill relationships in chargen drafts", () => {
           minimumParentLevel: 6,
           name: "Surgery",
           skillId: "surgery_parent",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       professionFamilies: [],
       professions: [],
@@ -1213,7 +1259,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1222,7 +1268,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1231,7 +1277,7 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1240,9 +1286,9 @@ describe("derived skill relationships in chargen drafts", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
 
     const result = spendSecondaryPoint({
@@ -1258,18 +1304,18 @@ describe("derived skill relationships in chargen drafts", () => {
             primaryRanks: 6,
             ranks: 6,
             secondaryRanks: 0,
-            skillId: "surgery_parent"
-          }
-        ]
+            skillId: "surgery_parent",
+          },
+        ],
       },
       targetId: "surgery",
       targetType: "specialization",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(result.error).toBe(
-      "This specialization is outside the current society/profession access for its parent skill."
+      "This specialization is outside the current society/profession access for its parent skill.",
     );
   });
 });
@@ -1288,20 +1334,20 @@ const motherTongueTestContent = {
       period: "Test period",
       shortDescription: "Test civilization",
       spokenLanguageName: "Common",
-      writtenLanguageName: "Common"
-    }
+      writtenLanguageName: "Common",
+    },
   ],
   languages: [
     {
       id: "glantri_language",
       name: "Common",
-      sourceSocietyId: "glantri"
+      sourceSocietyId: "glantri",
     },
     {
       id: "old_common_language",
       name: "Old Common",
-      sourceSocietyId: "glantri"
-    }
+      sourceSocietyId: "glantri",
+    },
   ],
   societies: [
     {
@@ -1309,8 +1355,8 @@ const motherTongueTestContent = {
       id: "glantri",
       name: "Glantri",
       shortDescription: "Test society",
-      societyLevel: 1
-    }
+      societyLevel: 1,
+    },
   ],
   skills: [
     ...chargenTestContent.skills,
@@ -1328,9 +1374,9 @@ const motherTongueTestContent = {
       name: "Language",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 4
-    }
-  ]
+      sortOrder: 4,
+    },
+  ],
 };
 
 function createProgressionWithLore(): CharacterProgression {
@@ -1345,8 +1391,8 @@ function createProgressionWithLore(): CharacterProgression {
         groupId: "scholarly",
         primaryRanks: 1,
         secondaryRanks: 0,
-        ranks: 1
-      }
+        ranks: 1,
+      },
     ],
     skills: [
       {
@@ -1357,9 +1403,9 @@ function createProgressionWithLore(): CharacterProgression {
         primaryRanks: 1,
         ranks: 1,
         secondaryRanks: 0,
-        skillId: "lore"
-      }
-    ]
+        skillId: "lore",
+      },
+    ],
   };
 }
 
@@ -1370,8 +1416,8 @@ describe("chargen purchase gate integration", () => {
         {
           id: "basic_melee_training",
           name: "Basic Melee Training",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -1385,7 +1431,7 @@ describe("chargen purchase gate integration", () => {
           category: "ordinary",
           requiresLiteracy: "no",
           sortOrder: 1,
-          allowsSpecializations: false
+          allowsSpecializations: false,
         },
         {
           id: "parry",
@@ -1398,7 +1444,7 @@ describe("chargen purchase gate integration", () => {
           category: "ordinary",
           requiresLiteracy: "no",
           sortOrder: 2,
-          allowsSpecializations: false
+          allowsSpecializations: false,
         },
         {
           id: "one_h_edged",
@@ -1411,23 +1457,23 @@ describe("chargen purchase gate integration", () => {
           category: "ordinary",
           requiresLiteracy: "no",
           sortOrder: 3,
-          allowsSpecializations: false
-        }
+          allowsSpecializations: false,
+        },
       ],
       specializations: [],
       professionFamilies: [
         {
           id: "soldier",
-          name: "Soldier"
-        }
+          name: "Soldier",
+        },
       ],
       professions: [
         {
           id: "fighter",
           familyId: "soldier",
           name: "Fighter",
-          subtypeName: "Fighter"
-        }
+          subtypeName: "Fighter",
+        },
       ],
       professionSkills: [
         {
@@ -1435,8 +1481,8 @@ describe("chargen purchase gate integration", () => {
           scope: "family",
           grantType: "group",
           skillGroupId: "basic_melee_training",
-          isCore: true
-        }
+          isCore: true,
+        },
       ],
       societyLevels: [
         {
@@ -1445,7 +1491,7 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Common",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
+          skillGroupIds: ["basic_melee_training"],
         },
         {
           societyId: "glantri",
@@ -1453,7 +1499,7 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Guild",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
+          skillGroupIds: ["basic_melee_training"],
         },
         {
           societyId: "glantri",
@@ -1461,7 +1507,7 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Patrician",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
+          skillGroupIds: ["basic_melee_training"],
         },
         {
           societyId: "glantri",
@@ -1469,9 +1515,9 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Noble",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
-        }
-      ]
+          skillGroupIds: ["basic_melee_training"],
+        },
+      ],
     });
 
     const draftView = buildChargenDraftView({
@@ -1486,8 +1532,8 @@ describe("chargen purchase gate integration", () => {
             groupId: "basic_melee_training",
             primaryRanks: 1,
             secondaryRanks: 0,
-            ranks: 1
-          }
+            ranks: 1,
+          },
         ],
         skills: [
           {
@@ -1498,12 +1544,12 @@ describe("chargen purchase gate integration", () => {
             primaryRanks: 1,
             ranks: 1,
             secondaryRanks: 0,
-            skillId: "one_h_edged"
-          }
-        ]
+            skillId: "one_h_edged",
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     const dodge = draftView.skills.find((skill) => skill.skillId === "dodge");
@@ -1541,26 +1587,26 @@ describe("chargen purchase gate integration", () => {
               chooseCount: 1,
               id: "melee_choice",
               label: "Choose one melee weapon skill",
-              required: true
-            }
+              required: true,
+            },
           ],
           skillMemberships: [
             {
               relevance: "core",
-              skillId: "dodge"
+              skillId: "dodge",
             },
             {
               relevance: "core",
-              skillId: "parry"
-            }
+              skillId: "parry",
+            },
           ],
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           id: "combat_group",
           name: "Combat group",
-          sortOrder: 2
-        }
+          sortOrder: 2,
+        },
       ],
       skills: [
         {
@@ -1575,7 +1621,7 @@ describe("chargen purchase gate integration", () => {
           requiresLiteracy: "no",
           sortOrder: 1,
           allowsSpecializations: false,
-          categoryId: "combat"
+          categoryId: "combat",
         },
         {
           id: "parry",
@@ -1589,7 +1635,7 @@ describe("chargen purchase gate integration", () => {
           requiresLiteracy: "no",
           sortOrder: 2,
           allowsSpecializations: false,
-          categoryId: "combat"
+          categoryId: "combat",
         },
         {
           id: "one_h_edged",
@@ -1603,23 +1649,23 @@ describe("chargen purchase gate integration", () => {
           requiresLiteracy: "no",
           sortOrder: 3,
           allowsSpecializations: false,
-          categoryId: "combat"
-        }
+          categoryId: "combat",
+        },
       ],
       specializations: [],
       professionFamilies: [
         {
           id: "soldier",
-          name: "Soldier"
-        }
+          name: "Soldier",
+        },
       ],
       professions: [
         {
           id: "fighter",
           familyId: "soldier",
           name: "Fighter",
-          subtypeName: "Fighter"
-        }
+          subtypeName: "Fighter",
+        },
       ],
       professionSkills: [
         {
@@ -1627,8 +1673,8 @@ describe("chargen purchase gate integration", () => {
           scope: "family",
           grantType: "group",
           skillGroupId: "basic_melee_training",
-          isCore: true
-        }
+          isCore: true,
+        },
       ],
       societyLevels: [
         {
@@ -1637,7 +1683,7 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Common",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
+          skillGroupIds: ["basic_melee_training"],
         },
         {
           societyId: "glantri",
@@ -1645,7 +1691,7 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Guild",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
+          skillGroupIds: ["basic_melee_training"],
         },
         {
           societyId: "glantri",
@@ -1653,7 +1699,7 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Patrician",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
+          skillGroupIds: ["basic_melee_training"],
         },
         {
           societyId: "glantri",
@@ -1661,9 +1707,9 @@ describe("chargen purchase gate integration", () => {
           societyName: "Glantri",
           socialClass: "Noble",
           professionIds: ["fighter"],
-          skillGroupIds: ["basic_melee_training"]
-        }
-      ]
+          skillGroupIds: ["basic_melee_training"],
+        },
+      ],
     });
 
     const draftView = buildChargenDraftView({
@@ -1676,11 +1722,11 @@ describe("chargen purchase gate integration", () => {
             {
               groupId: "basic_melee_training",
               selectedSkillIds: ["one_h_edged"],
-              slotId: "melee_choice"
-            }
+              slotId: "melee_choice",
+            },
           ],
           selectedLanguageIds: [],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -1689,18 +1735,18 @@ describe("chargen purchase gate integration", () => {
             groupId: "basic_melee_training",
             primaryRanks: 1,
             secondaryRanks: 0,
-            ranks: 1
-          }
+            ranks: 1,
+          },
         ],
-        skills: []
+        skills: [],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "one_h_edged")).toMatchObject({
       name: "1-h edged",
-      specificSkillLevel: 0
+      specificSkillLevel: 0,
     });
   });
 
@@ -1717,26 +1763,26 @@ describe("chargen purchase gate integration", () => {
                 chooseCount: 1,
                 id: "melee_choice",
                 label: "Choose one melee weapon skill",
-                required: true
-              }
+                required: true,
+              },
             ],
             skillMemberships: [
               {
                 relevance: "core",
-                skillId: "dodge"
+                skillId: "dodge",
               },
               {
                 relevance: "core",
-                skillId: "parry"
-              }
+                skillId: "parry",
+              },
             ],
-            sortOrder: 1
+            sortOrder: 1,
           },
           {
             id: "combat_group",
             name: "Combat group",
-            sortOrder: 2
-          }
+            sortOrder: 2,
+          },
         ],
         skills: [
           {
@@ -1751,7 +1797,7 @@ describe("chargen purchase gate integration", () => {
             requiresLiteracy: "no",
             sortOrder: 1,
             allowsSpecializations: false,
-            categoryId: "combat"
+            categoryId: "combat",
           },
           {
             id: "parry",
@@ -1765,7 +1811,7 @@ describe("chargen purchase gate integration", () => {
             requiresLiteracy: "no",
             sortOrder: 2,
             allowsSpecializations: false,
-            categoryId: "combat"
+            categoryId: "combat",
           },
           {
             id: "one_h_edged",
@@ -1779,23 +1825,23 @@ describe("chargen purchase gate integration", () => {
             requiresLiteracy: "no",
             sortOrder: 3,
             allowsSpecializations: false,
-            categoryId: "combat"
-          }
+            categoryId: "combat",
+          },
         ],
         specializations: [],
         professionFamilies: [
           {
             id: "soldier",
-            name: "Soldier"
-          }
+            name: "Soldier",
+          },
         ],
         professions: [
           {
             id: "fighter",
             familyId: "soldier",
             name: "Fighter",
-            subtypeName: "Fighter"
-          }
+            subtypeName: "Fighter",
+          },
         ],
         professionSkills: [
           {
@@ -1803,8 +1849,8 @@ describe("chargen purchase gate integration", () => {
             scope: "family",
             grantType: "group",
             skillGroupId: "basic_melee_training",
-            isCore: true
-          }
+            isCore: true,
+          },
         ],
         societyLevels: [
           {
@@ -1813,7 +1859,7 @@ describe("chargen purchase gate integration", () => {
             societyName: "Glantri",
             socialClass: "Common",
             professionIds: ["fighter"],
-            skillGroupIds: ["basic_melee_training"]
+            skillGroupIds: ["basic_melee_training"],
           },
           {
             societyId: "glantri",
@@ -1821,7 +1867,7 @@ describe("chargen purchase gate integration", () => {
             societyName: "Glantri",
             socialClass: "Guild",
             professionIds: ["fighter"],
-            skillGroupIds: ["basic_melee_training"]
+            skillGroupIds: ["basic_melee_training"],
           },
           {
             societyId: "glantri",
@@ -1829,7 +1875,7 @@ describe("chargen purchase gate integration", () => {
             societyName: "Glantri",
             socialClass: "Patrician",
             professionIds: ["fighter"],
-            skillGroupIds: ["basic_melee_training"]
+            skillGroupIds: ["basic_melee_training"],
           },
           {
             societyId: "glantri",
@@ -1837,9 +1883,9 @@ describe("chargen purchase gate integration", () => {
             societyName: "Glantri",
             socialClass: "Noble",
             professionIds: ["fighter"],
-            skillGroupIds: ["basic_melee_training"]
-          }
-        ]
+            skillGroupIds: ["basic_melee_training"],
+          },
+        ],
       }),
       professionId: "fighter",
       profile: {
@@ -1857,9 +1903,9 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         ...createChargenProgression(),
@@ -1870,13 +1916,13 @@ describe("chargen purchase gate integration", () => {
             groupId: "basic_melee_training",
             primaryRanks: 1,
             secondaryRanks: 0,
-            ranks: 1
-          }
-        ]
+            ranks: 1,
+          },
+        ],
       },
       socialClass: "Common",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(review.canFinalize).toBe(false);
@@ -1891,7 +1937,7 @@ describe("chargen purchase gate integration", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "archives",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(result.error).toBe("Archives requires Literacy.");
@@ -1905,7 +1951,7 @@ describe("chargen purchase gate integration", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "codes",
-      targetType: "specialization"
+      targetType: "specialization",
     });
 
     expect(result.error).toBe("Lore does not allow specializations like Codes.");
@@ -1931,14 +1977,14 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: createChargenProgression(),
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const languageView = draftView.skills.find((skill) => skill.skillId === "language");
 
@@ -1952,13 +1998,13 @@ describe("chargen purchase gate integration", () => {
     const educationContent = validateCanonicalContent({
       ...motherTongueTestContent,
       skills: motherTongueTestContent.skills.map((skill) =>
-        skill.id === "lore" ? { ...skill, isTheoretical: true } : skill
+        skill.id === "lore" ? { ...skill, isTheoretical: true } : skill,
       ),
       societyLevels: motherTongueTestContent.societyLevels.map((societyLevel) =>
         societyLevel.societyId === "glantri" && societyLevel.societyLevel === 1
           ? { ...societyLevel, baseEducation: 3 }
-          : societyLevel
-      )
+          : societyLevel,
+      ),
     });
     const draftView = buildChargenDraftView({
       civilizationId: "glantri_civ",
@@ -1978,10 +2024,10 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         ...createChargenProgression(),
@@ -1995,12 +2041,12 @@ describe("chargen purchase gate integration", () => {
             primaryRanks: 1,
             ranks: 1,
             secondaryRanks: 0,
-            skillId: "lore"
-          }
-        ]
+            skillId: "lore",
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(draftView.education.baseEducation).toBe(3);
@@ -2008,7 +2054,7 @@ describe("chargen purchase gate integration", () => {
     expect(
       draftView.education.theoreticalSkillCount -
         draftView.education.baseEducation -
-        draftView.education.socialClassEducationValue
+        draftView.education.socialClassEducationValue,
     ).toBe(1);
     expect(draftView.education.theoreticalSkillCount).toBe(16);
   });
@@ -2033,10 +2079,10 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: createChargenProgression(),
       ruleSet: {
@@ -2046,14 +2092,16 @@ describe("chargen purchase gate integration", () => {
           exchangeCount: 2,
           flexiblePointFactor: 1,
           ordinarySkillPoints: 60,
-          statRollCount: 20
-        }
+          statRollCount: 20,
+        },
       },
       socialClass: "Common",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
-    const motherTongueSkill = result.build?.progression.skills.find((skill) => skill.skillId === "language");
+    const motherTongueSkill = result.build?.progression.skills.find(
+      (skill) => skill.skillId === "language",
+    );
 
     expect(result.errors).toEqual([]);
     expect(motherTongueSkill?.category).toBe("ordinary");
@@ -2066,7 +2114,7 @@ describe("chargen purchase gate integration", () => {
     expect(result.build?.chargenRuleSet).toMatchObject({
       id: "chargen-rule-standard",
       name: "Standard chargen",
-      ordinarySkillPoints: 60
+      ordinarySkillPoints: 60,
     });
   });
 
@@ -2089,21 +2137,21 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         ...createChargenProgression(),
         chargenSelections: {
           selectedLanguageIds: ["old_common_language"],
           selectedGroupSlots: [],
-          selectedSkillIds: []
-        }
+          selectedSkillIds: [],
+        },
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2112,19 +2160,19 @@ describe("chargen purchase gate integration", () => {
         .map((skill) => ({
           languageName: skill.languageName,
           sourceTag: skill.sourceTag,
-          specificSkillLevel: skill.specificSkillLevel
-        }))
+          specificSkillLevel: skill.specificSkillLevel,
+        })),
     ).toEqual([
       {
         languageName: "Common",
         sourceTag: "mother-tongue",
-        specificSkillLevel: 12
+        specificSkillLevel: 12,
       },
       {
         languageName: "Old Common",
         sourceTag: undefined,
-        specificSkillLevel: 0
-      }
+        specificSkillLevel: 0,
+      },
     ]);
   });
 
@@ -2147,10 +2195,10 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         ...createChargenProgression(),
@@ -2164,12 +2212,12 @@ describe("chargen purchase gate integration", () => {
             primaryRanks: 0,
             ranks: 2,
             secondaryRanks: 0,
-            skillId: "language"
-          }
-        ]
+            skillId: "language",
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2179,21 +2227,21 @@ describe("chargen purchase gate integration", () => {
           languageName: skill.languageName,
           skillKey: skill.skillKey,
           sourceTag: skill.sourceTag,
-          specificSkillLevel: skill.specificSkillLevel
-        }))
+          specificSkillLevel: skill.specificSkillLevel,
+        })),
     ).toEqual([
       {
         languageName: "Common",
         skillKey: "language::language:Common",
         sourceTag: "mother-tongue",
-        specificSkillLevel: 12
+        specificSkillLevel: 12,
       },
       {
         languageName: "Phoenician",
         skillKey: "language::language:Phoenician",
         sourceTag: undefined,
-        specificSkillLevel: 2
-      }
+        specificSkillLevel: 2,
+      },
     ]);
   });
 
@@ -2216,10 +2264,10 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         ...createChargenProgression(),
@@ -2232,12 +2280,12 @@ describe("chargen purchase gate integration", () => {
             primaryRanks: 2,
             ranks: 2,
             secondaryRanks: 0,
-            skillId: "language"
-          }
-        ]
+            skillId: "language",
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2246,14 +2294,14 @@ describe("chargen purchase gate integration", () => {
         .map((skill) => ({
           languageName: skill.languageName,
           sourceTag: skill.sourceTag,
-          specificSkillLevel: skill.specificSkillLevel
-        }))
+          specificSkillLevel: skill.specificSkillLevel,
+        })),
     ).toEqual([
       {
         languageName: "Common",
         sourceTag: "mother-tongue",
-        specificSkillLevel: 14
-      }
+        specificSkillLevel: 14,
+      },
     ]);
   });
 
@@ -2267,17 +2315,17 @@ describe("chargen purchase gate integration", () => {
           name: "Specific Language Specialization",
           minimumGroupLevel: 1,
           minimumParentLevel: 1,
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: motherTongueTestContent.skills.map((skill) =>
         skill.id === "language"
           ? {
               ...skill,
-              allowsSpecializations: true
+              allowsSpecializations: true,
             }
-          : skill
-      )
+          : skill,
+      ),
     };
 
     const draftView = buildChargenDraftView({
@@ -2299,10 +2347,10 @@ describe("chargen purchase gate integration", () => {
           pow: 10,
           siz: 10,
           str: 10,
-          will: 10
+          will: 10,
         },
         socialClassEducationValue: 12,
-        societyLevel: 0
+        societyLevel: 0,
       },
       progression: {
         ...createChargenProgression(),
@@ -2312,8 +2360,8 @@ describe("chargen purchase gate integration", () => {
             ranks: 1,
             secondaryRanks: 1,
             skillId: "language",
-            specializationId: "specific_language_specialization"
-          }
+            specializationId: "specific_language_specialization",
+          },
         ],
         skills: [
           {
@@ -2326,25 +2374,25 @@ describe("chargen purchase gate integration", () => {
             ranks: 0,
             secondaryRanks: 0,
             skillId: "language",
-            sourceTag: "mother-tongue"
-          }
-        ]
+            sourceTag: "mother-tongue",
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     expect(
       draftView.skills
         .filter((skill) => skill.skillId === "language")
         .map((skill) => ({
           languageName: skill.languageName,
-          sourceTag: skill.sourceTag
-        }))
+          sourceTag: skill.sourceTag,
+        })),
     ).toEqual([
       {
         languageName: "Common",
-        sourceTag: "mother-tongue"
-      }
+        sourceTag: "mother-tongue",
+      },
     ]);
     expect(draftView.specializations).toEqual([]);
   });
@@ -2361,11 +2409,11 @@ describe("chargen purchase gate integration", () => {
               chooseCount: 3,
               id: "advanced_melee_weapons",
               label: "Choose three melee weapon skills",
-              required: true
-            }
+              required: true,
+            },
           ],
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -2379,7 +2427,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Sword",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -2392,7 +2440,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Axe",
           requiresLiteracy: "no",
-          sortOrder: 2
+          sortOrder: 2,
         },
         {
           allowsSpecializations: false,
@@ -2405,20 +2453,22 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Spear",
           requiresLiteracy: "no",
-          sortOrder: 3
-        }
+          sortOrder: 3,
+        },
       ],
       specializations: [],
       professionFamilies: [{ id: "warrior", name: "Warrior" }],
-      professions: [{ familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" }],
+      professions: [
+        { familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" },
+      ],
       professionSkills: [
         {
           grantType: "group",
           isCore: true,
           professionId: "warrior",
           scope: "family",
-          skillGroupId: "advanced_melee_training"
-        }
+          skillGroupId: "advanced_melee_training",
+        },
       ],
       societyLevels: [
         {
@@ -2428,7 +2478,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2437,7 +2487,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2446,7 +2496,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2455,9 +2505,9 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
 
     const draftView = buildChargenDraftView({
@@ -2471,10 +2521,10 @@ describe("chargen purchase gate integration", () => {
             {
               groupId: "advanced_melee_training",
               selectedSkillIds: ["sword", "axe", "spear"],
-              slotId: "advanced_melee_weapons"
-            }
+              slotId: "advanced_melee_weapons",
+            },
           ],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -2483,15 +2533,19 @@ describe("chargen purchase gate integration", () => {
             groupId: "advanced_melee_training",
             primaryRanks: 1,
             secondaryRanks: 0,
-            ranks: 1
-          }
-        ]
+            ranks: 1,
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
-    expect(draftView.skills.map((skill) => skill.skillId).sort()).toEqual(["axe", "spear", "sword"]);
+    expect(draftView.skills.map((skill) => skill.skillId).sort()).toEqual([
+      "axe",
+      "spear",
+      "sword",
+    ]);
   });
 
   it("only grants combat group XP to fixed skills plus selected slot skills", () => {
@@ -2506,16 +2560,16 @@ describe("chargen purchase gate integration", () => {
               chooseCount: 3,
               id: "advanced_melee_weapons",
               label: "Choose three melee weapon skills",
-              required: true
-            }
+              required: true,
+            },
           ],
           skillMemberships: [
             { relevance: "core", skillId: "dodge" },
             { relevance: "core", skillId: "parry" },
-            { relevance: "core", skillId: "brawling" }
+            { relevance: "core", skillId: "brawling" },
           ],
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -2529,7 +2583,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Dodge",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -2542,7 +2596,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Parry",
           requiresLiteracy: "no",
-          sortOrder: 2
+          sortOrder: 2,
         },
         {
           allowsSpecializations: false,
@@ -2555,7 +2609,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["str"],
           name: "Brawling",
           requiresLiteracy: "no",
-          sortOrder: 3
+          sortOrder: 3,
         },
         {
           allowsSpecializations: false,
@@ -2568,7 +2622,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Sword",
           requiresLiteracy: "no",
-          sortOrder: 4
+          sortOrder: 4,
         },
         {
           allowsSpecializations: false,
@@ -2581,7 +2635,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Axe",
           requiresLiteracy: "no",
-          sortOrder: 5
+          sortOrder: 5,
         },
         {
           allowsSpecializations: false,
@@ -2594,7 +2648,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Spear",
           requiresLiteracy: "no",
-          sortOrder: 6
+          sortOrder: 6,
         },
         {
           allowsSpecializations: false,
@@ -2607,20 +2661,22 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Mace",
           requiresLiteracy: "no",
-          sortOrder: 7
-        }
+          sortOrder: 7,
+        },
       ],
       specializations: [],
       professionFamilies: [{ id: "warrior", name: "Warrior" }],
-      professions: [{ familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" }],
+      professions: [
+        { familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" },
+      ],
       professionSkills: [
         {
           grantType: "group",
           isCore: true,
           professionId: "warrior",
           scope: "family",
-          skillGroupId: "advanced_melee_training"
-        }
+          skillGroupId: "advanced_melee_training",
+        },
       ],
       societyLevels: [
         {
@@ -2630,7 +2686,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2639,7 +2695,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2648,7 +2704,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2657,9 +2713,9 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
 
     const draftView = buildChargenDraftView({
@@ -2673,10 +2729,10 @@ describe("chargen purchase gate integration", () => {
             {
               groupId: "advanced_melee_training",
               selectedSkillIds: ["sword", "axe", "spear"],
-              slotId: "advanced_melee_weapons"
-            }
+              slotId: "advanced_melee_weapons",
+            },
           ],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -2685,32 +2741,34 @@ describe("chargen purchase gate integration", () => {
             groupId: "advanced_melee_training",
             primaryRanks: 2,
             secondaryRanks: 0,
-            ranks: 2
-          }
-        ]
+            ranks: 2,
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
-    const meleeGroup = draftView.groups.find((group) => group.groupId === "advanced_melee_training");
+    const meleeGroup = draftView.groups.find(
+      (group) => group.groupId === "advanced_melee_training",
+    );
 
     expect(
       draftView.skills
         .filter((skill) =>
-          ["dodge", "parry", "brawling", "sword", "axe", "spear"].includes(skill.skillId)
+          ["dodge", "parry", "brawling", "sword", "axe", "spear"].includes(skill.skillId),
         )
         .map((skill) => ({
           effectiveSkillNumber: skill.effectiveSkillNumber,
-          skillId: skill.skillId
+          skillId: skill.skillId,
         }))
-        .sort((left, right) => left.skillId.localeCompare(right.skillId))
+        .sort((left, right) => left.skillId.localeCompare(right.skillId)),
     ).toEqual([
       { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "axe" },
       { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "brawling" },
       { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "dodge" },
       { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "parry" },
       { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "spear" },
-      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "sword" }
+      { effectiveSkillNumber: meleeGroup?.groupLevel ?? 0, skillId: "sword" },
     ]);
     expect(draftView.skills.find((skill) => skill.skillId === "mace")).toBeUndefined();
   });
@@ -2724,10 +2782,10 @@ describe("chargen purchase gate integration", () => {
           {
             groupId: "advanced_melee_training",
             selectedSkillIds: ["one_handed_edged", "two_handed_edged", "polearms"],
-            slotId: "advanced_melee_weapon_choices"
-          }
+            slotId: "advanced_melee_weapon_choices",
+          },
         ],
-        selectedSkillIds: []
+        selectedSkillIds: [],
       },
       skillGroups: [
         {
@@ -2736,22 +2794,22 @@ describe("chargen purchase gate integration", () => {
           groupId: "advanced_melee_training",
           primaryRanks: 11,
           ranks: 11,
-          secondaryRanks: 0
-        }
-      ]
+          secondaryRanks: 0,
+        },
+      ],
     };
     const draftView = buildChargenDraftView({
       content: defaultCanonicalContent,
       professionId: "bodyguard",
       progression,
       societyId: "glantri",
-      societyLevel: 4
+      societyLevel: 4,
     });
-    const selectedWeaponRows = ["one_handed_edged", "two_handed_edged", "polearms"].map(
-      (skillId) => draftView.skills.find((skill) => skill.skillId === skillId)
+    const selectedWeaponRows = ["one_handed_edged", "two_handed_edged", "polearms"].map((skillId) =>
+      draftView.skills.find((skill) => skill.skillId === skillId),
     );
     const unselectedRelatedRow = draftView.skills.find(
-      (skill) => skill.skillId === "one_handed_concussion_axe"
+      (skill) => skill.skillId === "one_handed_concussion_axe",
     );
 
     expect(selectedWeaponRows).toEqual(
@@ -2761,29 +2819,29 @@ describe("chargen purchase gate integration", () => {
           groupLevel: 11,
           relationshipGrantedPreviewLevel: 0,
           relationshipGrantedSkillLevel: 0,
-          skillId: "one_handed_edged"
+          skillId: "one_handed_edged",
         }),
         expect.objectContaining({
           effectiveSkillNumber: 11,
           groupLevel: 11,
           relationshipGrantedPreviewLevel: 0,
           relationshipGrantedSkillLevel: 0,
-          skillId: "two_handed_edged"
+          skillId: "two_handed_edged",
         }),
         expect.objectContaining({
           effectiveSkillNumber: 11,
           groupLevel: 11,
           relationshipGrantedPreviewLevel: 0,
           relationshipGrantedSkillLevel: 0,
-          skillId: "polearms"
-        })
-      ])
+          skillId: "polearms",
+        }),
+      ]),
     );
     expect(unselectedRelatedRow).toMatchObject({
       groupLevel: 0,
       relationshipGrantedPreviewLevel: 8,
       relationshipGrantedSkillLevel: 8,
-      relationshipSourceType: "melee-cross-training"
+      relationshipSourceType: "melee-cross-training",
     });
   });
 
@@ -2799,12 +2857,12 @@ describe("chargen purchase gate integration", () => {
               chooseCount: 3,
               id: "advanced_melee_weapons",
               label: "Choose three melee weapon skills",
-              required: true
-            }
+              required: true,
+            },
           ],
           skillMemberships: [{ relevance: "core", skillId: "dodge" }],
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -2818,7 +2876,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Dodge",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -2831,7 +2889,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Sword",
           requiresLiteracy: "no",
-          sortOrder: 2
+          sortOrder: 2,
         },
         {
           allowsSpecializations: false,
@@ -2844,7 +2902,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Axe",
           requiresLiteracy: "no",
-          sortOrder: 3
+          sortOrder: 3,
         },
         {
           allowsSpecializations: false,
@@ -2857,7 +2915,7 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Spear",
           requiresLiteracy: "no",
-          sortOrder: 4
+          sortOrder: 4,
         },
         {
           allowsSpecializations: false,
@@ -2870,20 +2928,22 @@ describe("chargen purchase gate integration", () => {
           linkedStats: ["dex"],
           name: "Mace",
           requiresLiteracy: "no",
-          sortOrder: 5
-        }
+          sortOrder: 5,
+        },
       ],
       specializations: [],
       professionFamilies: [{ id: "warrior", name: "Warrior" }],
-      professions: [{ familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" }],
+      professions: [
+        { familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" },
+      ],
       professionSkills: [
         {
           grantType: "group",
           isCore: true,
           professionId: "warrior",
           scope: "family",
-          skillGroupId: "advanced_melee_training"
-        }
+          skillGroupId: "advanced_melee_training",
+        },
       ],
       societyLevels: [
         {
@@ -2893,7 +2953,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2902,7 +2962,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2911,7 +2971,7 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["captain"],
@@ -2920,9 +2980,9 @@ describe("chargen purchase gate integration", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
 
     const draftView = buildChargenDraftView({
@@ -2936,10 +2996,10 @@ describe("chargen purchase gate integration", () => {
             {
               groupId: "advanced_melee_training",
               selectedSkillIds: ["sword", "axe", "spear", "mace"],
-              slotId: "advanced_melee_weapons"
-            }
+              slotId: "advanced_melee_weapons",
+            },
           ],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -2948,19 +3008,19 @@ describe("chargen purchase gate integration", () => {
             groupId: "advanced_melee_training",
             primaryRanks: 2,
             secondaryRanks: 0,
-            ranks: 2
-          }
-        ]
+            ranks: 2,
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "mace")).toBeUndefined();
     expect(
       draftView.skills
         .map((skill) => skill.skillId)
-        .sort((left, right) => left.localeCompare(right))
+        .sort((left, right) => left.localeCompare(right)),
     ).toEqual(["axe", "dodge", "spear", "sword"]);
   });
 });
