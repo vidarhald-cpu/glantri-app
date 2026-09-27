@@ -25,7 +25,7 @@
     "groupOpportunities": 272,
     "directSkillOpportunities": 106,
     "directSpecializationOpportunities": 14,
-    "digest": "sha256:3ba5d13ae4f423d6646d5e4ed2013f1367e94e05dfd7be4e4355a3a454ffcb39"
+    "digest": "sha256:7ebabe692d142a7a09ddec01bb848847334a7679f5961e034f410ce600461656"
   },
   "coverage": {
     "baseSkills": 131,
@@ -1976,7 +1976,7 @@
     {
       "id": "C02",
       "name": "Master artisan practice",
-      "shortDescription": "Guild- or master-level practice across several crafts, with apprentices of one's own.",
+      "shortDescription": "Guild- or master-level practice in one taught craft, with apprentices of one's own.",
       "disposition": "new",
       "fixedSkillIds": ["skill:appraisal", "skill:bargaining", "skill:teaching"],
       "selectionSlots": [
