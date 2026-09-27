@@ -144,6 +144,50 @@ no bridge.
   explanation is not acceptable. The recorded spend sequence above is a
   **regression check** on this record, not a defect reproduction.
 
+  **Correction, 2026-09-27 (post-PR #385) — the mechanism attribution above is
+  retired, not the ruling.** This record is corrected in place rather than
+  silently rewritten, following the convention already used above for
+  `specializationBridge` and for the Specialization-access-only Group price: the
+  superseded sentence is left standing just above, and this paragraph states
+  what governs instead, under the **same** 2026-09-27 Product Owner ruling — this
+  is the record catching up to the ruling it already cites, not a new decision.
+
+  The phrase "overlapping training has reduced the net cost" named the wrong
+  mechanism. "Overlapping training does not stack"
+  ([`docs/rules/competency-rules.md`](../../rules/competency-rules.md)) governs
+  **one Skill taught by several Learning Groups**, and it produces a **zero-cost
+  single purchase** — the case ruled separately under "Specialization-access-only
+  Learning Groups" below and under Ruling item 3 above (`ceil` of a bundle that
+  gains no useful competence prices at `0`). It never produces a cost
+  *reduction*: there is no bundle it reprices downward while other training
+  stays fixed. Every reachable cost reduction under this record instead comes
+  from a **different rule** — relationship floors between **different** Skills,
+  exactly the `weapon-instructor`/`F35`/`G08` mechanism in the example above.
+
+  **Do not broaden "overlapping training does not stack" to cover relationship
+  effects; they are different rules.** The non-stacking rule keeps its own
+  separate zero-cost wording and must not be unified with the relationship-floor
+  explanation below merely for narrative economy — doing so is exactly how the
+  defect that this correction fixes was reintroduced once already, and a future
+  reader must not repeat it.
+
+  The presentation requirement stands, corrected: Chargen keeps the **before and
+  after build cost visible**, and a bare "added training, points spent went
+  down" without explanation remains unacceptable. The explanation reads, for a
+  reduction, in terms of the training also improving related skills, so points
+  previously needed elsewhere are no longer needed; and, for the mirror increase
+  on removal, in terms of removing benefits to related skills, so more points
+  are needed elsewhere. No rules-engine terminology is exposed to the player.
+  The shipped strings
+  (`apps/web/src/features/chargen/components/TrainingCostChangeNotice.tsx:42-43`)
+  are the canonical player-facing wording and are checkably in agreement with
+  this record:
+
+  - reduction: "This training also improves related skills, so some points
+    previously needed elsewhere are no longer needed."
+  - increase (mirror, on removal): "Removing this training also removes its
+    benefit to related skills, so more points are needed elsewhere."
+
 - Draft acquisition state is not migrated. Development data is draft and
   non-durable. Any further allocation or removal recomputes the recorded pool
   spend under the corrected rules; a draft that is never touched again and is
