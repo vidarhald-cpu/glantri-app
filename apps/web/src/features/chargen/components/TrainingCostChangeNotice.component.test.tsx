@@ -10,9 +10,14 @@ import { TrainingCostChangeNotice } from "./TrainingCostChangeNotice";
  * training, points spent went down". This covers the wording, because the F35/G08 case is not
  * reachable through the Chargen browser surface — those Learning Groups exist only in the
  * `/skills` content projection, not in the one Chargen consumes.
+ *
+ * The explanation must describe training carrying over to related Skills, not the separate rule
+ * that makes a single rank free because stronger training already teaches the same Skill
+ * (Product Owner ruling, 2026-09-27, on #385-QA-5). The free-rank wording lives in
+ * `SkillAllocationStep.tsx` and is correct where it stands.
  */
 describe("TrainingCostChangeNotice", () => {
-  it("shows the before and after cost and explains a reduction as overlapping training", () => {
+  it("shows the before and after cost and explains a reduction as benefit to related skills", () => {
     render(
       <TrainingCostChangeNotice
         change={{ previousTotal: 16, shift: "reduced-by-overlap", total: 15 }}
@@ -23,7 +28,7 @@ describe("TrainingCostChangeNotice", () => {
 
     expect(notice).toHaveTextContent("Training cost went down: 16 → 15 ordinary points.");
     expect(notice).toHaveTextContent(
-      "Overlapping training does not stack. The new training covers ground the earlier training was already priced for, so this build costs less than before.",
+      "This training also improves related skills, so some points previously needed elsewhere are no longer needed.",
     );
   });
 
@@ -38,7 +43,7 @@ describe("TrainingCostChangeNotice", () => {
 
     expect(notice).toHaveTextContent("Training cost went up: 15 → 16 ordinary points.");
     expect(notice).toHaveTextContent(
-      "Overlapping training does not stack. With that training gone there is less overlap left, so the rest of this build costs more than before.",
+      "Removing this training also removes its benefit to related skills, so more points are needed elsewhere.",
     );
   });
 

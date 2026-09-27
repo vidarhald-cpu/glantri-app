@@ -274,6 +274,44 @@ and in [further environment traps](#further-environment-traps--recorded-2026-09-
 Most reported extra failures so far have been environment shortfalls or a stale
 baseline, not product defects.
 
+## Which competency catalogue a Chargen reproduction must use — recorded 2026-09-27
+
+**A reproduction is only meaningful against the catalogue the consumer actually
+loads.** Two competency catalogues currently exist and they disagree about which
+Learning Groups exist, so a Chargen test or reproduction that builds the wrong
+one proves nothing about the player-facing surface.
+
+- Chargen loads
+  `withCompetencyContentV2(buildTargetRuntimeContent(createTargetCompetencyChargenSource(...)))`
+  — `apps/web/src/features/chargen/useChargenWizardState.tsx:179`, from the source
+  seeded at `:126` — which yields **95 Learning Groups**.
+- `getApprovedTargetChargenContent()` yields **59**, and is retained _"solely for
+  /skills until #252"_ (`packages/content/src/targetCompetencies.ts:406`).
+- **`F35`, `G08` and `G13` exist only in the 59-group catalogue.** Verified by
+  building both catalogues: the 95-group catalogue reports
+  `F35=false G08=false G13=false`, while `F30` and `F24` exist in both.
+
+Therefore a reproduction or acceptance claim about **player-facing Chargen
+behaviour** must be built on the 95-group construction. A rules-layer regression
+test may legitimately use the 59-group catalogue where the case exists only there
+— `packages/rules-engine/src/chargen/overlappingLearningGroupPricing.test.ts`
+does, deliberately, because the ruled `[6, 11, 16, 16, 15, 15]` sequence is not
+reachable in the other one — **but it must not be read as evidence about the
+player-facing surface.**
+
+### The withdrawn F35/G08 browser acceptance case — recorded 2026-09-27
+
+The real-browser `F35`/`G08` acceptance case required by the 2026-09-27 ruling
+**has been withdrawn by Product Owner ruling**, because those Learning Groups are
+absent from the V2 Chargen projection and the case is therefore not reachable
+through the browser surface. **Synthetic runtime content must not be added to
+manufacture it.** Component coverage of the before/after training-cost notice
+(`apps/web/src/features/chargen/components/TrainingCostChangeNotice.component.test.tsx`)
+together with the exhaustive proof against the actual Chargen catalogue is
+sufficient until a canonical V2 path makes the behaviour reachable. Chargen's own
+strongest reachable overlap case stays covered in the browser by
+`apps/web/e2e/chargen-overlapping-training-cost.spec.ts`.
+
 ## Selecting independent-QA regression breadth
 
 The compact QA procedure is `docs/process/qa-execution.md`. INITIAL QA selects

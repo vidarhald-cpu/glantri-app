@@ -8,8 +8,11 @@ export interface TrainingCostChange {
 
 /**
  * Shown when a Learning Group training change moved this build's training cost the opposite
- * way to the training itself. Rule decision 0011 makes that canonical: overlapping training
- * does not stack, so new training can supply competence earlier training was priced for.
+ * way to the training itself. Every such movement comes from the way training in one Skill
+ * carries over to related Skills, so the points needed elsewhere in the build change with it
+ * (canonical rule 2; rule decision 0011). This is a different rule from the one that makes a
+ * single rank free because stronger training already teaches the same Skill, and the wording
+ * here must not be read as citing that one (Product Owner ruling, 2026-09-27, on #385-QA-5).
  *
  * The visible result must never be simply "added training, points spent went down", so this
  * carries the before and after cost together with the reason (Product Owner ruling,
@@ -36,8 +39,8 @@ export function TrainingCostChangeNotice({ change }: { change: TrainingCostChang
         &rarr; {change.total} ordinary points.
       </strong>{" "}
       {reduced
-        ? "Overlapping training does not stack. The new training covers ground the earlier training was already priced for, so this build costs less than before."
-        : "Overlapping training does not stack. With that training gone there is less overlap left, so the rest of this build costs more than before."}
+        ? "This training also improves related skills, so some points previously needed elsewhere are no longer needed."
+        : "Removing this training also removes its benefit to related skills, so more points are needed elsewhere."}
     </div>
   );
 }
