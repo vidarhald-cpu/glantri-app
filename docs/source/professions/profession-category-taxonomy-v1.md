@@ -2,7 +2,7 @@
 
 **Status:** approved by the Product Owner on 2026-09-27 as the **approved
 player-facing browsing taxonomy for Forgejo #372**. See [rule decision
-0011](../../decisions/rules/0011-profession-browsing-taxonomy-approval.md).
+0012](../../decisions/rules/0012-profession-browsing-taxonomy-approval.md).
 This is a presentation/browsing layer only: it carries no cost, level, XP,
 progression, eligibility, or acquisition rule, and it is not yet wired to any
 runtime, gate, or test.
@@ -277,7 +277,7 @@ receives **Guarding and Arms Training**, becoming 8 + 3 = 11. The corrected
 This ruling does not re-author any category name, scope statement, or family
 placement. The roster in §§1-4 stands exactly as authored, now as approved
 content. See [rule decision
-0011](../../decisions/rules/0011-profession-browsing-taxonomy-approval.md)
+0012](../../decisions/rules/0012-profession-browsing-taxonomy-approval.md)
 for the complete record.
 
 ## 6. Verification performed

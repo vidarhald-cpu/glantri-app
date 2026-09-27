@@ -1,4 +1,4 @@
-# Rule decision 0011: Profession browsing taxonomy approval
+# Rule decision 0012: Profession browsing taxonomy approval
 
 - Status: approved
 - Date: 2026-09-27

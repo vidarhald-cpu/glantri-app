@@ -17,4 +17,4 @@ taxonomy that previously appeared in this table was approved by the Product
 Owner on 2026-09-27 and moved to
 [`../profession-category-taxonomy-v1.md`](../profession-category-taxonomy-v1.md);
 see [rule decision
-0011](../../../decisions/rules/0011-profession-browsing-taxonomy-approval.md).
+0012](../../../decisions/rules/0012-profession-browsing-taxonomy-approval.md).
