@@ -1,5 +1,8 @@
 import { TargetGroupDetails } from "../components/TargetPackageDetails";
-import { allocateChargenPoint } from "@glantri/rules-engine";
+import {
+  allocateChargenPoint,
+  isSpecializationAccessOnlyChargenGroup,
+} from "@glantri/rules-engine";
 import { mergeSkillBrowseRowsBySkillId } from "@/lib/chargen/chargenBrowse";
 import {
   getBadgeStyle,
@@ -28,6 +31,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     coreProfessionSections,
     draftView,
     expandedAllocationSections,
+    groupTrainingCostChange,
     handleAllocate,
     handleAllocateSpecialization,
     handleRemoveAllocation,
@@ -127,9 +131,32 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
           >
             <strong style={{ fontSize: "0.9rem" }}>Ordinary points</strong>
             <div>
-              Ordinary spent {progression.primaryPoolSpent} / Remaining{" "}
+              Allocated to training {progression.primaryPoolSpent} / Still available{" "}
               {draftView.primaryPoolAvailable}
             </div>
+            {groupTrainingCostChange ? (
+              <div
+                role="status"
+                style={{
+                  borderTop: "1px solid #e7e2d7",
+                  color: "#4a4638",
+                  fontSize: "0.85rem",
+                  marginTop: "0.35rem",
+                  paddingTop: "0.35rem",
+                }}
+              >
+                <strong>
+                  {groupTrainingCostChange.shift === "reduced-by-overlap"
+                    ? "Training cost went down"
+                    : "Training cost went up"}
+                  : {groupTrainingCostChange.previousTotal} &rarr; {groupTrainingCostChange.total}{" "}
+                  ordinary points.
+                </strong>{" "}
+                {groupTrainingCostChange.shift === "reduced-by-overlap"
+                  ? "Overlapping training does not stack. The new training covers ground the earlier training was already priced for, so this build costs less than before."
+                  : "Overlapping training does not stack. With that training gone there is less overlap left, so the rest of this build costs more than before."}
+              </div>
+            ) : null}
           </div>
           <div
             style={{
@@ -143,7 +170,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
           >
             <strong style={{ fontSize: "0.9rem" }}>Flexible points</strong>
             <div>
-              Flexible spent {progression.secondaryPoolSpent} / Remaining{" "}
+              Allocated to training {progression.secondaryPoolSpent} / Still available{" "}
               {draftView.secondaryPoolAvailable}
             </div>
           </div>
@@ -525,6 +552,14 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                               targetType: "group",
                             })
                           : undefined;
+                        // A Group that only opens Specialization access teaches no Skills of
+                        // its own, so it carries no training controls at all. Rule decision
+                        // 0011; the classification comes from the rules layer.
+                        const opensSpecializationOnly = isSpecializationAccessOnlyChargenGroup({
+                          content,
+                          groupId: group.id,
+                          progression,
+                        });
                         const groupSkillRows = sortSkills(
                           content.skills.filter(
                             (skill) =>
@@ -597,20 +632,29 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                                   justifyContent: "flex-end",
                                 }}
                               >
-                                <button
-                                  disabled={!skillAllocationContext}
-                                  onClick={() => handleAllocate(group.id, "group")}
-                                  type="button"
-                                >
-                                  Buy / raise skill group
-                                </button>
-                                <button
-                                  disabled={!skillAllocationContext}
-                                  onClick={() => handleRemoveAllocation(group.id, "group")}
-                                  type="button"
-                                >
-                                  -1 skill group
-                                </button>
+                                {opensSpecializationOnly ? (
+                                  <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                                    This training opens a Specialization and teaches no Skills of
+                                    its own. The Specialization is acquired separately.
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      disabled={!skillAllocationContext}
+                                      onClick={() => handleAllocate(group.id, "group")}
+                                      type="button"
+                                    >
+                                      Add training
+                                    </button>
+                                    <button
+                                      disabled={!skillAllocationContext}
+                                      onClick={() => handleRemoveAllocation(group.id, "group")}
+                                      type="button"
+                                    >
+                                      Remove training
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </div>
 
@@ -622,23 +666,35 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                               }}
                             >
                               <div>
-                                <div style={{ fontSize: "0.85rem" }}>Ordinary spent</div>
+                                <div style={{ fontSize: "0.85rem" }}>
+                                  Ranks from ordinary points
+                                </div>
                                 <strong>{groupView?.primaryRanks ?? 0}</strong>
                               </div>
                               <div>
-                                <div style={{ fontSize: "0.85rem" }}>Flexible spent</div>
+                                <div style={{ fontSize: "0.85rem" }}>
+                                  Ranks from flexible points
+                                </div>
                                 <strong>{groupView?.secondaryRanks ?? 0}</strong>
                               </div>
                               <div>
-                                <div style={{ fontSize: "0.85rem" }}>Current total</div>
+                                <div style={{ fontSize: "0.85rem" }}>Ranks in total</div>
                                 <strong>{groupView?.totalRanks ?? 0}</strong>
                               </div>
                             </div>
 
-                            {addPreview?.spentCost ? (
-                              <div>Next purchase cost: {addPreview.spentCost}</div>
+                            {opensSpecializationOnly ? null : addPreview?.spentCost ? (
+                              <div>
+                                Adding one rank costs {addPreview.spentCost} ordinary{" "}
+                                {addPreview.spentCost === 1 ? "point" : "points"}.
+                              </div>
+                            ) : addPreview && !addPreview.error ? (
+                              <div>
+                                Adding one rank costs nothing. Other training this Character already
+                                has covers everything this one teaches.
+                              </div>
                             ) : null}
-                            {addPreview?.error ? (
+                            {opensSpecializationOnly ? null : addPreview?.error ? (
                               <div style={{ color: "#8a3b12", fontSize: "0.9rem" }}>
                                 {addPreview.error}
                               </div>

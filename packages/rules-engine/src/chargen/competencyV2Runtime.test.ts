@@ -11,6 +11,9 @@ import {
   createChargenProgression,
   getActiveGroupSkillCost,
   getAllowedSecondaryGroupIds,
+  getChargenGroupBundleCost,
+  isSpecializationAccessOnlyChargenGroup,
+  SPECIALIZATION_ACCESS_ONLY_GROUP_UNPURCHASABLE_MESSAGE,
 } from "./primaryAllocation";
 import { buildChargenCoreRouteStatus } from "./coreRouteSelection";
 import {
@@ -401,7 +404,7 @@ describe("canonical V2 runtime projection", () => {
     );
   });
 
-  it("prices and purchases a Specialization-only Learning Group without granting the Specialization", () => {
+  it("gives a Specialization-only Learning Group no price and no purchase action", () => {
     const specializedContent = structuredClone(content);
     specializedContent.skillGroups.push({
       id: "test:specialization-only",
@@ -422,13 +425,43 @@ describe("canonical V2 runtime projection", () => {
     });
     const progression = createChargenProgression();
 
+    // Rule decision 0011, Product Owner 2026-09-27: a Learning Group with no base-Skill
+    // contribution that only supplies access to a genuine Specialization has a Group
+    // purchase cost of 0 and no XP-buy action for the Group itself. The incidental flat
+    // price of 1 is retired, and a zero-cost purchase that still records a purchase is not
+    // what was ruled, so the Group is not purchasable at all.
+    expect(
+      isSpecializationAccessOnlyChargenGroup({
+        content: specializedContent,
+        groupId: "test:specialization-only",
+        progression,
+      }),
+    ).toBe(true);
     expect(
       getActiveGroupSkillCost({
         content: specializedContent,
         groupId: "test:specialization-only",
         progression,
       }),
-    ).toEqual({ cost: 1 });
+    ).toEqual({ error: SPECIALIZATION_ACCESS_ONLY_GROUP_UNPURCHASABLE_MESSAGE });
+    expect(
+      getChargenGroupBundleCost({
+        content: specializedContent,
+        progression: {
+          ...progression,
+          skillGroups: [
+            {
+              gms: 0,
+              grantedRanks: 0,
+              groupId: "test:specialization-only",
+              primaryRanks: 2,
+              ranks: 2,
+              secondaryRanks: 0,
+            },
+          ],
+        },
+      }).cost,
+    ).toBe(0);
     const purchase = allocateChargenPoint({
       content: specializedContent,
       professionId: "profession:courier",
@@ -438,8 +471,8 @@ describe("canonical V2 runtime projection", () => {
       targetId: "test:specialization-only",
       targetType: "group",
     });
-    expect(purchase.error).toBeUndefined();
-    expect(purchase.progression.skillGroups).toEqual(
+    expect(purchase.error).toBe(SPECIALIZATION_ACCESS_ONLY_GROUP_UNPURCHASABLE_MESSAGE);
+    expect(purchase.progression.skillGroups).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ groupId: "test:specialization-only", primaryRanks: 1 }),
       ]),

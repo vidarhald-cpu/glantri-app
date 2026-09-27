@@ -1,9 +1,24 @@
 # Rule decision 0011: One shared Learning Group acquisition arithmetic for the Pilot and Chargen paths
 
-- Status: approved and implemented. One consequence is recorded open below for
-  product-owner confirmation; it does not block the repair.
+- Status: approved and implemented. Nothing in this record is open.
 - Date: 2026-09-27
 - Product owner: Vidar Hald
+- Authority, stated precisely because a decision record is the project's evidence of who
+  decided what:
+  - The **convergence** onto one shared calculation, and the three canonical rules below,
+    were ruled by the **control-plane ruling of 2026-09-27** recorded in Forgejo #381
+    section 2.
+  - The **pricing coefficient** `ceil(2/3 * weightedUseful)`, replacing Chargen's recorded
+    `max(1, floor(0.6 * x))`, was **not** covered by that ruling. It was approved separately
+    by the **Product Owner on 2026-09-27**, recorded on Forgejo PR #385 ("Ruling 1 — the
+    coefficient is APPROVED"). The earlier version of this record asserted approved status
+    for the coefficient before that ruling existed; it is cited here rather than implied, and
+    this record must not be read as having back-dated it.
+  - The **Specialization-access-only Group price**, previously recorded open below, was
+    approved by the **Product Owner on 2026-09-27** on PR #385 ("Ruling 2").
+  - The **non-monotonic build cost** consequence below was ruled correct and intended by the
+    **Product Owner on 2026-09-27** on PR #385, together with the presentation requirement it
+    carries.
 - Related issues/PRs: Forgejo #381 (the defect and the convergence ruling),
   #375 (the conformance investigation that found it), #372 section 7 (the
   presentation half), #382 (the sibling Specialization Group-XP defect, separate
@@ -64,14 +79,38 @@ Each path keeps supplying its own inputs. Pilot v1 supplies authored economic
 weights `1`/`2`/`3` and its authored relationship strengths; Chargen supplies its
 own ordinary/flexible point costs as weights, its own membership resolution, and
 relationship floors derived from group-only competence through the existing
-Chargen relationship engine. `specializationBridge` is not used for acquisition
-or pricing.
+Chargen relationship engine.
+
+**`specializationBridge` and the Chargen floor derivation, stated accurately.** An earlier
+version of this record said the bridge "is not used for acquisition or pricing". That was
+**vacuous rather than true**, and it is corrected here. The Chargen floor derivation calls
+`deriveBestSkillRelationships({ skills: content.skills })`
+(`primaryAllocation/costs.ts`), and `deriveSkillRelationships.ts` derives
+`specialization-bridge-parent` and `specialization-bridge-child` grants from
+`skill.specializationBridge` whenever one is authored, regardless of whether specializations
+are supplied. The bridge therefore **contributes nothing today only because canonical content
+authors zero `specializationBridge` entries** — independently verified by QA and by the
+Orchestrator on 2026-09-27. The moment content authors one, this pricing path would begin
+consuming it.
+
+This is recorded, not resolved here, and it is **not** authority to use the bridge. Forgejo
+#381 section 5 keeps `specializationBridge` out of scope and rules that it "must not be used
+for new V2 acquisition, pricing or effective-value computation", and
+[rule decision 0010](0010-competency-classification-and-group-taught-specializations.md)
+records its parameters as an open, implementation-blocking question. **No coefficient may be
+invented for any competency pair.** Excluding bridge-sourced grants from the Chargen floor
+derivation is the natural closure and belongs to whichever issue settles the bridge; until
+then the true position is the one stated above, and canonical content must continue to author
+no bridge.
 
 ## Consequences
 
 - Chargen group prices change. `floor(0.6 * x)` with a minimum of `1` becomes
   `ceil(2/3 * x)` applied once to the bundle, so a group that cost `3` may now
-  cost `4`, and a two-group bundle that cost `5` may now cost `7`.
+  cost `4`, and a two-group bundle that cost `5` may now cost `7`. This is
+  roughly an 11% rise plus rounding against the 60-point ordinary pool, and it
+  is an approved consequence of the coefficient ruling of 2026-09-27 cited
+  above, not a side effect of the convergence ruling.
 - Because a bundle is priced once, the marginal price of one further rank in the
   same Group varies with the current level — a weight-`2` single-member Group
   alternates between `1` and `2`. This is inherent to pricing a bundle once
@@ -79,6 +118,32 @@ or pricing.
 - A membership fully suppressed by a stronger Group, or fully covered by a
   relationship floor, now quotes and costs `0`. The membership stays visible and
   explainable; it is not deleted.
+- **The build's total Learning Group cost is not monotonic in the training
+  purchased, and this is ruled correct and intended.** Where a newly added Group
+  raises a relationship floor that supplies competence an earlier Group was
+  priced for, the recomputed bundle costs **less** than before. The canonical
+  example is `profession:weapon-instructor` at society level 1: `F35` three
+  times then `G08` three times records ordinary spend
+  `[6, 11, 16, 16, 15, 15]`, falling from `16` to `15` while the player is
+  adding training. `F35` teaches `one_handed_concussion_axe`; `G08` teaches
+  `one_handed_edged`; melee cross-training at distance 1 floors the axe. The
+  case is reachable from canonical content — 25 ordered instances across
+  `weapon-instructor`, `guard-escort` and `sailor` — and the finalize-time
+  validator recomputes the same bundle, so it raises no spending mismatch.
+
+  **Product Owner ruling, 2026-09-27 (PR #385).** Canonical draft recomputation
+  may produce a lower final build cost when new training makes earlier paid
+  contribution redundant. The arithmetic stands: order-independent canonical
+  calculation is preserved, and there are **no refund transactions and no
+  history-dependent clamping**. What was **not** approved is presenting the
+  reduction as an ordinary purchase refund. Chargen therefore exposes the
+  operation as **editing the Character's training allocation**, and when a change
+  reduces the total cost it shows the **before and after build cost** with a
+  concise explanation that overlapping training has reduced the net cost. A
+  visible result of "added training, points spent went down" without an
+  explanation is not acceptable. The recorded spend sequence above is a
+  **regression check** on this record, not a defect reproduction.
+
 - Draft acquisition state is not migrated. Development data is draft and
   non-durable. Any further allocation or removal recomputes the recorded pool
   spend under the corrected rules; a draft that is never touched again and is
@@ -86,12 +151,32 @@ or pricing.
   "Recorded Chargen spending does not match authoritative purchase prices."
   No incorrect historic price is preserved.
 
-## Open — recorded for product-owner confirmation
+## Specialization-access-only Learning Groups — ruled, no longer open
 
 A Learning Group that teaches **no base membership** and exists only to open
 authored Specialization access grants no group competence, so the canonical
 competence arithmetic cannot price it. Its former price came entirely from the
-Chargen minimum of `1`. That flat `1` per purchase is **retained** so no price is
-invented and no recorded behaviour is silently dropped. Whether Specialization
-access should carry a price of its own, and what it should be, is a product
-question this record does not settle.
+retired Chargen minimum of `1`. An earlier version of this record retained that
+incidental flat `1` and recorded the price as an open product question rather
+than inventing one.
+
+**Product Owner ruling, 2026-09-27 (PR #385, "Ruling 2"). The question is now
+answered and this record no longer holds anything open.** Such a Group's
+purchase cost is **`0`**, and there is **no XP-buy action for the Group itself**.
+Eligibility through the Group exposes the Specialization; the Specialization is
+purchased and progressed separately under its own initial-`4` / increase-`2`
+costs. The incidental flat `1` is **not** preserved.
+
+This is not merely a constant set to zero. A zero-cost purchase that still
+records a purchase is not what was ruled, so such a Group stops being a
+purchasable thing: Chargen quotes no price for it, rejects a Group purchase of
+it, and shows no Group training controls for it. No access is lost, because
+Specialization eligibility is derived from the Profession-accessible Group
+definitions and never from purchased Group ranks
+(`resolveCompetencyV2Path.ts`, `resolveEffectiveProfessionPackage.ts`,
+`validateTargetChargenBuild.ts`).
+
+No approved canonical Learning Group reaches this case — all 59 approved groups
+have at least one fixed membership — so the shape is reachable only in legacy
+content. A legacy draft holding purchased ranks on such a Group reprices to `0`
+under the draft-state consequence above.

@@ -27,11 +27,13 @@ export const NEW_SPECIALIZATION_COST = 4;
 export const EXISTING_SPECIALIZATION_COST = 2;
 /**
  * A Learning Group that teaches no base membership and exists only to open authored
- * Specialization access keeps its recorded flat price of one point per purchase, from
- * `max(1, floor(0.6 * 0))` in `docs/rules/chargen-calculations.md`. The canonical group
- * competence arithmetic cannot price it, because it grants no group competence at all.
+ * Specialization access grants no group competence, so it carries no Group purchase cost
+ * and no Group purchase action at all. Eligibility through the Group exposes the
+ * Specialization; the Specialization is acquired separately under its own costs.
+ * Product Owner ruling, 2026-09-27, recorded in rule decision 0011.
  */
-export const SPECIALIZATION_ACCESS_GROUP_POINT_COST = 1;
+export const SPECIALIZATION_ACCESS_ONLY_GROUP_UNPURCHASABLE_MESSAGE =
+  "This training opens a Specialization and teaches no Skills of its own. The Specialization is acquired separately.";
 
 export type ChargenSkillAccessRoute = "ordinary" | "flexible";
 
@@ -168,8 +170,9 @@ export interface ChargenGroupBundle {
   errorsByGroupId: Map<string, string>;
   /**
    * Groups that teach no priced base membership and exist only to open authored
-   * Specialization access. They carry no group competence, so the shared competence
-   * arithmetic cannot price them; they keep their recorded flat access price instead.
+   * Specialization access. They carry no group competence, so they contribute nothing to
+   * the bundle price and carry no Group purchase action
+   * (see {@link isSpecializationAccessOnlyChargenGroup}).
    */
   specializationAccessOnlyGroupIds: Set<string>;
   /** Weighted useful increment attributed to each group that is the strongest contributor. */
@@ -297,6 +300,23 @@ export function calculateChargenGroupBundle(input: {
   };
 }
 
+function sumBundleWeightedUsefulIncrement(
+  bundle: ChargenGroupBundle,
+  chargeableGroupIds?: Iterable<string>,
+): number {
+  const chargeable = chargeableGroupIds === undefined ? undefined : new Set(chargeableGroupIds);
+  let weightedUsefulIncrement = 0;
+
+  for (const [groupId, weighted] of bundle.weightedUsefulIncrementByGroupId) {
+    if (chargeable && !chargeable.has(groupId)) {
+      continue;
+    }
+    weightedUsefulIncrement += weighted;
+  }
+
+  return weightedUsefulIncrement;
+}
+
 /**
  * Total primary/flexible-eligible price of the Learning Groups the Character has purchased.
  * The canonical ceiling is applied once to the complete chargeable bundle, never per group
@@ -309,35 +329,34 @@ export function getChargenGroupBundleCost(input: {
   progression: CharacterProgression;
 }): { bundle: ChargenGroupBundle; cost: number } {
   const bundle = calculateChargenGroupBundle(input);
-  const chargeable =
-    input.chargeableGroupIds === undefined ? undefined : new Set(input.chargeableGroupIds);
-  let weightedUsefulIncrement = 0;
 
-  for (const [groupId, weighted] of bundle.weightedUsefulIncrementByGroupId) {
-    if (chargeable && !chargeable.has(groupId)) {
-      continue;
-    }
-    weightedUsefulIncrement += weighted;
-  }
-
-  let specializationAccessCost = 0;
-
-  for (const groupId of bundle.specializationAccessOnlyGroupIds) {
-    if (chargeable && !chargeable.has(groupId)) {
-      continue;
-    }
-
-    const group = input.progression.skillGroups.find((item) => item.groupId === groupId);
-    const purchasedRanks =
-      input.groupRankOverrides?.get(groupId) ??
-      (group?.primaryRanks ?? 0) + (group?.secondaryRanks ?? 0);
-    specializationAccessCost += purchasedRanks * SPECIALIZATION_ACCESS_GROUP_POINT_COST;
-  }
-
+  // A Specialization-access-only Group grants no group competence and carries no Group
+  // purchase cost at all, so nothing is added here for one (rule decision 0011, Product
+  // Owner 2026-09-27). The incidental flat price of `1` it used to carry is retired.
   return {
     bundle,
-    cost: priceLearningGroupBundle(weightedUsefulIncrement) + specializationAccessCost,
+    cost: priceLearningGroupBundle(
+      sumBundleWeightedUsefulIncrement(bundle, input.chargeableGroupIds),
+    ),
   };
+}
+
+/**
+ * True when a Learning Group teaches no priced base membership and exists only to open
+ * authored Specialization access. Such a Group grants no group competence, costs nothing,
+ * and carries no Group purchase action; the Specialization it exposes is acquired
+ * separately. Specialization eligibility is derived from the Profession-accessible Group
+ * definitions, never from purchased Group ranks, so carrying no purchase action loses no
+ * access (`resolveCompetencyV2Path.ts`, `resolveEffectiveProfessionPackage.ts`).
+ */
+export function isSpecializationAccessOnlyChargenGroup(input: {
+  content: CanonicalContentShape;
+  groupId: string;
+  progression: CharacterProgression;
+}): boolean {
+  const resolved = resolveActiveGroupMembership(input);
+
+  return resolved.membership !== undefined && resolved.membership.activeSkillIds.length === 0;
 }
 
 /**
@@ -356,6 +375,12 @@ export function getActiveGroupSkillCost(input: {
 
   if (resolved.error) {
     return { error: resolved.error };
+  }
+
+  // A Group that only opens Specialization access is not a purchasable Group at all, so it
+  // has no price to quote (rule decision 0011, Product Owner 2026-09-27).
+  if (resolved.membership && resolved.membership.activeSkillIds.length === 0) {
+    return { error: SPECIALIZATION_ACCESS_ONLY_GROUP_UNPURCHASABLE_MESSAGE };
   }
 
   const group = input.progression.skillGroups.find((item) => item.groupId === input.groupId);
@@ -391,6 +416,72 @@ export function getActiveGroupSkillPurchaseCost(input: {
   progression: CharacterProgression;
 }): { cost?: number; error?: string } {
   return getActiveGroupSkillCost(input);
+}
+
+/**
+ * How a Learning Group training change moved the build's Learning Group cost.
+ *
+ * - `ordinary` — the cost moved the same way the training did, or did not move.
+ * - `reduced-by-overlap` — training was added and the build's Learning Group cost went
+ *   *down*, because the added training overlaps training the Character already had and
+ *   overlapping Groups do not stack, so competence the earlier training was priced for is
+ *   now supplied without it.
+ * - `raised-by-overlap` — the mirror: training was removed and the cost went *up*, because
+ *   the overlap that was absorbing part of the earlier price is gone.
+ *
+ * Both non-ordinary shapes are canonical and intended (rule decision 0011, Product Owner
+ * 2026-09-27). This classification belongs to the rules layer so no presentation surface has
+ * to reconstruct the rule to explain what the player is seeing.
+ */
+export type ChargenGroupTrainingCostShift = "ordinary" | "raised-by-overlap" | "reduced-by-overlap";
+
+export interface ChargenGroupTrainingChange {
+  cost: number;
+  previousCost: number;
+  shift: ChargenGroupTrainingCostShift;
+}
+
+function getPurchasedGroupRankTotal(progression: CharacterProgression): number {
+  return progression.skillGroups.reduce(
+    (total, group) => total + group.primaryRanks + group.secondaryRanks,
+    0,
+  );
+}
+
+/**
+ * Classify one Learning Group training change for presentation. See
+ * {@link ChargenGroupTrainingCostShift}.
+ */
+export function describeChargenGroupTrainingChange(input: {
+  chargeableGroupIds?: Iterable<string>;
+  content: CanonicalContentShape;
+  previousProgression: CharacterProgression;
+  progression: CharacterProgression;
+}): ChargenGroupTrainingChange {
+  const chargeableGroupIds =
+    input.chargeableGroupIds === undefined ? undefined : [...input.chargeableGroupIds];
+  const previous = getChargenGroupBundleCost({
+    chargeableGroupIds,
+    content: input.content,
+    progression: input.previousProgression,
+  });
+  const current = getChargenGroupBundleCost({
+    chargeableGroupIds,
+    content: input.content,
+    progression: input.progression,
+  });
+  const previousRanks = getPurchasedGroupRankTotal(input.previousProgression);
+  const ranks = getPurchasedGroupRankTotal(input.progression);
+  const previousUseful = sumBundleWeightedUsefulIncrement(previous.bundle, chargeableGroupIds);
+  const useful = sumBundleWeightedUsefulIncrement(current.bundle, chargeableGroupIds);
+  const shift: ChargenGroupTrainingCostShift =
+    ranks > previousRanks && current.cost < previous.cost && useful < previousUseful
+      ? "reduced-by-overlap"
+      : ranks < previousRanks && current.cost > previous.cost && useful > previousUseful
+        ? "raised-by-overlap"
+        : "ordinary";
+
+  return { cost: current.cost, previousCost: previous.cost, shift };
 }
 
 export function getOrdinaryPoolTotal(progression?: CharacterProgression): number {

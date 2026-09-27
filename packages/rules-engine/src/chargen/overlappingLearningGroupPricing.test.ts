@@ -5,9 +5,13 @@ import {
   allocateChargenPoint,
   buildChargenDraftView,
   createChargenProgression,
+  removeChargenPoint,
 } from "./primaryAllocation";
 import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
-import { getActiveGroupSkillCost } from "./primaryAllocation/costs";
+import {
+  describeChargenGroupTrainingChange,
+  getActiveGroupSkillCost,
+} from "./primaryAllocation/costs";
 import { getBestPurchasedParentGroup } from "./primaryAllocation/_helpers";
 import { validateTargetChargenBuild } from "./validateTargetChargenBuild";
 
@@ -126,5 +130,103 @@ describe("overlapping Learning Group pricing (#381)", () => {
     expect(errors).not.toContain(
       "Recorded Chargen spending does not match authoritative purchase prices.",
     );
+  });
+});
+
+/**
+ * Canonical negative-marginal case. `profession:weapon-instructor` reaches both `F35`
+ * (teaching `one_handed_concussion_axe`, `dodge`, `parry`, `brawling`) and `G08` (teaching
+ * `one_handed_edged`, `dodge`, `parry`). Melee cross-training at distance 1 means the edged
+ * training floors the axe, so competence `F35` was priced for is supplied without it and the
+ * build's total Learning Group cost falls.
+ *
+ * Product Owner ruling, 2026-09-27 (Forgejo #385, rule decision 0011): the arithmetic is
+ * correct and must not change. The recorded spend sequence is therefore a regression check,
+ * not a defect reproduction, and the requirement falls on the presentation.
+ */
+describe("canonical negative-marginal Learning Group training (#385)", () => {
+  const negativeContext = {
+    content,
+    professionId: "profession:weapon-instructor",
+    societyLevel: 1,
+  };
+
+  function buyNegative(progression: ReturnType<typeof createChargenProgression>, targetId: string) {
+    const result = allocateChargenPoint({
+      ...negativeContext,
+      progression,
+      targetId,
+      targetType: "group",
+    });
+    expect(result.error).toBeUndefined();
+    return result.progression;
+  }
+
+  it("keeps the ruled recorded spend sequence for F35 x3 then G08 x3", () => {
+    let progression = createChargenProgression();
+    const spent: number[] = [];
+
+    for (const groupId of ["F35", "F35", "F35", "G08", "G08", "G08"]) {
+      progression = buyNegative(progression, groupId);
+      spent.push(progression.primaryPoolSpent);
+    }
+
+    expect(spent).toEqual([6, 11, 16, 16, 15, 15]);
+  });
+
+  it("classifies added training that lowers the build cost as reduced by overlap", () => {
+    let progression = createChargenProgression();
+    progression = buyNegative(progression, "F35");
+    progression = buyNegative(progression, "F35");
+    progression = buyNegative(progression, "F35");
+    progression = buyNegative(progression, "G08");
+    const previousProgression = progression;
+    progression = buyNegative(progression, "G08");
+
+    const change = describeChargenGroupTrainingChange({
+      content,
+      previousProgression,
+      progression,
+    });
+
+    expect(previousProgression.primaryPoolSpent).toBe(16);
+    expect(progression.primaryPoolSpent).toBe(15);
+    expect(change.previousCost).toBe(16);
+    expect(change.cost).toBe(15);
+    expect(change.shift).toBe("reduced-by-overlap");
+  });
+
+  it("classifies removed training that raises the build cost as raised by overlap", () => {
+    let progression = createChargenProgression();
+    for (const groupId of ["F35", "F35", "F35", "G08", "G08"]) {
+      progression = buyNegative(progression, groupId);
+    }
+    const previousProgression = progression;
+    const removal = removeChargenPoint({
+      ...negativeContext,
+      progression,
+      targetId: "G08",
+      targetType: "group",
+    });
+    expect(removal.error).toBeUndefined();
+
+    const change = describeChargenGroupTrainingChange({
+      content,
+      previousProgression,
+      progression: removal.progression,
+    });
+
+    expect(change.previousCost).toBe(15);
+    expect(change.cost).toBe(16);
+    expect(change.shift).toBe("raised-by-overlap");
+  });
+
+  it("classifies an ordinary purchase that raises the build cost as ordinary", () => {
+    const previousProgression = createChargenProgression();
+    const progression = buyNegative(previousProgression, "F35");
+
+    expect(
+      describeChargenGroupTrainingChange({ content, previousProgression, progression }).shift,
+    ).toBe("ordinary");
   });
 });
