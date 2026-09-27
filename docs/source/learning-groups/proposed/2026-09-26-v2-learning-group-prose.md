@@ -29,10 +29,10 @@ sustained over a long watch, and the judgment of when that watch has turned
 into something that needs a physician.
 
 Attendance may be taught in a household as readily as in an organized place of
-care, and where it is, the household is part of the curriculum. An attendant works inside
-someone else's home, among their family, their servants and their griefs, and
-is expected to know how to conduct themselves there. A learner who nurses
-competently but blunders through the household does not last.
+care, and where it is, the household is part of the curriculum. An attendant
+works inside someone else's home, among their family, their servants and their
+griefs, and is expected to know how to conduct themselves there. A learner who
+nurses competently but blunders through the household does not last.
 
 **What it teaches.** Sustained practical care and observation of someone ill or
 recovering; the immediate assessment and first response when their condition
