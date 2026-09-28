@@ -72,6 +72,11 @@ export type CriticalEffectProposalProjection =
 
 export interface CriticalEffectProposalAdditionalEffect {
   accepted?: boolean;
+  /**
+   * Which Critical of the attack produced this effect. Absent means the Primary, so a Primary-only
+   * attack keeps exactly the shape it had before Secondary Criticals existed.
+   */
+  criticalRole?: "secondary";
   durationRounds?: number;
   effectOrder?: number;
   id: string;
@@ -111,13 +116,30 @@ export interface CriticalEffectProposalResult {
 }
 
 export interface CriticalEffectProposalInput {
+  /**
+   * Which Critical of the attack this proposal resolves. Defaults to `"primary"`, which keeps the
+   * family precedence and the effect identifiers exactly as they were before Secondary Criticals.
+   */
+  criticalRole?: "primary" | "secondary";
   existingCommittedDamageAmount: number;
   finalCriticalRoll?: number;
+  /**
+   * Additive escape hatch for the Secondary Critical, whose family is fixed by the `Sec` second
+   * character rather than derived from the weapon. When set, the weapon family precedence in
+   * `mapWeaponCriticalInputToFamily` is not consulted at all. The Primary never sets it.
+   */
+  forcedCriticalFamily?: CriticalFamily;
   preservedRollReports?: readonly CriticalEffectProposalRollReport[];
   rng?: () => number;
   selectedHitLocation?: HitLocation;
   weaponCriticalCode?: string;
   weaponDamageClass?: string | null;
+  /**
+   * The weapon-authored raw `Sec` code, carried for provenance only. It is deliberately never fed
+   * into the Primary's family mapping: rule decision 0006 §1 and the grammar both forbid deriving
+   * a Critical family from a concatenation of codes.
+   */
+  weaponSecondaryCriticalCode?: string;
 }
 
 const SUPPORTED_DICE_SIDES = new Set([3, 4, 6, 8, 10, 20]);
@@ -737,17 +759,20 @@ export function getCriticalEffectProposalProjection(
 }
 
 function mapCriticalEffectTemplateToReviewEffect(input: {
+  criticalRole: "primary" | "secondary";
   effect: CriticalEffectTemplate;
   existingCommittedDamageAmount: number;
   rollReports: readonly CriticalEffectProposalRollReport[];
 }): CriticalEffectProposalAdditionalEffect | undefined {
   const projection = getCriticalEffectProposalProjection(input.effect);
   const sourceConflict = getCriticalEffectSourceConflict(input.effect);
+  const isSecondary = input.criticalRole === "secondary";
   const common = {
     accepted: projection.rowCategory !== "special_note",
+    ...(isSecondary ? { criticalRole: "secondary" as const } : {}),
     durationRounds: getCriticalEffectStoredDurationRounds(input.effect, input.rollReports),
     effectOrder: input.effect.effectOrder,
-    id: `critical-effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
+    id: `critical-${isSecondary ? "secondary-" : ""}effect-${input.effect.effectKey.replace(/[^A-Za-z0-9_-]+/g, "-")}`,
     label: sourceConflict
       ? "Source-conflicted unconsciousness"
       : getCriticalEffectLabel(input.effect),
@@ -804,6 +829,7 @@ export function buildCriticalEffectProposalFromDamageResult(
   input: CriticalEffectProposalInput,
 ): CriticalEffectProposalResult {
   const warnings: string[] = [];
+  const criticalRole = input.criticalRole ?? "primary";
   const criticalIndexStatus = getFinalCriticalRollIndexStatus(input.finalCriticalRoll);
 
   if (criticalIndexStatus.status === "no_effect") {
@@ -815,10 +841,12 @@ export function buildCriticalEffectProposalFromDamageResult(
     };
   }
 
-  const family = mapWeaponCriticalInputToFamily({
-    weaponCriticalCode: input.weaponCriticalCode,
-    weaponDamageClass: input.weaponDamageClass,
-  });
+  const family: CriticalMappingResult<CriticalFamily> = input.forcedCriticalFamily
+    ? { status: "mapped", value: input.forcedCriticalFamily }
+    : mapWeaponCriticalInputToFamily({
+        weaponCriticalCode: input.weaponCriticalCode,
+        weaponDamageClass: input.weaponDamageClass,
+      });
   const location = mapCombatHitLocationToCriticalLocation(input.selectedHitLocation);
   const critIndex = mapFinalCriticalRollToCritIndex(input.finalCriticalRoll);
 
@@ -879,6 +907,7 @@ export function buildCriticalEffectProposalFromDamageResult(
     });
     rollReports.push(...effectRollReports);
     const reviewEffect = mapCriticalEffectTemplateToReviewEffect({
+      criticalRole,
       effect,
       existingCommittedDamageAmount: input.existingCommittedDamageAmount,
       rollReports: effectRollReports,
