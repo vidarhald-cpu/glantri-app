@@ -573,8 +573,10 @@ export function SkillReferenceContent({
           <p className={styles.scopeNote}>
             {model.readerContentCoverage.groups.published} of{" "}
             {model.readerContentCoverage.groups.canonical} Learning Groups have a published full
-            description. The remaining {model.readerContentCoverage.groups.awaiting} show their
-            short summary and say so.
+            description
+            {model.readerContentCoverage.groups.awaiting > 0
+              ? `. The remaining ${model.readerContentCoverage.groups.awaiting} show their short summary and say so.`
+              : "."}
           </p>
           {!withdrawn && outsideFilter(filteredGroups, group)}
           {withdrawn ? (

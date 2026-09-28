@@ -40,6 +40,17 @@ describe("reader prose publication layers", () => {
     }
   });
 
+  it("leaves `full` undefined for a record whose description was never published", () => {
+    /* #396 published all 95, so the loop above no longer reaches its first branch through real
+       content. The rule itself is unchanged and is asserted here directly: an unpublished
+       description must stay absent rather than be filled from the summary, so the surfaces that
+       read `full` keep saying so instead of presenting a one-liner as the explanation. */
+    expect(readerProse({ shortDescription: "A summary." }, "Canonical line.").full).toBeUndefined();
+    expect(readerProse({ description: "   " }, "Canonical line.").full).toBeUndefined();
+    expect(readerProse({}, "Canonical line.").summary).toBe("Canonical line.");
+    expect(readerProse({ description: "Full prose." }, "Canonical line.").full).toBe("Full prose.");
+  });
+
   it("publishes full Profession family prose for every canonical Profession", () => {
     for (const profession of model.professions)
       expect(readerProse(profession.readerContent, "").full).toBeTruthy();

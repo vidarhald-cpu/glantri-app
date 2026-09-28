@@ -42,11 +42,13 @@ const noteStyle = { color: "#6d665a", fontSize: "0.85rem" } as const;
 const bodyStyle = { color: "#4a4f45", fontSize: "0.9rem" } as const;
 
 /**
- * Learning Group prose, with the publication gap told honestly.
+ * Learning Group prose, with any publication gap told honestly.
  *
- * 51 of 95 canonical Learning Groups still have no published full description (#365). A row must
- * say so rather than present the one-line summary as though it were the explanation, which
- * sections 9.7 and 9.12 of the experience contract forbid.
+ * All 95 canonical Learning Groups now carry a published full description: #396 published the 51
+ * the accepted documents had outgrown. The absence branch below is retained rather than deleted,
+ * because it is the rule and not a workaround — a row must say a description is missing rather
+ * than present the one-line summary as though it were the explanation, which sections 9.7 and 9.12
+ * of the experience contract forbid. It renders for no canonical group today.
  */
 export function groupReaderProse(group: SkillReferenceGroup): ReaderProse {
   return readerProse(group.readerContent, group.description);

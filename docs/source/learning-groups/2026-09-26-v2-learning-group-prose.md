@@ -1,8 +1,22 @@
-# Learning Group reader prose for the canonical V2 catalogue — proposed
+# Learning Group reader prose for the canonical V2 catalogue
 
-> **PROPOSED. PENDING PRODUCT OWNER ACCEPTANCE.** Authored under Forgejo #365.
-> This is not accepted source material. See [README](README.md) for the
-> inventory, the method and the constraint observed.
+> **ACCEPTED SOURCE.** Authored under Forgejo #365, reviewed and corrected by
+> the Product Owner, and accepted and integrated through Forgejo #367 with the
+> C02 canonical correction of #386. Published into the runtime reader-content
+> projection under Forgejo #396. See [README](README.md) for the inventory, the
+> method, the constraint observed and this file's recorded digest.
+
+This is the single accepted source for these fifty-one Learning Group
+descriptions. `packages/content/src/proposals/competencyContentV2/competencyContentV2ReaderProse.ts`
+embeds the same strings for deterministic packaging without a filesystem
+dependency, exactly as it embeds the other three accepted documents it
+transcribes; the embedded copy is a transcription of this file and not a second
+authority.
+
+Two entries were corrected after acceptance, for facts that landed in Forgejo
+#389 after these pages were written on 2026-09-26: **M04** and **M05** now name
+the longbow among the missile arms their slots offer, because #389 added
+`longbow` to both candidate pools. Nothing else was reworded.
 
 Fifty-one canonical V2 Learning Groups: the forty-nine the catalogue redesign
 created, and the two whose accepted prose no longer matches the practice.
@@ -366,8 +380,8 @@ deliberately as the volley.
 **What it teaches.** The practiced conduct of an individual fighting as part of
 an organized formation; the inspection, care and working service of weapons; the
 attentive noticing and discrimination of relevant detail; and one missile arm —
-whichever the unit is issued and drilled with, whether the bow, the crossbow,
-handheld firearms, the sling or the hand-thrown weapon.
+whichever the unit is issued and drilled with, whether the bow, the longbow,
+the crossbow, handheld firearms, the sling or the hand-thrown weapon.
 
 **Boundaries and context.** One arm, the one the unit carries. This is formation
 shooting, so it does not teach close fighting, and it does not supply the
@@ -393,8 +407,8 @@ lies.
 
 **What it teaches.** Attentive noticing and discrimination of relevant detail;
 the inspection, care and working service of weapons; and several missile arms
-taught in turn, drawn from the bow, the crossbow, handheld firearms, the sling
-and the hand-thrown weapon.
+taught in turn, drawn from the bow, the longbow, the crossbow, handheld
+firearms, the sling and the hand-thrown weapon.
 
 **Boundaries and context.** It remains instruction. A shooting master who has
 never been shot at has learned nothing here about being shot at, and the
