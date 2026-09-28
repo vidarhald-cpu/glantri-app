@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import SkillsReferencePage from "./page";
 import AdminSkillReferencePage from "../admin/skills/reference/page";
+import { ProseIntroduction } from "./ReferenceParts";
 
 const mocks = vi.hoisted(() => ({
   session: {
@@ -151,7 +152,20 @@ describe("player competency reference", () => {
     expect(within(inspector).queryByText(/choice slot/i)).toBeNull();
   });
 
-  it("says so when a Learning Group has no published full description", async () => {
+  it("shows N01's published full description where the absence note used to stand", async () => {
+    /*
+     * This assertion was inverted by #396, not weakened. N01 was one of the 51 Learning Groups
+     * whose accepted prose had never been published, and it was chosen here precisely because it
+     * lacked a full description. #396 published all 51, so coverage is 95 of 95 and the premise
+     * is obsolete rather than merely inconvenient — the same treatment #372's browser journey
+     * received in this change. The surface stays proved, from the other side: the published
+     * prose must render and the absence note must appear nowhere on the page.
+     *
+     * `ProseIntroduction` keeps its absence branch, because it is the rule and not a workaround
+     * — a Group added later without prose must still say so rather than pass its one-line
+     * summary off as the explanation. That branch has no subject in canonical content today, so
+     * it is covered directly in the describe block below instead.
+     */
     const user = userEvent.setup();
     render(<SkillsReferencePage />);
     await user.click(screen.getByRole("tab", { name: "Learning Groups" }));
@@ -163,15 +177,14 @@ describe("player competency reference", () => {
     const inspector = screen.getByRole("heading", { name: "Small-craft boat working", level: 2 })
       .parentElement as HTMLElement;
     expect(
-      within(inspector).getByText(
-        /A full description of this training practice has not been published/,
-      ),
-    ).toBeVisible();
-    expect(
       within(inspector).getByText("Working an open boat: handling, lines, water and weather."),
     ).toBeVisible();
+    expect(within(inspector).getByText(/Working an open boat is a whole practice/)).toBeVisible();
     expect(
-      screen.getByText(/44 of 95 Learning Groups have a published full description/),
+      screen.queryAllByText(/A full description of this training practice has not been published/),
+    ).toHaveLength(0);
+    expect(
+      screen.getByText(/95 of 95 Learning Groups have a published full description/),
     ).toBeVisible();
   });
 
@@ -232,5 +245,50 @@ describe("player competency reference", () => {
     expect(
       screen.getByText(/Above Society Level 3, route availability has not yet been authored/),
     ).toBeVisible();
+  });
+});
+
+/**
+ * The honest-absence branch, which #396 left deliberately with no subject in canonical content.
+ *
+ * All 95 Learning Groups now carry a published full description, so no real record reaches the
+ * absence branch of `ProseIntroduction` any more. The branch is retained rather than deleted: a
+ * Group or Profession published later without full prose must say so, rather than present its
+ * one-line summary as though it were the explanation, which sections 9.7 and 9.12 of the
+ * experience contract forbid. Deleting the last test that exercised it would have left the
+ * retained mechanism untested, so it is exercised here with a synthetic record instead — the one
+ * place in this suite that does not read canonical content, and only because canonical content no
+ * longer contains a subject for it.
+ */
+describe("reader prose with no published full description", () => {
+  const note = "A full description of this training practice has not been published yet.";
+
+  it("says the description is missing instead of presenting the summary as one", () => {
+    const { unmount } = render(
+      <ProseIntroduction
+        prose={{ summary: "A one-line summary.", typicalActivities: [], boundaries: [] }}
+        unpublishedNote={note}
+      />,
+    );
+    expect(screen.getByText("A one-line summary.")).toBeVisible();
+    expect(screen.getByText(note)).toBeVisible();
+    unmount();
+  });
+
+  it("shows the full prose and drops the note as soon as a description is published", () => {
+    const { unmount } = render(
+      <ProseIntroduction
+        prose={{
+          summary: "A one-line summary.",
+          full: "The full explanation, which is not the summary.",
+          typicalActivities: [],
+          boundaries: [],
+        }}
+        unpublishedNote={note}
+      />,
+    );
+    expect(screen.getByText("The full explanation, which is not the summary.")).toBeVisible();
+    expect(screen.queryByText(note)).toBeNull();
+    unmount();
   });
 });

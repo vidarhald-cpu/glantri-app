@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { buildSkillReferenceModel } from "@/lib/skills/skillReferenceModel";
 import {
+  LearningGroupProse,
   LearningGroupTraining,
   ProfessionExplanation,
   ProfessionTrainingOverview,
@@ -186,5 +187,40 @@ describe("Chargen and the reference share one Profession projection", () => {
     for (const entry of training.reachable)
       expect(rendered, entry.link.id).toContain(entry.link.name);
     expect(rendered).toContain(String(training.possibleBaseSkillReach));
+  });
+});
+
+/**
+ * The Chargen honest-absence branch, retained by #396 and now without a canonical subject.
+ *
+ * `LearningGroupProse` keeps its "Not yet described in full" branch deliberately: it is the rule,
+ * not a workaround for the publication gap that #396 closed, so a Group added later without prose
+ * is still told honestly instead of having its one-line summary presented as the explanation. All
+ * 95 canonical Groups now carry a description, so the branch can no longer be reached through real
+ * content. It is exercised here on a canonical Group with its description withheld, so the
+ * retained mechanism keeps its test rather than losing it with the gap.
+ */
+describe("a Learning Group published without a full description", () => {
+  it("says so rather than presenting the short summary as the explanation", () => {
+    const published = model.learningGroups.find((row) => row.id === "N01")!;
+    const withheld = {
+      ...published,
+      readerContent: { ...published.readerContent, description: undefined },
+    };
+
+    const { container } = render(<LearningGroupProse group={withheld} />);
+
+    expect(screen.getByText(/Not yet described in full/)).toBeVisible();
+    expect(container.textContent).toContain(published.readerContent.shortDescription!);
+    expect(container.textContent).not.toContain(published.readerContent.description!);
+  });
+
+  it("drops the note and shows the prose once the description is published", () => {
+    const published = model.learningGroups.find((row) => row.id === "N01")!;
+
+    const { container } = render(<LearningGroupProse group={published} />);
+
+    expect(screen.queryByText(/Not yet described in full/)).toBeNull();
+    expect(container.textContent).toContain(published.readerContent.description!);
   });
 });
