@@ -234,6 +234,7 @@ import {
   getCombatGenericActionOpportunityAdvances,
   isCombatGenericActionFinalOpportunity,
   isCombatGenericActionOpportunityOpen,
+  isCombatItemInteractionActionLive,
   recordCombatGenericActionRoll,
   reviewCombatGenericAction,
   activateCombatGenericAction,
@@ -7204,6 +7205,42 @@ export function getCombatRoundOpenPerformTaskForParticipant(input: {
     }
     return candidate;
   });
+}
+
+/**
+ * The participant's single live Item interaction action, if they hold one.
+ *
+ * This mirrors {@link getCombatRoundOpenPerformTaskForParticipant} as rule decision 0007 §2's
+ * one-live-action principle is applied to the Item action family (Forgejo issue #409), and it is
+ * scoped exactly as the Product Owner ruling for that issue states:
+ *
+ * - **Per participant, not per round.** The scan is over the live round state's `genericActions`,
+ *   which the round rollover carries forward unchanged (`advanceCombatGenericActionsToRound`), so
+ *   an Item action declared in an earlier round and still live is still this participant's one
+ *   live Item action. Carry-forward itself is a state rollover, not a declaration, so nothing is
+ *   refused by carrying it.
+ * - **Liveness is the shared generic-action terminal vocabulary** — `completed`, `interrupted` and
+ *   `cancelled` end an Item action; `declared`, `reviewed` and `active` are live. See
+ *   {@link isCombatItemInteractionActionLive}.
+ * - **`excludeActionId` preserves idempotent re-declaration** by the declaration's own id.
+ * - The Item action family is `preset: "item_interaction"` only. `small_action` and the other
+ *   declaration kinds are deliberately not covered, exactly as 0007 §2 excludes `small_action`.
+ *
+ * Like 0007's own refusal, the caller that uses this is a **creation-time** refusal rather than an
+ * enforcement chokepoint: it makes a second live Item action rarer and repairs nothing already
+ * persisted.
+ */
+export function getCombatRoundLiveItemInteractionForParticipant(input: {
+  excludeActionId?: string;
+  participantId: string;
+  state: Pick<CombatRoundState, "genericActions">;
+}): CombatGenericAction | undefined {
+  return input.state.genericActions.find(
+    (action) =>
+      action.ownerParticipantId === input.participantId &&
+      action.id !== input.excludeActionId &&
+      isCombatItemInteractionActionLive(action),
+  );
 }
 
 export function getNextCombatRoundPhaseActionParticipantId(input: {

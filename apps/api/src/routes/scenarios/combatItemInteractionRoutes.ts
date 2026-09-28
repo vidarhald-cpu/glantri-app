@@ -5,6 +5,7 @@ import {
   combatItemInteractionOperationSchema,
   declareCombatGenericAction,
   finishCombatGenericAction,
+  getCombatRoundLiveItemInteractionForParticipant,
   initializeCombatRoundState,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
@@ -307,6 +308,38 @@ export function createCombatItemInteractionRoutes(
         return reply.code(409).send({
           error: "The canonical Item action changed. Refresh and review the latest state.",
         });
+      }
+      // One live Item action per participant — rule decision 0007 §2's one-live-action principle
+      // applied to the Item action family by Product Owner ruling on Forgejo issue #409.
+      //
+      // This is the **server-side creation-time refusal**; the panel's disabled buttons are a
+      // convenience, not the guard. Its scope is the ruling's, and each exclusion is deliberate:
+      //
+      // - Per participant, not per round. `getCombatRoundLiveItemInteractionForParticipant` scans
+      //   the live round state's carried-forward `genericActions`, so a still-live Item action from
+      //   an earlier round still occupies the slot. Carry-forward is a rollover, not a declaration,
+      //   so it is never itself refused here.
+      // - Idempotent re-declaration by the declaration's own id never reaches this point: the
+      //   `body.operation === "declare" && existingAction` branch above already returned the
+      //   canonical encounter unchanged. `excludeActionId` keeps that true regardless of ordering.
+      // - Only `preset: "item_interaction"` counts. `small_action` and the other declaration kinds
+      //   are untouched, exactly as 0007 §2 excludes `small_action`.
+      //
+      // Like 0007's refusal this repairs nothing already persisted; it only stops a second live
+      // Item action being created. The remedy it names is the existing GM review/cancel lifecycle,
+      // not a new replacement mechanism.
+      if (body.operation === "declare" && body.participantId) {
+        const liveItemAction = getCombatRoundLiveItemInteractionForParticipant({
+          excludeActionId: body.actionId,
+          participantId: body.participantId,
+          state: roundState,
+        });
+        if (liveItemAction) {
+          return reply.code(400).send({
+            error:
+              "This character already has an Item action in progress. Resolve, interrupt or cancel it before declaring another.",
+          });
+        }
       }
       if (body.operation === "resolve" && existingAction?.status === "completed") {
         return { encounter };

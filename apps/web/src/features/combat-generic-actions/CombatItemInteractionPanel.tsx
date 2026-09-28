@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { CombatItemInteractionOperation, EncounterSession } from "@glantri/domain";
+import {
+  isCombatItemInteractionActionLive,
+  type CombatGenericAction,
+  type CombatGenericActionStatus,
+  type CombatItemInteractionOperation,
+  type EncounterSession,
+} from "@glantri/domain";
 
 import {
   loadCombatItemInteractionOptions,
@@ -18,6 +24,20 @@ const operationLabels: Record<CombatItemInteractionOperation, string> = {
   pickup: "Pick up",
   stow: "Stow / unequip",
   use: "Use / interact",
+};
+
+/**
+ * The canonical status vocabulary an Item action moves through. `completed`, `interrupted` and
+ * `cancelled` are terminal; the other three are live. This panel only ever renders what the
+ * persisted action says, so a reload restores it.
+ */
+const declarationStatusLabels: Record<CombatGenericActionStatus, string> = {
+  active: "In progress",
+  cancelled: "Cancelled",
+  completed: "Completed",
+  declared: "Waiting for GM review",
+  interrupted: "Interrupted",
+  reviewed: "Reviewed — waiting to act",
 };
 
 const stateLabels: Record<CombatItemInteractionOption["state"], string> = {
@@ -49,6 +69,22 @@ export function CombatItemInteractionPanel({
   const [detailByItemId, setDetailByItemId] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string>();
+  /**
+   * The pending Item action, derived from canonical persisted Combat state.
+   *
+   * Forgejo issue #409: the acknowledgement this replaces was local `useState` and was never
+   * rehydrated, so a reload lost the pending state entirely. Reading the persisted
+   * `CombatGenericAction` instead makes it survive a reload for free, and makes the panel's
+   * disabled buttons a **consequence** of the canonical one-live-Item-action state rather than a
+   * guard of their own — the guard is the server's creation-time refusal.
+   */
+  const liveDeclaration: CombatGenericAction | undefined = useMemo(() => {
+    if (!participantId) return undefined;
+    return (encounter.combatRoundState?.genericActions ?? []).find(
+      (action) =>
+        action.ownerParticipantId === participantId && isCombatItemInteractionActionLive(action),
+    );
+  }, [encounter.combatRoundState, participantId]);
   const actor = options?.actors.find((candidate) => candidate.participantId === participantId);
   const itemRows = useMemo(
     () => [
@@ -103,7 +139,6 @@ export function CombatItemInteractionPanel({
         recipientParticipantId,
       });
       onEncounterUpdated(next);
-      setFeedback(`${operationLabels[operation]} declared for GM review.`);
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Unable to declare the Item action.");
     } finally {
@@ -131,6 +166,17 @@ export function CombatItemInteractionPanel({
         this Combat and the Character’s current equipment.
       </div>
       {actor?.unsupportedReason ? <div role="status">{actor.unsupportedReason}</div> : null}
+      {liveDeclaration?.itemInteraction ? (
+        <div role="status">
+          {`Pending Item action: ${operationLabels[liveDeclaration.itemInteraction.operation]} ${
+            liveDeclaration.itemInteraction.itemLabel
+          } — ${declarationStatusLabels[liveDeclaration.status]}.`}
+          <div>
+            The Combat Log carries this declaration. Only one Item action can be live at a time; the
+            GM resolves, interrupts or cancels this one before another can be declared.
+          </div>
+        </div>
+      ) : null}
       {itemRows.length > 0 ? (
         <div
           style={{
@@ -201,6 +247,7 @@ export function CombatItemInteractionPanel({
                     aria-label={`${item.label}: ${operationLabels[operation]}`}
                     disabled={
                       busy ||
+                      Boolean(liveDeclaration) ||
                       (operation === "pass" && !recipientByItemId[item.id]) ||
                       (operation === "use" && !detailByItemId[item.id]?.trim())
                     }

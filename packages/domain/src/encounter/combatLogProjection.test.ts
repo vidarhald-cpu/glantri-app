@@ -11,6 +11,8 @@ import {
   projectCombatHistory,
   getCombatRoundAttackResultId,
   recordCombatRoundParryResult,
+  getCombatRoundLiveItemInteractionForParticipant,
+  type CombatGenericAction,
   type CombatRoundState,
   type CombatStepEvent,
 } from "../index";
@@ -972,5 +974,233 @@ describe("CombatLogProjection", () => {
         },
       }),
     );
+  });
+});
+
+describe("CombatLogProjection — Item action declarations (Forgejo #409)", () => {
+  function itemAction(overrides: Partial<CombatGenericAction> = {}): CombatGenericAction {
+    return {
+      createdAt: occurredAt(5),
+      duration: { kind: "gm_decided" },
+      id: "item-action-1",
+      intent: "Draw / ready the Silver dagger",
+      itemInteraction: {
+        itemId: "item-1",
+        itemLabel: "Silver dagger",
+        itemRevision: occurredAt(4),
+        operation: "draw",
+        stateAtDeclaration: "stowed",
+        visibleToParticipantIds: ["gladiator"],
+      },
+      lastUpdatedAt: occurredAt(5),
+      ownerParticipantId: "gladiator",
+      preset: "item_interaction",
+      progress: { completedRounds: 0 },
+      reference: {
+        itemId: "item-1",
+        kind: "item",
+        label: "Silver dagger",
+        ownerParticipantId: "gladiator",
+      },
+      status: "declared",
+      ...overrides,
+    };
+  }
+
+  it("records the declaration and its pending status from persisted Combat state alone", () => {
+    const projection = project(state({ genericActions: [itemAction()] }));
+    const entry = projection.events.find(
+      (candidate) => candidate.summaryFacts.kind === "item_action_declared",
+    );
+
+    expect(entry?.summary).toBe(
+      "The Gladiator declared Draw / ready the Silver dagger — waiting for GM review.",
+    );
+    expect(entry?.category).toBe("declaration");
+    expect(entry?.state).toBe("provisional");
+    expect(entry?.roundNumber).toBe(1);
+    expect(entry?.summaryFacts).toEqual({
+      actionId: "item-action-1",
+      itemId: "item-1",
+      itemOperation: "draw",
+      kind: "item_action_declared",
+      live: true,
+      status: "declared",
+    });
+    // The Log owns no uncommitted draft: only persisted generic actions reach it.
+    expect(
+      project(state()).events.some((c) => c.summaryFacts.kind === "item_action_declared"),
+    ).toBe(false);
+  });
+
+  it.each([["completed"], ["interrupted"], ["cancelled"]] as const)(
+    "marks a %s Item action final rather than pending",
+    (status) => {
+      const projection = project(state({ genericActions: [itemAction({ status })] }));
+      const entry = projection.events.find(
+        (candidate) => candidate.summaryFacts.kind === "item_action_declared",
+      );
+
+      expect(entry?.state).toBe("final");
+      expect(entry?.summaryFacts).toMatchObject({ live: false, status });
+    },
+  );
+
+  it("keeps one entry in its declaring round when the action is carried forward", () => {
+    const roundOne = state({ genericActions: [itemAction({ status: "active" })] });
+    const roundTwo = combatRoundStateSchema.parse({
+      ...roundOne,
+      genericActions: [itemAction({ status: "active" })],
+      roundNumber: 2,
+      rounds: [completedCombatRoundSchema.parse({ ...roundOne, completedAt: occurredAt(9) })],
+    });
+    const entries = project(roundTwo).events.filter(
+      (candidate) => candidate.summaryFacts.kind === "item_action_declared",
+    );
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.roundNumber).toBe(1);
+  });
+
+  it("restricts the entry to the Item interaction's own audience", () => {
+    const projection = project(state({ genericActions: [itemAction()] }));
+    const owner = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["gladiator"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+      },
+    });
+    const other = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["scyrian"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["gladiator", "scyrian"]),
+      },
+    });
+
+    expect(owner.events.map((event) => event.summary)).toContain(
+      "you declared Draw / ready the Silver dagger — waiting for GM review.",
+    );
+    expect(other.events.some((event) => event.summaryFacts.kind === "item_action_declared")).toBe(
+      false,
+    );
+  });
+
+  it("keeps a GM-only Item action out of every player's Log", () => {
+    const projection = project(
+      state({
+        genericActions: [
+          itemAction({
+            itemInteraction: {
+              itemId: "item-1",
+              itemLabel: "Silver dagger",
+              itemRevision: occurredAt(4),
+              operation: "draw",
+              stateAtDeclaration: "stowed",
+              visibleToParticipantIds: [],
+            },
+          }),
+        ],
+      }),
+    );
+
+    expect(
+      projection.events.some((event) => event.summaryFacts.kind === "item_action_declared"),
+    ).toBe(true);
+    expect(
+      projectCombatLogForViewer({
+        projection,
+        viewer: {
+          controlledParticipantIds: new Set(["gladiator"]),
+          kind: "player",
+          visibleParticipantIds: new Set(["gladiator"]),
+        },
+      }).events.some((event) => event.summaryFacts.kind === "item_action_declared"),
+    ).toBe(false);
+  });
+});
+
+describe("getCombatRoundLiveItemInteractionForParticipant (Forgejo #409)", () => {
+  const live = {
+    createdAt: occurredAt(5),
+    duration: { kind: "gm_decided" },
+    id: "item-action-1",
+    intent: "Draw / ready the Silver dagger",
+    itemInteraction: {
+      itemId: "item-1",
+      itemLabel: "Silver dagger",
+      itemRevision: occurredAt(4),
+      operation: "draw",
+      stateAtDeclaration: "stowed",
+      visibleToParticipantIds: ["gladiator"],
+    },
+    lastUpdatedAt: occurredAt(5),
+    ownerParticipantId: "gladiator",
+    preset: "item_interaction",
+    progress: { completedRounds: 0 },
+    reference: {
+      itemId: "item-1",
+      kind: "item",
+      label: "Silver dagger",
+      ownerParticipantId: "gladiator",
+    },
+    status: "declared",
+  } satisfies CombatGenericAction;
+
+  it.each([["declared"], ["reviewed"], ["active"]] as const)("finds a %s Item action", (status) => {
+    expect(
+      getCombatRoundLiveItemInteractionForParticipant({
+        participantId: "gladiator",
+        state: { genericActions: [{ ...live, status }] },
+      })?.id,
+    ).toBe("item-action-1");
+  });
+
+  it.each([["completed"], ["interrupted"], ["cancelled"]] as const)(
+    "treats a %s Item action as terminal",
+    (status) => {
+      expect(
+        getCombatRoundLiveItemInteractionForParticipant({
+          participantId: "gladiator",
+          state: { genericActions: [{ ...live, status }] },
+        }),
+      ).toBeUndefined();
+    },
+  );
+
+  it("is scoped per participant, excludes the action's own id, and ignores other families", () => {
+    expect(
+      getCombatRoundLiveItemInteractionForParticipant({
+        participantId: "scyrian",
+        state: { genericActions: [live] },
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundLiveItemInteractionForParticipant({
+        excludeActionId: "item-action-1",
+        participantId: "gladiator",
+        state: { genericActions: [live] },
+      }),
+    ).toBeUndefined();
+    expect(
+      getCombatRoundLiveItemInteractionForParticipant({
+        participantId: "gladiator",
+        state: {
+          genericActions: [
+            {
+              ...live,
+              declarationKind: "small_action",
+              id: "small-1",
+              itemInteraction: undefined,
+              preset: undefined,
+              reference: undefined,
+            },
+          ],
+        },
+      }),
+    ).toBeUndefined();
   });
 });

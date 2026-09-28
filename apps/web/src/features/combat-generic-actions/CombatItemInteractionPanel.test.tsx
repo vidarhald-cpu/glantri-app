@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { EncounterSession } from "@glantri/domain";
+import type { CombatGenericAction, EncounterSession } from "@glantri/domain";
 
 import {
   loadCombatItemInteractionOptions,
@@ -154,5 +154,135 @@ describe("CombatItemInteractionPanel", () => {
     expect(recipientSelect.querySelectorAll("option")).toHaveLength(1);
     expect(container.textContent).not.toContain("Hidden Bram");
     expect(container.textContent).not.toContain("participant-2");
+  });
+});
+
+describe("CombatItemInteractionPanel — pending Item action state (Forgejo #409)", () => {
+  const liveAction: CombatGenericAction = {
+    createdAt: "2026-08-16T09:30:00.000Z",
+    duration: { kind: "gm_decided" },
+    id: "action-1",
+    intent: "Draw / ready Silver dagger",
+    itemInteraction: {
+      itemId: "item-dagger",
+      itemLabel: "Silver dagger",
+      itemRevision: "2026-08-16T09:59:00.000Z",
+      operation: "draw",
+      stateAtDeclaration: "stowed",
+      visibleToParticipantIds: ["participant-1"],
+    },
+    lastUpdatedAt: "2026-08-16T09:30:00.000Z",
+    ownerParticipantId: "participant-1",
+    preset: "item_interaction",
+    progress: { completedRounds: 0 },
+    reference: {
+      itemId: "item-dagger",
+      kind: "item",
+      label: "Silver dagger",
+      ownerParticipantId: "participant-1",
+    },
+    status: "declared",
+  };
+
+  function encounterWith(actions: CombatGenericAction[]): EncounterSession {
+    return {
+      ...encounter,
+      combatRoundState: { genericActions: actions },
+    } as unknown as EncounterSession;
+  }
+
+  beforeEach(() => {
+    vi.mocked(loadCombatItemInteractionOptions).mockResolvedValue({
+      actors: [
+        {
+          characterId: "character-1",
+          items: [
+            {
+              category: "weapon",
+              id: "item-dagger",
+              label: "Silver dagger",
+              operations: ["draw", "drop"],
+              revision: "2026-08-16T09:59:00.000Z",
+              state: "stowed",
+              templateId: "weapon-dagger",
+            },
+          ],
+          label: "Aster",
+          participantId: "participant-1",
+        },
+      ],
+      disarmTargets: [],
+      presentItems: [],
+      recipients: [],
+    });
+    vi.mocked(updateCombatItemInteractionOnServer).mockResolvedValue(encounter);
+  });
+
+  it.each([
+    ["declared", "Waiting for GM review"],
+    ["reviewed", "Reviewed — waiting to act"],
+    ["active", "In progress"],
+  ] as const)(
+    "shows the %s Item action from canonical state, so it survives a reload",
+    async (status, label) => {
+      // A fresh mount with no prior interaction is exactly what a reload produces.
+      render(
+        <CombatItemInteractionPanel
+          encounter={encounterWith([{ ...liveAction, status }])}
+          isGm={false}
+          onEncounterUpdated={vi.fn()}
+          participantId="participant-1"
+        />,
+      );
+
+      expect(
+        await screen.findByText(`Pending Item action: Draw / ready Silver dagger — ${label}.`),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it.each([["completed"], ["interrupted"], ["cancelled"]] as const)(
+    "shows no pending state and frees the operations once the action is %s",
+    async (status) => {
+      render(
+        <CombatItemInteractionPanel
+          encounter={encounterWith([{ ...liveAction, status }])}
+          isGm={false}
+          onEncounterUpdated={vi.fn()}
+          participantId="participant-1"
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: "Silver dagger: Drop" })).toBeEnabled();
+      expect(screen.queryByText(/Pending Item action/)).not.toBeInTheDocument();
+    },
+  );
+
+  it("disables the operations while a live declaration exists, as a consequence of canonical state", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounterWith([liveAction])}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Silver dagger: Drop" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Silver dagger: Draw / ready" })).toBeDisabled();
+  });
+
+  it("ignores another participant's live Item action", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounterWith([{ ...liveAction, ownerParticipantId: "participant-2" }])}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Silver dagger: Drop" })).toBeEnabled();
+    expect(screen.queryByText(/Pending Item action/)).not.toBeInTheDocument();
   });
 });

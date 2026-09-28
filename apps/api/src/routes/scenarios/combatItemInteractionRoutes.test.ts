@@ -653,3 +653,149 @@ describe("canonical Combat Item interaction routes", () => {
     await app.close();
   });
 });
+
+describe("one live Item action per participant (Forgejo #409, rule decision 0007 §2)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    auth.requireAuthenticatedUser.mockResolvedValue(player);
+  });
+
+  function declareSecond(app: Awaited<ReturnType<typeof appWith>>, actionId = "action-2") {
+    return app.inject({
+      method: "POST",
+      payload: {
+        actionId,
+        expectedItemRevision: "2026-08-16T09:29:00.000Z",
+        expectedRevision: revision,
+        itemId: "item-1",
+        itemOperation: "drop",
+        operation: "declare",
+        participantId: "participant-1",
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/item-interactions",
+    });
+  }
+
+  it.each([["declared"], ["reviewed"], ["active"]] as const)(
+    "refuses a second Item declaration server-side while a %s one is live",
+    async (status) => {
+      const routeServices = services(encounterWithActions([itemAction(status)]));
+      const app = await appWith(routeServices);
+      const response = await declareSecond(app);
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toMatch(/already has an Item action in progress/);
+      // The refusal is the guard: nothing is resolved and nothing is persisted.
+      expect(routeServices.itemService.resolveDeclaration).not.toHaveBeenCalled();
+      expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+      await app.close();
+    },
+  );
+
+  it.each([["completed"], ["interrupted"], ["cancelled"]] as const)(
+    "accepts the next Item declaration once the earlier one is %s",
+    async (status) => {
+      const routeServices = services(encounterWithActions([itemAction(status)]));
+      const app = await appWith(routeServices);
+      const response = await declareSecond(app);
+
+      expect(response.statusCode).toBe(200);
+      expect(routeServices.itemService.resolveDeclaration).toHaveBeenCalledTimes(1);
+      const persisted = vi.mocked(routeServices.encounterService.updateCombatEncounter).mock
+        .calls[0]?.[0].session.combatRoundState?.genericActions;
+      // The terminal action is untouched and the new one exists alongside it.
+      expect(persisted?.map((action) => action.id)).toEqual(["action-1", "action-2"]);
+      expect(persisted?.find((action) => action.id === "action-1")?.status).toBe(status);
+      await app.close();
+    },
+  );
+
+  it("still accepts idempotent re-declaration of the same live Item action by its own id", async () => {
+    const routeServices = services(encounterWithActions([itemAction("declared")]));
+    const app = await appWith(routeServices);
+    const response = await declareSecond(app, "action-1");
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().error).toBeUndefined();
+    expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("does not refuse a live Item action carried forward across a round boundary", async () => {
+    const carried = encounterWithActions([itemAction("active")]);
+    const nextRound = encounterSessionSchema.parse({
+      ...carried,
+      combatRoundState: { ...carried.combatRoundState!, roundNumber: 2 },
+      currentRound: 2,
+    });
+    const routeServices = services(nextRound);
+    const app = await appWith(routeServices);
+
+    // The carried action is still this participant's one live Item action in the new round, and
+    // re-addressing it by its own id is accepted rather than refused as a duplicate.
+    const sameAction = await declareSecond(app, "action-1");
+    expect(sameAction.statusCode).toBe(200);
+    expect(
+      sameAction
+        .json()
+        .encounter.combatRoundState.genericActions.find(
+          (action: { id: string }) => action.id === "action-1",
+        ).status,
+    ).toBe("active");
+
+    // The slot it occupies is still occupied — the guard is per participant, not per round.
+    const second = await declareSecond(app);
+    expect(second.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("scopes the refusal to the declaring participant", async () => {
+    auth.requireAuthenticatedUser.mockResolvedValue(gm);
+    const routeServices = services(encounterWithActions([itemAction("active")]));
+    const app = await appWith(routeServices);
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "action-2",
+        expectedItemRevision: "2026-08-16T09:29:00.000Z",
+        expectedRevision: revision,
+        itemId: "item-1",
+        itemOperation: "drop",
+        operation: "declare",
+        participantId: "participant-2",
+        visibleToParticipantIds: [],
+      },
+      url: "/encounters/encounter-1/combat-round/item-interactions",
+    });
+
+    expect(response.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("does not widen to other action families", async () => {
+    const performTask: CombatGenericAction = {
+      createdAt: "2026-08-16T09:30:00.000Z",
+      declarationKind: "perform_task",
+      duration: { kind: "gm_decided" },
+      id: "task-1",
+      intent: "Brace the door",
+      lastUpdatedAt: "2026-08-16T09:30:00.000Z",
+      ownerParticipantId: "participant-1",
+      progress: { completedRounds: 0 },
+      status: "active",
+    };
+    const smallAction: CombatGenericAction = {
+      ...performTask,
+      declarationKind: "small_action",
+      id: "small-1",
+      intent: "Shout a warning",
+    };
+    const routeServices = services(encounterWithActions([performTask, smallAction]));
+    const app = await appWith(routeServices);
+    const response = await declareSecond(app);
+
+    expect(response.statusCode).toBe(200);
+    await app.close();
+  });
+});

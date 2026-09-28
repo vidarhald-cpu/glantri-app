@@ -3,6 +3,12 @@ import type { CombatAdjustDistanceProposal } from "./combatAdjustDistance";
 import type { CombatFeintProposal } from "./combatFeint";
 import { getCombatRoundTimelineRoundStates, type CombatRoundState } from "./combatRoundManager";
 import {
+  isCombatGenericActionLive,
+  type CombatGenericAction,
+  type CombatGenericActionStatus,
+  type CombatItemInteractionOperation,
+} from "./combatGenericAction";
+import {
   combatCriticalBleedControlStateSchema,
   getCombatCriticalBleedControlStateLabel,
 } from "./combatCriticalRuntime";
@@ -110,6 +116,14 @@ export type CombatLogSummaryFacts =
       readonly kind: "task_resolved";
       readonly rollOutcome?: "failed" | "succeeded";
       readonly taskId: string;
+    }
+  | {
+      readonly actionId: string;
+      readonly itemId: string;
+      readonly itemOperation: CombatItemInteractionOperation;
+      readonly kind: "item_action_declared";
+      readonly live: boolean;
+      readonly status: CombatGenericActionStatus;
     };
 
 export interface CombatLogEventPresentation {
@@ -1039,6 +1053,114 @@ function maneuverAttempts(input: {
   return attempts;
 }
 
+const ITEM_ACTION_STATUS_PHRASES: Readonly<Record<CombatGenericActionStatus, string>> = {
+  active: "in progress",
+  cancelled: "cancelled",
+  completed: "completed",
+  declared: "waiting for GM review",
+  interrupted: "interrupted",
+  reviewed: "reviewed, waiting to act",
+};
+
+/**
+ * Projects one canonical Item interaction declaration.
+ *
+ * The Combat Log is the player-facing status and history location for Item actions (Product Owner
+ * ruling on Forgejo issue #409; Combat Panel Contract §12.4 routes the pending-status row here and
+ * §12.8 forbids inventing another surface). The entry is derived from the **persisted**
+ * `CombatGenericAction` alone, so:
+ *
+ * - it survives a reload, because nothing about it lives in component state, and
+ * - the Log never owns an uncommitted draft (§12.3): an Item action exists here only once the
+ *   declaration route has persisted it, and the panel's unsent form fields reach nothing.
+ *
+ * `state` carries pending-ness through the Log's own existing provisional/final vocabulary rather
+ * than a new field, and the entry's audience is the Item interaction's own
+ * `visibleToParticipantIds` — including the empty set, which correctly makes a GM-only Item action
+ * reach no player at all.
+ */
+function projectItemActionDeclaration(input: {
+  action: CombatGenericAction;
+  encounterId: string;
+  labels: ReadonlyMap<string, string>;
+  roundNumber: number;
+  sourceRevision: string;
+}): Candidate | undefined {
+  const interaction = input.action.itemInteraction;
+  if (input.action.preset !== "item_interaction" || !interaction) return undefined;
+  const actor = subject(input.action.ownerParticipantId, input.labels);
+  if (!actor) return undefined;
+  const live = isCombatGenericActionLive(input.action);
+  return baseCandidate({
+    actor,
+    audienceParticipantIds: interaction.visibleToParticipantIds,
+    category: "declaration",
+    encounterId: input.encounterId,
+    eventId: `item-action:${input.action.id}:declared`,
+    occurredAt: input.action.createdAt,
+    phase: "declaration",
+    roundNumber: input.roundNumber,
+    semanticOrder: -1,
+    sourceEventIds: [],
+    sourceRevision: input.sourceRevision,
+    sourceSequence: -1,
+    state: live ? "provisional" : "final",
+    summary: `${actor.displayName} declared ${input.action.intent} — ${
+      ITEM_ACTION_STATUS_PHRASES[input.action.status]
+    }.`,
+    summaryFacts: {
+      actionId: input.action.id,
+      itemId: interaction.itemId,
+      itemOperation: interaction.operation,
+      kind: "item_action_declared",
+      live,
+      status: input.action.status,
+    },
+  });
+}
+
+/**
+ * Projects every Item action across the timeline exactly once.
+ *
+ * A live Item action is carried forward unchanged into each following round's `genericActions`
+ * (`advanceCombatGenericActionsToRound`), so the same action is visible in several round states.
+ * The declaration belongs to the round it first appeared in, while its **status** is whatever the
+ * newest round state says — so the entry stays put and its pending status keeps up.
+ */
+function itemActionDeclarations(input: {
+  encounterId: string;
+  sourceRevision: string;
+  state: CombatRoundState;
+}): Candidate[] {
+  const firstRoundNumber = new Map<string, number>();
+  const newest = new Map<
+    string,
+    { action: CombatGenericAction; labels: ReadonlyMap<string, string> }
+  >();
+  for (const roundState of getCombatRoundTimelineRoundStates(input.state)) {
+    const labels = new Map(
+      roundState.participants.map((participant) => [participant.participantId, participant.label]),
+    );
+    for (const action of roundState.genericActions) {
+      if (action.preset !== "item_interaction") continue;
+      if (!firstRoundNumber.has(action.id)) firstRoundNumber.set(action.id, roundState.roundNumber);
+      newest.set(action.id, { action, labels });
+    }
+  }
+  const candidates: Candidate[] = [];
+  for (const [actionId, entry] of newest) {
+    const candidate = projectItemActionDeclaration({
+      action: entry.action,
+      encounterId: input.encounterId,
+      labels: entry.labels,
+      roundNumber: firstRoundNumber.get(actionId) ?? entry.action.progress.startedRoundNumber ?? 1,
+      sourceRevision: input.sourceRevision,
+    });
+    if (candidate) candidates.push(candidate);
+  }
+  return candidates;
+}
+
 /**
  * Projects one resolved Perform Task. The GM-authored player-safe text is the authorized Combat
  * outcome for its explicit audience; the entry carries that audience so no other viewer receives it.
@@ -1219,6 +1341,14 @@ export function buildCombatLogProjection(input: {
       }
     }
   }
+
+  candidates.push(
+    ...itemActionDeclarations({
+      encounterId: input.encounterId,
+      sourceRevision: input.sourceRevision,
+      state: input.state,
+    }),
+  );
 
   const uniqueCandidates = [
     ...new Map(candidates.map((candidate) => [candidate.id, candidate])).values(),

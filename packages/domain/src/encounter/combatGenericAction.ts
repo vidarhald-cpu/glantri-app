@@ -154,6 +154,34 @@ export const combatGenericActionSchema = z.object({
 });
 export type CombatGenericAction = z.infer<typeof combatGenericActionSchema>;
 
+/**
+ * A Combat generic action in one of these statuses is no longer live.
+ *
+ * This is the single terminal-status vocabulary for **every** generic-action family, Item
+ * interactions included: an Item action is an ordinary `CombatGenericAction` carrying
+ * `preset: "item_interaction"` and an `itemInteraction`, and it moves through the same
+ * `combatGenericActionStatusSchema` — `declared -> reviewed -> active` and then exactly one of
+ * `completed` (resolve), `interrupted` (interrupt) or `cancelled` (cancel), as the Item action
+ * lifecycle route's own terminal-status mapping shows. Rule decision 0007 §2 names the same three
+ * statuses for Perform Task; they are shared here rather than restated per family.
+ */
+export const COMBAT_GENERIC_ACTION_TERMINAL_STATUSES: ReadonlySet<CombatGenericActionStatus> =
+  new Set<CombatGenericActionStatus>(["completed", "interrupted", "cancelled"]);
+
+/** True while a Combat generic action has not yet reached a terminal status. */
+export function isCombatGenericActionLive(action: CombatGenericAction): boolean {
+  return !COMBAT_GENERIC_ACTION_TERMINAL_STATUSES.has(action.status);
+}
+
+/**
+ * True for an Item interaction action that is still live — the liveness the one-live-Item-action
+ * guard is scoped on. `preset: "item_interaction"` is the Item action family marker;
+ * `declareCombatGenericAction` keeps it in step with `itemInteraction`.
+ */
+export function isCombatItemInteractionActionLive(action: CombatGenericAction): boolean {
+  return action.preset === "item_interaction" && isCombatGenericActionLive(action);
+}
+
 export function getCombatGenericActionTotalRounds(
   duration: CombatGenericActionDuration,
 ): number | undefined {
