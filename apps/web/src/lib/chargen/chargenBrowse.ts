@@ -1,4 +1,8 @@
-﻿import { getPlayerFacingSkillCategoryId, type PlayerFacingSkillCategoryId, type SkillDefinition } from "@glantri/domain";
+﻿import {
+  getPlayerFacingSkillCategoryId,
+  type PlayerFacingSkillCategoryId,
+  type SkillDefinition,
+} from "@glantri/domain";
 import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 
 /*
@@ -11,6 +15,13 @@ import type { ChargenSkillAccessSource } from "@glantri/rules-engine";
 */
 
 export interface ProfessionBrowseItem {
+  /**
+   * The approved player-facing browsing category (rule decision 0012). Browsing and findability
+   * only: it grants no competence and creates no cost, prerequisite or availability effect.
+   * `undefined` only for a Profession outside the canonical V2 roster.
+   */
+  categoryId?: string;
+  categoryName?: string;
   description?: string;
   familyName: string;
   id: string;
@@ -65,126 +76,141 @@ const ACCESS_SOURCE_LABELS: Record<ChargenSkillAccessSource, string> = {
   "profession-group": "Profession group",
   "profession-skill": "Direct profession skill",
   "society-foundational-skill": "Society access",
-  "society-skill": "Society access"
+  "society-skill": "Society access",
 };
 
 const ACCESS_SOURCE_ORDER: ChargenSkillAccessSource[] = [
   "profession-skill",
   "profession-group",
   "society-foundational-skill",
-  "society-skill"
+  "society-skill",
 ];
 
 const PLAYER_FACING_SKILL_BUCKETS: PlayerFacingSkillBucketDefinition[] = [
   {
     description: "Weapons, direct fighting, and practical battle skills.",
     id: "combat",
-    label: "Combat"
+    label: "Combat",
   },
   {
     description: "Soldiering, battlefield work, and organized service training.",
     id: "military",
-    label: "Military"
+    label: "Military",
   },
   {
     description: "Travel, stealthy movement, animals, survival, and field utility.",
     id: "fieldcraft",
-    label: "Fieldcraft"
+    label: "Fieldcraft",
   },
   {
     description: "Ships, small craft, crews, and navigation.",
     id: "maritime",
-    label: "Maritime"
+    label: "Maritime",
   },
   {
     description: "Care, remedies, diagnosis, and treatment.",
     id: "healing",
-    label: "Healing"
+    label: "Healing",
   },
   {
     description: "Commerce, records, administration, and practical livelihoods.",
     id: "trade",
-    label: "Trade"
+    label: "Trade",
   },
   {
     description: "Courtly manners, rank, heraldry, ceremony, and elite intrigue.",
     id: "high-society",
-    label: "High Society"
+    label: "High Society",
   },
   {
     description: "Song, music, dance, acting, and spoken performance.",
     id: "performance",
-    label: "Performance"
+    label: "Performance",
   },
   {
     description: "Influence, social reading, and interpersonal maneuvering.",
     id: "social",
-    label: "Social"
+    label: "Social",
   },
   {
     description: "Infiltration, security work, theft, and deception.",
     id: "covert",
-    label: "Covert"
+    label: "Covert",
   },
   {
     description: "Spoken and learned tongues represented as concrete Language (X) skills.",
     id: "language",
-    label: "Language"
+    label: "Language",
   },
   {
     description: "Literacy, scholarship, natural inquiry, and learned culture.",
     id: "knowledge",
-    label: "Knowledge"
+    label: "Knowledge",
   },
   {
     description: "Focus, discipline, inner control, and mental resilience.",
     id: "mental",
-    label: "Mental"
+    label: "Mental",
   },
   {
     description: "Ritual, omen-reading, magical theory, and mystical practice.",
     id: "mystical",
-    label: "Mystical"
+    label: "Mystical",
   },
   {
     description: "Making, shaping, and artisan work.",
     id: "craft",
-    label: "Craft"
+    label: "Craft",
   },
   {
     description: "Athletic conditioning, mobility, and body training.",
     id: "physical",
-    label: "Physical"
+    label: "Physical",
   },
   {
-    description: "Standalone direct profession skills outside the main training groups.",
+    /*
+     * `special-access` is access provenance, not a kind of competence: it says how a Skill was
+     * reached, not what it is. Competency Content V2 retires it as a category and gives every
+     * competency a real one. The bucket survives only as the landing place for a Skill whose
+     * category is still unresolved, and its player-facing label says what the row actually is.
+     */
+    description: "Profession training reached directly, without a separate training practice.",
     id: "special-access",
-    label: "Special access"
-  }
+    label: "Direct profession training",
+  },
 ];
 
+/**
+ * Browsing filter for the Profession chooser.
+ *
+ * Filters by the approved browsing category rather than by Profession family: there are 84
+ * families for 86 paths, so a family filter narrows nothing, which is the defect recorded in
+ * section 10.3 of the Chargen experience contract. Search still matches the family name, because a
+ * player who knows the family name should still find the Profession.
+ */
 export function filterProfessionBrowseItems<T extends ProfessionBrowseItem>(input: {
-  familyFilter: string;
+  categoryFilter: string;
   items: T[];
   search: string;
 }): T[] {
   const normalizedSearch = input.search.trim().toLowerCase();
 
   return input.items.filter((item) => {
-    const matchesFamily =
-      input.familyFilter === "all" || item.familyName === input.familyFilter;
+    const matchesCategory =
+      input.categoryFilter === "all" || item.categoryId === input.categoryFilter;
     const matchesSearch =
       normalizedSearch.length === 0 ||
       item.name.toLowerCase().includes(normalizedSearch) ||
       item.familyName.toLowerCase().includes(normalizedSearch) ||
+      item.categoryName?.toLowerCase().includes(normalizedSearch) ||
       item.description?.toLowerCase().includes(normalizedSearch);
 
-    return matchesFamily && matchesSearch;
+    return matchesCategory && matchesSearch;
   });
 }
 
 export function getSkillAccessSourceLabels(
-  sources: ChargenSkillAccessSource[] | undefined
+  sources: ChargenSkillAccessSource[] | undefined,
 ): string[] {
   if (!sources || sources.length === 0) {
     return [];
@@ -193,7 +219,7 @@ export function getSkillAccessSourceLabels(
   const sourceSet = new Set(sources);
 
   return ACCESS_SOURCE_ORDER.filter((source) => sourceSet.has(source)).map(
-    (source) => ACCESS_SOURCE_LABELS[source]
+    (source) => ACCESS_SOURCE_LABELS[source],
   );
 }
 
@@ -242,7 +268,7 @@ export function getPlayerFacingSkillBucket(
   skill:
     | Pick<SkillDefinition, "id" | "categoryId" | "groupId" | "groupIds">
     | { id: string; categoryId?: string; groupId?: string; groupIds?: string[] },
-  options?: { preferDirectProfession?: boolean }
+  options?: { preferDirectProfession?: boolean },
 ): PlayerFacingSkillBucketId {
   return getPlayerFacingSkillCategoryId(skill, options);
 }
@@ -256,7 +282,7 @@ export function mergeSkillBrowseRowsBySkillId<T extends SkillBrowseRowLike>(rows
     if (!existing) {
       merged.set(row.skill.id, {
         ...row,
-        sourceLabels: [...row.sourceLabels]
+        sourceLabels: [...row.sourceLabels],
       });
       continue;
     }
@@ -264,7 +290,7 @@ export function mergeSkillBrowseRowsBySkillId<T extends SkillBrowseRowLike>(rows
     merged.set(row.skill.id, {
       ...existing,
       ...row,
-      sourceLabels: [...new Set([...existing.sourceLabels, ...row.sourceLabels])]
+      sourceLabels: [...new Set([...existing.sourceLabels, ...row.sourceLabels])],
     });
   }
 
@@ -283,7 +309,9 @@ export function formatDependencyOwnershipSummary(input: {
   return `${input.dependencyName}: currently counts as level ${input.effectiveSkillLevel}.`;
 }
 
-export function groupRowsBySkillType<T extends SkillTypeGroupedRow>(rows: T[]): SkillTypeGroup<T>[] {
+export function groupRowsBySkillType<T extends SkillTypeGroupedRow>(
+  rows: T[],
+): SkillTypeGroup<T>[] {
   const grouped = new Map<PlayerFacingSkillBucketId, T[]>();
 
   for (const row of rows) {
@@ -292,26 +320,22 @@ export function groupRowsBySkillType<T extends SkillTypeGroupedRow>(rows: T[]): 
     grouped.set(row.skillType, existing);
   }
 
-  return PLAYER_FACING_SKILL_BUCKETS
-    .map((definition) => {
-      const bucketRows = grouped.get(definition.id);
+  return PLAYER_FACING_SKILL_BUCKETS.map((definition) => {
+    const bucketRows = grouped.get(definition.id);
 
-      if (!bucketRows || bucketRows.length === 0) {
-        return null;
-      }
+    if (!bucketRows || bucketRows.length === 0) {
+      return null;
+    }
 
-      return {
-        bucketId: definition.id,
-        label: definition.label,
-        rows: [...bucketRows].sort((left, right) => left.skillName.localeCompare(right.skillName))
-      } satisfies SkillTypeGroup<T>;
-    })
-    .filter((group): group is SkillTypeGroup<T> => group !== null);
+    return {
+      bucketId: definition.id,
+      label: definition.label,
+      rows: [...bucketRows].sort((left, right) => left.skillName.localeCompare(right.skillName)),
+    } satisfies SkillTypeGroup<T>;
+  }).filter((group): group is SkillTypeGroup<T> => group !== null);
 }
 
-export function isRelevantSpecializationBrowseItem(
-  item: SpecializationBrowseItem
-): boolean {
+export function isRelevantSpecializationBrowseItem(item: SpecializationBrowseItem): boolean {
   return (
     item.evaluation.isAllowed ||
     item.specializationLevel > 0 ||

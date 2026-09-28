@@ -26,6 +26,7 @@ import type {
   PlayerFacingSkillBucketDefinition,
   ProfessionBrowseItem,
 } from "@/lib/chargen/chargenBrowse";
+import type { SkillReferenceProfession } from "@/lib/skills/skillReferenceModel";
 import type { AuthUser } from "@glantri/auth";
 
 export const UNIVERSAL_SOCIAL_BANDS = [1, 2, 3, 4] as const;
@@ -57,22 +58,22 @@ export interface CivilizationOption {
   writtenLanguageName?: string;
 }
 
+/**
+ * One Profession in the chooser.
+ *
+ * Reader-facing content only. The training structure is not restated here: it travels on `browse`,
+ * which is the one canonical Profession projection (#372 section 0.6), so the chooser, the
+ * selected-Profession presentation and the `/skills` reference cannot drift apart. No
+ * implementation-derived count belongs on this card; section 1 forbids leading with one, and a
+ * display path that renders whatever field exists is how a provenance `note` reached this chooser
+ * before.
+ */
 export interface ProfessionBrowseCard extends ProfessionBrowseItem {
-  coreGroupNames: string[];
-  coreReachableSkillNames: string[];
-  favoredDirectOnlySkillNames: string[];
-  favoredGroupNames: string[];
-  favoredReachableSkillNames: string[];
+  browse?: SkillReferenceProfession;
   familyDescription?: string;
   hasLiteracyFoundation: boolean;
-  literacyGatedReachableSkillCount: number;
-  normalAccessGroupNames: string[];
   profession: ProfessionDefinition;
   subtypeName: string;
-  summary: {
-    totalEffectiveCoreReachableSkills: number;
-    totalEffectiveFavoredReachableSkills: number;
-  };
 }
 
 export interface RuleStatusItem {

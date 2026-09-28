@@ -8,6 +8,8 @@ import {
   competencyContentV2Families,
   competencyContentV2GroupReaderProse,
   competencyContentV2GroupsAwaitingReaderProse,
+  competencyContentV2ProfessionCategories,
+  competencyContentV2ProfessionCategoryByFamilyCode,
   competencyContentV2ReaderProseCoverage,
   competencyContentV2RemovedGroups,
   competencyContentV2SocietyLevelAvailability,
@@ -134,6 +136,10 @@ export function getCompetencyV2ReferenceSource() {
   );
   const familyProse = (familyId: string | undefined) =>
     readerContent(competencyContentV2FamilyReaderProse[familyCodeById.get(familyId ?? "") ?? ""]);
+  /* Decision 0012's browsing taxonomy, carried per family. It is a navigation label only: it
+     changes no Profession identity, route, membership or availability. */
+  const browsingCategoryId = (familyId: string | undefined) =>
+    competencyContentV2ProfessionCategoryByFamilyCode[familyCodeById.get(familyId ?? "") ?? ""];
   const families = content.professionFamilies
     .filter((family) => runtime.paths.some((path) => path.familyId === family.id))
     .map((family) => ({
@@ -141,6 +147,7 @@ export function getCompetencyV2ReferenceSource() {
       name: family.name,
       code: familyCodeById.get(family.id),
       readerContent: familyProse(family.id),
+      browsingCategoryId: browsingCategoryId(family.id),
     }));
   const professions = content.professions
     .filter((profession) => runtime.paths.some((path) => path.id === profession.id))
@@ -174,6 +181,8 @@ export function getCompetencyV2ReferenceSource() {
       })),
     },
     categories: competencyContentV2Catalogue.categories,
+    /* The approved player-facing Profession browsing roster (decision 0012). Browsing only. */
+    professionCategories: competencyContentV2ProfessionCategories,
     removedGroups: competencyContentV2RemovedGroups,
     availability: {
       authoredCeiling: competencyContentV2SocietyLevelAvailability.authoredCeiling,

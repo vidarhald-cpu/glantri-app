@@ -16,22 +16,20 @@ export function SkillsTableStep({ groupedPlayerSkillTableRows }: SkillsTableStep
         display: "grid",
         gap: "1rem",
         order: 9,
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>9. Skills table</h2>
 
       {groupedPlayerSkillTableRows.length > 0 ? (
-        <div
-          style={{ display: "grid", gap: "1rem" }}
-        >
+        <div style={{ display: "grid", gap: "1rem" }}>
           {groupedPlayerSkillTableRows.map((group) => (
             <section
               key={group.bucketId}
               style={{
                 border: "1px solid #e7e2d7",
                 borderRadius: 10,
-                overflowX: "auto"
+                overflowX: "auto",
               }}
             >
               <div
@@ -42,7 +40,7 @@ export function SkillsTableStep({ groupedPlayerSkillTableRows }: SkillsTableStep
                   display: "flex",
                   gap: "0.5rem",
                   justifyContent: "space-between",
-                  padding: "0.75rem 1rem"
+                  padding: "0.75rem 1rem",
                 }}
               >
                 <strong>{group.label}</strong>
@@ -59,13 +57,13 @@ export function SkillsTableStep({ groupedPlayerSkillTableRows }: SkillsTableStep
                   gap: "0.75rem",
                   gridTemplateColumns:
                     "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                  padding: "0.75rem 1rem"
+                  padding: "0.75rem 1rem",
                 }}
               >
                 <strong>Skill</strong>
                 <strong>Stats</strong>
                 <strong>Avg stats</strong>
-                <strong>Skill group XP</strong>
+                <strong>Learning Group XP</strong>
                 <strong>Owned XP</strong>
                 <strong>Derived preview</strong>
                 <strong>Total XP</strong>
@@ -81,7 +79,7 @@ export function SkillsTableStep({ groupedPlayerSkillTableRows }: SkillsTableStep
                     gap: "0.75rem",
                     gridTemplateColumns:
                       "minmax(180px, 2fr) minmax(120px, 1.2fr) repeat(6, minmax(72px, 88px))",
-                    padding: "0.75rem 1rem"
+                    padding: "0.75rem 1rem",
                   }}
                 >
                   <div>

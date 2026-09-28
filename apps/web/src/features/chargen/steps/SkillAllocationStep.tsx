@@ -1,4 +1,4 @@
-import { TargetGroupDetails } from "../components/TargetPackageDetails";
+import { LearningGroupTraining } from "../components/ProfessionTraining";
 import { TrainingCostChangeNotice } from "../components/TrainingCostChangeNotice";
 import {
   allocateChargenPoint,
@@ -45,6 +45,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     motherTongueSummary,
     otherSkillFilterActive,
     otherSkillTypeOptions,
+    professionBrowseModel,
     progression,
     renderSkillRowsTable,
     rowActionFeedback,
@@ -292,7 +293,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                 }}
               >
                 <div style={{ display: "grid", gap: "0.25rem" }}>
-                  <strong>Profession groups</strong>
+                  <strong>Profession training</strong>
                 </div>
                 <button
                   onClick={() => toggleAllocationSection("core-profession-skills")}
@@ -600,12 +601,14 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                             >
                               <div style={{ display: "grid", gap: "0.2rem" }}>
                                 <strong>{group.name}</strong>
-                                <TargetGroupDetails groupId={group.id} />
+                                <LearningGroupTraining
+                                  groupId={group.id}
+                                  model={professionBrowseModel}
+                                />
                                 <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                                  Included training package • {visibleSkillRows.length} displayed
-                                  skill
-                                  {visibleSkillRows.length === 1 ? "" : "s"}
-                                  {hasOwnedContent ? " • currently invested" : ""}
+                                  {visibleSkillRows.length} skill
+                                  {visibleSkillRows.length === 1 ? "" : "s"} shown
+                                  {hasOwnedContent ? " • already trained" : ""}
                                 </div>
                               </div>
                               <div
@@ -758,13 +761,14 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                       {section.directRows.length > 0 ? (
                         <div style={{ display: "grid", gap: "0.5rem" }}>
                           <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                            <strong>Direct skills in this area</strong>
+                            {/* Direct training comes after the grouped routes (#372 §0.6). */}
+                            <strong>Direct training in this area</strong>
                             <span style={getBadgeStyle({ muted: true })}>
-                              No separate included package
+                              Taught directly, not through a training practice
                             </span>
                           </div>
                           {renderSkillRowsTable({
-                            emptyMessage: "No direct normal-access skills in this area.",
+                            emptyMessage: "No direct training in this area.",
                             rows: section.directRows,
                           })}
                         </div>
@@ -796,7 +800,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                 }}
               >
                 <div style={{ display: "grid", gap: "0.25rem" }}>
-                  <strong>Special-access granted skills</strong>
+                  <strong>Direct profession training</strong>
                 </div>
                 <button onClick={() => toggleAllocationSection("special-access")} type="button">
                   {expandedAllocationSections.includes("special-access") ? "Collapse" : "Expand"}
@@ -805,7 +809,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
 
               {expandedAllocationSections.includes("special-access")
                 ? renderSkillRowsTable({
-                    emptyMessage: "No direct profession-linked skills are currently available.",
+                    emptyMessage: "No direct profession training is currently available.",
                     rows: specialAccessSection.directRows,
                   })
                 : null}

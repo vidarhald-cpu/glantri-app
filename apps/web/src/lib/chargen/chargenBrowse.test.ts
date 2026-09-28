@@ -7,32 +7,56 @@ import {
   getPlayerFacingSkillBucket,
   getPlayerFacingSkillBucketDefinitions,
   isRelevantSpecializationBrowseItem,
-  matchesSkillBrowseFilters
+  matchesSkillBrowseFilters,
 } from "./chargenBrowse";
 
 describe("chargenBrowse helpers", () => {
-  it("filters professions by family and search text", () => {
+  it("filters professions by browsing category and search text", () => {
     const items = [
       {
+        categoryId: "letters-and-teaching",
+        categoryName: "Letters and Teaching",
         description: "Records temple law and scripture.",
         familyName: "Scholar / Scribe",
         id: "temple_scribe",
-        name: "Temple Scribe"
+        name: "Temple Scribe",
       },
       {
+        categoryId: "trade-and-money",
+        categoryName: "Trade and Money",
         description: "Keeps caravans moving.",
         familyName: "Merchant / Trader",
         id: "local_trader",
-        name: "Local Trader"
-      }
+        name: "Local Trader",
+      },
     ];
 
     expect(
       filterProfessionBrowseItems({
-        familyFilter: "Merchant / Trader",
+        categoryFilter: "trade-and-money",
         items,
-        search: "local"
-      }).map((item) => item.id)
+        search: "local",
+      }).map((item) => item.id),
+    ).toEqual(["local_trader"]);
+    expect(
+      filterProfessionBrowseItems({ categoryFilter: "all", items, search: "" }).map(
+        (item) => item.id,
+      ),
+    ).toEqual(["temple_scribe", "local_trader"]);
+    // A player who knows the family name or the kind of work still finds the Profession.
+    expect(
+      filterProfessionBrowseItems({
+        categoryFilter: "all",
+        items,
+        search: "Scholar",
+      }).map((item) => item.id),
+    ).toEqual(["temple_scribe"]);
+    expect(
+      filterProfessionBrowseItems({
+        categoryFilter: "all",
+        items,
+        search: "Trade and Money",
+      }).map((item) => item.id),
     ).toEqual(["local_trader"]);
   });
 
@@ -42,8 +66,8 @@ describe("chargenBrowse helpers", () => {
         "society-skill",
         "profession-group",
         "profession-skill",
-        "profession-group"
-      ])
+        "profession-group",
+      ]),
     ).toEqual(["Direct profession skill", "Profession group", "Society access"]);
   });
 
@@ -56,21 +80,21 @@ describe("chargenBrowse helpers", () => {
     expect(definitions.map((definition) => definition.label)).not.toContain("Court / Social");
     expect(definitions.map((definition) => definition.label)).not.toContain("Leadership");
     expect(getPlayerFacingSkillBucket({ categoryId: "court-social", id: "etiquette" })).toBe(
-      "social"
+      "social",
     );
     expect(getPlayerFacingSkillBucket({ categoryId: "high-society", id: "etiquette" })).toBe(
-      "high-society"
+      "high-society",
     );
     expect(getPlayerFacingSkillBucket({ categoryId: "performance", id: "singing" })).toBe(
-      "performance"
+      "performance",
     );
     expect(
       getPlayerFacingSkillBucket({
         categoryId: "leadership",
         groupId: "officer_training",
         groupIds: ["officer_training"],
-        id: "captaincy"
-      })
+        id: "captaincy",
+      }),
     ).toBe("military");
   });
 
@@ -81,8 +105,8 @@ describe("chargenBrowse helpers", () => {
         isOwned: false,
         name: "Lockpicking",
         search: "lock",
-        visibilityFilter: "purchasable"
-      })
+        visibilityFilter: "purchasable",
+      }),
     ).toBe(true);
     expect(
       matchesSkillBrowseFilters({
@@ -90,8 +114,8 @@ describe("chargenBrowse helpers", () => {
         isOwned: false,
         name: "Lockpicking",
         search: "lock",
-        visibilityFilter: "blocked"
-      })
+        visibilityFilter: "blocked",
+      }),
     ).toBe(true);
     expect(
       matchesSkillBrowseFilters({
@@ -99,8 +123,8 @@ describe("chargenBrowse helpers", () => {
         isOwned: true,
         name: "Lockpicking",
         search: "lock",
-        visibilityFilter: "owned"
-      })
+        visibilityFilter: "owned",
+      }),
     ).toBe(true);
   });
 
@@ -110,22 +134,22 @@ describe("chargenBrowse helpers", () => {
         advisories: [],
         blockingReasons: [{ message: "Requires Parry." }],
         isAllowed: false,
-        warnings: []
+        warnings: [],
       },
       parentSkillLevel: 0,
       specializationLevel: 0,
-      specializationName: "Fencing"
+      specializationName: "Fencing",
     };
     const blockedNear = {
       evaluation: {
         advisories: [],
         blockingReasons: [{ message: "Needs parent level 3." }],
         isAllowed: false,
-        warnings: []
+        warnings: [],
       },
       parentSkillLevel: 2,
       specializationLevel: 0,
-      specializationName: "Longbow"
+      specializationName: "Longbow",
     };
 
     expect(isRelevantSpecializationBrowseItem(blockedFar)).toBe(false);
@@ -134,8 +158,8 @@ describe("chargenBrowse helpers", () => {
       filterSpecializationBrowseItems({
         includeBlocked: false,
         items: [blockedFar, blockedNear],
-        search: ""
-      }).map((item) => item.specializationName)
+        search: "",
+      }).map((item) => item.specializationName),
     ).toEqual(["Longbow"]);
   });
 
@@ -146,20 +170,20 @@ describe("chargenBrowse helpers", () => {
           advisories: [],
           blockingReasons: [{ message: "Missing parent." }],
           isAllowed: false,
-          warnings: []
+          warnings: [],
         },
         parentSkillLevel: 0,
         specializationLevel: 0,
-        specializationName: "Crossbow"
-      }
+        specializationName: "Crossbow",
+      },
     ];
 
     expect(
       filterSpecializationBrowseItems({
         includeBlocked: true,
         items,
-        search: "cross"
-      }).map((item) => item.specializationName)
+        search: "cross",
+      }).map((item) => item.specializationName),
     ).toEqual(["Crossbow"]);
   });
 
@@ -169,8 +193,8 @@ describe("chargenBrowse helpers", () => {
         categoryId: "combat",
         groupId: "mounted_warrior_training",
         groupIds: ["mounted_warrior_training", "combat_group"],
-        id: "one_handed_edged"
-      })
+        id: "one_handed_edged",
+      }),
     ).toBe("combat");
 
     expect(
@@ -178,8 +202,8 @@ describe("chargenBrowse helpers", () => {
         categoryId: "combat",
         groupId: "mounted_warrior_training",
         groupIds: ["mounted_warrior_training", "combat_group"],
-        id: "lance"
-      })
+        id: "lance",
+      }),
     ).toBe("combat");
   });
 
@@ -189,8 +213,8 @@ describe("chargenBrowse helpers", () => {
         categoryId: "fieldcraft",
         groupId: "combat_group",
         groupIds: ["combat_group"],
-        id: "test_skill"
-      })
+        id: "test_skill",
+      }),
     ).toBe("fieldcraft");
   });
 
@@ -200,8 +224,8 @@ describe("chargenBrowse helpers", () => {
         categoryId: "language",
         groupId: "language_group",
         groupIds: ["language_group"],
-        id: "language"
-      })
+        id: "language",
+      }),
     ).toBe("language");
   });
 });

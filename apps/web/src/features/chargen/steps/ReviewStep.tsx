@@ -31,7 +31,7 @@ export function ReviewStep({
   selectedProfile,
   selectedSocialBand,
   selectedSociety,
-  selectedSocietyAccess
+  selectedSocietyAccess,
 }: ReviewStepProps) {
   return (
     <section
@@ -42,7 +42,7 @@ export function ReviewStep({
         display: "grid",
         gap: "1rem",
         order: 11,
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>10. Review summary</h2>
@@ -51,7 +51,7 @@ export function ReviewStep({
         style={{
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))"
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
         }}
       >
         <div
@@ -61,7 +61,7 @@ export function ReviewStep({
             borderRadius: 10,
             display: "grid",
             gap: "0.35rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <strong>Character summary</strong>
@@ -78,13 +78,17 @@ export function ReviewStep({
               ? `${motherTongueSummary.displayLabel} • XP ${motherTongueSummary.startingLevel}`
               : "Not selected"}
           </div>
-          <div>Selected extra languages: {languageSelectionSummary.selectedOptionalLanguageIds.length}</div>
-          <div>Skill groups: {draftView.groups.length}</div>
+          <div>
+            Selected extra languages: {languageSelectionSummary.selectedOptionalLanguageIds.length}
+          </div>
+          <div>Learning Groups trained: {draftView.groups.length}</div>
           <div>Skills: {draftView.skills.length}</div>
-          <div>Core skills: {selectableSkillSummary.coreSkillIds.length}</div>
-          <div>Required group choices: {selectableSkillSummary.selectionSlots.length}</div>
-          <div>Selectable pool: {selectableSkillSummary.selectableSkillIds.length}</div>
-          <div>Chosen skills: {selectableSkillSummary.selectedSkillIds.length}</div>
+          <div>
+            Skills this Profession always teaches: {selectableSkillSummary.coreSkillIds.length}
+          </div>
+          <div>Training choices to make: {selectableSkillSummary.selectionSlots.length}</div>
+          <div>Skills available to choose: {selectableSkillSummary.selectableSkillIds.length}</div>
+          <div>Skills chosen: {selectableSkillSummary.selectedSkillIds.length}</div>
           <div>Specializations: {draftView.specializations.length}</div>
         </div>
 
@@ -95,33 +99,31 @@ export function ReviewStep({
             borderRadius: 10,
             display: "grid",
             gap: "0.35rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <strong>Points and education</strong>
           <div>
-            Rule set: {chargenRuleSet.name} ({chargenRuleSet.ordinarySkillPoints} ordinary, flexible x
-            {chargenRuleSet.flexiblePointFactor})
+            Rule set: {chargenRuleSet.name} ({chargenRuleSet.ordinarySkillPoints} ordinary, flexible
+            x{chargenRuleSet.flexiblePointFactor})
           </div>
           <div>
-            Ordinary points: {progression.primaryPoolSpent} spent /{" "}
-            {draftView.primaryPoolAvailable} remaining
+            Ordinary points: allocated to training {progression.primaryPoolSpent} / still available{" "}
+            {draftView.primaryPoolAvailable}
           </div>
           <div>
-            Flexible points: {progression.secondaryPoolSpent} spent /{" "}
-            {draftView.secondaryPoolAvailable} remaining
+            Flexible points: allocated to training {progression.secondaryPoolSpent} / still
+            available {draftView.secondaryPoolAvailable}
           </div>
           <div>Education: {draftView.education.theoreticalSkillCount}</div>
           <div>Base education: {draftView.education.baseEducation}</div>
           <div>Social class education value: {draftView.education.socialClassEducationValue}</div>
           <div>Education-linked skills: {educationLinkedSkillCount}</div>
           <small style={{ color: "#6d665a" }}>
-            Education-linked skills are learned skills that add to Education. Review skill
-            metadata in Admin -&gt; Skills.
+            Education-linked skills are learned skills that add to Education.
           </small>
-          <div>Total skill points invested: {draftView.totalSkillPointsInvested}</div>
+          <div>Points allocated to training in total: {draftView.totalSkillPointsInvested}</div>
         </div>
-
       </div>
     </section>
   );

@@ -101,6 +101,7 @@ import {
   createTargetCompetencyChargenSource,
   buildTargetRuntimeContent,
 } from "./targetCompetencyContent";
+import { useProfessionBrowseModel } from "./components/ProfessionTraining";
 import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
 import { ChargenDraftPersistenceCoordinator } from "./chargenDraftPersistenceCoordinator";
 
@@ -158,7 +159,7 @@ export function useChargenWizardState() {
   const [showCivilizationChooser, setShowCivilizationChooser] = useState(true);
   const [showProfessionChooser, setShowProfessionChooser] = useState(true);
   const [expandedProfessionId, setExpandedProfessionId] = useState<string>();
-  const [professionFamilyFilter, setProfessionFamilyFilter] = useState("all");
+  const [professionCategoryFilter, setProfessionCategoryFilter] = useState("all");
   const [professionSearch, setProfessionSearch] = useState("");
   const [chargenRuleSet, setChargenRuleSet] = useState<ChargenRuleSet>(DEFAULT_CHARGEN_RULE_SET);
   const [expandedAllocationSections, setExpandedAllocationSections] = useState<string[]>([]);
@@ -245,81 +246,73 @@ export function useChargenWizardState() {
   const selectedProfession = availableProfessions.find((item) => item.id === selectedProfessionId);
   const sortedSkillGroups = sortSkillGroups(content.skillGroups);
   const playerFacingSkillBucketDefinitions = getPlayerFacingSkillBucketDefinitions();
+  /* The one canonical Profession projection, shared with the `/skills` reference (#372 §0.6). */
+  const professionBrowseModel = useProfessionBrowseModel();
+  /*
+   * The Profession chooser and the selected-Profession presentation both read the one canonical
+   * Profession projection (#372 section 0.6). The card carries only reader-facing content: the
+   * approved browsing category, the published short description, and the family name a player may
+   * search by. Implementation-derived counts stayed out deliberately — section 1 forbids leading
+   * with them, and a card that exposes a field merely because it exists is how a provenance `note`
+   * reached this chooser before (#361 QA).
+   */
+  const professionBrowseById = new Map(
+    professionBrowseModel.professions.map((profession) => [profession.id, profession]),
+  );
   const availableProfessionCards: ProfessionBrowseCard[] = [...availableProfessions]
     .map((profession) => {
-      const professionAccess =
-        activeSocietyId && activeSocialBand !== undefined
-          ? buildChargenSkillAccessSummary({
-              content,
-              professionId: profession.id,
-              societyId: activeSocietyId,
-              societyLevel: activeSocialBand,
-            })
-          : undefined;
       const professionPackage = resolveEffectiveProfessionPackage({
         content,
         subtypeId: profession.id,
       });
-      const coreReachableSkills = professionPackage.core.finalEffectiveReachableSkillIds
-        .map((skillId) => content.skills.find((skill) => skill.id === skillId))
-        .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
-      const favoredReachableSkills = professionPackage.favored.finalEffectiveReachableSkillIds
-        .map((skillId) => content.skills.find((skill) => skill.id === skillId))
-        .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
-      const literacyGatedReachableSkillCount = [
-        ...coreReachableSkills,
-        ...favoredReachableSkills,
-      ].filter((skill) => skill.requiresLiteracy !== "no").length;
+      const browse = professionBrowseById.get(profession.id);
+      const readerContent = browse?.readerContent;
       const hasLiteracyFoundation =
         professionPackage.core.finalEffectiveReachableSkillIds.includes("literacy") ||
         professionPackage.favored.finalEffectiveReachableSkillIds.includes("literacy") ||
-        literacyGatedReachableSkillCount > 0;
+        [
+          ...professionPackage.core.finalEffectiveReachableSkillIds,
+          ...professionPackage.favored.finalEffectiveReachableSkillIds,
+        ].some((skillId) => {
+          const skill = content.skills.find((candidate) => candidate.id === skillId);
+          return skill !== undefined && skill.requiresLiteracy !== "no";
+        });
 
       return {
-        coreGroupNames: professionPackage.core.finalEffectiveGroupIds.map(
-          (groupId) => content.skillGroups.find((group) => group.id === groupId)?.name ?? groupId,
-        ),
-        coreReachableSkillNames: professionPackage.core.finalEffectiveReachableSkillIds.map(
-          (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId,
-        ),
-        description: profession.description,
+        browse,
+        categoryId: browse?.browsingCategory?.id,
+        categoryName: browse?.browsingCategory?.name,
+        description: readerContent?.shortDescription ?? profession.description,
         familyDescription: professionPackage.family.description,
-        favoredDirectOnlySkillNames: professionPackage.favored.directOnlySkillIds.map(
-          (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId,
-        ),
         familyName: professionPackage.family.name,
-        favoredGroupNames: professionPackage.favored.finalEffectiveGroupIds.map(
-          (groupId) => content.skillGroups.find((group) => group.id === groupId)?.name ?? groupId,
-        ),
-        favoredReachableSkillNames: professionPackage.favored.finalEffectiveReachableSkillIds.map(
-          (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId,
-        ),
         hasLiteracyFoundation,
         id: profession.id,
-        literacyGatedReachableSkillCount,
         name: profession.name,
-        normalAccessGroupNames: sortedSkillGroups
-          .filter((group) => professionAccess?.normalSkillGroupIds.includes(group.id))
-          .map((group) => group.name),
         profession,
-        summary: professionPackage.summary,
         subtypeName: profession.name,
       };
     })
     .sort((left, right) => {
-      const familyComparison = left.familyName.localeCompare(right.familyName);
+      const categoryComparison = (left.categoryName ?? "").localeCompare(right.categoryName ?? "");
 
-      if (familyComparison !== 0) {
-        return familyComparison;
+      if (categoryComparison !== 0) {
+        return categoryComparison;
       }
 
       return left.name.localeCompare(right.name);
     });
-  const professionFamilyOptions = [
-    ...new Set(availableProfessionCards.map((item) => item.familyName)),
-  ];
+  /* Decision 0012's approved roster, in its authored order, restricted to what is offered here. */
+  const offeredCategoryIds = new Set(
+    availableProfessionCards.flatMap((card) => (card.categoryId ? [card.categoryId] : [])),
+  );
+  const professionCategoryOptions = professionBrowseModel.professionCategories
+    .filter((category) => offeredCategoryIds.has(category.id))
+    .map((category) => ({
+      count: availableProfessionCards.filter((card) => card.categoryId === category.id).length,
+      ...category,
+    }));
   const visibleProfessionCards = filterProfessionBrowseItems({
-    familyFilter: professionFamilyFilter,
+    categoryFilter: professionCategoryFilter,
     items: availableProfessionCards,
     search: professionSearch,
   });
@@ -1472,6 +1465,17 @@ export function useChargenWizardState() {
               playerFacingSkillBucketDefinitions.find((definition) => definition.id === skillType)
                 ?.label ?? skillType;
             const isDetailOpen = expandedSkillDetails.includes(row.rowKey);
+            /*
+             * Forgejo #372 section 7. Training the player already holds that teaches this Skill but
+             * supplied none of its level. The judgement is made in the rules view layer and only
+             * read here; the interface does not reconstruct it.
+             */
+            const coveredGroupMemberships =
+              draftView.skills.find(
+                (candidate) =>
+                  candidate.skillId === row.skill.id &&
+                  candidate.languageName === row.targetLanguageName,
+              )?.coveredGroupMemberships ?? [];
             const nextCost = getOrdinarySkillNextCost({
               isNormalAccess: row.isNormalAccess,
               progression,
@@ -1589,6 +1593,14 @@ export function useChargenWizardState() {
                     {status.message}
                   </div>
                 ))}
+                {coveredGroupMemberships.length > 0 ? (
+                  <div role="status" style={{ color: "#6d665a", fontSize: "0.85rem" }}>
+                    Also taught by{" "}
+                    {coveredGroupMemberships.map((membership) => membership.name).join(", ")}. That
+                    training adds nothing further to this skill, because{" "}
+                    {coveredGroupMemberships[0]?.coveredByGroupName} already covers it.
+                  </div>
+                ) : null}
                 {isDetailOpen ? (
                   <div
                     style={{
@@ -1787,8 +1799,9 @@ export function useChargenWizardState() {
     otherSkillFilterActive,
     otherSkillTypeOptions,
     playerFacingSkillBucketDefinitions,
-    professionFamilyFilter,
-    professionFamilyOptions,
+    professionBrowseModel,
+    professionCategoryFilter,
+    professionCategoryOptions,
     professionSearch,
     progression,
     renderSkillRowsTable,
@@ -1856,7 +1869,7 @@ export function useChargenWizardState() {
     setCharacterName,
     setExchangeFirstStat,
     setExchangeSecondStat,
-    setProfessionFamilyFilter,
+    setProfessionCategoryFilter,
     setProfessionSearch,
     setShowAllSpecializations,
     setShowCivilizationChooser,

@@ -8,7 +8,7 @@ import type {
   ReferenceRelationship,
   SkillReferenceTab,
 } from "@/lib/skills/skillReferenceModel";
-import { accessOverviewRows, type ReaderProse } from "./referenceCatalogue";
+import { accessOverviewRows, type ReaderProse } from "@/lib/skills/referenceCatalogue";
 import { hashFor, linkDestination, type Navigate } from "./referenceNavigation";
 import styles from "./skillsReference.module.css";
 

@@ -13,6 +13,7 @@ describe("buildLoadoutCombatStatsTable", () => {
       draftSkills: [
         {
           category: "ordinary",
+          coveredGroupMemberships: [],
           effectiveSkillNumber: 7,
           groupId: "mental_group",
           groupIds: ["mental_group"],
@@ -29,6 +30,7 @@ describe("buildLoadoutCombatStatsTable", () => {
         },
         {
           category: "secondary",
+          coveredGroupMemberships: [],
           effectiveSkillNumber: 6,
           groupId: "military_group",
           groupIds: ["military_group"],
@@ -86,4 +88,3 @@ describe("buildLoadoutCombatStatsTable", () => {
     ]);
   });
 });
-

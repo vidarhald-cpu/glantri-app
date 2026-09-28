@@ -6,13 +6,19 @@ import type {
   SkillReferenceGroup,
   SkillReferenceModel,
   SkillReferenceProfession,
-} from "@/lib/skills/skillReferenceModel";
+} from "./skillReferenceModel";
 
 /**
  * Derived reader presentation for the canonical V2 competency catalogue.
  *
  * Everything here reflects canonical V2 data. Nothing here repairs it, fills a gap by inference, or
  * invents an availability semantic: where the canonical content stops, the returned value says so.
+ *
+ * THIS IS THE ONE CANONICAL PROFESSION PROJECTION. The competency reference at `/skills` and the
+ * Chargen Profession experience both consume `professionTraining` and `readerProse` from here.
+ * Forgejo #372 section 0.6 requires exactly one derivation of `Profession -> Learning Group ->
+ * Skill`, because two interpretations of the same graph are how the two surfaces drift apart. Do
+ * not add a second derivation for Chargen.
  */
 
 /* ---------------------------------------------------------------- reader prose */
