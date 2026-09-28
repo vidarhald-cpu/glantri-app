@@ -70,14 +70,14 @@ pnpm --filter @glantri/content build
 
 The seed command is expected to create or normalize only the disposable application database with:
 
-| Seed fact | Expected value |
-| --- | --- |
-| Login email | `local-gm@example.com` |
-| Local-only password | `devpassword123` |
-| Display name | `Local GM` |
-| Roles | `player`, `game_master` |
-| Campaign | `Local Dev Campaign` (draft) |
-| Reusable entity | `Training Bandit` |
+| Seed fact           | Expected value               |
+| ------------------- | ---------------------------- |
+| Login email         | `local-gm@example.com`       |
+| Local-only password | `devpassword123`             |
+| Display name        | `Local GM`                   |
+| Roles               | `player`, `game_master`      |
+| Campaign            | `Local Dev Campaign` (draft) |
+| Reusable entity     | `Training Bandit`            |
 
 These are repository-defined disposable-development credentials, not production credentials. Do not reuse them elsewhere. No manual first-GM bootstrap is expected after the seed.
 

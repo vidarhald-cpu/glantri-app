@@ -15,16 +15,16 @@ Repository evidence controls implemented state. Chat evidence may recover a deci
 
 ## Portfolio summary
 
-| Forgejo | Recovered identity | Purpose | Current state | Implementation state |
-| ---: | --- | --- | --- | --- |
-| #1 | GitHub #383 / PR #386 | Retained Character acquisition ledger and headless Chargen foundation | Closed — Integrated | Implemented and integrated in recovered `dev` |
-| #2 | GitHub #387 / PR #390 | C1 Stun, timing, Bleed, treatment, persistence, and privacy runtime | Closed — Integrated | Implemented and integrated in recovered `dev` |
-| #3 | GitHub #391 | GM Critical-review workflow with auditable overrides | Authorized, dependency-gated, inactive | Not implemented or dispatched |
-| #4 | GitHub #392 | Activate the accepted n1-13 Critical content slice | Authorized, paused, inactive, superseded pending refresh | Not implemented or dispatched |
-| #5 | GitHub #393 | Rewrite and recalibrate the 34 C1 representative fixtures | Closed — accepted decision integrated | Content/rule decision recorded; fixture/runtime code unchanged |
-| #6 | GitHub #394 | Preserve mature Chargen and Combat Manager patterns | Design, inactive | Core preservation decision recorded; five questions open |
-| #7 | GitHub #395 | Future Glantri-native spatial scene and movement tracker | Future/Design, inactive, not authorized | No prototype or implementation |
-| #8 | R1 finding B2 | Investigate intermittent equipment read-model race | Ready, mandatory recovery, inactive, not authorized | No investigation or repair yet |
+| Forgejo | Recovered identity    | Purpose                                                               | Current state                                            | Implementation state                                           |
+| ------: | --------------------- | --------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------- |
+|      #1 | GitHub #383 / PR #386 | Retained Character acquisition ledger and headless Chargen foundation | Closed — Integrated                                      | Implemented and integrated in recovered `dev`                  |
+|      #2 | GitHub #387 / PR #390 | C1 Stun, timing, Bleed, treatment, persistence, and privacy runtime   | Closed — Integrated                                      | Implemented and integrated in recovered `dev`                  |
+|      #3 | GitHub #391           | GM Critical-review workflow with auditable overrides                  | Authorized, dependency-gated, inactive                   | Not implemented or dispatched                                  |
+|      #4 | GitHub #392           | Activate the accepted n1-13 Critical content slice                    | Authorized, paused, inactive, superseded pending refresh | Not implemented or dispatched                                  |
+|      #5 | GitHub #393           | Rewrite and recalibrate the 34 C1 representative fixtures             | Closed — accepted decision integrated                    | Content/rule decision recorded; fixture/runtime code unchanged |
+|      #6 | GitHub #394           | Preserve mature Chargen and Combat Manager patterns                   | Design, inactive                                         | Core preservation decision recorded; five questions open       |
+|      #7 | GitHub #395           | Future Glantri-native spatial scene and movement tracker              | Future/Design, inactive, not authorized                  | No prototype or implementation                                 |
+|      #8 | R1 finding B2         | Investigate intermittent equipment read-model race                    | Ready, mandatory recovery, inactive, not authorized      | No investigation or repair yet                                 |
 
 ## Forgejo #1 — recovered GitHub #383 / PR #386
 
