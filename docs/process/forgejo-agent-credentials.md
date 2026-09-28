@@ -119,12 +119,16 @@ The canonical clone's repository-local Git configuration enforces both:
 - `credential.useHttpPath=true`; and
 - `credential.username=glantri-no-default`.
 
-`glantri-no-default` is deliberately not a Forgejo user and has no Keychain
-item. With terminal prompts disabled, an unqualified credential lookup therefore
-fails locally instead of selecting any role or the recovery administrator.
-Command-level `credential.username` is required to override the sentinel with
-one explicit path-scoped handle. Do not unset or bypass either repository-local
-setting, and do not create host-only Forgejo Keychain items.
+`glantri-no-default` is deliberately not a Forgejo user and must have no
+Keychain item. With terminal prompts disabled and no such item, an unqualified
+credential lookup fails locally instead of selecting any role or the recovery
+administrator. Command-level `credential.username` is required to override the
+sentinel with one explicit path-scoped handle. Do not unset or bypass either
+repository-local setting, and do not create host-only Forgejo Keychain items.
+
+This fail-closed property depends on the secure store actually matching the
+design. See [Observed store deviations](#observed-store-deviations-2026-09-28)
+for the current recorded divergence and the operator actions that restore it.
 
 The Development Orchestrator assigns the role before dispatch and includes only
 the identity and Keychain handle in the visible task contract. Git network
@@ -143,13 +147,38 @@ to permit the operation. Recovery Git operations use the same pattern with
 `credential.username=recovery-admin`, but only under separate break-glass
 authority; no routine task may select it.
 
-For authorized issue or PR API calls, the assigned publisher uses a local
-credential bridge
-that reads the selected Keychain entry into process memory, supplies
-authentication to the loopback request through standard input rather than a
-secret-bearing argument, and unsets the value immediately. The bridge must not
-echo, trace, persist, or include the credential in an error report. API output
-must be reduced to the non-secret fields required as evidence.
+### Forgejo API access route
+
+Git network operations and Forgejo **API** operations use different credential
+stores. Do not assume that a working Git fetch implies a working API call, or
+the reverse.
+
+For authorized issue, PR, commit-status, and Actions API calls the assigned
+worker uses the installed `tea` client with an explicit login, for example:
+
+```sh
+tea api --login glantri-qa /repos/recovery-admin/glantri-app/issues/398
+```
+
+`tea` holds its own per-identity logins, resolves them without a terminal and
+without the Git credential helper, and never renders a token value in its
+output. It therefore works from unattended background worker processes, which
+is the route a QA or Investigator lane uses to read its own contract and to
+publish its own evidence. `--login` is mandatory on every call: it selects the
+identity exactly as `credential.username` does for Git, and selecting an
+identity still grants no authority that token scopes, collaborator roles,
+branch rules, and the task contract do not already permit.
+
+A worker must not read, print, copy, or relay a stored credential value in
+order to construct an API call by hand. If `tea` cannot perform an authorized
+call, that is a non-secret provisioning failure to report, not a reason to
+handle the secret directly. API output must be reduced to the non-secret fields
+required as evidence.
+
+Any alternative local credential bridge must read the selected entry into
+process memory only, supply authentication through standard input rather than a
+secret-bearing argument, unset the value immediately, and never echo, trace,
+persist, or include the credential in an error report.
 
 A Builder's full bounded PR/evidence publication authority does not imply that
 `glantri-builder` has issue API scope. Try only the assigned authorized identity;
@@ -250,6 +279,39 @@ A fully headless installation should use a dedicated macOS automation account
 and its own Keychain. If an unattended secure store cannot be made available,
 use a short-lived scoped token as the documented fallback rather than creating
 a plaintext credential file.
+
+## Observed store deviations (2026-09-28)
+
+Recorded for Forgejo issue #398 against
+`dev@215ebd4aee02f77053a86373e15a96525070b781`, from an unattended background
+worker process. Only non-secret attributes were inspected; no credential value
+was read, rendered, copied, or modified. This section records observed state, not
+an approved change; remediation is an authorized infrastructure-administrator
+action and is outside any worker's authority.
+
+Observed:
+
+1. The Git credential store contains no item for `glantri-qa`,
+   `glantri-orchestrator`, or `recovery-admin`. Only `glantri-builder` resolves.
+   A Git network command run as any other identity fails with
+   `could not read Password for ... terminal prompts disabled`. This is a missing
+   handle, **not** an unattended-process limitation and **not** a Forgejo
+   authorization denial: the same process resolves `glantri-builder` normally.
+2. A prohibited **host-only** `glantri-builder` item exists alongside the correct
+   path-scoped one.
+3. An item exists under the `glantri-no-default` sentinel account, which this
+   document requires to have none. Its presence defeats the fail-closed
+   selection above: an unqualified Git network command in the canonical clone
+   currently succeeds instead of failing.
+
+Until an authorized administrator removes the sentinel and host-only items and
+creates the missing path-scoped handles, treat the sentinel fail-closed
+guarantee as unproven and always pass `credential.username` explicitly.
+
+Forgejo-side authorization was verified separately and is correct: `glantri-qa`
+holds `read:repository` and `write:issue`, is a Read collaborator, and is denied
+label and issue-state changes with HTTP 403 and branch creation and PR merge
+with an explicit missing-`write:repository` scope error.
 
 ## Recorded verification snapshot
 
