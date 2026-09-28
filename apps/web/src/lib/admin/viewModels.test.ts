@@ -10,7 +10,7 @@ import {
   buildSkillGroupAdminRows,
   filterProfessionAdminRowsBySocietyStage,
   getProfessionFamilyName,
-  buildSocietyAdminRows
+  buildSocietyAdminRows,
 } from "./viewModels";
 
 const content = {
@@ -18,7 +18,7 @@ const content = {
   languages: [],
   professionFamilies: [
     { id: "craft", name: "Craft" },
-    { id: "martial", name: "Martial" }
+    { id: "martial", name: "Martial" },
   ],
   professionSkills: [
     {
@@ -26,15 +26,15 @@ const content = {
       isCore: true,
       professionId: "alpha_prof",
       scope: "profession",
-      skillGroupId: "low_group"
+      skillGroupId: "low_group",
     },
     {
       grantType: "group",
       isCore: false,
       professionId: "bravo_prof",
       scope: "profession",
-      skillGroupId: "high_group"
-    }
+      skillGroupId: "high_group",
+    },
   ],
   professions: [
     {
@@ -42,15 +42,15 @@ const content = {
       familyId: "martial",
       id: "bravo_prof",
       name: "Zulu Profession",
-      subtypeName: "Zulu Profession"
+      subtypeName: "Zulu Profession",
     },
     {
       description: "Alpha profession",
       familyId: "craft",
       id: "alpha_prof",
       name: "Alpha Profession",
-      subtypeName: "Alpha Profession"
-    }
+      subtypeName: "Alpha Profession",
+    },
   ],
   skillGroups: [
     {
@@ -58,7 +58,7 @@ const content = {
       id: "low_group",
       name: "A Light Group",
       skillMemberships: [{ relevance: "core", skillId: "zeta_skill" }],
-      sortOrder: 99
+      sortOrder: 99,
     },
     {
       description: "Heavy package",
@@ -70,10 +70,10 @@ const content = {
         { relevance: "core", skillId: "gamma_skill" },
         { relevance: "core", skillId: "delta_skill" },
         { relevance: "core", skillId: "epsilon_skill" },
-        { relevance: "core", skillId: "eta_skill" }
+        { relevance: "core", skillId: "eta_skill" },
       ],
-      sortOrder: 1
-    }
+      sortOrder: 1,
+    },
   ],
   skills: [
     {
@@ -91,7 +91,7 @@ const content = {
       requiresLiteracy: "no",
       shortDescription: "Zeta short",
       societyLevel: 1,
-      sortOrder: 99
+      sortOrder: 99,
     },
     {
       allowsSpecializations: false,
@@ -107,13 +107,13 @@ const content = {
       linkedStats: ["dex"],
       meleeCrossTraining: {
         attackStyle: "slash",
-        handClass: "one-handed"
+        handClass: "one-handed",
       },
       name: "Alpha Skill",
       requiresLiteracy: "no",
       shortDescription: "Alpha short",
       societyLevel: 1,
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       allowsSpecializations: false,
@@ -127,12 +127,12 @@ const content = {
       linkedStats: ["dex"],
       meleeCrossTraining: {
         attackStyle: "strike",
-        handClass: "one-handed"
+        handClass: "one-handed",
       },
       name: "Beta Skill",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 3
+      sortOrder: 3,
     },
     {
       allowsSpecializations: false,
@@ -147,7 +147,7 @@ const content = {
       name: "Gamma Skill",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 4
+      sortOrder: 4,
     },
     {
       allowsSpecializations: false,
@@ -162,7 +162,7 @@ const content = {
       name: "Delta Skill",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 5
+      sortOrder: 5,
     },
     {
       allowsSpecializations: false,
@@ -177,7 +177,7 @@ const content = {
       name: "Epsilon Skill",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 6
+      sortOrder: 6,
     },
     {
       allowsSpecializations: false,
@@ -192,7 +192,7 @@ const content = {
       name: "Eta Skill",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 7
+      sortOrder: 7,
     },
     {
       allowsSpecializations: false,
@@ -207,7 +207,7 @@ const content = {
       name: "1-h edged",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 8
+      sortOrder: 8,
     },
     {
       allowsSpecializations: false,
@@ -223,7 +223,7 @@ const content = {
       name: "Bow",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 9
+      sortOrder: 9,
     },
     {
       allowsSpecializations: false,
@@ -239,7 +239,7 @@ const content = {
       name: "Crossbow",
       requiresLiteracy: "no",
       societyLevel: 1,
-      sortOrder: 10
+      sortOrder: 10,
     },
     {
       allowsSpecializations: false,
@@ -255,22 +255,22 @@ const content = {
       requiresLiteracy: "no",
       societyLevel: 2,
       sortOrder: 11,
-      specializationOfSkillId: "bow"
-    }
+      specializationOfSkillId: "bow",
+    },
   ],
   societies: [
     {
       id: "z_society",
       name: "Zulu Society",
       shortDescription: "Zulu description",
-      societyLevel: 2
+      societyLevel: 2,
     },
     {
       id: "a_society",
       name: "Alpha Society",
       shortDescription: "Alpha description",
-      societyLevel: 1
-    }
+      societyLevel: 1,
+    },
   ],
   societyBandSkillAccess: [],
   societyLevels: [
@@ -281,7 +281,7 @@ const content = {
       socialClass: "Elite",
       societyId: "z_society",
       societyLevel: 2,
-      societyName: "Zulu Society"
+      societyName: "Zulu Society",
     },
     {
       professionIds: ["alpha_prof"],
@@ -290,8 +290,8 @@ const content = {
       socialClass: "Common",
       societyId: "a_society",
       societyLevel: 1,
-      societyName: "Alpha Society"
-    }
+      societyName: "Alpha Society",
+    },
   ],
   specializations: [
     {
@@ -301,12 +301,6 @@ const content = {
       name: "Longbow",
       skillId: "bow",
       sortOrder: 11,
-      specializationBridge: {
-        parentExcessOffset: 5,
-        parentSkillId: "bow",
-        reverseFactor: 1,
-        threshold: 6
-      }
     },
     {
       id: "fencing",
@@ -315,14 +309,8 @@ const content = {
       name: "Fencing",
       skillId: "one_handed_edged",
       sortOrder: 1,
-      specializationBridge: {
-        parentExcessOffset: 5,
-        parentSkillId: "one_handed_edged",
-        reverseFactor: 1,
-        threshold: 6
-      }
-    }
-  ]
+    },
+  ],
 } as unknown as CanonicalContent;
 
 describe("admin view models", () => {
@@ -339,7 +327,7 @@ describe("admin view models", () => {
       "Fencing",
       "Gamma Skill",
       "Longbow",
-      "Zeta Skill"
+      "Zeta Skill",
     ]);
   });
 
@@ -352,29 +340,29 @@ describe("admin view models", () => {
       hasSkillRelationships: true,
       meleeCrossTraining: {
         attackStyle: "slash",
-        handClass: "one-handed"
-      }
+        handClass: "one-handed",
+      },
     });
     expect(alphaRow?.outgoingMeleeCrossTraining).toEqual([
       {
         factorPercent: 75,
         targetSkillId: "beta_skill",
-        targetSkillName: "Beta Skill"
-      }
+        targetSkillName: "Beta Skill",
+      },
     ]);
     expect(alphaRow?.outgoingDerivedGrants).toEqual([
       {
         factorPercent: 100,
         targetSkillId: "beta_skill",
-        targetSkillName: "Beta Skill"
-      }
+        targetSkillName: "Beta Skill",
+      },
     ]);
     expect(betaRow?.incomingDerivedGrants).toEqual([
       {
         factorPercent: 100,
         sourceSkillId: "alpha_skill",
-        sourceSkillName: "Alpha Skill"
-      }
+        sourceSkillName: "Alpha Skill",
+      },
     ]);
   });
 
@@ -382,36 +370,36 @@ describe("admin view models", () => {
     expect(
       buildSkillRelationshipSummary({
         content,
-        skillId: "alpha_skill"
-      })
+        skillId: "alpha_skill",
+      }),
     ).toMatchObject({
       hasSkillRelationships: true,
       incomingMeleeCrossTraining: [
         {
           factorPercent: 75,
           sourceSkillId: "beta_skill",
-          sourceSkillName: "Beta Skill"
-        }
+          sourceSkillName: "Beta Skill",
+        },
       ],
       outgoingMeleeCrossTraining: [
         {
           factorPercent: 75,
           targetSkillId: "beta_skill",
-          targetSkillName: "Beta Skill"
-        }
+          targetSkillName: "Beta Skill",
+        },
       ],
       outgoingDerivedGrants: [
         {
           factorPercent: 100,
           targetSkillId: "beta_skill",
-          targetSkillName: "Beta Skill"
-        }
+          targetSkillName: "Beta Skill",
+        },
       ],
-      relationshipSummaryBadges: ["Grants 1", "Cross-trains 1", "Cross-trained from 1"]
+      relationshipSummaryBadges: ["Grants 1", "Cross-trains 1", "Cross-trained from 1"],
     });
   });
 
-  it("surfaces specialization-bridge relationships for parent and child skills", () => {
+  it("surfaces derived-grant relationships for parent and child skills and no bridge rows", () => {
     const rows = buildSkillAdminRows(content);
     const bowRow = rows.find((row) => row.id === "bow");
     const crossbowRow = rows.find((row) => row.id === "crossbow");
@@ -422,49 +410,29 @@ describe("admin view models", () => {
       {
         factorPercent: 50,
         targetSkillId: "crossbow",
-        targetSkillName: "Crossbow"
-      }
+        targetSkillName: "Crossbow",
+      },
     ]);
-    expect(bowRow?.outgoingSpecializationBridges).toEqual([
-      {
-        parentExcessOffset: 5,
-        reverseFactorPercent: 100,
-        targetName: "Longbow",
-        targetType: "specialization",
-        threshold: 6
-      }
-    ]);
-    expect(longbowRow?.incomingSpecializationBridges).toEqual([
-      {
-        factorPercent: 100,
-        sourceName: "Bow",
-        sourceType: "skill"
-      }
-    ]);
+    /* Rule decision 0010 ruling 5 deletes the bridge, so the admin rows carry no bridge collections
+       and publish no numeric factor for a Specialization's parent relationship. */
+    expect(bowRow).not.toHaveProperty("outgoingSpecializationBridges");
+    expect(longbowRow).not.toHaveProperty("incomingSpecializationBridges");
     expect(crossbowRow?.incomingDerivedGrants).toEqual([
       {
         factorPercent: 50,
         sourceSkillId: "bow",
-        sourceSkillName: "Bow"
-      }
+        sourceSkillName: "Bow",
+      },
     ]);
     expect(crossbowRow?.outgoingDerivedGrants).toEqual([
       {
         factorPercent: 50,
         targetSkillId: "bow",
-        targetSkillName: "Bow"
-      }
+        targetSkillName: "Bow",
+      },
     ]);
-    expect(edgedRow?.relationshipSummaryBadges).toContain("Specializes 1");
-    expect(edgedRow?.outgoingSpecializationBridges).toEqual([
-      {
-        parentExcessOffset: 5,
-        reverseFactorPercent: 100,
-        targetName: "Fencing",
-        targetType: "specialization",
-        threshold: 6
-      }
-    ]);
+    expect(edgedRow?.relationshipSummaryBadges).not.toContain("Specializes 1");
+    expect(edgedRow).not.toHaveProperty("outgoingSpecializationBridges");
   });
 
   it("includes specialization-only entries in the skill admin catalog", () => {
@@ -477,40 +445,28 @@ describe("admin view models", () => {
       primaryGroup: "Z Heavy Group",
       skillCategory: "combat",
       skillType: "specialization",
-      specializationOf: "1-h edged"
+      specializationOf: "1-h edged",
     });
-    expect(fencingRow?.incomingSpecializationBridges).toEqual([
-      {
-        factorPercent: 100,
-        sourceName: "1-h edged",
-        sourceType: "skill"
-      }
-    ]);
+    expect(fencingRow).not.toHaveProperty("incomingSpecializationBridges");
+    expect(fencingRow?.relationshipSummaryBadges).toEqual(["Parent 1-h edged"]);
   });
 
-  it("surfaces default Glantri Fencing and Longbow specialization relationships in admin rows", () => {
+  it("shows default Glantri Fencing and Longbow as base combat Skills in admin rows", () => {
+    /* Rule decision 0010 rulings 1 and 2: both are base combat Skills, so the admin catalogue lists
+       them as Skills with no parent and no bridge row. THEY MUST STILL APPEAR — deleting the bridge
+       without reclassifying would have removed them from this catalogue entirely. */
     const rows = buildSkillAdminRows(defaultCanonicalContent);
     const fencingRow = rows.find((row) => row.id === "fencing");
     const longbowRow = rows.find((row) => row.id === "longbow");
 
-    expect(fencingRow).toMatchObject({
-      name: "Fencing",
-      skillCategory: "combat",
-      skillType: "specialization",
-      specializationOf: "1-h edged"
-    });
-    expect(longbowRow).toMatchObject({
-      name: "Longbow",
-      skillCategory: "combat",
-      specializationOf: "Bow"
-    });
-    expect(longbowRow?.incomingSpecializationBridges).toEqual([
-      {
-        factorPercent: 100,
-        sourceName: "Bow",
-        sourceType: "skill"
-      }
-    ]);
+    for (const row of [fencingRow, longbowRow]) {
+      expect(row).toBeDefined();
+      expect(row).toMatchObject({ skillCategory: "combat", skillType: "secondary" });
+      expect(row?.specializationOf).toBe("");
+      expect(row).not.toHaveProperty("incomingSpecializationBridges");
+    }
+    expect(fencingRow?.name).toBe("Fencing");
+    expect(longbowRow?.name).toBe("Longbow");
   });
 
   it("surfaces default Glantri Etiquette by Culture under the parent High Society category", () => {
@@ -520,13 +476,13 @@ describe("admin view models", () => {
 
     expect(etiquetteRow).toMatchObject({
       name: "Etiquette",
-      skillCategory: "high-society"
+      skillCategory: "high-society",
     });
     expect(specializationRow).toMatchObject({
       name: "Etiquette by Culture",
       skillCategory: "high-society",
       skillType: "specialization",
-      specializationOf: "Etiquette"
+      specializationOf: "Etiquette",
     });
   });
 
@@ -535,8 +491,14 @@ describe("admin view models", () => {
     const lowGroup = rows.find((row) => row.id === "low_group");
     const highGroup = rows.find((row) => row.id === "high_group");
 
-    expect(lowGroup?.warningDetails.some((warning) => warning.includes("low-size review threshold (5)"))).toBe(true);
-    expect(highGroup?.warningDetails.some((warning) => warning.includes("high-size review threshold (12)"))).toBe(true);
+    expect(
+      lowGroup?.warningDetails.some((warning) => warning.includes("low-size review threshold (5)")),
+    ).toBe(true);
+    expect(
+      highGroup?.warningDetails.some((warning) =>
+        warning.includes("high-size review threshold (12)"),
+      ),
+    ).toBe(true);
   });
 
   it("surfaces family-aware profession links for skill-group filtering", () => {
@@ -550,8 +512,8 @@ describe("admin view models", () => {
         familyId: "craft",
         familyName: "Craft",
         professionId: "alpha_prof",
-        professionName: "Alpha Profession"
-      }
+        professionName: "Alpha Profession",
+      },
     ]);
     expect(highGroup?.visibleProfessionFamilyIds).toEqual(["martial"]);
   });
@@ -560,7 +522,7 @@ describe("admin view models", () => {
     expect(buildProfessionFamilyFilterOptions(content, ["martial", "craft", ""])).toEqual([
       "all",
       "craft",
-      "martial"
+      "martial",
     ]);
     expect(getProfessionFamilyName(content, "martial")).toBe("Martial");
   });
@@ -568,7 +530,7 @@ describe("admin view models", () => {
   it("sorts professions alphabetically for the catalog rows", () => {
     expect(buildProfessionAdminRows(content).map((row) => row.name)).toEqual([
       "Alpha Profession",
-      "Zulu Profession"
+      "Zulu Profession",
     ]);
   });
 
@@ -584,8 +546,8 @@ describe("admin view models", () => {
         accessBand: 1,
         canonicalSocietyLevel: 1,
         socialClass: "Common",
-        societyName: "Alpha Society"
-      }
+        societyName: "Alpha Society",
+      },
     ]);
     expect(bravo?.societyStageLevels).toEqual([2]);
     expect(bravo?.societyStageSummary).toBe("S2");
@@ -594,8 +556,8 @@ describe("admin view models", () => {
         accessBand: 2,
         canonicalSocietyLevel: 2,
         socialClass: "Elite",
-        societyName: "Zulu Society"
-      }
+        societyName: "Zulu Society",
+      },
     ]);
   });
 
@@ -611,7 +573,7 @@ describe("admin view models", () => {
     expect(allIds.length).toBe(rows.length);
     expect(tribalWarrior?.societyStageLevels).toEqual([1, 2]);
     expect(tribalWarrior?.allowedSocietySlots.map((slot) => slot.accessBand)).toEqual(
-      expect.arrayContaining([1, 2])
+      expect.arrayContaining([1, 2]),
     );
     expect(stageOneIds).toContain("tribal_warrior");
     expect(stageSixIds).not.toContain("tribal_warrior");
@@ -629,7 +591,7 @@ describe("admin view models", () => {
   it("sorts society review rows alphabetically by society name", () => {
     expect(buildSocietyAdminRows(content).map((row) => row.society)).toEqual([
       "Alpha Society",
-      "Zulu Society"
+      "Zulu Society",
     ]);
   });
 });

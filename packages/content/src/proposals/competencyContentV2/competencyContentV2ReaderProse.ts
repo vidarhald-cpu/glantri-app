@@ -287,13 +287,14 @@ export const competencyContentV2GroupReaderProse: Readonly<Record<string, V2Read
     /* F30 — Swashbuckling fencing instruction */
     F30: {
       shortDescription:
-        "Learners combine the established Fencing tradition with complete blade, avoidance and parrying instruction.",
+        "Learners are taught the Fencing tradition itself, together with complete avoidance and parrying instruction.",
       fullDescription:
-        "An experienced fencer teaches one-handed edged weapon fundamentals, deliberate evasion and parrying, then develops the timing, distance and coordinated exchanges of the swashbuckling tradition. Learners repeat and correct defensive decisions as well as the finer blade work; a graceful change of position alone is not treated as complete Dodge instruction.\n\nThe course expressly teaches the specialist sword-and-buckler and main-gauche practice already belonging to Fencing. It remains a course in that established tradition, not modern sport fencing. Unarmed rough fighting is not part of the curriculum described here.",
+        "An experienced fencer teaches the timing, distance and coordinated exchanges of the swashbuckling tradition alongside deliberate evasion and parrying. Learners repeat and correct defensive decisions as well as the finer blade work; a graceful change of position alone is not treated as complete Dodge instruction.\n\nThe course expressly teaches the specialist sword-and-buckler and main-gauche practice belonging to Fencing. It remains a course in that established tradition, not modern sport fencing. Unarmed rough fighting is not part of the curriculum described here.\n\nFencing is the weapon competence this course teaches, and it is charged once. Ordinary one-handed edged practice is a separate Skill and a separate course; where a Profession offers that instead of this tradition, it is an alternative training route rather than a choice inside this group.",
       boundaries: [
         "Brawling is not inferred from physical contact during fencing; this page does not teach its whole unarmed practice.",
         "No separate Sword & Buckler / Main-Gauche specialization, off-hand Skill or new combat style is introduced.",
         "No additional weapon-family membership is inferred from an item used within the approved tradition.",
+        "1-h edged is not taught here: it is the separate ordinary one-handed edged weapon practice.",
         "Formation Fighting, Mounted Combat and Weapon Maintenance remain separate instruction.",
       ],
       source: "martial-revision",
@@ -301,14 +302,14 @@ export const competencyContentV2GroupReaderProse: Readonly<Record<string, V2Read
     /* F41 — Longbow hunting apprenticeship */
     F41: {
       shortDescription:
-        "Learners hunt with a longbow while receiving complete archery instruction and sustained correction of specialist longbow technique.",
+        "Learners hunt with a longbow, receiving sustained correction of longbow technique alongside complete hunting instruction.",
       fullDescription:
-        "A hunting teacher alternates archery lessons with supervised hunts. Learners practise the broader bow competence, then receive further repeated correction in the longbow’s particular handling demands. In the field they choose an approach, judge when to attempt a shot and review whether continuing the hunt is sensible.\n\nThe same learner is taught the course of the hunt as well as the shooting. This is one specific longbow hunting apprenticeship, not every civilian archery lesson. It teaches neither formation participation nor human close-combat fighting, and it does not imply that ordinary Bow instruction always includes a specialization.",
+        "A hunting teacher alternates longbow lessons with supervised hunts. Learners receive repeated correction in the longbow’s particular handling demands, and in the field they choose an approach, judge when to attempt a shot and review whether continuing the hunt is sensible.\n\nThe same learner is taught the course of the hunt as well as the shooting. This is the civilian and hunting route to the longbow, not every civilian archery lesson. It teaches neither formation participation nor human close-combat fighting.\n\nLongbow is the weapon competence this course teaches, and it is charged once. Ordinary Bow is a separate Skill and is not charged here; the longbow’s relationship to Bow is a qualitative one, with no transfer of competence in either direction. Military longbow training is taught directly by the military missile curricula, so a soldier reaches the longbow without this hunting apprenticeship and without acquiring Hunting.",
       boundaries: [
         "Tracking, Stealth and Perception are not added merely because they are useful to a hunt; this page does not teach those entire competences.",
         "Dodge, Parry and Brawling are not included because this is not a human close-combat curriculum.",
         "Formation Fighting is not taught by hunting with another person.",
-        "A military archer does not gain Hunting or Longbow merely from belonging to F38.",
+        "Bow is not taught here: it is the separate ordinary archery competence.",
         "This is not a new bow type, new specialization or weapon-access rule.",
       ],
       source: "martial-revision",
@@ -2152,11 +2153,6 @@ export const competencyContentV2ReaderProseContentReviewFlags: readonly {
   citedIdentifier: string;
   reason: string;
 }[] = Object.freeze([
-  Object.freeze({
-    key: "F41",
-    citedIdentifier: "F38",
-    reason: "F38 was removed by the V2 redesign, so the cited group no longer exists.",
-  }),
   Object.freeze({
     key: "P09",
     citedIdentifier: "G08, F35",

@@ -92,11 +92,24 @@ export interface ChargenSkillView {
   totalSkill: number;
 }
 
+/**
+ * A persisted progression row may still carry a retired `specialization-bridge-*` source type: the
+ * progression schema keeps accepting stored values, but rule decision 0010 ruling 5 deleted the
+ * `specializationBridge` mechanism. A retired source type is therefore never surfaced again.
+ */
+function currentRelationshipSourceType(
+  sourceType: string | undefined,
+): SkillRelationshipSourceType | undefined {
+  return sourceType === "explicit" || sourceType === "melee-cross-training"
+    ? sourceType
+    : undefined;
+}
+
 export interface ChargenSpecializationView {
   relationshipGrantedPreviewLevel?: number;
   relationshipGrantedSourceSkillId?: string;
   relationshipGrantedSourceSkillName?: string;
-  relationshipGrantedSourceType?: "specialization-bridge-parent";
+  relationshipGrantedSourceType?: SkillRelationshipSourceType;
   relationshipGrantedSpecializationLevel?: number;
   effectiveSpecializationNumber: number;
   name: string;
@@ -362,7 +375,8 @@ export function buildChargenDraftView(input: {
           relationshipSourceType: skill?.languageName
             ? undefined
             : shouldSurfaceRelationshipSource
-              ? (relationshipGrant?.sourceType ?? skill?.relationshipGrantSourceType)
+              ? (relationshipGrant?.sourceType ??
+                currentRelationshipSourceType(skill?.relationshipGrantSourceType))
               : undefined,
           effectiveSkillNumber,
           groupId: resolvedGroupId,
@@ -434,10 +448,9 @@ export function buildChargenDraftView(input: {
       const relationshipGrantedPreviewLevel = relationshipGrant?.previewAdditionalRanks ?? 0;
       const shouldSurfaceRelationshipSource =
         relationshipGrantedSpecializationLevel > 0 || relationshipGrantedPreviewLevel > 0;
-      const persistedRelationshipSourceType =
-        progressionSpecialization?.relationshipGrantSourceType === "specialization-bridge-parent"
-          ? progressionSpecialization.relationshipGrantSourceType
-          : undefined;
+      const persistedRelationshipSourceType = currentRelationshipSourceType(
+        progressionSpecialization?.relationshipGrantSourceType,
+      );
       const specializationLevel = calculateSpecializationLevel({
         ownedSpecializationXp: progressionSpecialization?.secondaryRanks ?? 0,
         relationshipGrantedXp: relationshipGrantedSpecializationLevel,

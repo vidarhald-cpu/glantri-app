@@ -21,20 +21,20 @@ describe("validateCanonicalContent", () => {
       "bodyguard",
       "gladiator",
       "outrider_scout",
-      "champion"
+      "champion",
     ];
     const soldierFamily = defaultCanonicalContent.professionFamilies.find(
-      (family) => family.id === "soldier"
+      (family) => family.id === "soldier",
     );
     const grantsFor = (professionId: string) => {
       const profession = defaultCanonicalContent.professions.find(
-        (candidate) => candidate.id === professionId
+        (candidate) => candidate.id === professionId,
       );
 
       return defaultCanonicalContent.professionSkills.filter(
         (grant) =>
           (grant.scope === "family" && grant.professionId === profession?.familyId) ||
-          (grant.scope === "profession" && grant.professionId === professionId)
+          (grant.scope === "profession" && grant.professionId === professionId),
       );
     };
     const groupIdsFor = (professionId: string) =>
@@ -71,7 +71,7 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
@@ -81,7 +81,7 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
@@ -91,16 +91,14 @@ describe("validateCanonicalContent", () => {
       defaultCanonicalContent.professionSkills
         .filter(
           (grant) =>
-            grant.scope === "family" &&
-            grant.professionId === professionFamilyId &&
-            grant.skillId
+            grant.scope === "family" && grant.professionId === professionFamilyId && grant.skillId,
         )
         .map((grant) => grant.skillId!);
 
     expect(soldierFamily).toBeDefined();
     expect(familySkillIdsFor("soldier")).toEqual([]);
     expect(groupIdsFor("tribal_warrior")).toEqual(
-      expect.arrayContaining(["basic_melee_training", "veteran_soldiering"])
+      expect.arrayContaining(["basic_melee_training", "veteran_soldiering"]),
     );
 
     for (const professionId of affectedOrdinaryProfessionIds) {
@@ -115,21 +113,21 @@ describe("validateCanonicalContent", () => {
     }
 
     expect(groupIdsFor("watchman")).toEqual(
-      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "watch_civic_guard"])
+      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "watch_civic_guard"]),
     );
     expect(groupIdsFor("jailer")).toEqual(
-      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "watch_civic_guard"])
+      expect.arrayContaining(["basic_melee_training", "defensive_soldiering", "watch_civic_guard"]),
     );
     expect(groupIdsFor("cavalry")).toEqual(
-      expect.arrayContaining(["mounted_warrior_training", "veteran_soldiering"])
+      expect.arrayContaining(["mounted_warrior_training", "veteran_soldiering"]),
     );
     expect(groupIdsFor("light_infantry")).toEqual(
       expect.arrayContaining([
         "basic_missile_training",
         "basic_melee_training",
         "defensive_soldiering",
-        "veteran_soldiering"
-      ])
+        "veteran_soldiering",
+      ]),
     );
     expect(skillIdsFor("light_infantry")).toEqual([]);
     expect(skillReachFor("light_infantry")).toBeGreaterThanOrEqual(15);
@@ -137,36 +135,40 @@ describe("validateCanonicalContent", () => {
       "throwing",
       "sling",
       "bow",
-      "crossbow"
+      "crossbow",
     ]);
     expect(groupSkillIdsFor("basic_missile_training")).toEqual(
-      expect.arrayContaining(["perception", "concentration", "weapon_maintenance"])
+      expect.arrayContaining(["perception", "concentration", "weapon_maintenance"]),
     );
     expect(groupSkillIdsFor("basic_missile_training")).not.toContain("longbow");
     expect(groupSkillIdsFor("basic_missile_training")).not.toContain("self_control");
-    expect(groupSkillIdsFor("basic_missile_training").filter((skillId) =>
-      ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
-    )).toEqual([]);
-    expect(groupSkillIdsFor("basic_missile_training").filter((skillId) =>
-      [
-        "one_handed_edged",
-        "one_handed_concussion_axe",
-        "two_handed_edged",
-        "two_handed_concussion_axe",
-        "polearms",
-        "lance"
-      ].includes(skillId)
-    )).toEqual([]);
+    expect(
+      groupSkillIdsFor("basic_missile_training").filter((skillId) =>
+        ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId),
+      ),
+    ).toEqual([]);
+    expect(
+      groupSkillIdsFor("basic_missile_training").filter((skillId) =>
+        [
+          "one_handed_edged",
+          "one_handed_concussion_axe",
+          "two_handed_edged",
+          "two_handed_concussion_axe",
+          "polearms",
+          "lance",
+        ].includes(skillId),
+      ),
+    ).toEqual([]);
     expect(groupWeightedValueFor("basic_missile_training")).toBeGreaterThanOrEqual(5);
     expect(
       groupWeightedValueFor("basic_missile_training") +
-        minimumSlotWeightedValueFor("basic_missile_training")
+        minimumSlotWeightedValueFor("basic_missile_training"),
     ).toBeGreaterThanOrEqual(6);
     expect(groupSelectionCandidateIdsFor("advanced_missile_training")).toEqual([
       "throwing",
       "sling",
       "bow",
-      "crossbow"
+      "crossbow",
     ]);
     expect(groupSkillIdsFor("advanced_missile_training")).toEqual(
       expect.arrayContaining([
@@ -174,73 +176,87 @@ describe("validateCanonicalContent", () => {
         "concentration",
         "weapon_maintenance",
         "battlefield_awareness",
-        "combat_experience"
-      ])
+        "combat_experience",
+      ]),
     );
     expect(groupSkillIdsFor("advanced_missile_training")).not.toContain("longbow");
     expect(groupSkillIdsFor("advanced_missile_training")).not.toContain("self_control");
-    expect(groupSkillIdsFor("advanced_missile_training").filter((skillId) =>
-      ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId)
-    )).toEqual([]);
+    expect(
+      groupSkillIdsFor("advanced_missile_training").filter((skillId) =>
+        ["dodge", "parry", "veteran_leadership", "captaincy", "tactics"].includes(skillId),
+      ),
+    ).toEqual([]);
     expect(groupSelectionCandidateIdsFor("basic_melee_training")).toEqual(
-      expect.arrayContaining(["one_handed_edged", "polearms"])
+      expect.arrayContaining(["one_handed_edged", "polearms"]),
     );
     expect(groupSkillIdsFor("basic_melee_training")).toEqual(
-      expect.arrayContaining(["dodge", "parry", "brawling"])
+      expect.arrayContaining(["dodge", "parry", "brawling"]),
     );
-    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")).toMatchObject({
-      specializationOfSkillId: "bow"
-    });
+    /* Rule decision 0010 ruling 2: Longbow is a base combat Skill, so it carries no Specialization
+       parent. It still stays out of the legacy missile training slots, which issue #389 freezes. */
+    expect(
+      defaultCanonicalContent.skills.find((skill) => skill.id === "longbow")
+        ?.specializationOfSkillId,
+    ).toBeUndefined();
+    expect(groupSelectionCandidateIdsFor("basic_missile_training")).not.toContain("longbow");
     expect(groupSkillIdsFor("defensive_soldiering")).toEqual(
       expect.arrayContaining([
         "formation_fighting",
         "battlefield_awareness",
         "perception",
         "combat_experience",
-        "first_aid"
-      ])
+        "first_aid",
+      ]),
     );
     expect(groupSkillIdsFor("defensive_soldiering")).not.toContain("self_control");
-    expect(groupSkillIdsFor("defensive_soldiering").filter((skillId) =>
-      ["dodge", "parry", "brawling"].includes(skillId)
-    )).toEqual([]);
+    expect(
+      groupSkillIdsFor("defensive_soldiering").filter((skillId) =>
+        ["dodge", "parry", "brawling"].includes(skillId),
+      ),
+    ).toEqual([]);
     expect(groupWeightedValueFor("defensive_soldiering")).toBeGreaterThanOrEqual(6);
-    expect(defaultCanonicalContent.skills.find((skill) => skill.id === "self_control")).toBeDefined();
-    expect(defaultCanonicalContent.skillGroups
-      .filter((group) =>
-        (group.skillMemberships ?? []).some((membership) => membership.skillId === "self_control")
-      )
-      .map((group) => group.id)
-      .sort()).toEqual(["mental_discipline", "mental_group"]);
+    expect(
+      defaultCanonicalContent.skills.find((skill) => skill.id === "self_control"),
+    ).toBeDefined();
+    expect(
+      defaultCanonicalContent.skillGroups
+        .filter((group) =>
+          (group.skillMemberships ?? []).some(
+            (membership) => membership.skillId === "self_control",
+          ),
+        )
+        .map((group) => group.id)
+        .sort(),
+    ).toEqual(["mental_discipline", "mental_group"]);
     expect(groupSkillIdsFor("veteran_soldiering")).toEqual(
       expect.arrayContaining([
         "combat_experience",
         "battlefield_awareness",
         "perception",
         "first_aid",
-        "weapon_maintenance"
-      ])
+        "weapon_maintenance",
+      ]),
     );
-    expect(groupSkillIdsFor("veteran_soldiering").filter((skillId) =>
-      ["dodge", "parry", "brawling"].includes(skillId)
-    )).toEqual([]);
+    expect(
+      groupSkillIdsFor("veteran_soldiering").filter((skillId) =>
+        ["dodge", "parry", "brawling"].includes(skillId),
+      ),
+    ).toEqual([]);
     expect(groupWeightedValueFor("veteran_soldiering")).toBeGreaterThanOrEqual(6);
     expect(skillById.get("dodge")?.groupIds).not.toEqual(
       expect.arrayContaining([
         "basic_missile_training",
         "advanced_missile_training",
         "defensive_soldiering",
-        "veteran_soldiering"
-      ])
+        "veteran_soldiering",
+      ]),
     );
     expect(skillById.get("parry")?.groupIds).not.toEqual(
-      expect.arrayContaining(["defensive_soldiering", "veteran_soldiering"])
+      expect.arrayContaining(["defensive_soldiering", "veteran_soldiering"]),
     );
     for (const group of defaultCanonicalContent.skillGroups) {
       const groupSkillIds = group.skillMemberships?.map((membership) => membership.skillId) ?? [];
-      const hasDodgeOrParry = groupSkillIds.some((skillId) =>
-        ["dodge", "parry"].includes(skillId)
-      );
+      const hasDodgeOrParry = groupSkillIds.some((skillId) => ["dodge", "parry"].includes(skillId));
 
       if (!hasDodgeOrParry) {
         continue;
@@ -256,9 +272,9 @@ describe("validateCanonicalContent", () => {
               "two_handed_edged",
               "two_handed_concussion_axe",
               "polearms",
-              "lance"
-            ].includes(skillId)
-          )
+              "lance",
+            ].includes(skillId),
+          ),
       ).toBe(true);
     }
     expect(groupIdsFor("military_officer")).toEqual(
@@ -266,14 +282,14 @@ describe("validateCanonicalContent", () => {
         "basic_melee_training",
         "defensive_soldiering",
         "veteran_leadership",
-        "veteran_soldiering"
-      ])
+        "veteran_soldiering",
+      ]),
     );
     expect(skillIdsFor("military_officer")).toEqual(
-      expect.arrayContaining(["captaincy", "tactics"])
+      expect.arrayContaining(["captaincy", "tactics"]),
     );
     expect(groupIdsFor("military_officer").length).toBeGreaterThan(
-      groupIdsFor("tribal_warrior").length
+      groupIdsFor("tribal_warrior").length,
     );
 
     expect(skillIdsFor("watchman")).not.toContain("riding");
@@ -286,10 +302,10 @@ describe("validateCanonicalContent", () => {
 
   it("gives civic guard professions a watch-focused skill group without officer training", () => {
     const groupById = new Map(
-      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group]),
     );
     const professionById = new Map(
-      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession]),
     );
     const grantsFor = (professionId: string) => {
       const profession = professionById.get(professionId);
@@ -297,7 +313,7 @@ describe("validateCanonicalContent", () => {
       return defaultCanonicalContent.professionSkills.filter(
         (grant) =>
           (grant.scope === "family" && grant.professionId === profession?.familyId) ||
-          (grant.scope === "profession" && grant.professionId === professionId)
+          (grant.scope === "profession" && grant.professionId === professionId),
       );
     };
     const groupIdsFor = (professionId: string) =>
@@ -308,7 +324,7 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
       const directSkillIds = grantsFor(professionId)
@@ -321,7 +337,7 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
@@ -334,16 +350,10 @@ describe("validateCanonicalContent", () => {
 
     expect(watchGroup).toMatchObject({
       id: "watch_civic_guard",
-      name: "Watch / Civic Guard"
+      name: "Watch / Civic Guard",
     });
     expect(watchMembershipIds).toEqual(
-      expect.arrayContaining([
-        "perception",
-        "search",
-        "law",
-        "insight",
-        "social_perception"
-      ])
+      expect.arrayContaining(["perception", "search", "law", "insight", "social_perception"]),
     );
     expect(watchMembershipIds).not.toContain("parry");
     expect(watchMembershipIds).not.toContain("dodge");
@@ -365,8 +375,8 @@ describe("validateCanonicalContent", () => {
         expect.arrayContaining([
           "basic_melee_training",
           "defensive_soldiering",
-          "watch_civic_guard"
-        ])
+          "watch_civic_guard",
+        ]),
       );
       expect(groupIds).not.toContain("veteran_leadership");
       expect(new Set(groupIds).size).toBe(groupIds.length);
@@ -380,10 +390,10 @@ describe("validateCanonicalContent", () => {
 
   it("gives Caravan Guard route-security training without officer or isolated combat group leakage", () => {
     const groupById = new Map(
-      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group]),
     );
     const professionById = new Map(
-      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession]),
     );
     const grantsFor = (professionId: string) => {
       const profession = professionById.get(professionId);
@@ -391,7 +401,7 @@ describe("validateCanonicalContent", () => {
       return defaultCanonicalContent.professionSkills.filter(
         (grant) =>
           (grant.scope === "family" && grant.professionId === profession?.familyId) ||
-          (grant.scope === "profession" && grant.professionId === professionId)
+          (grant.scope === "profession" && grant.professionId === professionId),
       );
     };
     const groupIdsFor = (professionId: string) =>
@@ -406,19 +416,19 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
       return directSkillIdsFor(professionId).filter(
-        (skillId) => !skillIdsFromGroups.includes(skillId)
+        (skillId) => !skillIdsFromGroups.includes(skillId),
       );
     };
     const skillReachFor = (professionId: string) => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
@@ -432,7 +442,7 @@ describe("validateCanonicalContent", () => {
 
     expect(routeGroup).toMatchObject({
       id: "route_security",
-      name: "Route Security"
+      name: "Route Security",
     });
     expect(routeMembershipIds).toEqual(
       expect.arrayContaining([
@@ -441,8 +451,8 @@ describe("validateCanonicalContent", () => {
         "riding",
         "animal_care",
         "teamstering",
-        "first_aid"
-      ])
+        "first_aid",
+      ]),
     );
     expect(routeMembershipIds).not.toContain("captaincy");
     expect(routeMembershipIds).not.toContain("tactics");
@@ -458,7 +468,7 @@ describe("validateCanonicalContent", () => {
     expect(routeMembershipIds).not.toContain("lance");
 
     expect(caravanGroupIds).toEqual(
-      expect.arrayContaining(["basic_melee_training", "route_security", "veteran_soldiering"])
+      expect.arrayContaining(["basic_melee_training", "route_security", "veteran_soldiering"]),
     );
     expect(caravanGroupIds).not.toContain("veteran_leadership");
     expect(new Set(caravanGroupIds).size).toBe(caravanGroupIds.length);
@@ -472,18 +482,19 @@ describe("validateCanonicalContent", () => {
     expect(directOnlySkillIdsFor("caravan_guard")).not.toContain("first_aid");
 
     const watchMembershipIds =
-      groupById.get("watch_civic_guard")?.skillMemberships?.map((membership) => membership.skillId) ??
-      [];
+      groupById
+        .get("watch_civic_guard")
+        ?.skillMemberships?.map((membership) => membership.skillId) ?? [];
 
     expect(watchMembershipIds).not.toContain("parry");
   });
 
   it("gives Gladiator arena-fighter training without battlefield command inheritance", () => {
     const groupById = new Map(
-      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group]),
     );
     const professionById = new Map(
-      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession]),
     );
     const grantsFor = (professionId: string) => {
       const profession = professionById.get(professionId);
@@ -491,7 +502,7 @@ describe("validateCanonicalContent", () => {
       return defaultCanonicalContent.professionSkills.filter(
         (grant) =>
           (grant.scope === "family" && grant.professionId === profession?.familyId) ||
-          (grant.scope === "profession" && grant.professionId === professionId)
+          (grant.scope === "profession" && grant.professionId === professionId),
       );
     };
     const groupIdsFor = (professionId: string) =>
@@ -506,19 +517,19 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
       return directSkillIdsFor(professionId).filter(
-        (skillId) => !skillIdsFromGroups.includes(skillId)
+        (skillId) => !skillIdsFromGroups.includes(skillId),
       );
     };
     const skillReachFor = (professionId: string) => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
@@ -532,16 +543,16 @@ describe("validateCanonicalContent", () => {
     const gladiatorGroupIds = groupIdsFor("gladiator");
 
     expect(
-      defaultCanonicalContent.professionFamilies.some((family) => family.id === "arena_fighter")
+      defaultCanonicalContent.professionFamilies.some((family) => family.id === "arena_fighter"),
     ).toBe(true);
     expect(gladiator).toMatchObject({
       familyId: "arena_fighter",
       id: "gladiator",
-      name: "Gladiator"
+      name: "Gladiator",
     });
     expect(arenaGroup).toMatchObject({
       id: "arena_training",
-      name: "Arena Training"
+      name: "Arena Training",
     });
     expect(arenaMembershipIds).toEqual(
       expect.arrayContaining([
@@ -549,8 +560,8 @@ describe("validateCanonicalContent", () => {
         "perception",
         "acting",
         "oratory",
-        "weapon_maintenance"
-      ])
+        "weapon_maintenance",
+      ]),
     );
     expect(arenaMembershipIds).not.toContain("dodge");
     expect(arenaMembershipIds).not.toContain("brawling");
@@ -567,7 +578,7 @@ describe("validateCanonicalContent", () => {
     expect(arenaMembershipIds).not.toContain("lance");
 
     expect(gladiatorGroupIds).toEqual(
-      expect.arrayContaining(["advanced_melee_training", "arena_training"])
+      expect.arrayContaining(["advanced_melee_training", "arena_training"]),
     );
     expect(gladiatorGroupIds).not.toContain("veteran_soldiering");
     expect(gladiatorGroupIds).not.toContain("veteran_leadership");
@@ -579,8 +590,9 @@ describe("validateCanonicalContent", () => {
     expect(directSkillIdsFor("gladiator")).not.toContain("tactics");
 
     const watchMembershipIds =
-      groupById.get("watch_civic_guard")?.skillMemberships?.map((membership) => membership.skillId) ??
-      [];
+      groupById
+        .get("watch_civic_guard")
+        ?.skillMemberships?.map((membership) => membership.skillId) ?? [];
     const routeMembershipIds =
       groupById.get("route_security")?.skillMemberships?.map((membership) => membership.skillId) ??
       [];
@@ -593,10 +605,10 @@ describe("validateCanonicalContent", () => {
 
   it("gives Ships Officer maritime command training without promoting ordinary sailors", () => {
     const groupById = new Map(
-      defaultCanonicalContent.skillGroups.map((group) => [group.id, group])
+      defaultCanonicalContent.skillGroups.map((group) => [group.id, group]),
     );
     const professionById = new Map(
-      defaultCanonicalContent.professions.map((profession) => [profession.id, profession])
+      defaultCanonicalContent.professions.map((profession) => [profession.id, profession]),
     );
     const grantsFor = (professionId: string) => {
       const profession = professionById.get(professionId);
@@ -604,7 +616,7 @@ describe("validateCanonicalContent", () => {
       return defaultCanonicalContent.professionSkills.filter(
         (grant) =>
           (grant.scope === "family" && grant.professionId === profession?.familyId) ||
-          (grant.scope === "profession" && grant.professionId === professionId)
+          (grant.scope === "profession" && grant.professionId === professionId),
       );
     };
     const groupIdsFor = (professionId: string) =>
@@ -619,19 +631,19 @@ describe("validateCanonicalContent", () => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
       return directSkillIdsFor(professionId).filter(
-        (skillId) => !skillIdsFromGroups.includes(skillId)
+        (skillId) => !skillIdsFromGroups.includes(skillId),
       );
     };
     const skillReachFor = (professionId: string) => {
       const groupIds = groupIdsFor(professionId);
       const skillIdsFromGroups = defaultCanonicalContent.skills
         .filter((skill) =>
-          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId))
+          (skill.groupIds ?? [skill.groupId]).some((groupId) => groupIds.includes(groupId)),
         )
         .map((skill) => skill.id);
 
@@ -645,7 +657,7 @@ describe("validateCanonicalContent", () => {
 
     expect(shipCommandGroup).toMatchObject({
       id: "ship_command",
-      name: "Ship Command"
+      name: "Ship Command",
     });
     expect(shipCommandMembershipIds).toEqual(
       expect.arrayContaining([
@@ -655,8 +667,8 @@ describe("validateCanonicalContent", () => {
         "perception",
         "insight",
         "oratory",
-        "administration"
-      ])
+        "administration",
+      ]),
     );
     expect(shipCommandMembershipIds).not.toContain("veteran_leadership");
     expect(shipCommandMembershipIds).not.toContain("tactics");
@@ -671,13 +683,13 @@ describe("validateCanonicalContent", () => {
     expect(shipCommandMembershipIds).not.toContain("lance");
 
     expect(shipsOfficerGroupIds).toEqual(
-      expect.arrayContaining(["maritime_crew_training", "maritime_navigation", "ship_command"])
+      expect.arrayContaining(["maritime_crew_training", "maritime_navigation", "ship_command"]),
     );
     expect(shipsOfficerGroupIds).not.toContain("veteran_leadership");
     expect(new Set(shipsOfficerGroupIds).size).toBe(shipsOfficerGroupIds.length);
     expect(skillReachFor("ships_officer")).toBeGreaterThan(10);
     expect(directOnlySkillIdsFor("ships_officer")).toEqual(
-      expect.arrayContaining(["language", "trading"])
+      expect.arrayContaining(["language", "trading"]),
     );
     expect(directOnlySkillIdsFor("ships_officer")).not.toContain("captaincy");
     expect(directOnlySkillIdsFor("ships_officer")).not.toContain("navigation");
@@ -688,8 +700,9 @@ describe("validateCanonicalContent", () => {
     }
 
     const watchMembershipIds =
-      groupById.get("watch_civic_guard")?.skillMemberships?.map((membership) => membership.skillId) ??
-      [];
+      groupById
+        .get("watch_civic_guard")
+        ?.skillMemberships?.map((membership) => membership.skillId) ?? [];
     const routeMembershipIds =
       groupById.get("route_security")?.skillMemberships?.map((membership) => membership.skillId) ??
       [];
@@ -709,5 +722,4 @@ describe("validateCanonicalContent", () => {
     expect(arenaMembershipIds).not.toContain("veteran_leadership");
     expect(arenaMembershipIds).not.toContain("formation_fighting");
   });
-
 });

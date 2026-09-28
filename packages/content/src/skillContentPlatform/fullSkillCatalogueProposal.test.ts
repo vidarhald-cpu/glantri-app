@@ -17,9 +17,9 @@ describe("full Skill catalogue proposal", () => {
       FULL_SKILL_CATALOGUE_SOURCE_SIZE,
     );
     expect(fullSkillCatalogueProposal.manifest).toMatchObject({
-      baseSkills: 131,
+      baseSkills: 133,
       competencies: 172,
-      specializations: 26,
+      specializations: 24,
       spokenLanguages: 12,
       supportScripts: 3,
       unresolvedBindings: 9,
@@ -60,7 +60,14 @@ describe("full Skill catalogue proposal", () => {
       fullSkillCatalogueProposal.entries.filter(
         ({ competencyType }) => competencyType === "specialization",
       ),
-    ).toHaveLength(26);
+    ).toHaveLength(24);
+    // Rule decision 0010 rulings 1 and 2: Fencing and Longbow are base combat Skills, so they
+    // carry no Specialization parent and are absent from the Specialization roster.
+    for (const id of ["fencing", "longbow"]) {
+      const entry = fullSkillCatalogueProposal.entries.find((candidate) => candidate.id === id)!;
+      expect(entry.competencyType).toBe("base-skill");
+      expect(entry.parent).toBeUndefined();
+    }
     expect(
       fullSkillCatalogueProposal.entries
         .filter(({ competencyType }) => competencyType === "specialization")

@@ -10,12 +10,12 @@ const sourceDefinitions = [
   {
     markdown: fullLearningGroupsSource,
     path: "docs/source/learning-groups/Glantri_Full_Catalogue_Learning_Groups_PO_Proposal.md.txt",
-    sha256: "7452da9e5fb0b324ea74b3eb618472c512d3c3f04288a49f124fa50821790423",
+    sha256: "35b1441dbc99e217a02ae20f84e28548c8e0f6a6a8036cfa6b9ae270f682f4ae",
   },
   {
     markdown: martialLearningGroupsSource,
     path: "docs/source/learning-groups/Glantri_Learning_Groups_Martial_Revision_PO_Proposal.md.txt",
-    sha256: "f44447d438fc33f0a37cc3703bb33d711f4423b95c9c0e047691ea4a12004e8a",
+    sha256: "4008a7af299d65933238a45150056c684ce051893cd79f007af9cebb89e228d1",
   },
 ] as const;
 
@@ -189,9 +189,9 @@ export function buildTargetLearningGroupCatalogue(): TargetLearningGroupCatalogu
   };
   if (
     manifest.groups !== 59 ||
-    manifest.baseMemberships !== 151 ||
-    manifest.specializationMemberships !== 9 ||
-    manifest.groupedBaseSkills !== 90 ||
+    manifest.baseMemberships !== 153 ||
+    manifest.specializationMemberships !== 7 ||
+    manifest.groupedBaseSkills !== 92 ||
     manifest.grouplessBaseSkills !== 41 ||
     manifest.pilotGroups !== 18 ||
     manifest.pilotLinks !== 46

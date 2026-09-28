@@ -47,7 +47,7 @@ import {
 } from "./targetCompetencyContent";
 
 describe("target competency Chargen projection", () => {
-  it("consumes exactly the approved 131/26/12/3 identities, not legacy or support choices", () => {
+  it("consumes exactly the approved 133/24/12/3 identities, not legacy or support choices", () => {
     const source = createTargetCompetencyChargenSource(defaultCanonicalContent);
     const { entries } = source.catalogue.content;
     expect(entries.map(({ id }) => id)).toEqual(
@@ -62,8 +62,10 @@ describe("target competency Chargen projection", () => {
         ]),
       ),
     ).toEqual({
-      "base-skill": 131,
-      specialization: 26,
+      // Rule decision 0010 rulings 1 and 2 move Fencing and Longbow from Specializations to base
+      // Skills. The 172-entry roster is unchanged; only the type split moves.
+      "base-skill": 133,
+      specialization: 24,
       "spoken-language": 12,
       "written-tradition": 3,
     });
@@ -89,8 +91,6 @@ describe("target competency Chargen projection", () => {
       entries.filter(({ parent }) => parent).map((entry) => [entry.name, entry.parent!.name]),
     );
     expect(namedParents).toMatchObject({
-      Fencing: "1-h edged",
-      Longbow: "Bow",
       Weaponsmithing: "Smithing",
       "Battlefield Surgery": "Surgery",
       "Animal Training": "Animal Handling",
@@ -104,7 +104,15 @@ describe("target competency Chargen projection", () => {
     expect(entries.find(({ name }) => name === "Animal Training")?.parent?.id).toBe(
       "skill:animal-handling",
     );
-    expect(entries.find(({ name }) => name === "Fencing")).toMatchObject({ minimumParentLevel: 6 });
+    /* Fencing and Longbow are base combat Skills, so they name no parent and carry no parent
+       minimum at all — the double-investment gate rule decision 0010 ruling 1 removes. */
+    for (const name of ["Fencing", "Longbow"]) {
+      const entry = entries.find((candidate) => candidate.name === name)!;
+      expect(entry.competencyType).toBe("base-skill");
+      expect(entry.parent).toBeUndefined();
+      expect(entry).not.toHaveProperty("minimumParentLevel");
+      expect(namedParents).not.toHaveProperty(name);
+    }
     expect(entries.find(({ name }) => name === "Falconry")).toMatchObject({
       minimumParentLevel: 11,
     });
@@ -119,6 +127,15 @@ describe("target competency Chargen projection", () => {
       linkedStats: {
         status: "legacy-counterpart",
         legacySkillId: "one_handed_edged",
+        linkedStats: ["str", "dex"],
+      },
+    });
+    /* Ruled 2026-09-27: Fencing's linked stats are one-handed edged's. It resolves through the
+       ordinary legacy-counterpart route rather than an invented approval. */
+    expect(entries.find(({ name }) => name === "Fencing")).toMatchObject({
+      linkedStats: {
+        status: "legacy-counterpart",
+        legacySkillId: "fencing",
         linkedStats: ["str", "dex"],
       },
     });
@@ -171,7 +188,7 @@ describe("target competency Chargen projection", () => {
         },
       });
     }
-    expect(buildTargetChargenDefinitions(source).skills).toHaveLength(146);
+    expect(buildTargetChargenDefinitions(source).skills).toHaveLength(148);
     const incomplete = structuredClone(source);
     incomplete.catalogue.content.entries = [];
     expect(() => buildTargetChargenDefinitions(incomplete)).toThrow("complete approved competency");
@@ -181,8 +198,17 @@ describe("target competency Chargen projection", () => {
     const content = buildTargetRuntimeContent(
       createTargetCompetencyChargenSource(defaultCanonicalContent),
     );
-    expect(content.chargenCatalogue?.skillIds).toHaveLength(146);
-    expect(content.chargenCatalogue?.specializationIds).toHaveLength(26);
+    expect(content.chargenCatalogue?.skillIds).toHaveLength(148);
+    expect(content.chargenCatalogue?.specializationIds).toHaveLength(24);
+    /* THE VANISHING TEST. Reclassification must move both competencies onto the base-Skill surface,
+       not remove them: deleting the bridge alone would have dropped the synthetic Specialization row
+       while `specializationOfSkillId` still excluded Longbow from every base-Skill surface. */
+    for (const id of ["fencing", "longbow"]) {
+      expect(content.chargenCatalogue?.skillIds).toContain(id);
+      expect(content.chargenCatalogue?.specializationIds).not.toContain(id);
+      expect(content.skills.find((skill) => skill.id === id)).toBeDefined();
+      expect(content.specializations.find((row) => row.id === id)).toBeUndefined();
+    }
     expect(content.skillGroups).toEqual(defaultCanonicalContent.skillGroups);
     expect(content.professions).toEqual(defaultCanonicalContent.professions);
     const surgery = content.skills.find(({ id }) => id === "skill:surgery")!;

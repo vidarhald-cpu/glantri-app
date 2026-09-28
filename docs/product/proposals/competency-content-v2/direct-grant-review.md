@@ -29,7 +29,7 @@ restored** to the Weapon Instructor, because the same ruling removed it from M10
 
 Highest remaining direct-Skill count: 3. 4 Profession(s) still carry three or more — P16 Local Informant (3), P48 Millwright and Mechanician (3), P52 Trapmaker (3), P53 Cook (3) — and each is argued in the table below rather than trimmed to a number.
 
-Direct Skill grants: **283 before, 106 after** — 184 withdrawn.
+Direct Skill grants: **283 before, 107 after** — 184 withdrawn.
 
 ## Policy applied
 

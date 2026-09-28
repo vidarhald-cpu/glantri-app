@@ -5,9 +5,9 @@
   "encoding": "base64",
   "originalSha256": "0bedd313d7d49b3cf4846008b75bf126cf956a985f8d1cc9dcab1ef9446b8376",
   "originalBytes": 355963,
-  "normalizedSha256": "c9d9c8c395024d71289dadf97717f450868fa2cdf86da51017d6f8a9231e007b",
-  "normalizedBytes": 354629,
-  "normalization": "Remove trailing ASCII spaces and tabs from each line; preserve line breaks and all other bytes. The base64 archive remains the exact original string.",
+  "normalizedSha256": "5dd3af7a39aecfcf337e2ca5d063e1f724a3a14cfd93d21a6ff82ae1d0e187ad",
+  "normalizedBytes": 354978,
+  "normalization": "Remove trailing ASCII spaces and tabs from each line; preserve line breaks and all other bytes. The base64 archive remains the exact original string and is unchanged. AMENDED 2026-09-27 (Forgejo #389): the readable copy additionally carries the authorized Fencing/Longbow reclassification, so it is no longer a pure normalization of the original. `normalizedSha256`/`normalizedBytes` above describe the amended readable copy; `originalSha256`/`originalBytes` still describe the supplied original, which the archive reproduces byte-for-byte. The readable copy is a reader convenience, not the controlling source; the controlling source is packages/content/src/skillContentPlatform/fullSkillCatalogueProposalSource.ts and its pinned digest.",
   "pinnedBy": "Forgejo #102 issue body pins originalSha256 and originalBytes; both match.",
   "suppliedDate": "2026-09-10",
   "originalSourceDirectory": "/Users/vidarhald/Documents/Glantri local/"

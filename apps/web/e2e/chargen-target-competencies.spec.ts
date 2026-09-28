@@ -61,7 +61,9 @@ test("target competencies through existing Chargen and authoritative persistence
   const written = competencyContent.skills.find(
     (skill) => "competencyType" in skill && skill.competencyType === "written-tradition",
   )!;
-  for (const skillName of ["Surgery", spoken.name, written.name]) {
+  /* Fencing is a base combat Skill under rule decision 0010 ruling 1, so it is purchased from the
+     individual-skill list rather than from the specialization search, and it needs no parent level. */
+  for (const skillName of ["Surgery", "Fencing", spoken.name, written.name]) {
     await page.getByRole("button", { name: `Add ${skillName}`, exact: true }).click();
   }
   for (let rank = 0; rank < 6; rank++) {
@@ -71,8 +73,18 @@ test("target competencies through existing Chargen and authoritative persistence
   await page.getByLabel("Search specializations").fill("Falconry");
   await expect(page.getByText(/Animal Training/).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Add Falconry", exact: true })).toBeDisabled();
+  /* Fencing is no longer offered as a Specialization: searching the Specializations step for it
+     returns no rows at all, while the Skill itself was purchased above from the individual-skill
+     list. */
+  const specializations = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "8. Specializations", exact: true }) })
+    .last();
   await page.getByLabel("Search specializations").fill("Fencing");
-  await page.getByRole("button", { name: "Add Fencing", exact: true }).click();
+  await expect(specializations.getByText(/Showing 0 of/)).toBeVisible();
+  await expect(
+    specializations.getByRole("button", { name: "Add Fencing", exact: true }),
+  ).toHaveCount(0);
   await page.getByLabel("Character name", { exact: true }).fill(name);
   const response = page.waitForResponse(
     (r) => r.request().method() === "POST" && /\/characters\/?$/.test(new URL(r.url()).pathname),
@@ -87,11 +99,13 @@ test("target competencies through existing Chargen and authoritative persistence
       id,
     );
   }
+  /* Fencing is saved as an ordinary Skill row, and no Specialization row is created for it. */
+  expect(skills.find((row: { skillId: string }) => row.skillId === "fencing")).toBeDefined();
   expect(
-    character.build.progression.specializations.find(
+    character.build.progression.specializations.some(
       (row: { specializationId: string }) => row.specializationId === "fencing",
-    )?.secondaryRanks,
-  ).toBe(1);
+    ),
+  ).toBe(false);
   const read = await page.request.get(`${api}/characters/${character.id}`);
   expect((await read.json()).character.build).toEqual(character.build);
   await page.goto(`/characters/${character.id}`);

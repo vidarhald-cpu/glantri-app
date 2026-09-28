@@ -456,27 +456,6 @@ export function normalizeRuleMessageMeaning(message: string): string {
   return message.trim().replace(/\s+/g, " ").replace(/[.]+$/g, "").toLowerCase();
 }
 
-export function suppressBridgeOverlapStatusItems(input: {
-  bridgeParentSkillId?: string;
-  items: RuleStatusItem[];
-}): RuleStatusItem[] {
-  if (!input.bridgeParentSkillId) {
-    return input.items;
-  }
-
-  return input.items.filter((item) => {
-    if (item.skillId !== input.bridgeParentSkillId) {
-      return true;
-    }
-
-    return ![
-      "missing-required-dependency",
-      "missing-recommended-dependency",
-      "missing-helpful-dependency",
-    ].includes(item.code ?? "");
-  });
-}
-
 export function getSkillRowMessages(input: {
   persistedRowFeedback?: string;
   skill: SkillDefinition;
@@ -485,10 +464,10 @@ export function getSkillRowMessages(input: {
   feedback?: string;
   statusItems: RuleStatusItem[];
 } {
-  const statusItems = suppressBridgeOverlapStatusItems({
-    bridgeParentSkillId: input.skill.specializationBridge?.parentSkillId,
-    items: dedupeRuleStatusItems(getRuleStatusItems(input.evaluation)),
-  });
+  /* The bridge used to suppress the parent Skill's dependency notices. With the mechanism deleted
+     (rule decision 0010 ruling 5), Longbow's authored qualitative `helpful` Bow dependency simply
+     shows its own ordinary advisory, with no numeric factor behind it. */
+  const statusItems = dedupeRuleStatusItems(getRuleStatusItems(input.evaluation));
   const feedback = input.persistedRowFeedback;
 
   if (!feedback) {

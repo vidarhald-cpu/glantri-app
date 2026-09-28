@@ -2,7 +2,7 @@
 
 **84 proposed Profession families, fully authored for review.** These are occupational identities with explicitly named training variants, not character classes or acquisition packages. The accepted **59 Learning Groups** remain unchanged. This proposal contains **115 Profession-to-Group opportunities** and **88 direct Skill/Specialization training exceptions**; variant opportunities are not combined entitlements.
 
-The controlling Learning Group source is the final **martial revision applied to the full proposal**, not the earlier 52-group document alone. The resulting foundation remains **131 base Skills, 26 Specializations, 12 spoken-language competencies and 3 written traditions; 90 grouped and 41 deliberately groupless base Skills; all 46 Pilot links preserved as provenance**. No Skill, group, weapon mapping or mechanic is changed.
+The controlling Learning Group source is the final **martial revision applied to the full proposal**, not the earlier 52-group document alone. The resulting foundation remains **133 base Skills, 24 Specializations, 12 spoken-language competencies and 3 written traditions; 92 grouped and 41 deliberately groupless base Skills; all 46 Pilot links preserved as provenance** — Fencing and Longbow were reclassified from Specializations to base Skills by the 2026-09-27 rulings, which moves two entries between types without changing the roster. No Skill, group, weapon mapping or mechanic is changed.
 
 Reading a Profession describes a plausible route to instruction and experience. It grants **no competency, rank, group, specialization, office, authority, Social Band, Society Level, assets, equipment or other benefit**. Employment can supply a teacher without guaranteeing admission, complete training or successful acquisition. A conditional branch is offered only where its whole stated practice is taught. An alternative replaces a route where stated; readers must not collect every branch under one Profession label.
 
@@ -1016,7 +1016,7 @@ A communal or household contingent without formation service can instead use the
 
 - `combat_experience` — **Combat Experience** (Skill); *Experienced service only.* Reviewed real fighting develops functioning under combat conditions; no group supplies it and recruit drill alone does not establish it.
 - `battlefield_awareness` — **Battlefield Awareness** (Skill); *Mentored battlefield service only.* Experienced soldiers teach interpretation of changing battlefield developments; no group teaches this whole awareness Skill.
-- `longbow` — **Longbow** (Specialization); *Explicit military-longbow specialist branch.* A military instructor teaches the approved Bow specialization; F38 does not inherit it and F41 would additionally require complete Hunting. Parent: **Bow**.
+- `longbow` — **Longbow** (Skill); *Explicit military-longbow specialist branch.* A military instructor teaches the longbow directly as its own weapon practice; F38 does not inherit it, and F41 is the civilian hunting route that would additionally require complete Hunting.
 
 **Society-Level range [P]: 2–6.** Requires sustained organized military training, which can be communal or household-based rather than a standing army. This range does not authorize every specialist branch or override any competency’s own conditions.
 
@@ -3461,7 +3461,7 @@ This is a material tension with the preference for a small exception register. W
 | [P21 Document Forger](#p21) | `skill:document-forgery` — Document & Credential Forgery (Skill) | Ordinary forgery apprenticeship | [No group] Repeated construction and review of false documents teaches the complete Skill; G16 concerns personal impersonation and F15 investigates old texts. |
 | [P22 Soldier](#p22) | `combat_experience` — Combat Experience (Skill) | Experienced service only | [No group] Reviewed real fighting develops functioning under combat conditions; no group supplies it and recruit drill alone does not establish it. |
 | [P22 Soldier](#p22) | `battlefield_awareness` — Battlefield Awareness (Skill) | Mentored battlefield service only | [No group] Experienced soldiers teach interpretation of changing battlefield developments; no group teaches this whole awareness Skill. |
-| [P22 Soldier](#p22) | `longbow` — Longbow (Specialization) | Explicit military-longbow specialist branch | [Existing groups unsuitable here] A military instructor teaches the approved Bow specialization; F38 does not inherit it and F41 would additionally require complete Hunting. |
+| [P22 Soldier](#p22) | `longbow` — Longbow (Skill) | Explicit military-longbow specialist branch | [Existing groups unsuitable here] A military instructor teaches the longbow directly as its own weapon practice; F38 does not inherit it, and F41 is the civilian hunting route that would additionally require complete Hunting. |
 | [P23 Mounted Soldier and Lancer](#p23) | `combat_experience` — Combat Experience (Skill) | Experienced fighting service only | [No group] Reviewed encounters develop practical functioning in combat; neither G05 nor F32 supplies this groupless Skill. |
 | [P23 Mounted Soldier and Lancer](#p23) | `battlefield_awareness` — Battlefield Awareness (Skill) | Mentored battlefield service only | [No group] A veteran teaches how the rider’s immediate encounter relates to changes across the battle; no group teaches the complete Skill. |
 | [P24 Military Scout](#p24) | `battlefield_awareness` — Battlefield Awareness (Skill) | Experienced reconnaissance service | [No group] Reviewed field encounters teach the significance of changing battle developments; F33 does not teach this whole groupless Skill. |
@@ -3731,7 +3731,7 @@ The society audit identifies a civilian F35 guard/protection route in every work
 
 Two target competencies deliberately have no generic occupational route in this proposal: **`skill:poisons` — Poisons** and **`spec:warded-lock-entry` — Warded-Lock Entry**. Neither is removed from the target catalogue. A poison-practice lineage or a warded-lock specialist occupation may be supportable, but attaching either to every herbalist, alchemist or thief would overstate the teaching. These remain visible coverage gaps; individual learning can be separately authored.
 
-The coverage check also preserves the nested `spec:falconry` → `spec:animal-training` → `skill:animal-handling` chain; `spec:steppe-remount-training` remains under `skill:animal-husbandry`; Surgery remains a base Skill; Fencing and Longbow remain Specializations. Heart Surgery, generic Literacy, Formation Command and other held/excluded target identities are not reintroduced.
+The coverage check also preserves the nested `spec:falconry` → `spec:animal-training` → `skill:animal-handling` chain; `spec:steppe-remount-training` remains under `skill:animal-husbandry`; Surgery remains a base Skill; Fencing and Longbow are base Skills, reclassified from Specializations by the 2026-09-27 rulings. Heart Surgery, generic Literacy, Formation Command and other held/excluded target identities are not reintroduced.
 
 ### Possible shared-training gaps — flagged, not added
 

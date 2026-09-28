@@ -22,22 +22,22 @@
     "duplicatePaymentsAvoided": 105,
     "families": 84,
     "validPaths": 86,
-    "groupOpportunities": 272,
-    "directSkillOpportunities": 106,
+    "groupOpportunities": 271,
+    "directSkillOpportunities": 107,
     "directSpecializationOpportunities": 14,
-    "digest": "sha256:7ebabe692d142a7a09ddec01bb848847334a7679f5961e034f410ce600461656"
+    "digest": "sha256:9896c39a895a3f3dd54dab96ada8c968d24f9a8237c3733f3ee67f65a67b294e"
   },
   "coverage": {
-    "baseSkills": 131,
-    "baseSkillsInAGroup": 130,
-    "baseSkillsWithAnyRoute": 130,
+    "baseSkills": 133,
+    "baseSkillsInAGroup": 132,
+    "baseSkillsWithAnyRoute": 132,
     "baseSkillsWithoutAnyRoute": [
       {
         "id": "skill:poisons",
         "name": "Poisons"
       }
     ],
-    "specializationsWithAnyRoute": 25,
+    "specializationsWithAnyRoute": 23,
     "specializationsWithoutAnyRoute": [
       {
         "id": "spec:warded-lock-entry",
@@ -56,11 +56,11 @@
         "3": 6,
         "4": 5,
         "5": 6,
-        "6": 6,
-        "7": 4,
-        "8": 5,
-        "9": 8,
-        "10": 2,
+        "6": 5,
+        "7": 5,
+        "8": 4,
+        "9": 7,
+        "10": 4,
         "11": 4,
         "12": 1,
         "13": 1,
@@ -72,9 +72,9 @@
       "median": 3,
       "upperQuartile": 7,
       "maximum": 17,
-      "mean": 4.39,
-      "atOrAboveTarget": 10,
-      "belowTarget": 89
+      "mean": 4.43,
+      "atOrAboveTarget": 12,
+      "belowTarget": 87
     },
     "proposed": {
       "paths": 86,
@@ -84,19 +84,19 @@
         "7": 28,
         "8": 13,
         "9": 17,
-        "10": 10,
-        "11": 5,
+        "10": 9,
+        "11": 6,
         "12": 3,
-        "14": 1,
+        "14": 2,
         "15": 1,
-        "16": 2
+        "16": 1
       },
       "minimum": 5,
       "lowerQuartile": 7,
       "median": 8,
       "upperQuartile": 9,
       "maximum": 16,
-      "mean": 8.59,
+      "mean": 8.58,
       "atOrAboveTarget": 22,
       "belowTarget": 64
     },
@@ -109,8 +109,8 @@
         "8": 10,
         "9": 18,
         "10": 10,
-        "11": 3,
-        "12": 3,
+        "11": 4,
+        "12": 2,
         "13": 2,
         "14": 1
       },
@@ -119,7 +119,7 @@
       "median": 8,
       "upperQuartile": 9,
       "maximum": 14,
-      "mean": 8.16,
+      "mean": 8.15,
       "atOrAboveTarget": 19,
       "belowTarget": 67
     },
@@ -433,7 +433,7 @@
       "effectiveSize": 3,
       "band": "in-band",
       "shape": "preferred-centre",
-      "justification": "Kept without a slot: the tradition is defined by its weapon, so an alternative family would not be the same practice."
+      "justification": "Kept without a slot: the tradition is defined by its weapon, so an alternative family would not be the same practice. Fencing is the weapon competence the course actually teaches, as a base combat Skill under rule decision 0010 ruling 1. `one_handed_edged` is removed: it was present only to satisfy the retired Specialization-parent model, and charging it alongside Fencing is the double investment that ruling removes. Where a Profession offers ordinary close combat instead of this tradition, that is an alternative Profession training route, not a choice inside this group."
     },
     {
       "id": "M03",
@@ -477,7 +477,7 @@
       "effectiveSize": 4,
       "band": "in-band",
       "shape": "preferred-centre",
-      "justification": "Restores the historical Basic Missile Training choose-one slot and merges the three one-weapon military ranged groups."
+      "justification": "Restores the historical Basic Missile Training choose-one slot and merges the three one-weapon military ranged groups. Longbow is a candidate because a military curriculum that actually issues the longbow teaches it directly (rule decision 0010 ruling 2). Adding a candidate changes the pool, not the approved choose-one count."
     },
     {
       "id": "M05",
@@ -488,7 +488,7 @@
       "effectiveSize": 5,
       "band": "above-band",
       "shape": "justified-large",
-      "justification": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: sustained instruction across the missile arms is the economical way to invest broadly in shooting. Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
+      "justification": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: sustained instruction across the missile arms is the economical way to invest broadly in shooting. Longbow joins the pool as the advanced military route to it (rule decision 0010 ruling 2); the approved choose-three count is unchanged. Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
     },
     {
       "id": "F41",
@@ -498,7 +498,8 @@
       "slotSize": 0,
       "effectiveSize": 2,
       "band": "in-band",
-      "shape": "acceptable-pair"
+      "shape": "acceptable-pair",
+      "justification": "The civilian and hunting route to Longbow, which is a base combat Skill under rule decision 0010 ruling 2. Bow is no longer charged here: the apprenticeship teaches the longbow it hunts with, and Longbow's authored qualitative relationship to Bow is not a second purchase. Military Longbow training comes through M04 and M05 instead, so no soldier needs Hunting to reach Longbow."
     },
     {
       "id": "M06",
@@ -1776,9 +1777,8 @@
       "name": "Swashbuckling fencing instruction",
       "shortDescription": "A named one-handed edged fencing tradition.",
       "disposition": "retained",
-      "fixedSkillIds": ["one_handed_edged", "dodge", "parry"],
-      "specializationIds": ["fencing"],
-      "note": "Kept without a slot: the tradition is defined by its weapon, so an alternative family would not be the same practice."
+      "fixedSkillIds": ["fencing", "dodge", "parry"],
+      "note": "Kept without a slot: the tradition is defined by its weapon, so an alternative family would not be the same practice. Fencing is the weapon competence the course actually teaches, as a base combat Skill under rule decision 0010 ruling 1. `one_handed_edged` is removed: it was present only to satisfy the retired Specialization-parent model, and charging it alongside Fencing is the double investment that ruling removes. Where a Profession offers ordinary close combat instead of this tradition, that is an alternative Profession training route, not a choice inside this group."
     },
     {
       "id": "M03",
@@ -1836,11 +1836,18 @@
           "label": "Choose one taught missile weapon family",
           "chooseCount": 1,
           "chooseCountStatus": "approved",
-          "candidateSkillIds": ["bow", "crossbow", "skill:firearms", "sling", "throwing"],
+          "candidateSkillIds": [
+            "bow",
+            "crossbow",
+            "skill:firearms",
+            "sling",
+            "throwing",
+            "longbow"
+          ],
           "required": true
         }
       ],
-      "note": "Restores the historical Basic Missile Training choose-one slot and merges the three one-weapon military ranged groups."
+      "note": "Restores the historical Basic Missile Training choose-one slot and merges the three one-weapon military ranged groups. Longbow is a candidate because a military curriculum that actually issues the longbow teaches it directly (rule decision 0010 ruling 2). Adding a candidate changes the pool, not the approved choose-one count."
     },
     {
       "id": "M05",
@@ -1854,19 +1861,26 @@
           "label": "Choose three taught missile weapon families",
           "chooseCount": 3,
           "chooseCountStatus": "approved",
-          "candidateSkillIds": ["bow", "crossbow", "skill:firearms", "sling", "throwing"],
+          "candidateSkillIds": [
+            "bow",
+            "crossbow",
+            "skill:firearms",
+            "sling",
+            "throwing",
+            "longbow"
+          ],
           "required": true
         }
       ],
-      "note": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: sustained instruction across the missile arms is the economical way to invest broadly in shooting. Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
+      "note": "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: sustained instruction across the missile arms is the economical way to invest broadly in shooting. Longbow joins the pool as the advanced military route to it (rule decision 0010 ruling 2); the approved choose-three count is unchanged. Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores the historical Advanced Missile Training choose-three slot."
     },
     {
       "id": "F41",
       "name": "Longbow hunting apprenticeship",
       "shortDescription": "Hunting with the longbow as a taught tradition.",
       "disposition": "retained",
-      "fixedSkillIds": ["bow", "skill:hunting"],
-      "specializationIds": ["longbow"]
+      "fixedSkillIds": ["longbow", "skill:hunting"],
+      "note": "The civilian and hunting route to Longbow, which is a base combat Skill under rule decision 0010 ruling 2. Bow is no longer charged here: the apprenticeship teaches the longbow it hunts with, and Longbow's authored qualitative relationship to Bow is not a second purchase. Military Longbow training comes through M04 and M05 instead, so no soldier needs Hunting to reach Longbow."
     },
     {
       "id": "M06",
@@ -2548,7 +2562,8 @@
         }
       ],
       "directRoute": "Taught directly by the hunter one works beside",
-      "skillIds": ["skill:animal-lore"]
+      "skillIds": ["bow", "skill:animal-lore"],
+      "note": "Bow is the accepted direct ordinary-archery route the approved Profession catalogue already justifies for the non-longbow bow-hunting branch: repeated coached shooting develops Bow, which neither F38's formation practice nor F41's longbow tradition necessarily teaches. It is restored here by the 2026-09-27 ruling, because F41 now teaches Longbow rather than charging Bow (rule decision 0010 ruling 2). Ordinary Bow therefore keeps a civilian route and is not an absent Skill at any Society Level."
     },
     {
       "code": "P02",
@@ -3222,13 +3237,9 @@
         {
           "groupId": "M04",
           "route": "Issued missile arm and formation drill"
-        },
-        {
-          "groupId": "F41",
-          "route": "Longbow tradition brought into service"
         }
       ],
-      "note": "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is experiential competence earned by real service, available to the soldier who sees it and not required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the breadth ruling asks for."
+      "note": "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the track-discipline ruling retires those four as well. Every one of them differed from its siblings only in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. F41 is no longer a Soldier route: rule decision 0010 ruling 2 keeps the military longbow path out of the civilian hunting apprenticeship, and Longbow is reached through M04 or M05 without acquiring Hunting. Independent access to F41 through some other Character history remains possible; it is simply not part of the Soldier package. Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is experiential competence earned by real service, available to the soldier who sees it and not required of the soldier who does not. That keeps the Combat Experience route audit correct — M06 and K23 remain its only two routes — and it is exactly the access-to-several-groups shape the breadth ruling asks for."
     },
     {
       "code": "P23",
@@ -5023,6 +5034,7 @@
       "groupIds": ["G03", "F34", "G04", "F41"],
       "fixedSkillIds": [
         "bow",
+        "longbow",
         "skill:animal-lore",
         "skill:hunting",
         "skill:perception",
@@ -5034,9 +5046,9 @@
         "skill:weather-lore"
       ],
       "slotSelections": 0,
-      "effectiveBreadthNominal": 10,
-      "effectiveBreadthMinimum": 10,
-      "reachableSpecializationIds": ["longbow"]
+      "effectiveBreadthNominal": 11,
+      "effectiveBreadthMinimum": 11,
+      "reachableSpecializationIds": []
     },
     {
       "professionCode": "P02",
@@ -5335,7 +5347,7 @@
       "groupIds": ["K24", "G04", "M01", "F30"],
       "fixedSkillIds": [
         "dodge",
-        "one_handed_edged",
+        "fencing",
         "parry",
         "skill:intimidation",
         "skill:perception",
@@ -5347,7 +5359,7 @@
       "slotSelections": 1,
       "effectiveBreadthNominal": 10,
       "effectiveBreadthMinimum": 9,
-      "reachableSpecializationIds": ["fencing"]
+      "reachableSpecializationIds": []
     },
     {
       "professionCode": "P15",
@@ -5511,15 +5523,13 @@
       "professionName": "Soldier",
       "pathId": "profession:soldier",
       "pathName": "Soldier",
-      "groupIds": ["M06", "G04", "M01", "M03", "M04", "F41"],
+      "groupIds": ["M06", "G04", "M01", "M03", "M04"],
       "fixedSkillIds": [
         "battlefield_awareness",
-        "bow",
         "combat_experience",
         "dodge",
         "formation_fighting",
         "parry",
-        "skill:hunting",
         "skill:perception",
         "skill:survival",
         "skill:wayfinding",
@@ -5527,9 +5537,9 @@
         "weapon_maintenance"
       ],
       "slotSelections": 4,
-      "effectiveBreadthNominal": 16,
-      "effectiveBreadthMinimum": 12,
-      "reachableSpecializationIds": ["longbow"]
+      "effectiveBreadthNominal": 14,
+      "effectiveBreadthMinimum": 10,
+      "reachableSpecializationIds": []
     },
     {
       "professionCode": "P23",
@@ -6786,7 +6796,7 @@
       "groupIds": ["M10", "M02", "M05", "F30"],
       "fixedSkillIds": [
         "dodge",
-        "one_handed_edged",
+        "fencing",
         "parry",
         "skill:perception",
         "skill:teaching",
@@ -6795,7 +6805,7 @@
       "slotSelections": 6,
       "effectiveBreadthNominal": 12,
       "effectiveBreadthMinimum": 6,
-      "reachableSpecializationIds": ["fencing"]
+      "reachableSpecializationIds": []
     },
     {
       "professionCode": "P83",
@@ -7122,6 +7132,11 @@
       "categoryId": "combat"
     },
     {
+      "competencyId": "fencing",
+      "name": "Fencing",
+      "categoryId": "combat"
+    },
+    {
       "competencyId": "two_handed_concussion_axe",
       "name": "2-h conc./axe",
       "categoryId": "combat"
@@ -7134,6 +7149,11 @@
     {
       "competencyId": "bow",
       "name": "Bow",
+      "categoryId": "combat"
+    },
+    {
+      "competencyId": "longbow",
+      "name": "Longbow",
       "categoryId": "combat"
     },
     {
@@ -7497,11 +7517,6 @@
       "categoryId": "craft"
     },
     {
-      "competencyId": "fencing",
-      "name": "Fencing",
-      "categoryId": "combat"
-    },
-    {
       "competencyId": "spec:court-administration",
       "name": "Court Administration",
       "categoryId": "trade"
@@ -7530,11 +7545,6 @@
       "competencyId": "spec:siege-operations",
       "name": "Siege Operations",
       "categoryId": "military"
-    },
-    {
-      "competencyId": "longbow",
-      "name": "Longbow",
-      "categoryId": "combat"
     },
     {
       "competencyId": "spec:baking",
@@ -7913,6 +7923,7 @@
           "F10",
           "M01",
           "M02",
+          "F30",
           "M05",
           "F41",
           "K23",
@@ -7985,7 +7996,7 @@
           "P84"
         ],
         "validPaths": 42,
-        "reachableBaseSkills": 80,
+        "reachableBaseSkills": 82,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8039,7 +8050,7 @@
           "throwing",
           "weapon_maintenance"
         ],
-        "reachableSpecializations": 15,
+        "reachableSpecializations": 14,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -8064,6 +8075,7 @@
           "F10",
           "M01",
           "M02",
+          "F30",
           "M05",
           "F41",
           "K23",
@@ -8136,7 +8148,7 @@
           "P84"
         ],
         "validPaths": 42,
-        "reachableBaseSkills": 80,
+        "reachableBaseSkills": 82,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8190,7 +8202,7 @@
           "throwing",
           "weapon_maintenance"
         ],
-        "reachableSpecializations": 15,
+        "reachableSpecializations": 14,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -8215,6 +8227,7 @@
           "F10",
           "M01",
           "M02",
+          "F30",
           "M05",
           "F41",
           "K23",
@@ -8287,7 +8300,7 @@
           "P84"
         ],
         "validPaths": 42,
-        "reachableBaseSkills": 80,
+        "reachableBaseSkills": 82,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8341,7 +8354,7 @@
           "throwing",
           "weapon_maintenance"
         ],
-        "reachableSpecializations": 15,
+        "reachableSpecializations": 14,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -8366,6 +8379,7 @@
           "F10",
           "M01",
           "M02",
+          "F30",
           "M05",
           "F41",
           "K23",
@@ -8438,7 +8452,7 @@
           "P84"
         ],
         "validPaths": 42,
-        "reachableBaseSkills": 80,
+        "reachableBaseSkills": 82,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8492,7 +8506,7 @@
           "throwing",
           "weapon_maintenance"
         ],
-        "reachableSpecializations": 15,
+        "reachableSpecializations": 14,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -8522,6 +8536,7 @@
           "G07",
           "M01",
           "M02",
+          "F30",
           "M03",
           "M11",
           "M04",
@@ -8606,7 +8621,7 @@
           "P84"
         ],
         "validPaths": 50,
-        "reachableBaseSkills": 94,
+        "reachableBaseSkills": 96,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8646,7 +8661,7 @@
           "skill:winemaking",
           "tactics"
         ],
-        "reachableSpecializations": 16,
+        "reachableSpecializations": 15,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -8676,6 +8691,7 @@
           "G07",
           "M01",
           "M02",
+          "F30",
           "M03",
           "M11",
           "M12",
@@ -8792,7 +8808,7 @@
           "P84"
         ],
         "validPaths": 65,
-        "reachableBaseSkills": 110,
+        "reachableBaseSkills": 112,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8816,7 +8832,7 @@
           "skill:siege-engine-operation",
           "skill:siege-engineering"
         ],
-        "reachableSpecializations": 18,
+        "reachableSpecializations": 17,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -8846,6 +8862,7 @@
           "G07",
           "M01",
           "M02",
+          "F30",
           "M03",
           "M11",
           "M12",
@@ -8962,7 +8979,7 @@
           "P84"
         ],
         "validPaths": 65,
-        "reachableBaseSkills": 110,
+        "reachableBaseSkills": 112,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8986,7 +9003,7 @@
           "skill:siege-engine-operation",
           "skill:siege-engineering"
         ],
-        "reachableSpecializations": 18,
+        "reachableSpecializations": 17,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -9016,6 +9033,7 @@
           "G07",
           "M01",
           "M02",
+          "F30",
           "M03",
           "M11",
           "M12",
@@ -9132,7 +9150,7 @@
           "P84"
         ],
         "validPaths": 65,
-        "reachableBaseSkills": 110,
+        "reachableBaseSkills": 112,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -9156,7 +9174,7 @@
           "skill:siege-engine-operation",
           "skill:siege-engineering"
         ],
-        "reachableSpecializations": 18,
+        "reachableSpecializations": 17,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -9314,7 +9332,7 @@
           "P84"
         ],
         "validPaths": 71,
-        "reachableBaseSkills": 118,
+        "reachableBaseSkills": 120,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -9330,7 +9348,7 @@
           "skill:trade",
           "skill:winemaking"
         ],
-        "reachableSpecializations": 22,
+        "reachableSpecializations": 20,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -9520,9 +9538,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -9712,9 +9730,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -9904,9 +9922,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -10064,7 +10082,7 @@
           "P84"
         ],
         "validPaths": 71,
-        "reachableBaseSkills": 118,
+        "reachableBaseSkills": 120,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -10080,7 +10098,7 @@
           "skill:trade",
           "skill:winemaking"
         ],
-        "reachableSpecializations": 22,
+        "reachableSpecializations": 20,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -10270,9 +10288,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -10462,9 +10480,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -10654,9 +10672,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -10814,7 +10832,7 @@
           "P84"
         ],
         "validPaths": 71,
-        "reachableBaseSkills": 118,
+        "reachableBaseSkills": 120,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -10830,7 +10848,7 @@
           "skill:trade",
           "skill:winemaking"
         ],
-        "reachableSpecializations": 22,
+        "reachableSpecializations": 20,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -11020,9 +11038,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -11212,9 +11230,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -11404,9 +11422,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -11564,7 +11582,7 @@
           "P84"
         ],
         "validPaths": 71,
-        "reachableBaseSkills": 118,
+        "reachableBaseSkills": 120,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -11580,7 +11598,7 @@
           "skill:trade",
           "skill:winemaking"
         ],
-        "reachableSpecializations": 22,
+        "reachableSpecializations": 20,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -11770,9 +11788,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -11962,9 +11980,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       },
       {
@@ -12154,9 +12172,9 @@
           "P84"
         ],
         "validPaths": 86,
-        "reachableBaseSkills": 130,
+        "reachableBaseSkills": 132,
         "unreachableBaseSkillIds": ["skill:poisons"],
-        "reachableSpecializations": 25,
+        "reachableSpecializations": 23,
         "specializationsWithoutTheirParent": []
       }
     ],
@@ -12332,13 +12350,6 @@
         "minSocietyLevel": 2,
         "minSocialBand": "L1",
         "reason": "A field surgical apprenticeship is learned where an organised force carries its wounded back to an operator. Society Level 1 fighting is not organised that way. Ordinary operative care is a separate route and is not restricted."
-      },
-      {
-        "groupId": "F30",
-        "groupName": "Swashbuckling fencing instruction",
-        "minSocietyLevel": 3,
-        "minSocialBand": "L1",
-        "reason": "Swashbuckling fencing is a named school of a specific urban fencing tradition."
       },
       {
         "groupId": "F33",
@@ -13046,9 +13057,9 @@
     ],
     "summary": {
       "groups": 95,
-      "unrestrictedGroups": 44,
+      "unrestrictedGroups": 45,
       "groupsFromSocietyLevel2": 28,
-      "groupsAboveSocietyLevel2": 23,
+      "groupsAboveSocietyLevel2": 22,
       "professionRouteRestrictions": 4,
       "directRouteRestrictions": 7,
       "routeGaps": 8,

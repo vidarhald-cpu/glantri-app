@@ -214,7 +214,6 @@ const testContent = validateCanonicalContent({
       requiresLiteracy: "no",
       sortOrder: 12,
       allowsSpecializations: false,
-      specializationOfSkillId: "bow",
     },
     {
       id: "one_handed_edged",
@@ -246,34 +245,6 @@ const testContent = validateCanonicalContent({
       minimumGroupLevel: 1,
       minimumParentLevel: 1,
       sortOrder: 2,
-    },
-    {
-      id: "longbow",
-      skillId: "bow",
-      name: "Longbow",
-      minimumGroupLevel: 6,
-      minimumParentLevel: 6,
-      sortOrder: 3,
-      specializationBridge: {
-        parentExcessOffset: 5,
-        parentSkillId: "bow",
-        reverseFactor: 1,
-        threshold: 6,
-      },
-    },
-    {
-      id: "fencing",
-      skillId: "one_handed_edged",
-      name: "Fencing",
-      minimumGroupLevel: 6,
-      minimumParentLevel: 6,
-      sortOrder: 4,
-      specializationBridge: {
-        parentExcessOffset: 5,
-        parentSkillId: "one_handed_edged",
-        reverseFactor: 1,
-        threshold: 6,
-      },
     },
   ],
   professionFamilies: [],
@@ -510,20 +481,20 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.warnings[0]?.message).toBe("Diplomacy recommends Literacy.");
   });
 
-  it("blocks a specialization-bridge specialization when the parent source level is missing or too low", () => {
+  it("blocks a Specialization when the parent source level is missing or too low", () => {
     const missingParent = evaluateSkillSelection({
       content: testContent,
       progression: buildProgression({}),
       target: {
-        specialization: getSpecialization("longbow"),
+        specialization: getSpecialization("dueling"),
         targetType: "specialization",
       },
     });
     const tooLow = evaluateSkillSelection({
       content: testContent,
-      progression: buildProgression({ bow: 5 }),
+      progression: buildProgression({ weapon_training: 2 }),
       target: {
-        specialization: getSpecialization("longbow"),
+        specialization: getSpecialization("dueling"),
         targetType: "specialization",
       },
     });
@@ -536,16 +507,16 @@ describe("evaluateSkillSelection", () => {
     expect(tooLow.blockingReasons.map((reason) => reason.code)).toEqual([
       "specialization-parent-skill-too-low",
     ]);
-    expect(tooLow.blockingReasons[0]?.requiredLevel).toBe(6);
-    expect(tooLow.blockingReasons[0]?.currentLevel).toBe(5);
+    expect(tooLow.blockingReasons[0]?.requiredLevel).toBe(3);
+    expect(tooLow.blockingReasons[0]?.currentLevel).toBe(2);
   });
 
-  it("allows a specialization-bridge specialization when the parent source level meets the threshold through non-derived base XP only", () => {
+  it("allows a Specialization when the parent source level meets the threshold through non-derived base XP only", () => {
     const directParent = evaluateSkillSelection({
       content: testContent,
-      progression: buildProgression({ bow: 6 }),
+      progression: buildProgression({ weapon_training: 3 }),
       target: {
-        specialization: getSpecialization("longbow"),
+        specialization: getSpecialization("dueling"),
         targetType: "specialization",
       },
     });
@@ -553,7 +524,7 @@ describe("evaluateSkillSelection", () => {
       content: testContent,
       progression: buildProgression({}, { combat: 6 }),
       target: {
-        specialization: getSpecialization("longbow"),
+        specialization: getSpecialization("dueling"),
         targetType: "specialization",
       },
     });
@@ -561,7 +532,7 @@ describe("evaluateSkillSelection", () => {
       content: testContent,
       progression: buildProgression({ crossbow: 20 }),
       target: {
-        specialization: getSpecialization("longbow"),
+        specialization: getSpecialization("dueling"),
         targetType: "specialization",
       },
     });
@@ -588,29 +559,6 @@ describe("evaluateSkillSelection", () => {
     expect(evaluation.blockingReasons.map((reason) => reason.code)).toEqual([
       "missing-specialization-parent-skill",
     ]);
-  });
-
-  it("allows a specialization-bridge specialization when the parent base meets the threshold and rejects derived-only parent XP", () => {
-    const allowed = evaluateSkillSelection({
-      content: testContent,
-      progression: buildProgression({ one_handed_edged: 8 }),
-      target: {
-        specialization: getSpecialization("fencing"),
-        targetType: "specialization",
-      },
-    });
-    const derivedOnly = evaluateSkillSelection({
-      content: testContent,
-      progression: buildProgression({ longbow: 20 }),
-      target: {
-        specialization: getSpecialization("fencing"),
-        targetType: "specialization",
-      },
-    });
-
-    expect(allowed.isAllowed).toBe(true);
-    expect(derivedOnly.isAllowed).toBe(false);
-    expect(derivedOnly.blockingReasons[0]?.code).toBe("missing-specialization-parent-skill");
   });
 
   it("blocks a specialization when the parent skill level is too low", () => {

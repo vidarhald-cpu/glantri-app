@@ -514,9 +514,15 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     name: "Swashbuckling fencing instruction",
     shortDescription: "A named one-handed edged fencing tradition.",
     disposition: "retained",
-    fixedSkillIds: ["one_handed_edged", "dodge", "parry"],
-    specializationIds: ["fencing"],
-    note: "Kept without a slot: the tradition is defined by its weapon, so an alternative family would not be the same practice.",
+    fixedSkillIds: ["fencing", "dodge", "parry"],
+    note:
+      "Kept without a slot: the tradition is defined by its weapon, so an alternative family would " +
+      "not be the same practice. Fencing is the weapon competence the course actually teaches, as a " +
+      "base combat Skill under rule decision 0010 ruling 1. `one_handed_edged` is removed: it was " +
+      "present only to satisfy the retired Specialization-parent model, and charging it alongside " +
+      "Fencing is the double investment that ruling removes. Where a Profession offers ordinary " +
+      "close combat instead of this tradition, that is an alternative Profession training route, " +
+      "not a choice inside this group.",
   },
   {
     id: "M03",
@@ -584,11 +590,15 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         label: "Choose one taught missile weapon family",
         chooseCount: 1,
         chooseCountStatus: "approved",
-        candidateSkillIds: ["bow", "crossbow", "skill:firearms", "sling", "throwing"],
+        candidateSkillIds: ["bow", "crossbow", "skill:firearms", "sling", "throwing", "longbow"],
         required: true,
       },
     ],
-    note: "Restores the historical Basic Missile Training choose-one slot and merges the three one-weapon military ranged groups.",
+    note:
+      "Restores the historical Basic Missile Training choose-one slot and merges the three " +
+      "one-weapon military ranged groups. Longbow is a candidate because a military curriculum " +
+      "that actually issues the longbow teaches it directly (rule decision 0010 ruling 2). Adding " +
+      "a candidate changes the pool, not the approved choose-one count.",
   },
   {
     id: "M05",
@@ -602,13 +612,15 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
         label: "Choose three taught missile weapon families",
         chooseCount: 3,
         chooseCountStatus: "approved",
-        candidateSkillIds: ["bow", "crossbow", "skill:firearms", "sling", "throwing"],
+        candidateSkillIds: ["bow", "crossbow", "skill:firearms", "sling", "throwing", "longbow"],
         required: true,
       },
     ],
     note:
       "Large and choice-heavy by design, under the Product Owner's explicit combat exception to the 5+ rule: " +
       "sustained instruction across the missile arms is the economical way to invest broadly in shooting. " +
+      "Longbow joins the pool as the advanced military route to it (rule decision 0010 ruling 2); the " +
+      "approved choose-three count is unchanged. " +
       "Combat Experience is absent — a shooting master who has never been shot at has not earned it. Restores " +
       "the historical Advanced Missile Training choose-three slot.",
   },
@@ -617,8 +629,13 @@ export const competencyContentV2LearningGroups: readonly V2LearningGroup[] = [
     name: "Longbow hunting apprenticeship",
     shortDescription: "Hunting with the longbow as a taught tradition.",
     disposition: "retained",
-    fixedSkillIds: ["bow", "skill:hunting"],
-    specializationIds: ["longbow"],
+    fixedSkillIds: ["longbow", "skill:hunting"],
+    note:
+      "The civilian and hunting route to Longbow, which is a base combat Skill under rule decision " +
+      "0010 ruling 2. Bow is no longer charged here: the apprenticeship teaches the longbow it " +
+      "hunts with, and Longbow's authored qualitative relationship to Bow is not a second " +
+      "purchase. Military Longbow training comes through M04 and M05 instead, so no soldier needs " +
+      "Hunting to reach Longbow.",
   },
   {
     id: "M06",
@@ -1393,7 +1410,14 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "F41", route: "Longbow hunting tradition" },
     ],
     directRoute: "Taught directly by the hunter one works beside",
-    skillIds: ["skill:animal-lore"],
+    skillIds: ["bow", "skill:animal-lore"],
+    note:
+      "Bow is the accepted direct ordinary-archery route the approved Profession catalogue already " +
+      "justifies for the non-longbow bow-hunting branch: repeated coached shooting develops Bow, " +
+      "which neither F38's formation practice nor F41's longbow tradition necessarily teaches. It is " +
+      "restored here by the 2026-09-27 ruling, because F41 now teaches Longbow rather than charging " +
+      "Bow (rule decision 0010 ruling 2). Ordinary Bow therefore keeps a civilian route and is not " +
+      "an absent Skill at any Society Level.",
   },
   {
     code: "P02",
@@ -1846,13 +1870,16 @@ export const competencyContentV2Families: readonly V2Family[] = [
       { groupId: "M01", route: "Contingent fighting drill" },
       { groupId: "M03", route: "Formation arms drill" },
       { groupId: "M04", route: "Issued missile arm and formation drill" },
-      { groupId: "F41", route: "Longbow tradition brought into service" },
     ],
     note:
       "The approved catalogue's nine fixed-weapon Soldier tracks became four in the previous revision; the " +
       "track-discipline ruling retires those four as well. Every one of them differed from its siblings only " +
       "in which combat Learning Group it bought — contingent drill, formation drill, the issued missile arm, " +
       "the longbow tradition — and a track must not exist for an ordinary weapon or equipment choice. " +
+      "F41 is no longer a Soldier route: rule decision 0010 ruling 2 keeps the military longbow path " +
+      "out of the civilian hunting apprenticeship, and Longbow is reached through M04 or M05 without " +
+      "acquiring Hunting. Independent access to F41 through some other Character history remains " +
+      "possible; it is simply not part of the Soldier package. " +
       "Core settled by the 2026-09-21 Profession-cores ruling: M06 Campaign service experience is NOT core. " +
       "A soldier is made by being drilled to arms, so the core is one of M01, M03 or M04, stated as " +
       "alternative core routes rather than as tracks. M06 remains an ordinary route: Combat Experience is " +
@@ -4573,10 +4600,6 @@ export const competencyContentV2GroupAvailability: Readonly<Record<string, V2Rou
     reason:
       "Naturalist field study is a standing comparative practice against a collection and a record. " +
       "Knowing plants and animals is reached through ordinary field routes, which are not restricted.",
-  },
-  F30: {
-    minSocietyLevel: 3,
-    reason: "Swashbuckling fencing is a named school of a specific urban fencing tradition.",
   },
 };
 

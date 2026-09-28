@@ -114,7 +114,7 @@ The course expressly teaches the specialist sword-and-buckler and main-gauche pr
 | `one_handed_edged` — 1-h edged | Base Skill | Learners practise the complete one-handed edged weapon competence, with correction of handling and use beyond specialist combinations. | Retained membership |
 | `dodge` — Dodge | Base Skill | Learners repeatedly read incoming attacks and move clear, receiving correction of evasion as a distinct defensive competence. | New proposed membership |
 | `parry` — Parry | Base Skill | Learners practise meeting and redirecting attacks and are corrected on the position and continuing exchange left afterward. | Retained membership |
-| `fencing` — Fencing | Specialization; parent `one_handed_edged` — 1-h edged | Learners refine the established tradition’s timing, distance and coordinated blade, buckler and main-gauche practice through specialist correction. | Retained membership |
+| `fencing` — Fencing | Base Skill | Learners refine the established tradition’s timing, distance and coordinated blade, buckler and main-gauche practice through specialist correction. | Retained membership |
 
 
 **Explicit exclusions**
@@ -461,7 +461,7 @@ The same learner is taught the course of the hunt as well as the shooting. This 
 | --- | --- | --- | --- |
 | `bow` — Bow | Base Skill | Learners practise complete bow handling and shooting, correcting technique under sustained instruction beyond individual hunting shots. | New proposed membership |
 | `skill:hunting` — Hunting | Base Skill | Learners plan and conduct hunts, receiving correction of approach, quarry response, timing and decisions to continue or stop. | New proposed membership |
-| `longbow` — Longbow | Specialization; parent `bow` — Bow | Learners undertake additional specialist correction of longbow handling, coordinated draw and release and consistency through repeated practice. | New proposed membership |
+| `longbow` — Longbow | Base Skill | Learners undertake additional specialist correction of longbow handling, coordinated draw and release and consistency through repeated practice. | New proposed membership |
 
 
 **Explicit exclusions**

@@ -50,7 +50,7 @@ describe("Competency Content V2 proposal status", () => {
   it("leaves the approved catalogues untouched", () => {
     expect(targetProfessionCatalogue.families).toHaveLength(84);
     expect(targetLearningGroupCatalogue.manifest.groups).toBe(59);
-    expect(fullSkillCatalogueProposal.manifest.baseSkills).toBe(131);
+    expect(fullSkillCatalogueProposal.manifest.baseSkills).toBe(133);
   });
 });
 
@@ -75,8 +75,11 @@ describe("deterministic catalogue checks", () => {
     expect(catalogue.manifest.removedGroups).toBe(13);
   });
 
-  it("preserves the 131 base-Skill catalogue without adding or renaming a Skill", () => {
-    expect(catalogue.coverage.baseSkills).toBe(131);
+  it("preserves the 133 base-Skill catalogue without adding or renaming a Skill", () => {
+    /* 133, not 131: rule decision 0010 rulings 1 and 2 reclassify Fencing and Longbow from
+       Specializations to base Skills. The 172-entry roster is unchanged — two entries moved
+       between types, and no Skill was added or renamed. */
+    expect(catalogue.coverage.baseSkills).toBe(133);
     const approvedIds = new Set(fullSkillCatalogueProposal.entries.map((entry) => entry.id));
     const used = new Set(
       competencyContentV2LearningGroups.flatMap((group) => [
@@ -691,7 +694,11 @@ describe("second ruling set — track discipline", () => {
   it("collapses the four Soldier tracks into one identity reached through several combat groups", () => {
     const soldier = competencyContentV2Families.find((family) => family.code === "P22")!;
     const groupIds = (soldier.groups ?? []).map((route) => route.groupId);
-    expect(groupIds).toEqual(expect.arrayContaining(["M01", "M03", "M04", "F41", "M06"]));
+    /* F41 is gone from the Soldier package by the 2026-09-27 ruling: the military longbow route is
+       M04/M05, which charges no Hunting. Independent access to F41 by another Character history
+       remains possible; it is simply not part of this Profession. */
+    expect(groupIds).toEqual(expect.arrayContaining(["M01", "M03", "M04", "M06"]));
+    expect(groupIds).not.toContain("F41");
     const paths = catalogue.paths.filter((path) => path.professionCode === "P22");
     expect(paths).toHaveLength(1);
     expect(paths[0]!.groupIds).toContain("M06");
@@ -1208,12 +1215,20 @@ describe("Society Level and Social Band route availability", () => {
   });
 
   it("records the three restriction shapes the settled model allows, and no fourth", () => {
-    expect(Object.keys(competencyContentV2GroupAvailability)).toHaveLength(51);
+    /* 50, not 51: F30's bound is withdrawn by the 2026-09-27 ruling. Fencing carries no elevated
+       generic Society-Level restriction, and F30's former reason — "a named school of a specific
+       urban fencing tradition" — was exactly the cultural/Setting restriction that must not be
+       encoded in generic combat content. F30 is now unbounded like M01, the ordinary
+       one-handed-edged route; Fencing's availability horizon belongs to Setting logic
+       (architecture decision 0006). M03's own force-structure bound is untouched. */
+    expect(Object.keys(competencyContentV2GroupAvailability)).toHaveLength(50);
+    expect(competencyContentV2GroupAvailability.F30).toBeUndefined();
+    expect(competencyContentV2GroupAvailability.M01).toBeUndefined();
     expect(competencyContentV2ProfessionRouteAvailability).toHaveLength(4);
     expect(competencyContentV2DirectRouteAvailability).toHaveLength(7);
-    expect(availability.summary.unrestrictedGroups).toBe(44);
+    expect(availability.summary.unrestrictedGroups).toBe(45);
     expect(availability.summary.groupsFromSocietyLevel2).toBe(28);
-    expect(availability.summary.groupsAboveSocietyLevel2).toBe(23);
+    expect(availability.summary.groupsAboveSocietyLevel2).toBe(22);
   });
 
   it("keeps each Profession route restriction genuinely narrower than the group's own bound", () => {
@@ -1284,14 +1299,23 @@ describe("Society Level and Social Band route availability", () => {
     }
     /* No group gained a member and no Profession gained a route to close a gap. */
     expect(catalogue.manifest.groups).toBe(95);
-    expect(catalogue.manifest.directSkillOpportunities).toBe(106);
+    /* 107, not 106: the 2026-09-27 ruling restores P01's accepted direct ordinary-archery route to
+       `bow`, which the approved Profession catalogue already justifies for the non-longbow
+       bow-hunting branch. No route gap was closed by it — `bow` was never flagged as one — and the
+       eight route gaps above are unchanged. */
+    expect(catalogue.manifest.directSkillOpportunities).toBe(107);
   });
 
   it("records the distribution the pass produces", () => {
-    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(80);
-    expect(cell(2, "L1").reachableBaseSkillIds).toHaveLength(94);
-    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(110);
-    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(130);
+    /* Each cell gains exactly the two reclassified base Skills and loses nothing: Fencing through
+       F30, now unbounded, and Longbow through F41. Ordinary Bow keeps its Society Level 1 route
+       through P01's restored direct access, so nothing became absent. */
+    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(82);
+    expect(cell(2, "L1").reachableBaseSkillIds).toHaveLength(96);
+    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(112);
+    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(132);
+    for (const id of ["bow", "fencing", "longbow"])
+      expect(cell(1, "L1").reachableBaseSkillIds).toContain(id);
     expect(cell(1, "L1").professionCodes).toHaveLength(42);
     expect(cell(2, "L2").professionCodes).toHaveLength(63);
     expect(cell(3, "L2").professionCodes).toHaveLength(84);
@@ -1367,13 +1391,13 @@ describe("fourth ruling set — SL1 authority and Latial Chiefdoms (settled 2026
 
   it("moves no group, Profession, path or Skill distribution", () => {
     expect(availability.summary.groups).toBe(95);
-    expect(availability.summary.unrestrictedGroups).toBe(44);
+    expect(availability.summary.unrestrictedGroups).toBe(45);
     expect(availability.summary.professionRouteRestrictions).toBe(4);
     expect(availability.summary.directRouteRestrictions).toBe(7);
     expect(availability.summary.routeGaps).toBe(8);
-    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(80);
-    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(110);
-    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(130);
+    expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(82);
+    expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(112);
+    expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(132);
     expect(cell(3, "L2").validPathIds).toHaveLength(86);
   });
 });

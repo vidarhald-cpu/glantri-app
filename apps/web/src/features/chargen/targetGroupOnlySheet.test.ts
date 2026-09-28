@@ -11,11 +11,17 @@ import {
 import { characterPayload } from "../../../e2e/character-fixture";
 import { buildCharacterSheetSkillRows } from "../../lib/characters/characterSheet";
 const approved = getApprovedV2RuntimeContent();
-function finalized(direct = false) {
+/*
+ * The Hunter and Trapper is F41's Profession. Issue #389 removes F41 from the Soldier package —
+ * rule decision 0010 ruling 2 keeps the military longbow path out of the civilian hunting
+ * apprenticeship — so this group-only sheet is built on the civilian route that actually offers it.
+ * F41 now teaches Longbow and Hunting and charges no Bow, so Bow is the separately purchased skill.
+ */
+function finalized(bowPurchases = 0) {
   const base = characterBuildSchema.parse(characterPayload("synthetic", "Synthetic").build);
   const context = {
     content: approved,
-    professionId: "profession:soldier",
+    professionId: "profession:hunter-trapper",
     profile: base.profile,
     societyId: "pastoral_clan_nomadic",
     societyLevel: 1,
@@ -25,19 +31,13 @@ function finalized(direct = false) {
     progression: {
       ...createChargenProgression(),
       chargenSelections: {
-        selectedCoreRouteId: "profession:soldier:core:contingent",
+        selectedCoreRouteId: "profession:hunter-trapper:core",
         selectedLanguageIds: [],
         selectedSkillIds: [],
-        selectedGroupSlots: [
-          {
-            groupId: "M01",
-            slotId: "melee-family",
-            selectedSkillIds: ["one_handed_edged"],
-          },
-        ],
+        selectedGroupSlots: [],
       },
     },
-    targetId: "M01",
+    targetId: "G03",
     targetType: "group",
   }).progression;
   progression = allocateChargenPoint({
@@ -46,7 +46,7 @@ function finalized(direct = false) {
     targetId: "F41",
     targetType: "group",
   }).progression;
-  if (direct)
+  for (let index = 0; index < bowPurchases; index += 1)
     progression = allocateChargenPoint({
       ...context,
       progression,
@@ -60,7 +60,7 @@ function finalized(direct = false) {
 describe("saved target group-only sheet with real legacy content fallback", () => {
   for (const direct of [false, true])
     it(`resolves approved group members without inventing purchases (direct=${direct})`, () => {
-      const build = finalized(direct);
+      const build = finalized(direct ? 1 : 0);
       const before = JSON.stringify(build);
       expect(
         build.progression.skills
@@ -73,13 +73,20 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         content: defaultCanonicalContent,
         sheetSummary: summary,
       }).flatMap((section) => section.rows);
-      for (const id of ["bow", "skill:hunting"]) {
+      /* F41's members are Longbow and Hunting. LONGBOW MUST RESOLVE HERE as an ordinary group-taught
+         Skill row — this is the vanishing check on the saved-sheet surface. */
+      for (const id of ["longbow", "skill:hunting"]) {
         const match = rows.filter((row) => row.skillId === id);
         expect(match).toHaveLength(1);
-        expect(match[0]).toMatchObject({
-          skillGroupXp: 1,
-          totalXp: id === "bow" && direct ? 2 : 1,
-        });
+        expect(match[0]).toMatchObject({ skillGroupXp: 1, totalXp: 1 });
+      }
+      /* Bow is charged only when it is actually purchased: F41 no longer teaches it. */
+      const bowRows = rows.filter((row) => row.skillId === "bow");
+      if (direct) {
+        expect(bowRows).toHaveLength(1);
+        expect(bowRows[0]).toMatchObject({ skillGroupXp: 0, totalXp: 1 });
+      } else {
+        expect(bowRows).toEqual([]);
       }
       expect(JSON.stringify(build)).toBe(before);
       // Learning Groups are priced once as a complete bundle through the shared canonical
@@ -112,7 +119,9 @@ describe("saved target group-only sheet with real legacy content fallback", () =
     }
   });
   it("retains canonical relationship grants while rejecting excess/self-asserted derived ranks", () => {
-    const build = finalized(true);
+    /* Two Bow purchases, because F41 contributes no Bow group XP any more: Crossbow's authored 50%
+       derived grant from Bow needs Bow at 2 to round to 1. The relationship itself is unchanged. */
+    const build = finalized(2);
     const crossbow = build.progression.skills.find((s) => s.skillId === "crossbow")!;
     expect(crossbow.relationshipGrantedRanks).toBe(1);
     expect(crossbow.primaryRanks + crossbow.secondaryRanks).toBe(0);
@@ -128,8 +137,8 @@ describe("saved target group-only sheet with real legacy content fallback", () =
         ),
       ).toBe(true);
     }
-    // Canonical bundle price, as above.
-    expect(build.progression.primaryPoolSpent).toBe(9);
+    // Canonical bundle price, as above, plus the second individually purchased Bow.
+    expect(build.progression.primaryPoolSpent).toBe(11);
   });
   it("keeps a historical build readable with its original content and spend", () => {
     const build = characterBuildSchema.parse(characterPayload("historical", "Historical").build);

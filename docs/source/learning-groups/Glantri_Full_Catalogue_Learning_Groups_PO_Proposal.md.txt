@@ -1684,7 +1684,7 @@ This course includes substantial instruction in one-handed edged weapon practice
 | --- | --- | --- | --- |
 | `one_handed_edged` — 1-h edged | Base Skill | Learners repeatedly practise the full one-handed edged weapon competence, with direct correction of handling, control and use beyond specialist combinations. | New proposal |
 | `parry` — Parry | Base Skill | Learners deliberately rehearse and receive correction on the distinct defensive practice of meeting and redirecting attacks. | New proposal |
-| `fencing` — Fencing | Specialization; parent: `one_handed_edged` — 1-h edged | Learners refine the established tradition’s coordinated exchanges, timing and distance through a fencing teacher’s specialist instruction. | New proposal |
+| `fencing` — Fencing | Base Skill | Learners refine the established tradition’s coordinated exchanges, timing and distance through a fencing teacher’s specialist instruction. | New proposal |
 
 
 **Exclusions and boundaries**

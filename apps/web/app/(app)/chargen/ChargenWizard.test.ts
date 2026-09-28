@@ -9,7 +9,7 @@ import {
   buildChargenSkillAccessSummary,
   createChargenProgression,
   evaluateSkillSelection,
-  removeChargenPoint
+  removeChargenPoint,
 } from "@glantri/rules-engine";
 import { getPlayerFacingSkillBucket } from "@/lib/chargen/chargenBrowse";
 
@@ -20,7 +20,7 @@ import {
   getSkillDisplayGroupId,
   getGroupSlotCandidateSkillIds,
   getSpecializationRowMessages,
-  getSpecializationPurchaseState
+  getSpecializationPurchaseState,
 } from "./ChargenWizard";
 
 const combatContent = {
@@ -34,8 +34,8 @@ const combatContent = {
       professionId: "warrior",
       ranks: 0,
       scope: "family" as const,
-      skillGroupId: "advanced_melee_training"
-    }
+      skillGroupId: "advanced_melee_training",
+    },
   ],
   professions: [{ familyId: "warrior", id: "captain", name: "Captain", subtypeName: "Captain" }],
   skillGroups: [
@@ -48,16 +48,16 @@ const combatContent = {
           chooseCount: 3,
           id: "advanced_melee_weapons",
           label: "Choose three melee weapon skills",
-          required: true
-        }
+          required: true,
+        },
       ],
       skillMemberships: [
         { relevance: "core" as const, skillId: "dodge" },
         { relevance: "core" as const, skillId: "parry" },
-        { relevance: "core" as const, skillId: "brawling" }
+        { relevance: "core" as const, skillId: "brawling" },
       ],
-      sortOrder: 1
-    }
+      sortOrder: 1,
+    },
   ],
   skills: [
     {
@@ -73,7 +73,7 @@ const combatContent = {
       name: "Dodge",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       allowsSpecializations: false,
@@ -88,7 +88,7 @@ const combatContent = {
       name: "Parry",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       allowsSpecializations: false,
@@ -103,7 +103,7 @@ const combatContent = {
       name: "Brawling",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 3
+      sortOrder: 3,
     },
     {
       allowsSpecializations: false,
@@ -118,7 +118,7 @@ const combatContent = {
       name: "Sword",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 4
+      sortOrder: 4,
     },
     {
       allowsSpecializations: false,
@@ -133,7 +133,7 @@ const combatContent = {
       name: "Axe",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 5
+      sortOrder: 5,
     },
     {
       allowsSpecializations: false,
@@ -148,7 +148,7 @@ const combatContent = {
       name: "Spear",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 6
+      sortOrder: 6,
     },
     {
       allowsSpecializations: false,
@@ -163,8 +163,8 @@ const combatContent = {
       name: "Mace",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 7
-    }
+      sortOrder: 7,
+    },
   ],
   societies: [],
   societyLevels: [
@@ -175,7 +175,7 @@ const combatContent = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["captain"],
@@ -184,7 +184,7 @@ const combatContent = {
       socialClass: "Guild",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["captain"],
@@ -193,7 +193,7 @@ const combatContent = {
       socialClass: "Patrician",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["captain"],
@@ -202,11 +202,11 @@ const combatContent = {
       socialClass: "Noble",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
   societyBandSkillAccess: [],
-  specializations: []
+  specializations: [],
 };
 
 const overlappingProfessionContent = {
@@ -220,7 +220,7 @@ const overlappingProfessionContent = {
       professionId: "scout_family",
       ranks: 0,
       scope: "family" as const,
-      skillGroupId: "fieldcraft"
+      skillGroupId: "fieldcraft",
     },
     {
       grantType: "ordinary-skill" as const,
@@ -228,11 +228,11 @@ const overlappingProfessionContent = {
       professionId: "scout_family",
       ranks: 0,
       scope: "family" as const,
-      skillId: "stealth"
-    }
+      skillId: "stealth",
+    },
   ],
   professions: [
-    { familyId: "scout_family", id: "pathfinder", name: "Pathfinder", subtypeName: "Pathfinder" }
+    { familyId: "scout_family", id: "pathfinder", name: "Pathfinder", subtypeName: "Pathfinder" },
   ],
   skillGroups: [{ id: "fieldcraft", name: "Fieldcraft", skillMemberships: [], sortOrder: 1 }],
   skills: [
@@ -249,7 +249,7 @@ const overlappingProfessionContent = {
       name: "Stealth",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       allowsSpecializations: false,
@@ -264,8 +264,8 @@ const overlappingProfessionContent = {
       name: "Tracking",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 2
-    }
+      sortOrder: 2,
+    },
   ],
   societies: [],
   societyLevels: [
@@ -276,7 +276,7 @@ const overlappingProfessionContent = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["pathfinder"],
@@ -285,7 +285,7 @@ const overlappingProfessionContent = {
       socialClass: "Guild",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["pathfinder"],
@@ -294,7 +294,7 @@ const overlappingProfessionContent = {
       socialClass: "Patrician",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["pathfinder"],
@@ -303,17 +303,17 @@ const overlappingProfessionContent = {
       socialClass: "Noble",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
   societyBandSkillAccess: [],
-  specializations: []
+  specializations: [],
 };
 
 const canonicalLanguages = [
   { id: "common_language", name: "Common", sourceSocietyId: "glantri" },
   { id: "old_common_language", name: "Old Common", sourceSocietyId: "glantri" },
-  { id: "phoenician_language", name: "Phoenician", sourceSocietyId: "glantri" }
+  { id: "phoenician_language", name: "Phoenician", sourceSocietyId: "glantri" },
 ];
 
 const languageContent = {
@@ -329,8 +329,8 @@ const languageContent = {
       period: "Test period",
       shortDescription: "Test civilization",
       spokenLanguageName: "Phoenician",
-      writtenLanguageName: "Phoenician"
-    }
+      writtenLanguageName: "Phoenician",
+    },
   ],
   languages: canonicalLanguages,
   professionFamilies: [{ id: "scholar", name: "Scholar" }],
@@ -352,7 +352,7 @@ const languageContent = {
       name: "Literacy",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       allowsSpecializations: false,
@@ -368,8 +368,8 @@ const languageContent = {
       name: "Language",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 2
-    }
+      sortOrder: 2,
+    },
   ],
   societies: [
     {
@@ -377,8 +377,8 @@ const languageContent = {
       id: "glantri",
       name: "Glantri",
       shortDescription: "Test society",
-      societyLevel: 1
-    }
+      societyLevel: 1,
+    },
   ],
   societyLevels: [
     {
@@ -388,7 +388,7 @@ const languageContent = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["scribe"],
@@ -397,7 +397,7 @@ const languageContent = {
       socialClass: "Guild",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["scribe"],
@@ -406,7 +406,7 @@ const languageContent = {
       socialClass: "Patrician",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["scribe"],
@@ -415,11 +415,11 @@ const languageContent = {
       socialClass: "Noble",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
   societyBandSkillAccess: [],
-  specializations: []
+  specializations: [],
 };
 
 const languageProfile = {
@@ -437,10 +437,10 @@ const languageProfile = {
     pow: 10,
     siz: 10,
     str: 10,
-    will: 10
+    will: 10,
   },
   socialClassEducationValue: 12,
-  societyLevel: 0 as const
+  societyLevel: 0 as const,
 };
 
 const commonMotherTongueLanguageContent = {
@@ -457,8 +457,8 @@ const commonMotherTongueLanguageContent = {
       period: "Test period",
       shortDescription: "Test civilization",
       spokenLanguageName: "Common",
-      writtenLanguageName: "Common"
-    }
+      writtenLanguageName: "Common",
+    },
   ],
   languages: canonicalLanguages,
   societies: [
@@ -467,14 +467,14 @@ const commonMotherTongueLanguageContent = {
       id: "glantri",
       name: "Glantri",
       shortDescription: "Test society",
-      societyLevel: 1
-    }
-  ]
+      societyLevel: 1,
+    },
+  ],
 };
 
 const education11LanguageProfile = {
   ...languageProfile,
-  socialClassEducationValue: 11
+  socialClassEducationValue: 11,
 };
 
 const hiddenOtherSkillContent = {
@@ -483,7 +483,7 @@ const hiddenOtherSkillContent = {
   professionFamilies: [{ id: "courtier_family", name: "Courtier" }],
   professionSkills: [],
   professions: [
-    { familyId: "courtier_family", id: "attendant", name: "Attendant", subtypeName: "Attendant" }
+    { familyId: "courtier_family", id: "attendant", name: "Attendant", subtypeName: "Attendant" },
   ],
   skillGroups: [{ id: "courtly", name: "Courtly", sortOrder: 1 }],
   skills: [
@@ -501,8 +501,8 @@ const hiddenOtherSkillContent = {
       name: "Etiquette",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 1
-    }
+      sortOrder: 1,
+    },
   ],
   societies: [],
   societyLevels: [
@@ -513,7 +513,7 @@ const hiddenOtherSkillContent = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["attendant"],
@@ -522,7 +522,7 @@ const hiddenOtherSkillContent = {
       socialClass: "Guild",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["attendant"],
@@ -531,7 +531,7 @@ const hiddenOtherSkillContent = {
       socialClass: "Patrician",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["attendant"],
@@ -540,11 +540,11 @@ const hiddenOtherSkillContent = {
       socialClass: "Noble",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
   societyBandSkillAccess: [],
-  specializations: []
+  specializations: [],
 };
 
 const directGrantedSkillContent = {
@@ -558,8 +558,8 @@ const directGrantedSkillContent = {
       professionId: "envoy_family",
       ranks: 0,
       scope: "family" as const,
-      skillId: "etiquette"
-    }
+      skillId: "etiquette",
+    },
   ],
   professions: [{ familyId: "envoy_family", id: "envoy", name: "Envoy", subtypeName: "Envoy" }],
   skillGroups: [{ id: "courtly", name: "Courtly", sortOrder: 1 }],
@@ -578,8 +578,8 @@ const directGrantedSkillContent = {
       name: "Etiquette",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 1
-    }
+      sortOrder: 1,
+    },
   ],
   societies: [],
   societyLevels: [
@@ -590,7 +590,7 @@ const directGrantedSkillContent = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["envoy"],
@@ -599,7 +599,7 @@ const directGrantedSkillContent = {
       socialClass: "Guild",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["envoy"],
@@ -608,7 +608,7 @@ const directGrantedSkillContent = {
       socialClass: "Patrician",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["envoy"],
@@ -617,11 +617,11 @@ const directGrantedSkillContent = {
       socialClass: "Noble",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
   societyBandSkillAccess: [],
-  specializations: []
+  specializations: [],
 };
 
 const overlappingOfficerTrainingContent = {
@@ -635,15 +635,15 @@ const overlappingOfficerTrainingContent = {
       professionId: "officer_family",
       ranks: 0,
       scope: "family" as const,
-      skillGroupId: "officer_training"
-    }
+      skillGroupId: "officer_training",
+    },
   ],
   professions: [
-    { familyId: "officer_family", id: "officer", name: "Officer", subtypeName: "Officer" }
+    { familyId: "officer_family", id: "officer", name: "Officer", subtypeName: "Officer" },
   ],
   skillGroups: [
     { id: "basic_awareness", name: "Basic Awareness", sortOrder: 1 },
-    { id: "officer_training", name: "Officer Training", sortOrder: 2 }
+    { id: "officer_training", name: "Officer Training", sortOrder: 2 },
   ],
   skills: [
     {
@@ -660,7 +660,7 @@ const overlappingOfficerTrainingContent = {
       name: "Perception",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 1
+      sortOrder: 1,
     },
     {
       allowsSpecializations: false,
@@ -676,7 +676,7 @@ const overlappingOfficerTrainingContent = {
       name: "Tactics",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 2
+      sortOrder: 2,
     },
     {
       allowsSpecializations: false,
@@ -692,8 +692,8 @@ const overlappingOfficerTrainingContent = {
       name: "Captaincy",
       requiresLiteracy: "no" as const,
       societyLevel: 1,
-      sortOrder: 3
-    }
+      sortOrder: 3,
+    },
   ],
   societies: [],
   societyLevels: [
@@ -704,7 +704,7 @@ const overlappingOfficerTrainingContent = {
       socialClass: "Common",
       societyId: "glantri",
       societyLevel: 1,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["officer"],
@@ -713,7 +713,7 @@ const overlappingOfficerTrainingContent = {
       socialClass: "Guild",
       societyId: "glantri",
       societyLevel: 2,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["officer"],
@@ -722,7 +722,7 @@ const overlappingOfficerTrainingContent = {
       socialClass: "Patrician",
       societyId: "glantri",
       societyLevel: 3,
-      societyName: "Glantri"
+      societyName: "Glantri",
     },
     {
       professionIds: ["officer"],
@@ -731,16 +731,16 @@ const overlappingOfficerTrainingContent = {
       socialClass: "Noble",
       societyId: "glantri",
       societyLevel: 4,
-      societyName: "Glantri"
-    }
+      societyName: "Glantri",
+    },
   ],
   societyBandSkillAccess: [],
-  specializations: []
+  specializations: [],
 };
 
 function createProgressionWithOtherSkillCandidate() {
   return {
-    ...createChargenProgression()
+    ...createChargenProgression(),
   };
 }
 
@@ -755,7 +755,7 @@ function getOtherSkillIds(input: {
     content: input.content,
     professionId: input.professionId,
     societyId: input.societyId,
-    societyLevel: input.societyLevel
+    societyLevel: input.societyLevel,
   });
 
   return input.content.skills
@@ -766,9 +766,9 @@ function getOtherSkillIds(input: {
           content: input.content,
           draftView: input.draftView,
           skill,
-          skillAccess
+          skillAccess,
         }) === undefined &&
-        !skillAccess.normalSkillIds.includes(skill.id)
+        !skillAccess.normalSkillIds.includes(skill.id),
     )
     .map((skill) => skill.id);
 }
@@ -785,10 +785,12 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           isCore: true,
           professionId: "warrior",
           scope: "family",
-          skillGroupId: "combat_group"
-        }
+          skillGroupId: "combat_group",
+        },
       ],
-      professions: [{ familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      professions: [
+        { familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" },
+      ],
       skillGroups: [{ id: "combat_group", name: "Combat", sortOrder: 1 }],
       skills: [
         {
@@ -802,11 +804,11 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           linkedStats: ["dex"],
           meleeCrossTraining: {
             attackStyle: "slash",
-            handClass: "one-handed"
+            handClass: "one-handed",
           },
           name: "1-h edged",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -819,12 +821,12 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           linkedStats: ["dex"],
           meleeCrossTraining: {
             attackStyle: "slash",
-            handClass: "two-handed"
+            handClass: "two-handed",
           },
           name: "2-h edged",
           requiresLiteracy: "no",
-          sortOrder: 2
-        }
+          sortOrder: 2,
+        },
       ],
       societies: [],
       societyLevels: [
@@ -835,7 +837,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["soldier"],
@@ -844,7 +846,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Guild",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["soldier"],
@@ -853,7 +855,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Patrician",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: ["soldier"],
@@ -862,10 +864,10 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Noble",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
+          societyName: "Glantri",
+        },
       ],
-      specializations: []
+      specializations: [],
     });
     const progression = createChargenProgression();
     progression.skillGroups = [
@@ -875,8 +877,8 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         groupId: "combat_group",
         primaryRanks: 10,
         ranks: 10,
-        secondaryRanks: 0
-      }
+        secondaryRanks: 0,
+      },
     ];
 
     const draftView = buildChargenDraftView({
@@ -884,157 +886,13 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       professionId: "soldier",
       progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(draftView.skills.find((skill) => skill.skillId === "two_handed_edged")).toMatchObject({
       effectiveSkillNumber: 10,
       relationshipGrantedSkillLevel: 0,
-      relationshipSourceSkillName: undefined
-    });
-  });
-
-  it("keeps Fencing purchasable when flexible points remain and a bridge grant preview is present", () => {
-    const bridgeContent = validateCanonicalContent({
-      skillGroups: [
-        {
-          id: "combat_group",
-          name: "Combat",
-          sortOrder: 1
-        }
-      ],
-      skills: [
-        {
-          allowsSpecializations: true,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "combat_group",
-          groupIds: ["combat_group"],
-          id: "one_handed_edged",
-          linkedStats: ["dex"],
-          name: "1-h edged",
-          requiresLiteracy: "no",
-          sortOrder: 1
-        }
-      ],
-      specializations: [
-        {
-          id: "fencing",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Fencing",
-          skillId: "one_handed_edged",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "one_handed_edged",
-            reverseFactor: 1,
-            threshold: 6
-          }
-        }
-      ],
-      professionFamilies: [{ id: "warrior", name: "Warrior" }],
-      professionSkills: [],
-      professions: [{ familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" }],
-      societies: [],
-      societyBandSkillAccess: [],
-      societyLevels: [
-        {
-          professionIds: ["soldier"],
-          skillGroupIds: ["combat_group"],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 1,
-          societyName: "Glantri"
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 2,
-          societyName: "Glantri"
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 3,
-          societyName: "Glantri"
-        },
-        {
-          professionIds: [],
-          skillGroupIds: [],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
-    });
-    const profile = {
-      distractionLevel: 0,
-      id: "profile-fencer",
-      label: "Fencer",
-      rolledStats: {
-        cha: 10,
-        com: 10,
-        con: 10,
-        dex: 10,
-        health: 10,
-        int: 20,
-        lck: 13,
-        pow: 10,
-        siz: 10,
-        str: 10,
-        will: 10
-      },
-      societyLevel: 0
-    };
-    const progression = createChargenProgression();
-    progression.skillGroups = [
-      {
-        gms: 0,
-        grantedRanks: 0,
-        groupId: "combat_group",
-        primaryRanks: 6,
-        ranks: 6,
-        secondaryRanks: 0
-      }
-    ];
-    const draftView = buildChargenDraftView({
-      content: bridgeContent,
-      professionId: "soldier",
-      profile,
-      progression,
-      societyId: "glantri",
-      societyLevel: 1
-    });
-    const purchaseState = getSpecializationPurchaseState({
-      skillAllocationContext: {
-        content: bridgeContent,
-        professionId: "soldier",
-        profile,
-        progression,
-        societyId: "glantri",
-        societyLevel: 1
-      },
-      specializationId: "fencing"
-    });
-
-    expect(draftView.secondaryPoolAvailable).toBe(33);
-    expect(draftView.specializations.find((item) => item.specializationId === "fencing")).toMatchObject({
-      relationshipGrantedPreviewLevel: 1
-    });
-    expect(purchaseState).toMatchObject({
-      canAllocate: true,
-      nextCost: 4
+      relationshipSourceSkillName: undefined,
     });
   });
 
@@ -1044,8 +902,8 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         {
           id: "surgery_group",
           name: "Surgery Group",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       skills: [
         {
@@ -1059,7 +917,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           linkedStats: ["int"],
           name: "Medicine",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -1072,8 +930,8 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           linkedStats: ["int"],
           name: "First Aid",
           requiresLiteracy: "no",
-          sortOrder: 2
-        }
+          sortOrder: 2,
+        },
       ],
       specializations: [
         {
@@ -1082,12 +940,14 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           minimumParentLevel: 6,
           name: "Surgery",
           skillId: "medicine",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
       professionFamilies: [{ id: "scholar", name: "Scholar" }],
       professionSkills: [],
-      professions: [{ familyId: "scholar", id: "physician", name: "Physician", subtypeName: "Physician" }],
+      professions: [
+        { familyId: "scholar", id: "physician", name: "Physician", subtypeName: "Physician" },
+      ],
       societies: [],
       societyBandSkillAccess: [],
       societyLevels: [
@@ -1098,7 +958,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1107,7 +967,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 2,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1116,7 +976,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 3,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
         {
           professionIds: [],
@@ -1125,9 +985,9 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 4,
-          societyName: "Glantri"
-        }
-      ]
+          societyName: "Glantri",
+        },
+      ],
     });
     const progression = createChargenProgression();
     progression.skills = [
@@ -1140,8 +1000,8 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         ranks: 6,
         relationshipGrantedRanks: 0,
         secondaryRanks: 6,
-        skillId: "medicine"
-      }
+        skillId: "medicine",
+      },
     ];
 
     const purchaseState = getSpecializationPurchaseState({
@@ -1151,18 +1011,19 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         profile: undefined,
         progression,
         societyId: "glantri",
-        societyLevel: 1
+        societyLevel: 1,
       },
-      specializationId: "surgery"
+      specializationId: "surgery",
     });
 
     expect(purchaseState).toMatchObject({
       canAllocate: false,
-      previewMessage: "This specialization is outside the current society/profession access for its parent skill."
+      previewMessage:
+        "This specialization is outside the current society/profession access for its parent skill.",
     });
   });
 
-  it("shows one coherent bridge gate message for blocked specialization rows without duplicating the live blocker", () => {
+  it("shows one coherent parent-gate message for blocked Specialization rows without duplicating the live blocker", () => {
     const bridgeContent = validateCanonicalContent({
       skillGroups: [{ id: "combat_group", name: "Combat", sortOrder: 1 }],
       skills: [
@@ -1177,28 +1038,27 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           linkedStats: ["dex"],
           name: "1-h edged",
           requiresLiteracy: "no",
-          sortOrder: 1
-        }
+          sortOrder: 1,
+        },
       ],
+      /* Rule decision 0010 ruling 1 makes Fencing a base combat Skill, so the blocked-row fixture
+         uses a Specialization that really does gate on one-handed edged. The rule under test — one
+         coherent parent-gate message, never duplicated — is unchanged. */
       specializations: [
         {
-          id: "fencing",
+          id: "sword_and_buckler_or_main_gauche_style",
           minimumGroupLevel: 6,
           minimumParentLevel: 6,
-          name: "Fencing",
+          name: "Sword & Buckler / Main-Gauche Style",
           skillId: "one_handed_edged",
           sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "one_handed_edged",
-            reverseFactor: 1,
-            threshold: 6
-          }
-        }
+        },
       ],
       professionFamilies: [{ id: "warrior", name: "Warrior" }],
       professionSkills: [],
-      professions: [{ familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" }],
+      professions: [
+        { familyId: "warrior", id: "soldier", name: "Soldier", subtypeName: "Soldier" },
+      ],
       societies: [],
       societyBandSkillAccess: [],
       societyLevels: [
@@ -1209,12 +1069,36 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 2, societyName: "Glantri" },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 3, societyName: "Glantri" },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 4, societyName: "Glantri" }
-      ]
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri",
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri",
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri",
+        },
+      ],
     });
     const progression = createChargenProgression();
     progression.skillGroups = [
@@ -1224,8 +1108,8 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         groupId: "combat_group",
         primaryRanks: 5,
         ranks: 5,
-        secondaryRanks: 0
-      }
+        secondaryRanks: 0,
+      },
     ];
 
     const evaluation = evaluateSkillSelection({
@@ -1233,8 +1117,8 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       progression,
       target: {
         specialization: bridgeContent.specializations[0]!,
-        targetType: "specialization"
-      }
+        targetType: "specialization",
+      },
     });
     const purchaseState = getSpecializationPurchaseState({
       skillAllocationContext: {
@@ -1243,22 +1127,22 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         profile: languageProfile,
         progression,
         societyId: "glantri",
-        societyLevel: 1
+        societyLevel: 1,
       },
-      specializationId: "fencing"
+      specializationId: "sword_and_buckler_or_main_gauche_style",
     });
 
+    const blocker =
+      "Sword & Buckler / Main-Gauche Style requires 1-h edged level 6 or higher (current 5).";
     const rowMessages = getSpecializationRowMessages({
       evaluation,
-      persistedRowFeedback: "Fencing requires 1-h edged level 6 or higher (current 5).",
-      purchaseState
+      persistedRowFeedback: blocker,
+      purchaseState,
     });
 
     expect(rowMessages.feedback).toBeUndefined();
     expect(rowMessages.statusItems).toHaveLength(1);
-    expect(rowMessages.statusItems[0]?.message).toBe(
-      "Fencing requires 1-h edged level 6 or higher (current 5)."
-    );
+    expect(rowMessages.statusItems[0]?.message).toBe(blocker);
   });
 
   it("collapses duplicate specialization requirement text even when it arrives through multiple rule channels", () => {
@@ -1268,133 +1152,27 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
         blockingReasons: [
           {
             code: "missing-specialization-parent-skill",
-            message: "Augury requires Omen Reading."
-          }
+            message: "Augury requires Omen Reading.",
+          },
         ],
         isAllowed: false,
         warnings: [
           {
             code: "missing-required-dependency",
-            message: "Augury requires Omen Reading."
-          }
-        ]
+            message: "Augury requires Omen Reading.",
+          },
+        ],
       },
       persistedRowFeedback: "Augury requires Omen Reading.",
       purchaseState: {
         canAllocate: false,
-        previewMessage: undefined
-      }
+        previewMessage: undefined,
+      },
     });
 
     expect(rowMessages.feedback).toBeUndefined();
     expect(rowMessages.statusItems.map((item) => item.message)).toEqual([
-      "Augury requires Omen Reading."
-    ]);
-  });
-
-  it("suppresses overlapping dependency text when a bridge skill already explains the parent requirement", () => {
-    const longbowContent = validateCanonicalContent({
-      skillGroups: [{ id: "missile_group", name: "Missile", sortOrder: 1 }],
-      skills: [
-        {
-          allowsSpecializations: false,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "missile_group",
-          groupIds: ["missile_group"],
-          id: "bow",
-          linkedStats: ["dex"],
-          name: "Bow",
-          requiresLiteracy: "no",
-          sortOrder: 1
-        },
-        {
-          allowsSpecializations: false,
-          category: "ordinary",
-          dependencies: [],
-          dependencySkillIds: [],
-          groupId: "missile_group",
-          groupIds: ["missile_group"],
-          id: "crossbow",
-          linkedStats: ["dex"],
-          name: "Crossbow",
-          requiresLiteracy: "no",
-          sortOrder: 2
-        },
-        {
-          allowsSpecializations: false,
-          category: "ordinary",
-          dependencies: [{ skillId: "bow", strength: "helpful" }],
-          dependencySkillIds: ["bow"],
-          groupId: "missile_group",
-          groupIds: ["missile_group"],
-          id: "longbow",
-          linkedStats: ["dex"],
-          name: "Longbow",
-          requiresLiteracy: "no",
-          sortOrder: 3,
-          specializationOfSkillId: "bow"
-        }
-      ],
-      specializations: [
-        {
-          id: "longbow",
-          minimumGroupLevel: 6,
-          minimumParentLevel: 6,
-          name: "Longbow",
-          skillId: "bow",
-          sortOrder: 1,
-          specializationBridge: {
-            parentExcessOffset: 5,
-            parentSkillId: "bow",
-            reverseFactor: 1,
-            threshold: 6
-          }
-        }
-      ],
-      professionFamilies: [{ id: "warrior", name: "Warrior" }],
-      professionSkills: [],
-      professions: [{ familyId: "warrior", id: "archer", name: "Archer", subtypeName: "Archer" }],
-      societies: [],
-      societyBandSkillAccess: [],
-      societyLevels: [
-        {
-          professionIds: ["archer"],
-          skillGroupIds: ["missile_group"],
-          skillIds: [],
-          socialClass: "Common",
-          societyId: "glantri",
-          societyLevel: 1,
-          societyName: "Glantri"
-        },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 2, societyName: "Glantri" },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 3, societyName: "Glantri" },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 4, societyName: "Glantri" }
-      ]
-    });
-
-    const rowMessages = getSpecializationRowMessages({
-      evaluation: evaluateSkillSelection({
-        content: longbowContent,
-        progression: createChargenProgression(),
-        target: {
-          specialization: longbowContent.specializations.find(
-            (specialization) => specialization.id === "longbow"
-          )!,
-          targetType: "specialization"
-        }
-      }),
-      persistedRowFeedback: undefined,
-      purchaseState: {
-        canAllocate: false,
-        previewMessage: undefined
-      }
-    });
-
-    expect(rowMessages.feedback).toBeUndefined();
-    expect(rowMessages.statusItems.map((item) => item.message)).toEqual([
-      "Longbow requires Bow."
+      "Augury requires Omen Reading.",
     ]);
   });
 
@@ -1410,10 +1188,10 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
             {
               groupId: "advanced_melee_training",
               selectedSkillIds: ["sword", "axe", "spear"],
-              slotId: "advanced_melee_weapons"
-            }
+              slotId: "advanced_melee_weapons",
+            },
           ],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -1422,18 +1200,18 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
             groupId: "advanced_melee_training",
             primaryRanks: 2,
             ranks: 2,
-            secondaryRanks: 0
-          }
-        ]
+            secondaryRanks: 0,
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const skillAccess = buildChargenSkillAccessSummary({
       content: combatContent,
       professionId: "captain",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     const displayGroupIds = Object.fromEntries(
@@ -1443,9 +1221,9 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           content: combatContent,
           draftView,
           skill,
-          skillAccess
-        })
-      ])
+          skillAccess,
+        }),
+      ]),
     );
 
     expect(displayGroupIds).toEqual({
@@ -1455,7 +1233,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       mace: undefined,
       parry: "advanced_melee_training",
       spear: "advanced_melee_training",
-      sword: "advanced_melee_training"
+      sword: "advanced_melee_training",
     });
   });
 
@@ -1465,13 +1243,13 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       professionId: "captain",
       progression: createChargenProgression(),
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const skillAccess = buildChargenSkillAccessSummary({
       content: combatContent,
       professionId: "captain",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     const displayGroupIds = Object.fromEntries(
@@ -1481,9 +1259,9 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
           content: combatContent,
           draftView,
           skill,
-          skillAccess
-        })
-      ])
+          skillAccess,
+        }),
+      ]),
     );
 
     expect(displayGroupIds).toEqual({
@@ -1493,7 +1271,7 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       mace: undefined,
       parry: "advanced_melee_training",
       spear: undefined,
-      sword: undefined
+      sword: undefined,
     });
   });
 
@@ -1509,10 +1287,10 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
             {
               groupId: "advanced_melee_training",
               selectedSkillIds: ["sword", "axe", "spear"],
-              slotId: "advanced_melee_weapons"
-            }
+              slotId: "advanced_melee_weapons",
+            },
           ],
-          selectedSkillIds: []
+          selectedSkillIds: [],
         },
         skillGroups: [
           {
@@ -1521,12 +1299,12 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
             groupId: "advanced_melee_training",
             primaryRanks: 2,
             ranks: 2,
-            secondaryRanks: 0
-          }
-        ]
+            secondaryRanks: 0,
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const sword = combatContent.skills.find((skill) => skill.id === "sword");
     const mace = combatContent.skills.find((skill) => skill.id === "mace");
@@ -1538,13 +1316,13 @@ describe("ChargenWizard combat allocation runtime helpers", () => {
       content: combatContent,
       draftView,
       profile: undefined,
-      skill: sword!
+      skill: sword!,
     });
     const maceMetrics = getSkillAllocationMetrics({
       content: combatContent,
       draftView,
       profile: undefined,
-      skill: mace!
+      skill: mace!,
     });
 
     expect(swordMetrics.groupXp).toBeGreaterThan(0);
@@ -1561,13 +1339,13 @@ describe("ChargenWizard profession-group display priority", () => {
       professionId: "pathfinder",
       progression: createChargenProgression(),
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const skillAccess = buildChargenSkillAccessSummary({
       content: overlappingProfessionContent,
       professionId: "pathfinder",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const stealth = overlappingProfessionContent.skills.find((skill) => skill.id === "stealth");
 
@@ -1577,7 +1355,7 @@ describe("ChargenWizard profession-group display priority", () => {
       content: overlappingProfessionContent,
       draftView,
       skill: stealth!,
-      skillAccess
+      skillAccess,
     });
 
     const additionalAllowedSkills = overlappingProfessionContent.skills.filter(
@@ -1587,8 +1365,8 @@ describe("ChargenWizard profession-group display priority", () => {
           content: overlappingProfessionContent,
           draftView,
           skill,
-          skillAccess
-        }) === undefined
+          skillAccess,
+        }) === undefined,
     );
     const fieldcraftGroupSkillIds = overlappingProfessionContent.skills
       .filter(
@@ -1597,8 +1375,8 @@ describe("ChargenWizard profession-group display priority", () => {
             content: overlappingProfessionContent,
             draftView,
             skill,
-            skillAccess
-          }) === "fieldcraft"
+            skillAccess,
+          }) === "fieldcraft",
       )
       .map((skill) => skill.id);
 
@@ -1608,10 +1386,11 @@ describe("ChargenWizard profession-group display priority", () => {
   });
 
   it("keeps unselected weapon slot candidates out of direct skill display rows", () => {
-    const lightInfantryRow = defaultCanonicalContent.societyLevels.find((societyLevel) =>
-      societyLevel.professionIds.includes("light_infantry") &&
-      societyLevel.skillGroupIds.includes("basic_missile_training") &&
-      societyLevel.skillGroupIds.includes("basic_melee_training")
+    const lightInfantryRow = defaultCanonicalContent.societyLevels.find(
+      (societyLevel) =>
+        societyLevel.professionIds.includes("light_infantry") &&
+        societyLevel.skillGroupIds.includes("basic_missile_training") &&
+        societyLevel.skillGroupIds.includes("basic_melee_training"),
     );
 
     expect(lightInfantryRow).toBeDefined();
@@ -1622,24 +1401,22 @@ describe("ChargenWizard profession-group display priority", () => {
         professionId: "light_infantry",
         progression,
         societyId: lightInfantryRow!.societyId,
-        societyLevel: lightInfantryRow!.societyLevel
+        societyLevel: lightInfantryRow!.societyLevel,
       });
       const skillAccess = buildChargenSkillAccessSummary({
         content: defaultCanonicalContent,
         professionId: "light_infantry",
         societyId: lightInfantryRow!.societyId,
-        societyLevel: lightInfantryRow!.societyLevel
+        societyLevel: lightInfantryRow!.societyLevel,
       });
       const selectableSkillSummary = buildChargenSelectableSkillSummary({
         content: defaultCanonicalContent,
         professionId: "light_infantry",
         progression,
         societyId: lightInfantryRow!.societyId,
-        societyLevel: lightInfantryRow!.societyLevel
+        societyLevel: lightInfantryRow!.societyLevel,
       });
-      const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(
-        selectableSkillSummary
-      );
+      const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(selectableSkillSummary);
 
       return defaultCanonicalContent.skills
         .filter(
@@ -1650,8 +1427,8 @@ describe("ChargenWizard profession-group display priority", () => {
               content: defaultCanonicalContent,
               draftView,
               skill,
-              skillAccess
-            }) === undefined
+              skillAccess,
+            }) === undefined,
         )
         .map((skill) => skill.id);
     };
@@ -1659,21 +1436,21 @@ describe("ChargenWizard profession-group display priority", () => {
     const unselectedDirectSkillIds = buildDirectSkillIds(
       applyProfessionGrants({
         content: defaultCanonicalContent,
-        professionId: "light_infantry"
-      })
+        professionId: "light_infantry",
+      }),
     );
     const unselectedSummary = buildChargenSelectableSkillSummary({
       content: defaultCanonicalContent,
       professionId: "light_infantry",
       progression: applyProfessionGrants({
         content: defaultCanonicalContent,
-        professionId: "light_infantry"
+        professionId: "light_infantry",
       }),
       societyId: lightInfantryRow!.societyId,
-      societyLevel: lightInfantryRow!.societyLevel
+      societyLevel: lightInfantryRow!.societyLevel,
     });
     const missileSlot = unselectedSummary.selectionSlots.find(
-      (slot) => slot.groupId === "basic_missile_training"
+      (slot) => slot.groupId === "basic_missile_training",
     );
 
     expect(missileSlot?.candidateSkillIds).toEqual(["throwing", "sling", "bow", "crossbow"]);
@@ -1687,7 +1464,7 @@ describe("ChargenWizard profession-group display priority", () => {
 
     const selectedProgression = applyProfessionGrants({
       content: defaultCanonicalContent,
-      professionId: "light_infantry"
+      professionId: "light_infantry",
     });
     const selectedSlotProgression = {
       ...selectedProgression,
@@ -1698,28 +1475,28 @@ describe("ChargenWizard profession-group display priority", () => {
           {
             groupId: "basic_missile_training",
             selectedSkillIds: ["bow"],
-            slotId: "missile_weapon_choice"
+            slotId: "missile_weapon_choice",
           },
           {
             groupId: "basic_melee_training",
             selectedSkillIds: ["polearms"],
-            slotId: "melee_weapon_choice"
-          }
-        ]
-      }
+            slotId: "melee_weapon_choice",
+          },
+        ],
+      },
     };
     const selectedDraftView = buildChargenDraftView({
       content: defaultCanonicalContent,
       professionId: "light_infantry",
       progression: selectedSlotProgression,
       societyId: lightInfantryRow!.societyId,
-      societyLevel: lightInfantryRow!.societyLevel
+      societyLevel: lightInfantryRow!.societyLevel,
     });
     const selectedSkillAccess = buildChargenSkillAccessSummary({
       content: defaultCanonicalContent,
       professionId: "light_infantry",
       societyId: lightInfantryRow!.societyId,
-      societyLevel: lightInfantryRow!.societyLevel
+      societyLevel: lightInfantryRow!.societyLevel,
     });
     const bow = defaultCanonicalContent.skills.find((skill) => skill.id === "bow");
     const polearms = defaultCanonicalContent.skills.find((skill) => skill.id === "polearms");
@@ -1728,13 +1505,13 @@ describe("ChargenWizard profession-group display priority", () => {
       professionId: "light_infantry",
       progression: selectedSlotProgression,
       societyId: lightInfantryRow!.societyId,
-      societyLevel: lightInfantryRow!.societyLevel
+      societyLevel: lightInfantryRow!.societyLevel,
     });
     const selectedGroupSkillIdsFor = (groupId: string) => {
       const selectedGroupSlotSkillIds = new Set(
         selectedSummary.selectionSlots
           .filter((slot) => slot.groupId === groupId)
-          .flatMap((slot) => slot.selectedSkillIds)
+          .flatMap((slot) => slot.selectedSkillIds),
       );
 
       return defaultCanonicalContent.skills
@@ -1744,8 +1521,8 @@ describe("ChargenWizard profession-group display priority", () => {
               content: defaultCanonicalContent,
               draftView: selectedDraftView,
               skill,
-              skillAccess: selectedSkillAccess
-            }) === groupId || selectedGroupSlotSkillIds.has(skill.id)
+              skillAccess: selectedSkillAccess,
+            }) === groupId || selectedGroupSlotSkillIds.has(skill.id),
         )
         .map((skill) => skill.id);
     };
@@ -1763,7 +1540,7 @@ describe("ChargenWizard profession-group display priority", () => {
       const row = defaultCanonicalContent.societyLevels.find(
         (societyLevel) =>
           societyLevel.professionIds.includes(professionId) &&
-          societyLevel.skillGroupIds.includes(groupId)
+          societyLevel.skillGroupIds.includes(groupId),
       );
 
       expect(row).toBeDefined();
@@ -1776,7 +1553,7 @@ describe("ChargenWizard profession-group display priority", () => {
         content: defaultCanonicalContent,
         professionId,
         societyId: row.societyId,
-        societyLevel: row.societyLevel
+        societyLevel: row.societyLevel,
       });
 
       return defaultCanonicalContent.skillGroups
@@ -1786,44 +1563,48 @@ describe("ChargenWizard profession-group display priority", () => {
             getPlayerFacingSkillBucket({
               id: group.id,
               groupId: group.id,
-              groupIds: [group.id]
-            }) !== "special-access"
+              groupIds: [group.id],
+            }) !== "special-access",
         )
         .map((group) => group.id);
     };
 
-    expect(getPlayerFacingSkillBucket({
-      id: "craft_specialty",
-      groupId: "craft_specialty",
-      groupIds: ["craft_specialty"]
-    })).toBe("craft");
-    expect(getPlayerFacingSkillBucket({
-      id: "craft_specialty_advanced",
-      groupId: "craft_specialty_advanced",
-      groupIds: ["craft_specialty_advanced"]
-    })).toBe("craft");
-    expect(getPlayerFacingSkillBucket({
-      id: "construction_specialty",
-      groupId: "construction_specialty",
-      groupIds: ["construction_specialty"]
-    })).toBe("craft");
+    expect(
+      getPlayerFacingSkillBucket({
+        id: "craft_specialty",
+        groupId: "craft_specialty",
+        groupIds: ["craft_specialty"],
+      }),
+    ).toBe("craft");
+    expect(
+      getPlayerFacingSkillBucket({
+        id: "craft_specialty_advanced",
+        groupId: "craft_specialty_advanced",
+        groupIds: ["craft_specialty_advanced"],
+      }),
+    ).toBe("craft");
+    expect(
+      getPlayerFacingSkillBucket({
+        id: "construction_specialty",
+        groupId: "construction_specialty",
+        groupIds: ["construction_specialty"],
+      }),
+    ).toBe("craft");
 
-    expect(visibleProfessionGroupIdsFor("crafter", "craft_specialty")).toContain(
-      "craft_specialty"
-    );
+    expect(visibleProfessionGroupIdsFor("crafter", "craft_specialty")).toContain("craft_specialty");
     expect(visibleProfessionGroupIdsFor("master_craftsmen", "craft_specialty_advanced")).toContain(
-      "craft_specialty_advanced"
+      "craft_specialty_advanced",
     );
-    expect(visibleProfessionGroupIdsFor("builder_master_mason", "construction_specialty")).toContain(
-      "construction_specialty"
-    );
+    expect(
+      visibleProfessionGroupIdsFor("builder_master_mason", "construction_specialty"),
+    ).toContain("construction_specialty");
   });
 
   it("keeps craft slot candidates in their group choices instead of direct skill rows", () => {
     const masterCraftsmenRow = defaultCanonicalContent.societyLevels.find(
       (societyLevel) =>
         societyLevel.professionIds.includes("master_craftsmen") &&
-        societyLevel.skillGroupIds.includes("craft_specialty_advanced")
+        societyLevel.skillGroupIds.includes("craft_specialty_advanced"),
     );
 
     expect(masterCraftsmenRow).toBeDefined();
@@ -1834,20 +1615,20 @@ describe("ChargenWizard profession-group display priority", () => {
         professionId: "master_craftsmen",
         progression,
         societyId: masterCraftsmenRow!.societyId,
-        societyLevel: masterCraftsmenRow!.societyLevel
+        societyLevel: masterCraftsmenRow!.societyLevel,
       });
       const skillAccess = buildChargenSkillAccessSummary({
         content: defaultCanonicalContent,
         professionId: "master_craftsmen",
         societyId: masterCraftsmenRow!.societyId,
-        societyLevel: masterCraftsmenRow!.societyLevel
+        societyLevel: masterCraftsmenRow!.societyLevel,
       });
       const selectableSkillSummary = buildChargenSelectableSkillSummary({
         content: defaultCanonicalContent,
         professionId: "master_craftsmen",
         progression,
         societyId: masterCraftsmenRow!.societyId,
-        societyLevel: masterCraftsmenRow!.societyLevel
+        societyLevel: masterCraftsmenRow!.societyLevel,
       });
       const groupSlotCandidateSkillIds = getGroupSlotCandidateSkillIds(selectableSkillSummary);
 
@@ -1860,36 +1641,36 @@ describe("ChargenWizard profession-group display priority", () => {
               content: defaultCanonicalContent,
               draftView,
               skill,
-              skillAccess
-            }) === undefined
+              skillAccess,
+            }) === undefined,
         )
         .map((skill) => skill.id);
     };
     const professionProgression = applyProfessionGrants({
       content: defaultCanonicalContent,
-      professionId: "master_craftsmen"
+      professionId: "master_craftsmen",
     });
     const selectableSkillSummary = buildChargenSelectableSkillSummary({
       content: defaultCanonicalContent,
       professionId: "master_craftsmen",
       progression: professionProgression,
       societyId: masterCraftsmenRow!.societyId,
-      societyLevel: masterCraftsmenRow!.societyLevel
+      societyLevel: masterCraftsmenRow!.societyLevel,
     });
     const advancedCraftSlot = selectableSkillSummary.selectionSlots.find(
-      (slot) => slot.groupId === "craft_specialty_advanced"
+      (slot) => slot.groupId === "craft_specialty_advanced",
     );
 
     expect(advancedCraftSlot).toMatchObject({
       chooseCount: 1,
       groupName: "Advanced Craft Specialty",
-      required: true
+      required: true,
     });
     expect(advancedCraftSlot?.candidateSkillIds).toEqual(
-      expect.arrayContaining(["carpentry", "smithing", "stoneworking", "weaving"])
+      expect.arrayContaining(["carpentry", "smithing", "stoneworking", "weaving"]),
     );
     expect(buildDirectSkillIds(professionProgression)).not.toEqual(
-      expect.arrayContaining(["carpentry", "smithing", "stoneworking", "weaving"])
+      expect.arrayContaining(["carpentry", "smithing", "stoneworking", "weaving"]),
     );
 
     const selectedSlotProgression = {
@@ -1901,35 +1682,35 @@ describe("ChargenWizard profession-group display priority", () => {
           {
             groupId: "craft_specialty_advanced",
             selectedSkillIds: ["smithing"],
-            slotId: "advanced_craft_specialty_choices"
-          }
-        ]
-      }
+            slotId: "advanced_craft_specialty_choices",
+          },
+        ],
+      },
     };
     const selectedDraftView = buildChargenDraftView({
       content: defaultCanonicalContent,
       professionId: "master_craftsmen",
       progression: selectedSlotProgression,
       societyId: masterCraftsmenRow!.societyId,
-      societyLevel: masterCraftsmenRow!.societyLevel
+      societyLevel: masterCraftsmenRow!.societyLevel,
     });
     const selectedSkillAccess = buildChargenSkillAccessSummary({
       content: defaultCanonicalContent,
       professionId: "master_craftsmen",
       societyId: masterCraftsmenRow!.societyId,
-      societyLevel: masterCraftsmenRow!.societyLevel
+      societyLevel: masterCraftsmenRow!.societyLevel,
     });
     const selectedSummary = buildChargenSelectableSkillSummary({
       content: defaultCanonicalContent,
       professionId: "master_craftsmen",
       progression: selectedSlotProgression,
       societyId: masterCraftsmenRow!.societyId,
-      societyLevel: masterCraftsmenRow!.societyLevel
+      societyLevel: masterCraftsmenRow!.societyLevel,
     });
     const selectedGroupSlotSkillIds = new Set(
       selectedSummary.selectionSlots
         .filter((slot) => slot.groupId === "craft_specialty_advanced")
-        .flatMap((slot) => slot.selectedSkillIds)
+        .flatMap((slot) => slot.selectedSkillIds),
     );
     const selectedAdvancedCraftSkillIds = defaultCanonicalContent.skills
       .filter(
@@ -1938,18 +1719,15 @@ describe("ChargenWizard profession-group display priority", () => {
             content: defaultCanonicalContent,
             draftView: selectedDraftView,
             skill,
-            skillAccess: selectedSkillAccess
-          }) === "craft_specialty_advanced" ||
-          selectedGroupSlotSkillIds.has(skill.id)
+            skillAccess: selectedSkillAccess,
+          }) === "craft_specialty_advanced" || selectedGroupSlotSkillIds.has(skill.id),
       )
       .map((skill) => skill.id);
 
-    expect(selectedAdvancedCraftSkillIds).toEqual(
-      expect.arrayContaining(["smithing"])
-    );
+    expect(selectedAdvancedCraftSkillIds).toEqual(expect.arrayContaining(["smithing"]));
     expect(selectedAdvancedCraftSkillIds).not.toContain("carpentry");
     expect(buildDirectSkillIds(selectedSlotProgression)).not.toEqual(
-      expect.arrayContaining(["carpentry", "smithing"])
+      expect.arrayContaining(["carpentry", "smithing"]),
     );
   });
 });
@@ -1963,25 +1741,25 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: createChargenProgression(),
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     const rows = buildConcreteLanguageBrowseRows({
       content: { ...languageContent, languages: canonicalLanguages },
       draftView,
       profile: undefined,
-      progression: createChargenProgression()
+      progression: createChargenProgression(),
     });
     expect(rows.map((row) => row.displayName)).toEqual([
       "Language (Common)",
       "Language (Old Common)",
-      "Language (Phoenician)"
+      "Language (Phoenician)",
     ]);
     expect(rows.map((row) => row.displayName)).not.toContain("Language");
     expect(rows.map((row) => row.targetLanguageName)).toEqual([
       "Common",
       "Old Common",
-      "Phoenician"
+      "Phoenician",
     ]);
     expect(rows.every((row) => row.skill.category === "ordinary")).toBe(true);
     expect(rows.every((row) => row.skill.categoryId === "language")).toBe(true);
@@ -1992,8 +1770,8 @@ describe("ChargenWizard concrete language rows", () => {
     const canonicalLanguageContent = {
       ...languageContent,
       languages: defaultCanonicalContent.languages.filter((language) =>
-        ["Common", "Old Common", "Phoenician"].includes(language.name)
-      )
+        ["Common", "Old Common", "Phoenician"].includes(language.name),
+      ),
     };
     const draftView = buildChargenDraftView({
       civilizationId: "lankhmar",
@@ -2002,25 +1780,25 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: createChargenProgression(),
       societyId: "imperial_classical_high_civ",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     const rows = buildConcreteLanguageBrowseRows({
       content: canonicalLanguageContent,
       draftView,
       profile: undefined,
-      progression: createChargenProgression()
+      progression: createChargenProgression(),
     });
 
     expect(rows.map((row) => row.displayName)).toEqual([
       "Language (Common)",
       "Language (Old Common)",
-      "Language (Phoenician)"
+      "Language (Phoenician)",
     ]);
     expect(
       rows.some((row) =>
-        row.displayName.includes("Imperial classical / Hellenistic-Roman high civilization")
-      )
+        row.displayName.includes("Imperial classical / Hellenistic-Roman high civilization"),
+      ),
     ).toBe(false);
   });
 
@@ -2034,7 +1812,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyLevel: 1,
       targetId: "language",
       targetLanguageName: "Old Common",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(purchased.error).toBeUndefined();
@@ -2046,7 +1824,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: purchased.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const languageSkill = languageContent.skills.find((skill) => skill.id === "language");
 
@@ -2057,14 +1835,14 @@ describe("ChargenWizard concrete language rows", () => {
       draftView,
       profile: undefined,
       skill: languageSkill!,
-      targetLanguageName: "Old Common"
+      targetLanguageName: "Old Common",
     });
     const phoenicianMetrics = getSkillAllocationMetrics({
       content: { ...languageContent, languages: canonicalLanguages },
       draftView,
       profile: undefined,
       skill: languageSkill!,
-      targetLanguageName: "Phoenician"
+      targetLanguageName: "Phoenician",
     });
     expect(oldCommonMetrics.flexibleXp).toBe(1);
     expect(oldCommonMetrics.totalXp).toBe(1);
@@ -2081,7 +1859,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "etiquette",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(firstPurchase.error).toBeUndefined();
@@ -2092,7 +1870,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: firstPurchase.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const etiquetteSkill = hiddenOtherSkillContent.skills.find((skill) => skill.id === "etiquette");
 
@@ -2103,16 +1881,16 @@ describe("ChargenWizard concrete language rows", () => {
         draftView: firstDraftView,
         professionId: "attendant",
         societyId: "glantri",
-        societyLevel: 1
-      })
+        societyLevel: 1,
+      }),
     ).toContain("etiquette");
     expect(
       getSkillAllocationMetrics({
         content: hiddenOtherSkillContent,
         draftView: firstDraftView,
         profile: undefined,
-        skill: etiquetteSkill!
-      }).totalXp
+        skill: etiquetteSkill!,
+      }).totalXp,
     ).toBe(1);
 
     const secondPurchase = allocateChargenPoint({
@@ -2123,7 +1901,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "etiquette",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(secondPurchase.error).toBeUndefined();
@@ -2134,7 +1912,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: secondPurchase.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2143,16 +1921,16 @@ describe("ChargenWizard concrete language rows", () => {
         draftView: secondDraftView,
         professionId: "attendant",
         societyId: "glantri",
-        societyLevel: 1
-      })
+        societyLevel: 1,
+      }),
     ).toContain("etiquette");
     expect(
       getSkillAllocationMetrics({
         content: hiddenOtherSkillContent,
         draftView: secondDraftView,
         profile: undefined,
-        skill: etiquetteSkill!
-      }).totalXp
+        skill: etiquetteSkill!,
+      }).totalXp,
     ).toBe(2);
   });
 
@@ -2166,7 +1944,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "etiquette",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(firstPurchase.error).toBeUndefined();
@@ -2177,14 +1955,16 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: firstPurchase.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
-    const etiquetteSkill = directGrantedSkillContent.skills.find((skill) => skill.id === "etiquette");
+    const etiquetteSkill = directGrantedSkillContent.skills.find(
+      (skill) => skill.id === "etiquette",
+    );
     const skillAccess = buildChargenSkillAccessSummary({
       content: directGrantedSkillContent,
       professionId: "envoy",
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(etiquetteSkill).toBeDefined();
@@ -2194,16 +1974,16 @@ describe("ChargenWizard concrete language rows", () => {
         content: directGrantedSkillContent,
         draftView: firstDraftView,
         skill: etiquetteSkill!,
-        skillAccess
-      })
+        skillAccess,
+      }),
     ).toBeUndefined();
     expect(
       getSkillAllocationMetrics({
         content: directGrantedSkillContent,
         draftView: firstDraftView,
         profile: languageProfile,
-        skill: etiquetteSkill!
-      }).totalXp
+        skill: etiquetteSkill!,
+      }).totalXp,
     ).toBe(1);
 
     const secondPurchase = allocateChargenPoint({
@@ -2214,7 +1994,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "etiquette",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(secondPurchase.error).toBeUndefined();
@@ -2225,7 +2005,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: secondPurchase.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2233,16 +2013,16 @@ describe("ChargenWizard concrete language rows", () => {
         content: directGrantedSkillContent,
         draftView: secondDraftView,
         skill: etiquetteSkill!,
-        skillAccess
-      })
+        skillAccess,
+      }),
     ).toBeUndefined();
     expect(
       getSkillAllocationMetrics({
         content: directGrantedSkillContent,
         draftView: secondDraftView,
         profile: languageProfile,
-        skill: etiquetteSkill!
-      }).totalXp
+        skill: etiquetteSkill!,
+      }).totalXp,
     ).toBe(2);
   });
 
@@ -2256,13 +2036,19 @@ describe("ChargenWizard concrete language rows", () => {
           groupId: "basic_awareness",
           primaryRanks: 2,
           ranks: 2,
-          secondaryRanks: 0
-        }
-      ]
+          secondaryRanks: 0,
+        },
+      ],
     };
-    const perception = overlappingOfficerTrainingContent.skills.find((skill) => skill.id === "perception");
-    const tactics = overlappingOfficerTrainingContent.skills.find((skill) => skill.id === "tactics");
-    const captaincy = overlappingOfficerTrainingContent.skills.find((skill) => skill.id === "captaincy");
+    const perception = overlappingOfficerTrainingContent.skills.find(
+      (skill) => skill.id === "perception",
+    );
+    const tactics = overlappingOfficerTrainingContent.skills.find(
+      (skill) => skill.id === "tactics",
+    );
+    const captaincy = overlappingOfficerTrainingContent.skills.find(
+      (skill) => skill.id === "captaincy",
+    );
 
     expect(perception).toBeDefined();
     expect(tactics).toBeDefined();
@@ -2274,7 +2060,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: startingProgression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2282,8 +2068,8 @@ describe("ChargenWizard concrete language rows", () => {
         content: overlappingOfficerTrainingContent,
         draftView: initialDraftView,
         profile: languageProfile,
-        skill: perception!
-      }).groupXp
+        skill: perception!,
+      }).groupXp,
     ).toBeGreaterThan(0);
     expect(
       getGroupScopedSkillAllocationMetrics({
@@ -2292,8 +2078,8 @@ describe("ChargenWizard concrete language rows", () => {
         groupId: "officer_training",
         profile: languageProfile,
         progression: startingProgression,
-        skill: perception!
-      }).groupXp
+        skill: perception!,
+      }).groupXp,
     ).toBe(0);
 
     const afterBuy = allocateChargenPoint({
@@ -2303,7 +2089,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "officer_training",
-      targetType: "group"
+      targetType: "group",
     });
 
     expect(afterBuy.error).toBeUndefined();
@@ -2314,10 +2100,10 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: afterBuy.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const officerGroupAfterBuy = purchasedDraftView.groups.find(
-      (group) => group.groupId === "officer_training"
+      (group) => group.groupId === "officer_training",
     );
 
     expect(officerGroupAfterBuy?.totalRanks).toBe(1);
@@ -2330,8 +2116,8 @@ describe("ChargenWizard concrete language rows", () => {
           groupId: "officer_training",
           profile: languageProfile,
           progression: afterBuy.progression,
-          skill
-        }).groupXp
+          skill,
+        }).groupXp,
       ).toBe(officerGroupAfterBuy?.groupLevel ?? 0);
     }
 
@@ -2342,7 +2128,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "officer_training",
-      targetType: "group"
+      targetType: "group",
     });
 
     expect(afterRemove.error).toBeUndefined();
@@ -2353,7 +2139,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: languageProfile,
       progression: afterRemove.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     for (const skill of [perception!, tactics!, captaincy!]) {
@@ -2364,8 +2150,8 @@ describe("ChargenWizard concrete language rows", () => {
           groupId: "officer_training",
           profile: languageProfile,
           progression: afterRemove.progression,
-          skill
-        }).groupXp
+          skill,
+        }).groupXp,
       ).toBe(0);
     }
     expect(
@@ -2373,8 +2159,8 @@ describe("ChargenWizard concrete language rows", () => {
         content: overlappingOfficerTrainingContent,
         draftView: removedDraftView,
         profile: languageProfile,
-        skill: perception!
-      }).groupXp
+        skill: perception!,
+      }).groupXp,
     ).toBeGreaterThan(0);
   });
 
@@ -2397,15 +2183,15 @@ describe("ChargenWizard concrete language rows", () => {
             primaryRanks: 0,
             ranks: 2,
             secondaryRanks: 0,
-            skillId: "language"
-          }
-        ]
+            skillId: "language",
+          },
+        ],
       },
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
     const languageSkill = commonMotherTongueLanguageContent.skills.find(
-      (skill) => skill.id === "language"
+      (skill) => skill.id === "language",
     );
 
     expect(languageSkill).toBeDefined();
@@ -2415,21 +2201,21 @@ describe("ChargenWizard concrete language rows", () => {
       draftView,
       profile: undefined,
       skill: languageSkill!,
-      targetLanguageName: "Common"
+      targetLanguageName: "Common",
     });
     const oldCommonMetrics = getSkillAllocationMetrics({
       content: commonMotherTongueLanguageContent,
       draftView,
       profile: undefined,
       skill: languageSkill!,
-      targetLanguageName: "Old Common"
+      targetLanguageName: "Old Common",
     });
     const phoenicianMetrics = getSkillAllocationMetrics({
       content: commonMotherTongueLanguageContent,
       draftView,
       profile: undefined,
       skill: languageSkill!,
-      targetLanguageName: "Phoenician"
+      targetLanguageName: "Phoenician",
     });
 
     expect(commonMetrics.totalXp).toBe(11);
@@ -2445,7 +2231,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyLevel: 1,
       targetId: "language",
       targetLanguageName: "Phoenician",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(firstPhoenicianPurchase.error).toBeUndefined();
@@ -2457,7 +2243,7 @@ describe("ChargenWizard concrete language rows", () => {
       profile: education11LanguageProfile,
       progression: firstPhoenicianPurchase.progression,
       societyId: "glantri",
-      societyLevel: 1
+      societyLevel: 1,
     });
 
     expect(
@@ -2466,8 +2252,8 @@ describe("ChargenWizard concrete language rows", () => {
         draftView: purchasedDraftView,
         profile: undefined,
         skill: languageSkill!,
-        targetLanguageName: "Phoenician"
-      }).totalXp
+        targetLanguageName: "Phoenician",
+      }).totalXp,
     ).toBe(1);
   });
 
@@ -2475,7 +2261,7 @@ describe("ChargenWizard concrete language rows", () => {
     const pricingContent = validateCanonicalContent({
       skillGroups: [
         { id: "fieldcraft", name: "Fieldcraft", sortOrder: 1 },
-        { id: "courtly", name: "Courtly", sortOrder: 2 }
+        { id: "courtly", name: "Courtly", sortOrder: 2 },
       ],
       skills: [
         {
@@ -2489,7 +2275,7 @@ describe("ChargenWizard concrete language rows", () => {
           linkedStats: ["dex"],
           name: "Stealth",
           requiresLiteracy: "no",
-          sortOrder: 1
+          sortOrder: 1,
         },
         {
           allowsSpecializations: false,
@@ -2502,7 +2288,7 @@ describe("ChargenWizard concrete language rows", () => {
           linkedStats: ["int"],
           name: "Tracking",
           requiresLiteracy: "no",
-          sortOrder: 2
+          sortOrder: 2,
         },
         {
           allowsSpecializations: false,
@@ -2515,7 +2301,7 @@ describe("ChargenWizard concrete language rows", () => {
           linkedStats: ["cha"],
           name: "Etiquette",
           requiresLiteracy: "no",
-          sortOrder: 3
+          sortOrder: 3,
         },
         {
           allowsSpecializations: false,
@@ -2528,8 +2314,8 @@ describe("ChargenWizard concrete language rows", () => {
           linkedStats: ["int"],
           name: "Streetwise",
           requiresLiteracy: "no",
-          sortOrder: 4
-        }
+          sortOrder: 4,
+        },
       ],
       specializations: [],
       professionFamilies: [{ id: "scout", name: "Scout" }],
@@ -2539,10 +2325,12 @@ describe("ChargenWizard concrete language rows", () => {
           isCore: true,
           professionId: "scout",
           scope: "family",
-          skillGroupId: "fieldcraft"
-        }
+          skillGroupId: "fieldcraft",
+        },
       ],
-      professions: [{ familyId: "scout", id: "pathfinder", name: "Pathfinder", subtypeName: "Pathfinder" }],
+      professions: [
+        { familyId: "scout", id: "pathfinder", name: "Pathfinder", subtypeName: "Pathfinder" },
+      ],
       societies: [],
       societyBandSkillAccess: [],
       societyLevels: [
@@ -2553,12 +2341,36 @@ describe("ChargenWizard concrete language rows", () => {
           socialClass: "Common",
           societyId: "glantri",
           societyLevel: 1,
-          societyName: "Glantri"
+          societyName: "Glantri",
         },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 2, societyName: "Glantri" },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 3, societyName: "Glantri" },
-        { professionIds: [], skillGroupIds: [], skillIds: [], socialClass: "Common", societyId: "glantri", societyLevel: 4, societyName: "Glantri" }
-      ]
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 2,
+          societyName: "Glantri",
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 3,
+          societyName: "Glantri",
+        },
+        {
+          professionIds: [],
+          skillGroupIds: [],
+          skillIds: [],
+          socialClass: "Common",
+          societyId: "glantri",
+          societyLevel: 4,
+          societyName: "Glantri",
+        },
+      ],
     });
 
     const normalAccessPurchase = allocateChargenPoint({
@@ -2569,7 +2381,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "stealth",
-      targetType: "skill"
+      targetType: "skill",
     });
     const outsideOrdinaryPurchase = allocateChargenPoint({
       content: pricingContent,
@@ -2579,7 +2391,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "etiquette",
-      targetType: "skill"
+      targetType: "skill",
     });
     const outsideSecondaryPurchase = allocateChargenPoint({
       content: pricingContent,
@@ -2589,7 +2401,7 @@ describe("ChargenWizard concrete language rows", () => {
       societyId: "glantri",
       societyLevel: 1,
       targetId: "streetwise",
-      targetType: "skill"
+      targetType: "skill",
     });
 
     expect(normalAccessPurchase.spentCost).toBe(2);
