@@ -840,10 +840,20 @@ export function buildSkillSystemAiExport(
 export function buildSkillSystemNote(): string {
   return `# Glantri Skill System AI Export Notes
 
+## Regenerating the export
+
+\`glantri-skill-system-export.json\` is gitignored (~190k lines). Regenerate locally with:
+
+\`\`\`bash
+pnpm --filter @glantri/content export:skill-system-ai
+\`\`\`
+
 ## Purpose
+
 This export is for AI review/modeling and possible later import proposals. It is not canonical content by itself, and generated suggestions must not be reimported without validation.
 
 ## Society/Class Model
+
 - Society stage/level uses a 1-6 scale.
 - Social class band uses a 1-4 scale.
 - Class 4 is elite/high-status.
@@ -851,18 +861,21 @@ This export is for AI review/modeling and possible later import proposals. It is
 - Class 3 should support upward mobility.
 
 ## Skill Model
+
 - Ordinary skills are the main skill rows used for broad learned capability.
 - Secondary skills are narrower or more contextual skills.
 - Specializations are not normal skill choices; they depend on a parent skill and minimum parent/group level.
 - Concrete languages are materialized rather than relying on a raw generic Language skill.
 
 ## Skill-Group Economics
+
 - Learning Group price: ceil(2/3 × weighted useful competence), charged ONCE for the complete purchased bundle — never per group and never per rank. Rule decision 0011 retired the earlier floor(0.6 x total individual cost) group scalar; packages/rules-engine/src/skills/learningGroupAcquisition.ts is the single shared calculation.
 - Active group skills = fixed group skills + selected slot skills.
 - Unselected slot candidates do not count.
 - Normal groups should usually represent about 6+ weighted skill points unless deliberately narrow/allowed.
 
 ## Skill-Group Guardrails
+
 - Dodge and Parry must not be taught alone.
 - Any group containing Dodge or Parry must include melee weapon context.
 - Combat support groups such as Defensive Soldiering and Veteran Soldiering should contain non-combat/military support skills, not ordinary weapon/Dodge/Parry fundamentals.
@@ -870,6 +883,7 @@ This export is for AI review/modeling and possible later import proposals. It is
 - Longbow is a base combat Skill related to Bow by an authored qualitative "helpful" dependency, with no numeric transfer in either direction. It is taught by F41 (with Hunting) and is a candidate in the M04 and M05 military missile slots, but it is deliberately NOT a candidate in the legacy basic/advanced missile training slots.
 
 ## Profession/Package Principles
+
 - Profession reach measures unique skills reachable from granted groups plus direct grants not already covered by groups.
 - Avoid isolated combat skills in non-combat professions.
 - Use coherent packages.
@@ -878,10 +892,12 @@ This export is for AI review/modeling and possible later import proposals. It is
 - Low-class playable paths are intentional.
 
 ## Craft/Choice-Slot Model
+
 - Craft professions can use common social/business/technical training plus craft choice slots.
 - Master craft should usually choose craft specialties rather than automatically gaining all crafts.
 
 ## Import Caution
+
 - Do not reimport generated suggestions without validation.
 - Preserve stable IDs where possible.
 - Retired IDs/compatibility aliases may exist.
@@ -895,42 +911,55 @@ export function buildSkillSystemSchemaNote(): string {
 This document describes the generated JSON in plain English. It is intentionally not a formal JSON Schema.
 
 ## metadata
+
 Export version, generation timestamp, source path, optional git commit, and import-safety warning.
 
 ## civilizations
+
 Civilization/culture records with display names, descriptions, linked society model, society stage, and language names.
 
 ## societies
+
 Society-model records. \`societyLevel\` / \`stage\` is the 1-6 society-stage scale. \`classBands\` are the social class rows available inside that society.
 
 ## socialClasses
+
 Flattened society class-band records. \`classBand\` is the 1-4 social class band, not the society stage. These rows include education values, profession IDs, skill group IDs, skill IDs, and notes where available.
 
 ## skills
+
 Skill definitions with category, player-facing category, linked stats, description, group membership, specialization-only marker, dependencies, literacy requirement, and admin notes.
 
 ## skillGroups
+
 Skill group definitions. \`fixedSkills\` are always part of the group. \`selectionSlots\` describe choices. \`allReachableSkillIds\` includes fixed skills plus slot candidates. Economics explain fixed and slot-dependent cost data.
 
 ## specializations
+
 Specialization definitions keyed to parent skills. These are not selectable as ordinary skills.
 
 ## professions
+
 Profession subtype definitions with family, effective package, direct grants, reach metrics, availability, and warnings.
 
 ## professionFamilies
+
 Profession family definitions and their profession subtype IDs.
 
 ## professionPackages
+
 Admin-facing package view: core/optional groups, direct grants, reachable skills, and group fan details.
 
 ## availability
+
 Flattened profession availability by profession, civilization, society, society stage, and class band. Some civilization fields may be null when availability exists at society-model level without a specific civilization.
 
 ## relationships
+
 Explicit graph-style records for AI modeling. Each row has a \`type\`, \`from\`, \`to\`, and \`metadata\`.
 
 Relationship types include:
+
 - \`skill_in_group\`
 - \`group_has_selection_slot\`
 - \`slot_can_select_skill\`
@@ -943,15 +972,19 @@ Relationship types include:
 - \`derived_skill_relationship\`
 
 ## derivedRules
+
 Readable derived-grant and melee cross-training rules. These describe rule sources and targets, factors/thresholds where available, and whether the relationship contributes derived XP.
 
 ## adminMetrics
+
 \`professionReach\` contains unique/group/direct-only reach metrics. \`groupWeightedValues\` contains weighted group values and small-group exceptions. \`validationWarnings\` contains non-blocking content warnings.
 `;
 }
 
 export function writeSkillSystemAiExport(outputDir = defaultOutputDir): {
   exportPath: string;
+  notePath: string;
+  schemaPath: string;
 } {
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -960,11 +993,21 @@ export function writeSkillSystemAiExport(outputDir = defaultOutputDir): {
 
   fs.writeFileSync(exportPath, `${JSON.stringify(exportData, null, 2)}\n`, "utf8");
 
-  return { exportPath };
+  /* Issue #394: the tracked Markdown companions are generated, not hand-maintained. The builders
+     above are the single source of truth, so a hand-edit to either tracked file is caught by the
+     regeneration-parity test rather than silently persisting. */
+  const notePath = path.join(outputDir, "glantri-skill-system-note.md");
+  const schemaPath = path.join(outputDir, "glantri-skill-system-schema.md");
+
+  fs.writeFileSync(notePath, buildSkillSystemNote(), "utf8");
+  fs.writeFileSync(schemaPath, buildSkillSystemSchemaNote(), "utf8");
+
+  return { exportPath, notePath, schemaPath };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const paths = writeSkillSystemAiExport();
   // Keep script output stable and concise for CI/log review.
-  console.log(`Wrote ${path.relative(repoRoot, paths.exportPath)}`);
+  for (const written of [paths.exportPath, paths.notePath, paths.schemaPath])
+    console.log(`Wrote ${path.relative(repoRoot, written)}`);
 }

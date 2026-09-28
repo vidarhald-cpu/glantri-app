@@ -1,14 +1,23 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import {
   buildSkillSystemAiExport,
   buildSkillSystemNote,
+  buildSkillSystemSchemaNote,
   writeSkillSystemAiExport,
 } from "./exportSkillSystemForAi";
+
+const trackedExportDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../exports/skill-system-ai",
+);
+const trackedNotePath = path.join(trackedExportDir, "glantri-skill-system-note.md");
+const trackedSchemaPath = path.join(trackedExportDir, "glantri-skill-system-schema.md");
 
 describe("skill-system AI export", () => {
   it("builds the required top-level sections", () => {
@@ -70,24 +79,36 @@ describe("skill-system AI export", () => {
     expect(buildSkillSystemNote()).toContain("Rule decision 0011 retired");
   });
 
-  it("writes only the generated JSON and preserves durable documentation", () => {
+  /* Issue #394: the previous test asserted the tracked Markdown companions were left untouched,
+     which guarded them against changing rather than against becoming wrong. The guard now points
+     the other way: the tracked files must be byte-reproducible from the in-code builders, so a
+     hand-edit to either one fails the suite. */
+  it("regenerates the tracked Markdown companions byte-identically", () => {
     const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), "glantri-skill-export-"));
-    const notePath = path.join(outputDir, "glantri-skill-system-note.md");
-    const schemaPath = path.join(outputDir, "glantri-skill-system-schema.md");
-    const note = "tracked regeneration instructions\n";
-    const schema = "tracked schema notes\n";
 
     try {
-      fs.writeFileSync(notePath, note, "utf8");
-      fs.writeFileSync(schemaPath, schema, "utf8");
-
-      const { exportPath } = writeSkillSystemAiExport(outputDir);
+      const { exportPath, notePath, schemaPath } = writeSkillSystemAiExport(outputDir);
 
       expect(fs.existsSync(exportPath)).toBe(true);
-      expect(fs.readFileSync(notePath, "utf8")).toBe(note);
-      expect(fs.readFileSync(schemaPath, "utf8")).toBe(schema);
+
+      for (const [regenerated, tracked] of [
+        [notePath, trackedNotePath],
+        [schemaPath, trackedSchemaPath],
+      ]) {
+        expect(fs.readFileSync(regenerated, "utf8")).toBe(fs.readFileSync(tracked, "utf8"));
+      }
     } finally {
       fs.rmSync(outputDir, { recursive: true });
     }
+  });
+
+  it("builds byte-identical output for identical injected metadata", () => {
+    const options = { appCommit: "test-commit", generatedAt: "2026-05-11T00:00:00.000Z" };
+
+    expect(JSON.stringify(buildSkillSystemAiExport(options), null, 2)).toBe(
+      JSON.stringify(buildSkillSystemAiExport(options), null, 2),
+    );
+    expect(buildSkillSystemNote()).toBe(buildSkillSystemNote());
+    expect(buildSkillSystemSchemaNote()).toBe(buildSkillSystemSchemaNote());
   });
 });
