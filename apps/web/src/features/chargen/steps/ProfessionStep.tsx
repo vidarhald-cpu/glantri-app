@@ -1,5 +1,8 @@
-import { TargetPackageDetails } from "../components/TargetPackageDetails";
-import { getBadgeStyle, formatPreviewList } from "../chargenWizardHelpers";
+import {
+  ProfessionExplanation,
+  ProfessionTrainingOverview,
+} from "../components/ProfessionTraining";
+import { getBadgeStyle } from "../chargenWizardHelpers";
 import type { useChargenWizardState } from "../useChargenWizardState";
 
 type State = ReturnType<typeof useChargenWizardState>;
@@ -8,14 +11,15 @@ interface ProfessionStepProps {
   activeProfessionPreviewId: State["activeProfessionPreviewId"];
   availableProfessions: State["availableProfessions"];
   handleProfessionChange: State["handleProfessionChange"];
-  professionFamilyFilter: State["professionFamilyFilter"];
-  professionFamilyOptions: State["professionFamilyOptions"];
+  professionBrowseModel: State["professionBrowseModel"];
+  professionCategoryFilter: State["professionCategoryFilter"];
+  professionCategoryOptions: State["professionCategoryOptions"];
   professionSearch: State["professionSearch"];
   selectedProfessionCard: State["selectedProfessionCard"];
   selectedProfessionId: State["selectedProfessionId"];
   selectedSociety: State["selectedSociety"];
   selectedSocietyAccess: State["selectedSocietyAccess"];
-  setProfessionFamilyFilter: State["setProfessionFamilyFilter"];
+  setProfessionCategoryFilter: State["setProfessionCategoryFilter"];
   setProfessionSearch: State["setProfessionSearch"];
   setShowProfessionChooser: State["setShowProfessionChooser"];
   showProfessionChooser: State["showProfessionChooser"];
@@ -23,24 +27,44 @@ interface ProfessionStepProps {
   visibleProfessionCards: State["visibleProfessionCards"];
 }
 
+const panelStyle = {
+  background: "#f6f5ef",
+  border: "1px solid #d9ddd8",
+  borderRadius: 12,
+  padding: "1rem",
+} as const;
+
+/**
+ * Step 5 — choose a Profession, and understand it before any mechanics appear.
+ *
+ * The order is #372 section 1 and contract section 10.1: the full reader description, then what
+ * the Profession can train, then the training routes and the Skills they teach. The detailed
+ * acquisition controls live in step 6 and read the same canonical model, so a player never has to
+ * re-learn the structure between the two steps.
+ */
 export function ProfessionStep({
   activeProfessionPreviewId,
   availableProfessions,
   handleProfessionChange,
-  professionFamilyFilter,
-  professionFamilyOptions,
+  professionBrowseModel,
+  professionCategoryFilter,
+  professionCategoryOptions,
   professionSearch,
   selectedProfessionCard,
   selectedProfessionId,
   selectedSociety,
   selectedSocietyAccess,
-  setProfessionFamilyFilter,
+  setProfessionCategoryFilter,
   setProfessionSearch,
   setShowProfessionChooser,
   showProfessionChooser,
   toggleProfessionPreview,
   visibleProfessionCards,
 }: ProfessionStepProps) {
+  const activeCategory = professionCategoryOptions.find(
+    (category) => category.id === professionCategoryFilter,
+  );
+
   return (
     <section
       style={{
@@ -51,23 +75,14 @@ export function ProfessionStep({
     >
       <h2 style={{ margin: 0 }}>5. Choose profession</h2>
       <div style={{ fontSize: "0.95rem" }}>
-        Choose a Profession or its explicit track. Inspect its training opportunities before
-        selecting; purchases use your existing points.
+        A Profession is the working life your Character has been trained into. Read what it does and
+        what it can teach, then choose. Choosing one grants no ranks and spends no points.
       </div>
       <div style={{ display: "grid", gap: "0.75rem" }}>
         {availableProfessions.length > 0 ? (
           <>
             {selectedProfessionCard && !showProfessionChooser ? (
-              <section
-                style={{
-                  background: "#f6f5ef",
-                  border: "1px solid #d9ddd8",
-                  borderRadius: 12,
-                  display: "grid",
-                  gap: "0.75rem",
-                  padding: "1rem",
-                }}
-              >
+              <section style={{ ...panelStyle, display: "grid", gap: "0.9rem" }}>
                 <div
                   style={{
                     alignItems: "start",
@@ -76,7 +91,7 @@ export function ProfessionStep({
                     gridTemplateColumns: "minmax(0, 1fr) auto",
                   }}
                 >
-                  <div style={{ display: "grid", gap: "0.35rem" }}>
+                  <div style={{ display: "grid", gap: "0.45rem" }}>
                     <div
                       style={{
                         alignItems: "center",
@@ -86,91 +101,77 @@ export function ProfessionStep({
                       }}
                     >
                       <strong>{selectedProfessionCard.subtypeName}</strong>
-                      <span style={getBadgeStyle()}>{selectedProfessionCard.familyName}</span>
+                      {selectedProfessionCard.categoryName ? (
+                        <span style={getBadgeStyle()}>{selectedProfessionCard.categoryName}</span>
+                      ) : null}
+                      {selectedProfessionCard.hasLiteracyFoundation ? (
+                        <span style={getBadgeStyle({ muted: true })}>Literacy matters here</span>
+                      ) : null}
                     </div>
-                    <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                      {selectedProfessionCard.description ??
-                        selectedProfessionCard.familyDescription ??
-                        ""}
-                    </div>
+                    {/* 1. Explain the occupation. */}
+                    {selectedProfessionCard.browse ? (
+                      <ProfessionExplanation profession={selectedProfessionCard.browse} />
+                    ) : (
+                      <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                        {selectedProfessionCard.description ??
+                          selectedProfessionCard.familyDescription ??
+                          ""}
+                      </div>
+                    )}
                   </div>
                   <button onClick={() => setShowProfessionChooser(true)} type="button">
                     Change profession
                   </button>
                 </div>
-                <TargetPackageDetails professionId={selectedProfessionCard.id} />
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                  <span style={getBadgeStyle({ muted: true })}>
-                    Core reach {selectedProfessionCard.summary.totalEffectiveCoreReachableSkills}
-                  </span>
-                  <span style={getBadgeStyle({ muted: true })}>
-                    Favored reach{" "}
-                    {selectedProfessionCard.summary.totalEffectiveFavoredReachableSkills}
-                  </span>
-                  <span style={getBadgeStyle({ muted: true })}>
-                    Included training packages{" "}
-                    {selectedProfessionCard.normalAccessGroupNames.length}
-                  </span>
-                  {selectedProfessionCard.hasLiteracyFoundation ? (
-                    <span style={getBadgeStyle()}>Literacy matters here</span>
-                  ) : null}
-                </div>
-                <div style={{ display: "grid", gap: "0.35rem", fontSize: "0.9rem" }}>
-                  <div>
-                    Included training packages:{" "}
-                    {formatPreviewList(selectedProfessionCard.normalAccessGroupNames)}
-                  </div>
-                  <div>
-                    Favored direct skills worth watching:{" "}
-                    {formatPreviewList(selectedProfessionCard.favoredDirectOnlySkillNames)}
-                  </div>
-                  {selectedProfessionCard.hasLiteracyFoundation ? (
-                    <div>
-                      Literacy foundation: this profession path reaches{" "}
-                      {selectedProfessionCard.literacyGatedReachableSkillCount} literacy-linked
-                      skill
-                      {selectedProfessionCard.literacyGatedReachableSkillCount === 1 ? "" : "s"}.
-                    </div>
-                  ) : null}
-                </div>
+                {/* 2. What it can train, then 3. how it trains it. */}
+                {selectedProfessionCard.browse ? (
+                  <ProfessionTrainingOverview
+                    model={professionBrowseModel}
+                    profession={selectedProfessionCard.browse}
+                  />
+                ) : null}
               </section>
             ) : (
               <>
                 <div
                   style={{
+                    ...panelStyle,
                     alignItems: "end",
-                    background: "#f6f5ef",
-                    border: "1px solid #d9ddd8",
-                    borderRadius: 12,
                     display: "grid",
                     gap: "0.75rem",
                     gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
-                    padding: "1rem",
                   }}
                 >
                   <label style={{ display: "grid", gap: "0.35rem" }}>
                     <span>Search professions</span>
                     <input
                       onChange={(event) => setProfessionSearch(event.target.value)}
-                      placeholder="Search by subtype, family, or notes"
+                      placeholder="Search by name, kind of work, or what it does"
                       type="search"
                       value={professionSearch}
                     />
                   </label>
+                  {/* The approved browsing roster (rule decision 0012). It narrows the list; it
+                      grants nothing and changes no Profession. */}
                   <label style={{ display: "grid", gap: "0.35rem" }}>
-                    <span>Family</span>
+                    <span>Kind of work</span>
                     <select
-                      onChange={(event) => setProfessionFamilyFilter(event.target.value)}
-                      value={professionFamilyFilter}
+                      onChange={(event) => setProfessionCategoryFilter(event.target.value)}
+                      value={professionCategoryFilter}
                     >
-                      <option value="all">All families</option>
-                      {professionFamilyOptions.map((familyName) => (
-                        <option key={familyName} value={familyName}>
-                          {familyName}
+                      <option value="all">Every kind of work</option>
+                      {professionCategoryOptions.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name} ({category.count})
                         </option>
                       ))}
                     </select>
                   </label>
+                  {activeCategory ? (
+                    <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+                      {activeCategory.belongsHere}
+                    </div>
+                  ) : null}
                 </div>
 
                 {visibleProfessionCards.length > 0 ? (
@@ -215,29 +216,15 @@ export function ProfessionStep({
                                 type="radio"
                               />
                               <strong>{profession.subtypeName}</strong>
-                              <span style={getBadgeStyle()}>{profession.familyName}</span>
+                              {profession.categoryName ? (
+                                <span style={getBadgeStyle()}>{profession.categoryName}</span>
+                              ) : null}
                               {selectedProfessionId === profession.id ? (
                                 <span style={getBadgeStyle()}>Selected</span>
                               ) : null}
                             </label>
                             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                               {profession.description ?? profession.familyDescription ?? ""}
-                            </div>
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                              <span style={getBadgeStyle({ muted: true })}>
-                                Core reach {profession.summary.totalEffectiveCoreReachableSkills}
-                              </span>
-                              <span style={getBadgeStyle({ muted: true })}>
-                                Favored reach{" "}
-                                {profession.summary.totalEffectiveFavoredReachableSkills}
-                              </span>
-                              <span style={getBadgeStyle({ muted: true })}>
-                                Included training packages{" "}
-                                {profession.normalAccessGroupNames.length}
-                              </span>
-                              {profession.hasLiteracyFoundation ? (
-                                <span style={getBadgeStyle()}>Literacy matters here</span>
-                              ) : null}
                             </div>
                           </div>
 
@@ -256,103 +243,39 @@ export function ProfessionStep({
                               border: "1px solid #e7e2d7",
                               borderRadius: 10,
                               display: "grid",
-                              gap: "0.75rem",
+                              gap: "0.9rem",
                               padding: "1rem",
                             }}
                           >
-                            <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                              <TargetPackageDetails professionId={profession.id} />
-                              Skill areas organize the allocation view. Inside each area, you may
-                              have included training packages, and those packages open into the
-                              actual skills you can raise.
-                            </div>
-                            <div style={{ display: "grid", gap: "0.35rem" }}>
-                              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                                <strong>Profession access</strong>
-                                <span style={getBadgeStyle()}>No automatic grants</span>
+                            {profession.browse ? (
+                              <>
+                                <ProfessionExplanation profession={profession.browse} />
+                                <ProfessionTrainingOverview
+                                  model={professionBrowseModel}
+                                  profession={profession.browse}
+                                  showGroupProse={false}
+                                />
+                              </>
+                            ) : (
+                              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                                This Profession is not yet described in full.
                               </div>
-                              <div>
-                                Included training packages:{" "}
-                                {formatPreviewList(profession.coreGroupNames)}
-                              </div>
-                              <div>
-                                Actual reachable skills (
-                                {profession.summary.totalEffectiveCoreReachableSkills}):{" "}
-                                {formatPreviewList(profession.coreReachableSkillNames)}
-                              </div>
-                            </div>
-                            <div style={{ display: "grid", gap: "0.35rem" }}>
-                              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                                <strong>Favored package preview</strong>
-                                <span style={getBadgeStyle({ muted: true })}>Preview only</span>
-                              </div>
-                              <div>
-                                Included training packages:{" "}
-                                {formatPreviewList(profession.favoredGroupNames)}
-                              </div>
-                              <div>
-                                Actual reachable skills (
-                                {profession.summary.totalEffectiveFavoredReachableSkills}):{" "}
-                                {formatPreviewList(profession.favoredReachableSkillNames)}
-                              </div>
-                            </div>
-                            <div style={{ display: "grid", gap: "0.35rem" }}>
-                              <div style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}>
-                                <strong>Available skill areas</strong>
-                                <span style={getBadgeStyle({ muted: true })}>Allocation view</span>
-                              </div>
-                              <div>
-                                Buckets include:{" "}
-                                {formatPreviewList(profession.normalAccessGroupNames)}
-                              </div>
-                            </div>
-                            {profession.hasLiteracyFoundation ? (
-                              <div style={{ display: "grid", gap: "0.35rem" }}>
-                                <div
-                                  style={{ alignItems: "center", display: "flex", gap: "0.5rem" }}
-                                >
-                                  <strong>Literacy foundation</strong>
-                                  <span style={getBadgeStyle()}>Important</span>
-                                </div>
-                                <div>
-                                  This profession path reaches{" "}
-                                  {profession.literacyGatedReachableSkillCount} literacy-linked
-                                  skill
-                                  {profession.literacyGatedReachableSkillCount === 1 ? "" : "s"}.
-                                </div>
-                              </div>
-                            ) : null}
+                            )}
                           </div>
                         ) : null}
                       </section>
                     );
                   })
                 ) : (
-                  <div
-                    style={{
-                      background: "#f6f5ef",
-                      border: "1px solid #d9ddd8",
-                      borderRadius: 12,
-                      padding: "1rem",
-                    }}
-                  >
-                    No professions match the current family filter and search text.
+                  <div style={panelStyle}>
+                    No professions match that search in this kind of work.
                   </div>
                 )}
               </>
             )}
           </>
         ) : (
-          <div
-            style={{
-              background: "#f6f5ef",
-              border: "1px solid #d9ddd8",
-              borderRadius: 12,
-              padding: "1rem",
-            }}
-          >
-            Select a rolled profile and civilization first.
-          </div>
+          <div style={panelStyle}>Select a rolled profile and civilization first.</div>
         )}
       </div>
     </section>

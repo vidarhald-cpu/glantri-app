@@ -18,7 +18,7 @@ import {
   professionTraining,
   rangeLabel,
   readerProse,
-} from "./referenceCatalogue";
+} from "@/lib/skills/referenceCatalogue";
 import {
   destinationFromHash,
   hashFor,

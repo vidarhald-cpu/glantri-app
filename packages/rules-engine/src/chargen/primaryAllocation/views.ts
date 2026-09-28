@@ -62,10 +62,35 @@ export interface ChargenGroupView {
   usefulWeightedIncrement: number;
 }
 
+/**
+ * A Learning Group the Character holds that teaches this Skill but supplies none of its level,
+ * because a stronger Group already does.
+ *
+ * Pilot Skill Rules v1 requires the weaker membership to be retained and marked as covered by the
+ * stronger Group rather than deleted. The marker is derived here, in the view layer, because
+ * reconstructing it in a component — by comparing `contributingGroupId` against `groupIds` — would
+ * rebuild a rules judgement in the interface, which section 2 of the Chargen experience contract
+ * forbids. Presentation of the marker is Forgejo #372 section 7.
+ */
+export interface ChargenCoveredGroupMembership {
+  groupId: string;
+  name: string;
+  /** The level this membership would have supplied on its own. */
+  suppliedGroupLevel: number;
+  /** The Group whose contribution is counted instead. */
+  coveredByGroupId: string;
+  coveredByGroupName: string;
+}
+
 export interface ChargenSkillView {
   category: "ordinary" | "secondary";
   categoryId?: SkillDefinition["categoryId"];
   contributingGroupId?: string;
+  /**
+   * Held memberships that contributed nothing to this Skill. Empty when only one held Group
+   * teaches it. See `ChargenCoveredGroupMembership`.
+   */
+  coveredGroupMemberships: ChargenCoveredGroupMembership[];
   relationshipGrantedPreviewLevel?: number;
   relationshipGrantedSkillLevel?: number;
   relationshipSourceSkillId?: string;
@@ -164,42 +189,40 @@ export function getChargenSkillContributionForGroup(input: {
   });
 }
 
-function getBestActiveGroupContribution(input: {
+/**
+ * Every Learning Group the Character actually holds that teaches this Skill.
+ *
+ * A Group only reaches this list when it has a `ChargenGroupView`, which means it is present in the
+ * progression: it is training the player already has, not merely a Group that could teach the
+ * Skill.
+ */
+function getHeldGroupContributions(input: {
   content: CanonicalContentShape;
   groupViewById: Map<string, ChargenGroupView>;
   progression: CharacterProgression;
   skill: SkillDefinition;
-}):
-  | {
-      groupId: string;
-      groupLevel: number;
-      name: string;
-      sortOrder: number;
-    }
-  | undefined {
-  return selectBestSkillGroupContribution(
-    getActiveSkillGroupIds({
-      progression: input.progression,
-      skill: input.skill,
-      skillGroups: input.content.skillGroups,
+}): { groupId: string; groupLevel: number; name: string; sortOrder: number }[] {
+  return getActiveSkillGroupIds({
+    progression: input.progression,
+    skill: input.skill,
+    skillGroups: input.content.skillGroups,
+  })
+    .map((groupId) => {
+      const groupView = input.groupViewById.get(groupId);
+      const groupDefinition = getSkillGroupDefinition(input.content, groupId);
+
+      if (!groupView) {
+        return null;
+      }
+
+      return {
+        groupId,
+        groupLevel: groupView.groupLevel,
+        name: groupView.name,
+        sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER,
+      };
     })
-      .map((groupId) => {
-        const groupView = input.groupViewById.get(groupId);
-        const groupDefinition = getSkillGroupDefinition(input.content, groupId);
-
-        if (!groupView) {
-          return null;
-        }
-
-        return {
-          groupId,
-          groupLevel: groupView.groupLevel,
-          name: groupView.name,
-          sortOrder: groupDefinition?.sortOrder ?? Number.MAX_SAFE_INTEGER,
-        };
-      })
-      .filter(isDefined),
-  );
+    .filter(isDefined);
 }
 
 export function buildChargenDraftView(input: {
@@ -313,12 +336,25 @@ export function buildChargenDraftView(input: {
 
       const progressionSkillRows = getProgressionSkillRows(progression, definition.id);
       const groupIds = getSkillDefinitionGroupIds(definition);
-      const bestContributingGroup = getBestActiveGroupContribution({
+      const heldGroupContributions = getHeldGroupContributions({
         content: input.content,
         groupViewById,
         progression,
         skill: definition,
       });
+      const bestContributingGroup = selectBestSkillGroupContribution(heldGroupContributions);
+      /* Only the strongest held Group counts. The rest are retained and marked, never dropped. */
+      const coveredGroupMemberships = bestContributingGroup
+        ? heldGroupContributions
+            .filter((candidate) => candidate.groupId !== bestContributingGroup.groupId)
+            .map((candidate) => ({
+              groupId: candidate.groupId,
+              name: candidate.name,
+              suppliedGroupLevel: candidate.groupLevel,
+              coveredByGroupId: bestContributingGroup.groupId,
+              coveredByGroupName: bestContributingGroup.name,
+            }))
+        : [];
       const fallbackGroupId = getBestGroupIdByDefinitionOrder(input.content, groupIds);
       const resolvedGroupId = bestContributingGroup?.groupId ?? fallbackGroupId;
       const groupContribution = bestContributingGroup?.groupLevel ?? 0;
@@ -360,6 +396,7 @@ export function buildChargenDraftView(input: {
           category: skill?.category ?? definition.category,
           categoryId: skill?.categoryId ?? definition.categoryId,
           contributingGroupId: bestContributingGroup?.groupId,
+          coveredGroupMemberships,
           relationshipGrantedPreviewLevel,
           relationshipGrantedSkillLevel: rowRelationshipGrantedLevel,
           relationshipSourceSkillId: skill?.languageName

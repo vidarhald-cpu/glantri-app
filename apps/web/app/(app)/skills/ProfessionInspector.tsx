@@ -15,7 +15,12 @@ import {
   ReferenceLinkView,
   Section,
 } from "./ReferenceParts";
-import { professionTraining, rangeLabel, readerProse, type RouteEntry } from "./referenceCatalogue";
+import {
+  professionTraining,
+  rangeLabel,
+  readerProse,
+  type RouteEntry,
+} from "@/lib/skills/referenceCatalogue";
 import type { Navigate } from "./referenceNavigation";
 import styles from "./skillsReference.module.css";
 

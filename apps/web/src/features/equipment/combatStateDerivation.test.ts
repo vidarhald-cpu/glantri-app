@@ -714,6 +714,7 @@ describe("combatStateDerivation", () => {
         skills: [
           {
             category: "ordinary",
+            coveredGroupMemberships: [],
             effectiveSkillNumber: 10,
             groupId: "basic_melee_training",
             groupIds: ["basic_melee_training"],
@@ -730,6 +731,7 @@ describe("combatStateDerivation", () => {
           },
           {
             category: "ordinary",
+            coveredGroupMemberships: [],
             effectiveSkillNumber: 11,
             groupId: "basic_melee_training",
             groupIds: ["basic_melee_training"],
@@ -746,6 +748,7 @@ describe("combatStateDerivation", () => {
           },
           {
             category: "ordinary",
+            coveredGroupMemberships: [],
             effectiveSkillNumber: 10,
             groupId: "basic_melee_training",
             groupIds: ["basic_melee_training"],
@@ -822,6 +825,7 @@ describe("combatStateDerivation", () => {
         skills: [
           {
             category: "ordinary",
+            coveredGroupMemberships: [],
             effectiveSkillNumber: 6,
             groupId: "martial",
             groupIds: ["martial"],

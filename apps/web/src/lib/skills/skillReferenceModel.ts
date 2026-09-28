@@ -71,9 +71,22 @@ export type SkillReferenceGroup = ReferenceLink & {
   professionRoutes: (ReferenceLink & { label: string; bound?: ReferenceBound })[];
   bound?: ReferenceBound;
 };
+/**
+ * The approved player-facing Profession browsing category (rule decision 0012).
+ *
+ * Navigation and findability only: it grants no competence and creates no relationship, cost,
+ * prerequisite or availability effect. Profession family remains structural identity.
+ */
+export type ProfessionBrowsingCategory = {
+  id: string;
+  name: string;
+  belongsHere: string;
+  doesNotBelongHere: string;
+};
 export type SkillReferenceProfession = ReferenceLink & {
   familyId: string;
   familyCode?: string;
+  browsingCategory?: ProfessionBrowsingCategory;
   readerContent: ReferenceReaderContent;
   coreAlternatives: {
     id: string;
@@ -121,6 +134,8 @@ export type SkillReferenceModel = {
   professions: SkillReferenceProfession[];
   societies: SkillReferenceSociety[];
   withdrawnGroups: WithdrawnGroup[];
+  /** The approved 16-category browsing roster, in its authored order. */
+  professionCategories: ProfessionBrowsingCategory[];
   grouplessSkills: ReferenceLink[];
   relationships: ReferenceRelationship[];
   authoredCeiling: number;
@@ -192,7 +207,17 @@ export function buildSkillReferenceModel(
   const familyById = new Map(source.families.map((row) => [row.id, row]));
   const professionById = new Map(source.professions.map((row) => [row.id, row]));
   const familyReaderById = new Map(
-    source.families.map((row) => [row.id, { code: row.code, readerContent: row.readerContent }]),
+    source.families.map((row) => [
+      row.id,
+      {
+        code: row.code,
+        readerContent: row.readerContent,
+        browsingCategoryId: row.browsingCategoryId,
+      },
+    ]),
+  );
+  const browsingCategoryById = new Map(
+    source.professionCategories.map((row) => [row.id, { ...row }]),
   );
   const categoryById = new Map(source.categories.map((row) => [row.competencyId, row.categoryId]));
   const groupDescriptionById = new Map(
@@ -258,6 +283,9 @@ export function buildSkillReferenceModel(
         ...linkProfession(path.id),
         familyId: path.familyId,
         familyCode: familyReaderById.get(path.familyId)?.code,
+        browsingCategory: browsingCategoryById.get(
+          familyReaderById.get(path.familyId)?.browsingCategoryId ?? "",
+        ),
         readerContent: readerContentOf(familyReaderById.get(path.familyId)?.readerContent),
         coreAlternatives: path.coreRoutes.map((core) => ({
           id: core.id,
@@ -474,6 +502,7 @@ export function buildSkillReferenceModel(
     professions,
     societies,
     relationships,
+    professionCategories: source.professionCategories.map((row) => ({ ...row })),
     withdrawnGroups: source.removedGroups.map((row) => ({
       id: row.id,
       name: row.name,

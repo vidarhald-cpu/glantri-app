@@ -18,7 +18,7 @@ import {
   RelationshipRow,
   Section,
 } from "./ReferenceParts";
-import { groupTraining, readerProse } from "./referenceCatalogue";
+import { groupTraining, readerProse } from "@/lib/skills/referenceCatalogue";
 import type { Navigate } from "./referenceNavigation";
 import styles from "./skillsReference.module.css";
 
