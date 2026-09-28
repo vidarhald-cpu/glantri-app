@@ -375,6 +375,19 @@ Passing automated tests is necessary where specified but does not override an ob
 
 Use `Not applicable` with a short reason rather than leaving irrelevant lines blank.
 
+Catalogue publication, corpus completeness, and content-coverage changes run the
+full test suite of the owning application rather than a targeted selection.
+Presentation tests may depend indirectly on how complete the corpus is, and a
+targeted selection cannot reach them: the affected test may name no content
+module and import no catalogue source, so no search over the changed modules
+finds it. Forgejo issue #396 is the worked example — publishing accepted reader
+prose for 51 Learning Groups moved coverage from 44-of-95 to 95-of-95 and
+falsified an `apps/web` presentation test that had selected Learning Group N01
+precisely because it lacked a full description and asserted the honest-absence
+note. This is a verification-scope requirement, not a new automated guard;
+existing CI caught the real instance and no additional product guard is
+introduced.
+
 ### Dependencies and integration order
 
 List blockers, upstream contracts, dependent tasks, hotspot scheduling, and intended merge order.
