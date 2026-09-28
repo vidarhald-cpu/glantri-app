@@ -234,7 +234,7 @@ import {
   getCombatGenericActionOpportunityAdvances,
   isCombatGenericActionFinalOpportunity,
   isCombatGenericActionOpportunityOpen,
-  isCombatItemInteractionActionLive,
+  isCombatGuardedItemActionLive,
   recordCombatGenericActionRoll,
   reviewCombatGenericAction,
   activateCombatGenericAction,
@@ -7221,14 +7221,28 @@ export function getCombatRoundOpenPerformTaskForParticipant(input: {
  *   refused by carrying it.
  * - **Liveness is the shared generic-action terminal vocabulary** — `completed`, `interrupted` and
  *   `cancelled` end an Item action; `declared`, `reviewed` and `active` are live. See
- *   {@link isCombatItemInteractionActionLive}.
+ *   {@link isCombatGuardedItemActionLive}.
  * - **`excludeActionId` preserves idempotent re-declaration** by the declaration's own id.
- * - The Item action family is `preset: "item_interaction"` only. `small_action` and the other
- *   declaration kinds are deliberately not covered, exactly as 0007 §2 excludes `small_action`.
+ * - **The family is decided by `declarationKind`, not by `preset`** — see
+ *   {@link isCombatGuardedItemAction}. An action minted by the combat-declaration surface carries a
+ *   `declarationKind` and belongs to its own declaration family, so the M7 secondary `small_action`
+ *   that names an Item is *a Small Action involving an Item* and does **not** occupy this slot,
+ *   exactly as 0007 §2 excludes `small_action`. Merely naming or interacting with an Item never
+ *   makes an action a guarded Item action.
  *
  * Like 0007's own refusal, the caller that uses this is a **creation-time** refusal rather than an
  * enforcement chokepoint: it makes a second live Item action rarer and repairs nothing already
  * persisted.
+ *
+ * **Every route that can create a guarded Item action calls it.** `declareCombatGenericAction` is
+ * the only function that appends a `CombatGenericAction` to canonical state, and it has three
+ * non-test call sites: this guard's own caller (`combatItemInteractionRoutes`, the Item authority —
+ * the sole creator of the guarded family), `materializeCombatDeclarationTasks`, which stamps a
+ * `declarationKind` on everything it mints and so can never create a family member, and the
+ * environmental-movement declaration, whose `preset` is the literal `"environmental_movement"`.
+ * `preset` is otherwise only writable by `reviewCombatGenericAction`, which refuses any value but
+ * `look_around` on an action that has none, and `declarationKind` is never rewritten at all — so no
+ * mutation path can turn a non-member into a member either.
  */
 export function getCombatRoundLiveItemInteractionForParticipant(input: {
   excludeActionId?: string;
@@ -7239,7 +7253,7 @@ export function getCombatRoundLiveItemInteractionForParticipant(input: {
     (action) =>
       action.ownerParticipantId === input.participantId &&
       action.id !== input.excludeActionId &&
-      isCombatItemInteractionActionLive(action),
+      isCombatGuardedItemActionLive(action),
   );
 }
 

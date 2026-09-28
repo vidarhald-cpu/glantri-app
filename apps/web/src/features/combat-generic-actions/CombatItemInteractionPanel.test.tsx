@@ -285,4 +285,50 @@ describe("CombatItemInteractionPanel — pending Item action state (Forgejo #409
     expect(await screen.findByRole("button", { name: "Silver dagger: Drop" })).toBeEnabled();
     expect(screen.queryByText(/Pending Item action/)).not.toBeInTheDocument();
   });
+
+  /**
+   * The real M7 shape (Forgejo issue #323): a secondary `small_action` naming an Item carries
+   * **both** `preset: "item_interaction"` and `declarationKind: "small_action"`. Under the Product
+   * Owner ruling on #409 it is a Small Action involving an Item, not a guarded Item action — so the
+   * panel must not label it a pending Item action and must not disable the operations, mirroring
+   * the server, which does not refuse behind it either.
+   */
+  const m7SmallAction: CombatGenericAction = {
+    ...liveAction,
+    declarationKind: "small_action",
+    id: "round-1:participant-1:declaration:small_action",
+  };
+
+  it("does not treat an M7 `small_action` that names an Item as a pending Item action", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounterWith([m7SmallAction])}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Silver dagger: Drop" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Silver dagger: Draw / ready" })).toBeEnabled();
+    expect(screen.queryByText(/Pending Item action/)).not.toBeInTheDocument();
+  });
+
+  it("still shows the genuine Item action beside an M7 `small_action` that names an Item", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounterWith([m7SmallAction, liveAction])}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "Pending Item action: Draw / ready Silver dagger — Waiting for GM review.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Silver dagger: Drop" })).toBeDisabled();
+  });
 });

@@ -798,4 +798,60 @@ describe("one live Item action per participant (Forgejo #409, rule decision 0007
     expect(response.statusCode).toBe(200);
     await app.close();
   });
+
+  /**
+   * The shape that actually occurs. `materializeCombatDeclarationTasks` (the M7 path, Forgejo issue
+   * #323) materializes a secondary `small_action` naming an Item with **both**
+   * `preset: "item_interaction"` and `declarationKind: "small_action"` — asserted by this
+   * repository's own `scenarios.test.ts` ("materializes the declared Item through the Item authority
+   * under a server-owned action id"). The earlier "does not widen" case above builds its
+   * `small_action` with no `preset` at all, which is the trivially distinguishable case; this is the
+   * real one. Under the Product Owner ruling on #409 such an action is a Small Action involving an
+   * Item, not a guarded Item action, so it must not occupy the one-live slot.
+   */
+  it("does not refuse an Item declaration behind an M7 `small_action` that names an Item", async () => {
+    const m7SmallAction: CombatGenericAction = {
+      ...itemAction("active"),
+      declarationKind: "small_action",
+      id: "round-1:participant-1:declaration:small_action",
+      intent: "Draw / ready the Silver dagger",
+    };
+    const routeServices = services(encounterWithActions([m7SmallAction]));
+    const app = await appWith(routeServices);
+    const response = await declareSecond(app);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().error).toBeUndefined();
+    expect(routeServices.itemService.resolveDeclaration).toHaveBeenCalledTimes(1);
+    const persisted = vi.mocked(routeServices.encounterService.updateCombatEncounter).mock
+      .calls[0]?.[0].session.combatRoundState?.genericActions;
+    expect(persisted?.map((action) => action.id)).toEqual([
+      "round-1:participant-1:declaration:small_action",
+      "action-2",
+    ]);
+    await app.close();
+  });
+
+  /**
+   * The converse face of the same defect: a genuine Item action must still occupy the slot even when
+   * an M7 `small_action` naming an Item sits beside it. Together with the case above this pins the
+   * classification from both sides, so the predicate cannot drift back to `preset` alone.
+   */
+  it("still refuses a second genuine Item action when an M7 `small_action` names an Item too", async () => {
+    const m7SmallAction: CombatGenericAction = {
+      ...itemAction("active"),
+      declarationKind: "small_action",
+      id: "round-1:participant-1:declaration:small_action",
+      intent: "Draw / ready the Silver dagger",
+    };
+    const routeServices = services(encounterWithActions([itemAction("active"), m7SmallAction]));
+    const app = await appWith(routeServices);
+    const response = await declareSecond(app);
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toMatch(/already has an Item action in progress/);
+    expect(routeServices.itemService.resolveDeclaration).not.toHaveBeenCalled();
+    expect(routeServices.encounterService.updateCombatEncounter).not.toHaveBeenCalled();
+    await app.close();
+  });
 });

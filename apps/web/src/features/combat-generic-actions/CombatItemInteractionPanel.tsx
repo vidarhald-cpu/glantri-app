@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import {
-  isCombatItemInteractionActionLive,
+  isCombatGuardedItemActionLive,
   type CombatGenericAction,
   type CombatGenericActionStatus,
   type CombatItemInteractionOperation,
@@ -77,12 +77,18 @@ export function CombatItemInteractionPanel({
    * `CombatGenericAction` instead makes it survive a reload for free, and makes the panel's
    * disabled buttons a **consequence** of the canonical one-live-Item-action state rather than a
    * guard of their own — the guard is the server's creation-time refusal.
+   *
+   * It reads the **guarded Item-action family**, the same predicate the server refuses on, so the
+   * two can never disagree about what occupies the slot. A Small Action that merely names an Item
+   * (the M7 secondary `small_action`, which carries `preset: "item_interaction"` alongside
+   * `declarationKind: "small_action"`) is not a member, so it neither labels itself a pending Item
+   * action here nor disables the operation buttons.
    */
   const liveDeclaration: CombatGenericAction | undefined = useMemo(() => {
     if (!participantId) return undefined;
     return (encounter.combatRoundState?.genericActions ?? []).find(
       (action) =>
-        action.ownerParticipantId === participantId && isCombatItemInteractionActionLive(action),
+        action.ownerParticipantId === participantId && isCombatGuardedItemActionLive(action),
     );
   }, [encounter.combatRoundState, participantId]);
   const actor = options?.actors.find((candidate) => candidate.participantId === participantId);

@@ -1121,6 +1121,45 @@ describe("CombatLogProjection — Item action declarations (Forgejo #409)", () =
       }).events.some((event) => event.summaryFacts.kind === "item_action_declared"),
     ).toBe(false);
   });
+
+  /**
+   * Independent QA observation O1 on Forgejo issue #409. An M7 `small_action` naming an Item
+   * carries `preset: "item_interaction"` alongside `declarationKind: "small_action"`, so a
+   * `preset`-only filter projected a second "Item action" entry beside the declaration entry the
+   * combat-declaration surface already produces for the same submission. The guarded-family
+   * discriminator removes the duplicate.
+   */
+  it("does not project an M7 `small_action` that names an Item as an Item action entry", () => {
+    expect(
+      project(
+        state({
+          genericActions: [
+            itemAction({
+              declarationKind: "small_action",
+              id: "round-1:gladiator:declaration:small_action",
+            }),
+          ],
+        }),
+      ).events.some((event) => event.summaryFacts.kind === "item_action_declared"),
+    ).toBe(false);
+  });
+
+  it("still projects the genuine Item action beside an M7 `small_action` that names an Item", () => {
+    const entries = project(
+      state({
+        genericActions: [
+          itemAction({
+            declarationKind: "small_action",
+            id: "round-1:gladiator:declaration:small_action",
+          }),
+          itemAction(),
+        ],
+      }),
+    ).events.filter((event) => event.summaryFacts.kind === "item_action_declared");
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.summaryFacts).toMatchObject({ actionId: "item-action-1" });
+  });
 });
 
 describe("getCombatRoundLiveItemInteractionForParticipant (Forgejo #409)", () => {
@@ -1202,5 +1241,36 @@ describe("getCombatRoundLiveItemInteractionForParticipant (Forgejo #409)", () =>
         },
       }),
     ).toBeUndefined();
+  });
+
+  /**
+   * The real M7 shape, not the trivially distinguishable one. `materializeCombatDeclarationTasks`
+   * (Forgejo issue #323) mints a secondary `small_action` naming an Item with **both**
+   * `preset: "item_interaction"` and `declarationKind: "small_action"`. The Product Owner ruled on
+   * #409 that such an action is a Small Action involving an Item, not a guarded Item action, so it
+   * does not occupy the one-live slot — `declarationKind`, not `preset`, is the discriminator.
+   */
+  const m7SmallAction = {
+    ...live,
+    declarationKind: "small_action",
+    id: "round-1:gladiator:declaration:small_action",
+  } satisfies CombatGenericAction;
+
+  it("does not count an M7 `small_action` that names an Item", () => {
+    expect(
+      getCombatRoundLiveItemInteractionForParticipant({
+        participantId: "gladiator",
+        state: { genericActions: [m7SmallAction] },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("still finds the genuine Item action beside an M7 `small_action` that names an Item", () => {
+    expect(
+      getCombatRoundLiveItemInteractionForParticipant({
+        participantId: "gladiator",
+        state: { genericActions: [m7SmallAction, live] },
+      })?.id,
+    ).toBe("item-action-1");
   });
 });

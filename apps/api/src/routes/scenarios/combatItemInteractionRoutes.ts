@@ -322,8 +322,14 @@ export function createCombatItemInteractionRoutes(
       // - Idempotent re-declaration by the declaration's own id never reaches this point: the
       //   `body.operation === "declare" && existingAction` branch above already returned the
       //   canonical encounter unchanged. `excludeActionId` keeps that true regardless of ordering.
-      // - Only `preset: "item_interaction"` counts. `small_action` and the other declaration kinds
-      //   are untouched, exactly as 0007 §2 excludes `small_action`.
+      // - The family is decided by `declarationKind`, not by `preset`. A guarded Item action is one
+      //   the Item authority minted — `preset: "item_interaction"` and **no** `declarationKind`.
+      //   The M7 secondary `small_action` that names an Item carries both fields, and the Product
+      //   Owner ruled it is *a Small Action involving an Item*, not this family: it is neither
+      //   refused here nor able to occupy the slot, exactly as 0007 §2 excludes `small_action`.
+      //   This route's `declare` branch is the only creator of the guarded family, so this is the
+      //   only place the refusal is needed; `materializeCombatDeclarationTasks` stamps a
+      //   `declarationKind` on everything it mints and therefore cannot create one.
       //
       // Like 0007's refusal this repairs nothing already persisted; it only stops a second live
       // Item action being created. The remedy it names is the existing GM review/cancel lifecycle,

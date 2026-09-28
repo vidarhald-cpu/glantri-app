@@ -4,6 +4,7 @@ import type { CombatFeintProposal } from "./combatFeint";
 import { getCombatRoundTimelineRoundStates, type CombatRoundState } from "./combatRoundManager";
 import {
   isCombatGenericActionLive,
+  isCombatGuardedItemAction,
   type CombatGenericAction,
   type CombatGenericActionStatus,
   type CombatItemInteractionOperation,
@@ -1078,6 +1079,12 @@ const ITEM_ACTION_STATUS_PHRASES: Readonly<Record<CombatGenericActionStatus, str
  * than a new field, and the entry's audience is the Item interaction's own
  * `visibleToParticipantIds` — including the empty set, which correctly makes a GM-only Item action
  * reach no player at all.
+ *
+ * Only the **guarded Item-action family** is projected here — an action carrying a
+ * `declarationKind` was minted by the combat-declaration surface and already has its own
+ * declaration entry, so projecting it again would duplicate it (independent QA observation O1 on
+ * Forgejo issue #409). `isCombatGuardedItemAction` is the same family discriminator the one-live
+ * guard uses, so the Log and the guard always agree about what an Item action is.
  */
 function projectItemActionDeclaration(input: {
   action: CombatGenericAction;
@@ -1087,7 +1094,7 @@ function projectItemActionDeclaration(input: {
   sourceRevision: string;
 }): Candidate | undefined {
   const interaction = input.action.itemInteraction;
-  if (input.action.preset !== "item_interaction" || !interaction) return undefined;
+  if (!isCombatGuardedItemAction(input.action) || !interaction) return undefined;
   const actor = subject(input.action.ownerParticipantId, input.labels);
   if (!actor) return undefined;
   const live = isCombatGenericActionLive(input.action);
@@ -1142,7 +1149,7 @@ function itemActionDeclarations(input: {
       roundState.participants.map((participant) => [participant.participantId, participant.label]),
     );
     for (const action of roundState.genericActions) {
-      if (action.preset !== "item_interaction") continue;
+      if (!isCombatGuardedItemAction(action)) continue;
       if (!firstRoundNumber.has(action.id)) firstRoundNumber.set(action.id, roundState.roundNumber);
       newest.set(action.id, { action, labels });
     }
