@@ -9,10 +9,17 @@ import { expect, test } from "@playwright/test";
  * taxonomy, not by Profession family.
  *
  * `Teacher` on `Scandia` is the deterministic journey. It reaches `Instruction and schooling
- * practice` (K07) whose full reader prose is still unpublished, `Speech and memory practice` (F14)
- * whose prose is published, and a direct route — so one journey exercises the honest-absence row,
- * the published row, and the grouped-then-direct ordering. Its Learning Group memberships also
- * overlap, which is what section 7 must explain.
+ * practice` (K07), `Speech and memory practice` (F14) and a direct route, so one journey exercises
+ * the grouped-then-direct ordering. Its Learning Group memberships also overlap, which is what
+ * section 7 must explain.
+ *
+ * Forgejo #396 changed what this journey proves about reader prose. K07 was chosen for #372
+ * because its full description was unpublished, so the step rendered the honest-absence note; #396
+ * published the accepted prose for K07 and the other 50 awaiting groups, and every canonical
+ * Learning Group now has a full description. The assertion is therefore inverted rather than
+ * deleted: the step must show K07's published prose and must not show the absence note anywhere.
+ * The note itself is still the rule and is still rendered by `LearningGroupProse`; it simply has no
+ * subject in the canonical catalogue, which the `packages/content` and component suites assert.
  */
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const SCHOOLING = "Instruction and schooling practice";
@@ -77,15 +84,18 @@ test("Chargen explains a Profession before it exposes acquisition", async ({ pag
     }),
   ).toBeVisible();
 
-  // A Learning Group with no published full description says so, and does not present its
-  // one-line summary as though it were the explanation (#372 section 0.5).
+  // Every Learning Group the step shows carries its published full description (#396). K07's is
+  // one of the 51 published there, and no row falls back to the honest-absence note (#372 0.5).
   await expect(
     professionStep
-      .getByText("Not yet described in full. The line above is this training’s short summary", {
+      .getByText("A learner takes lessons under an experienced teacher's observation", {
         exact: false,
       })
       .first(),
   ).toBeVisible();
+  await expect(professionStep.getByText("Not yet described in full", { exact: false })).toHaveCount(
+    0,
+  );
 
   // No forbidden or stale label anywhere in the step.
   const stepText = (await professionStep.textContent()) ?? "";

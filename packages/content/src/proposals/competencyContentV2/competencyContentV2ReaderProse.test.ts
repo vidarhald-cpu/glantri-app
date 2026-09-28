@@ -15,7 +15,7 @@ import {
 } from "./index";
 
 /**
- * Forgejo #361 — reader-content publication.
+ * Forgejo #361 — reader-content publication; Forgejo #396 — closing the 51-group gap.
  *
  * These are identity assertions, not count assertions: a count that still matches while the
  * identities have drifted is exactly the failure the inventory was asked to rule out.
@@ -39,7 +39,7 @@ describe("Competency Content V2 reader prose", () => {
       ...Object.entries(competencyContentV2GroupReaderProse),
       ...Object.entries(competencyContentV2FamilyReaderProse),
     ];
-    expect(records.length).toBe(44 + 84);
+    expect(records.length).toBe(95 + 84);
     for (const [key, prose] of records) {
       expect(prose.shortDescription.trim().length, key).toBeGreaterThan(0);
       expect(prose.fullDescription.trim().length, key).toBeGreaterThan(
@@ -57,30 +57,65 @@ describe("Competency Content V2 reader prose", () => {
     }
   });
 
-  it("returns, rather than fabricates, the Learning Groups the accepted sources do not cover", () => {
+  it("publishes accepted prose for every canonical Learning Group, leaving nothing returned", () => {
     expect(competencyContentV2LearningGroups).toHaveLength(95);
     expect(competencyContentV2ReaderProseCoverage.groups).toEqual({
       canonical: 95,
-      published: 44,
-      awaiting: 51,
+      published: 95,
+      awaiting: 0,
     });
-    /* The gap is the 49 groups V2 authored after the accepted prose, plus the 2 it outgrew. */
-    const awaitingByDisposition = competencyContentV2GroupsAwaitingReaderProse.reduce<
-      Record<string, number>
-    >((acc, group) => ({ ...acc, [group.disposition]: (acc[group.disposition] ?? 0) + 1 }), {});
-    expect(awaitingByDisposition).toEqual({ new: 49, revised: 2 });
+    expect(competencyContentV2GroupsAwaitingReaderProse).toEqual([]);
+    /* The gap #396 closed was the 49 groups V2 authored after the earlier accepted documents,
+       plus the 2 it outgrew. All 51 now come from the 2026-09-26 accepted document. */
+    const fromNewDocument = competencyContentV2LearningGroups.filter(
+      (group) =>
+        competencyContentV2GroupReaderProse[group.id]!.source === "v2-learning-group-prose",
+    );
+    expect(fromNewDocument).toHaveLength(51);
+    const byDisposition = fromNewDocument.reduce<Record<string, number>>(
+      (acc, group) => ({ ...acc, [group.disposition]: (acc[group.disposition] ?? 0) + 1 }),
+      {},
+    );
+    expect(byDisposition).toEqual({ new: 49, revised: 2 });
+    /* The two whose earlier page was outgrown are read from the newer document, never from it. */
     expect(competencyContentV2GroupsWithSupersededSourceProse.map((row) => row.id)).toEqual([
       "F04",
       "F09",
     ]);
-    /* Every group whose accepted page still matches canonical is published. */
-    const unpublishedRetained = competencyContentV2LearningGroups
-      .filter(
-        (group) =>
-          group.disposition === "retained" && !competencyContentV2GroupReaderProse[group.id],
-      )
-      .map((group) => group.id);
-    expect(unpublishedRetained).toEqual([]);
+    for (const row of competencyContentV2GroupsWithSupersededSourceProse)
+      expect(competencyContentV2GroupReaderProse[row.id]!.source, row.id).toBe(
+        "v2-learning-group-prose",
+      );
+  });
+
+  it("keeps F30 and F41 on their martial-revision prose, current with rule decision 0010", () => {
+    /*
+     * Forgejo #389 made Fencing and Longbow base Skills and #396 verified rather than rewrote
+     * these two: neither was part of the published gap, and both already say what the ruling says.
+     */
+    const f30 = competencyContentV2GroupReaderProse.F30!;
+    const f41 = competencyContentV2GroupReaderProse.F41!;
+    expect(f30.source).toBe("martial-revision");
+    expect(f41.source).toBe("martial-revision");
+    expect(f30.fullDescription).toContain(
+      "Fencing is the weapon competence this course teaches, and it is charged once",
+    );
+    expect(f41.fullDescription).toContain(
+      "Longbow is the weapon competence this course teaches, and it is charged once",
+    );
+  });
+
+  it("names the longbow in the M04 and M05 slots #389 added it to", () => {
+    /*
+     * The 51 pages were authored on 2026-09-26, before #389 widened both missile candidate pools.
+     * Publication corrected exactly those two sentences and nothing else.
+     */
+    for (const id of ["M04", "M05"]) {
+      const group = competencyContentV2LearningGroups.find((row) => row.id === id)!;
+      const candidates = group.selectionSlots![0]!.candidateSkillIds;
+      expect(candidates, id).toContain("longbow");
+      expect(competencyContentV2GroupReaderProse[id]!.fullDescription, id).toContain("the longbow");
+    }
   });
 
   it("never publishes prose for a group the V2 redesign removed", () => {
@@ -134,7 +169,7 @@ describe("Competency Content V2 reader prose", () => {
       expect(profession.fullDescription, profession.id).toBeTruthy();
     }
     const groupsWithProse = content.skillGroups.filter((group) => group.fullDescription);
-    expect(groupsWithProse).toHaveLength(44);
+    expect(groupsWithProse).toHaveLength(95);
     for (const group of content.skillGroups) {
       expect(group.shortDescription, group.id).toBeTruthy();
       if (group.fullDescription) expect(group.fullDescription).not.toBe(group.shortDescription);
@@ -152,14 +187,18 @@ describe("Competency Content V2 reader prose", () => {
     expect(group.readerContent.description).toContain("accompany a practitioner");
     expect(group.readerContent.boundaries?.length).toBeGreaterThan(0);
 
-    const awaiting = source.groups.find((row) => row.id === "M01")!;
-    expect(awaiting.readerContent.description).toBeUndefined();
-    expect(awaiting.readerContent.shortDescription).toBeUndefined();
+    /* Every canonical group now carries both layers; nothing falls back to a bare summary. */
+    for (const row of source.groups) {
+      expect(row.readerContent.shortDescription, row.id).toBeTruthy();
+      expect(row.readerContent.description, row.id).toBeTruthy();
+      expect(row.readerContent.description, row.id).not.toBe(row.readerContent.shortDescription);
+    }
 
     const family = source.families.find((row) => row.code === "P01")!;
     expect(family.readerContent.description).toContain("accompany experienced hunters");
     expect(family.readerContent.typicalActivities?.length).toBeGreaterThan(0);
-    expect(source.readerContentCoverage.groups.awaiting).toBe(51);
+    expect(source.readerContentCoverage.groups.awaiting).toBe(0);
+    expect(source.readerContentCoverage.groupsAwaitingProse).toEqual([]);
     expect(source.professions.every((row) => row.readerContent.description)).toBe(true);
   });
 

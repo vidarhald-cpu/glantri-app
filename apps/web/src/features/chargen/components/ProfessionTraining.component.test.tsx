@@ -109,29 +109,39 @@ describe("Chargen Profession presentation", () => {
     }
   });
 
-  it("says a Learning Group is not yet described rather than passing off its summary as prose", () => {
-    /* K18 is one of the 51 canonical Learning Groups whose full prose is still unpublished. */
-    const awaiting = new Set(model.readerContentCoverage.groupsAwaitingProse.map((row) => row.id));
-    expect(awaiting.has("K18")).toBe(true);
-    const group = model.learningGroups.find((row) => row.id === "K18")!;
-
-    render(<LearningGroupTraining groupId="K18" model={model} />);
-    const block = screen.getByText(/Not yet described in full/);
-
-    expect(block.textContent).toContain("short summary, not its full explanation");
-    /* The one-liner is still shown — as a summary, and said to be one. */
-    expect(screen.getByText(group.description)).toBeInTheDocument();
+  it("leaves no canonical Learning Group without a published full description", () => {
+    /* #396 published the 51 that were awaiting; the honest-absence note now has no subject. */
+    expect(model.readerContentCoverage.groupsAwaitingProse).toEqual([]);
+    expect(model.readerContentCoverage.groups.awaiting).toBe(0);
+    for (const group of model.learningGroups)
+      expect(group.readerContent.description, group.id).toBeTruthy();
   });
 
-  it("shows the published full prose where a Learning Group has it, with no absence note", () => {
-    const group = model.learningGroups.find((row) => row.id === "G15")!;
-    expect(group.readerContent.description).toBeDefined();
+  it.each(["K18", "K07"])(
+    "shows full prose for %s, which used to say it was not yet described",
+    (groupId) => {
+      const group = model.learningGroups.find((row) => row.id === groupId)!;
+      expect(group.readerContent.description).toBeDefined();
 
-    const { container } = render(<LearningGroupTraining groupId="G15" model={model} />);
+      const { container } = render(<LearningGroupTraining groupId={groupId} model={model} />);
 
-    expect(container.textContent).toContain(group.readerContent.description);
-    expect(screen.queryByText(/Not yet described in full/)).toBeNull();
-  });
+      expect(container.textContent).toContain(group.readerContent.description);
+      expect(screen.queryByText(/Not yet described in full/)).toBeNull();
+    },
+  );
+
+  it.each(["G15", "F14"])(
+    "leaves the already-published %s unaffected, with no absence note",
+    (groupId) => {
+      const group = model.learningGroups.find((row) => row.id === groupId)!;
+      expect(group.readerContent.description).toBeDefined();
+
+      const { container } = render(<LearningGroupTraining groupId={groupId} model={model} />);
+
+      expect(container.textContent).toContain(group.readerContent.description);
+      expect(screen.queryByText(/Not yet described in full/)).toBeNull();
+    },
+  );
 
   it("publishes the approved sixteen browsing categories, and nothing else", () => {
     expect(model.professionCategories).toHaveLength(16);
