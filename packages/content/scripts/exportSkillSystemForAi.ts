@@ -122,10 +122,6 @@ function getSocietyName(content: CanonicalContent, societyId: string): string {
   return content.societies.find((society) => society.id === societyId)?.name ?? societyId;
 }
 
-function dynamicGroupCost(individualCostTotal: number): number {
-  return Math.max(1, Math.floor(0.6 * individualCostTotal));
-}
-
 function buildGroupWarningMap(content: CanonicalContent): Map<string, string[]> {
   const warningsByGroupId = new Map<string, string[]>();
 
@@ -170,13 +166,6 @@ function buildGroupWarningMap(content: CanonicalContent): Map<string, string[]> 
 
 function mapSkill(content: CanonicalContent, skill: SkillDefinition): JsonRecord {
   const groupIds = getSkillGroupIds(skill);
-  const adminWarnings: string[] = [];
-
-  if (skill.id === "longbow" && skill.specializationOfSkillId === "bow") {
-    adminWarnings.push(
-      "Exports as specialization-only access: Longbow is modeled under Bow, not as a missile slot candidate.",
-    );
-  }
 
   return {
     id: skill.id,
@@ -204,7 +193,7 @@ function mapSkill(content: CanonicalContent, skill: SkillDefinition): JsonRecord
       : null,
     societyLevel: skill.societyLevel,
     theoretical: skill.isTheoretical,
-    adminNotes: adminWarnings,
+    adminNotes: [],
   };
 }
 
@@ -284,12 +273,10 @@ function mapSkillGroup(
       secondarySkillCount,
       fixedIndividualCostTotal,
       allCandidateIndividualCostTotal,
-      dynamicGroupCost:
-        selectionSlots.length === 0 ? dynamicGroupCost(fixedIndividualCostTotal) : null,
       note:
         selectionSlots.length === 0
-          ? "No active choice slots; dynamic group cost can be computed from fixed skills. NOTE: `dynamicGroupCost` is the RETIRED floor(0.6 x individual cost) scalar and is not the controlling price. See the Skill-Group Economics section."
-          : "Dynamic group cost depends on active selected slot skills. Unselected slot candidates do not count. NOTE: `dynamicGroupCost` is the RETIRED floor(0.6 x individual cost) scalar and is not the controlling price. See the Skill-Group Economics section.",
+          ? "No active choice slots; the active group skills are the fixed skills. No per-group price is exported: rule decision 0011 prices a complete purchased bundle once as ceil(2/3 x weighted useful competence), so the price does not decompose into a per-group scalar. See the Skill-Group Economics section."
+          : "Active group skills depend on the selected slot skills; unselected slot candidates do not count. No per-group price is exported: rule decision 0011 prices a complete purchased bundle once as ceil(2/3 x weighted useful competence), so the price does not decompose into a per-group scalar. See the Skill-Group Economics section.",
     },
     allowedSmallGroupReason: ALLOWED_SMALL_GROUP_REASONS[group.id] ?? null,
     adminWarnings: warnings,
@@ -956,7 +943,7 @@ Relationship types include:
 - \`derived_skill_relationship\`
 
 ## derivedRules
-Readable derived/cross-training/specialization bridge rules. These describe rule sources and targets, factors/thresholds where available, and whether the relationship contributes derived XP.
+Readable derived-grant and melee cross-training rules. These describe rule sources and targets, factors/thresholds where available, and whether the relationship contributes derived XP.
 
 ## adminMetrics
 \`professionReach\` contains unique/group/direct-only reach metrics. \`groupWeightedValues\` contains weighted group values and small-group exceptions. \`validationWarnings\` contains non-blocking content warnings.
