@@ -16053,6 +16053,191 @@ describe("combat round manager", () => {
     });
   });
 
+  it("pins the legacy bleed `+1` so the initialization round counts toward the interval", () => {
+    const reviewLegacyBleedAtRound = (input: {
+      bleedState: {
+        accumulatedTenths: number;
+        initializedRound?: number;
+        lastHealthCheckRound?: number;
+      };
+      roundNumber: number;
+    }) =>
+      prepareCombatRoundEndReview({
+        participantInputs: {
+          gladiator: {
+            combatEffects: combatEffectsWith([
+              {
+                bleedState: input.bleedState,
+                effectGroup: "bleed",
+                id: "legacy-bleed-plus-one",
+                modifierValue: 1,
+                roundNumber: 1,
+                type: "bleed",
+              },
+            ]),
+            healthStat: 0,
+          },
+        },
+        state: advanceToStep(
+          initializeCombatRoundState({
+            encounter: encounter({ currentRound: input.roundNumber }),
+          }),
+          "round_summary",
+        ),
+      }).roundEndReview?.participantReviews.gladiator?.proposedDamage[0];
+
+    // Legacy semantics: roundsElapsed = roundNumber - initializedRound + 1, so a bleed
+    // initialized in round 1 is already one round old during round 1 itself.
+    expect(
+      reviewLegacyBleedAtRound({
+        bleedState: { accumulatedTenths: 0, initializedRound: 1 },
+        roundNumber: 2,
+      }),
+    ).toMatchObject({
+      healthCheckDue: false,
+      initializedRound: 1,
+      roundsUntilHealthCheck: 8,
+    });
+    expect(
+      reviewLegacyBleedAtRound({
+        bleedState: { accumulatedTenths: 0, initializedRound: 1 },
+        roundNumber: 9,
+      }),
+    ).toMatchObject({
+      healthCheckDue: false,
+      initializedRound: 1,
+      roundsUntilHealthCheck: 1,
+    });
+    expect(
+      reviewLegacyBleedAtRound({
+        bleedState: { accumulatedTenths: 0, initializedRound: 1 },
+        roundNumber: 10,
+      }),
+    ).toMatchObject({
+      healthCheckDue: true,
+      initializedRound: 1,
+      roundsUntilHealthCheck: 0,
+    });
+
+    // The `+1` is deliberately absent once a health check has happened: the next check
+    // falls a full ten rounds AFTER the recorded check round. This asymmetry is legacy.
+    expect(
+      reviewLegacyBleedAtRound({
+        bleedState: { accumulatedTenths: 0, initializedRound: 1, lastHealthCheckRound: 10 },
+        roundNumber: 19,
+      }),
+    ).toMatchObject({
+      healthCheckDue: false,
+      lastHealthCheckRound: 10,
+      roundsUntilHealthCheck: 1,
+    });
+    expect(
+      reviewLegacyBleedAtRound({
+        bleedState: { accumulatedTenths: 0, initializedRound: 1, lastHealthCheckRound: 10 },
+        roundNumber: 20,
+      }),
+    ).toMatchObject({
+      healthCheckDue: true,
+      lastHealthCheckRound: 10,
+      roundsUntilHealthCheck: 0,
+    });
+  });
+
+  it("pins the legacy bleed interval of 10 rounds and Health difficulties 21 / 26", () => {
+    const reviewAtRound = (input: { roundNumber: number; type: "bleed" | "internal_bleed" }) =>
+      prepareCombatRoundEndReview({
+        participantInputs: {
+          gladiator: {
+            combatEffects: combatEffectsWith([
+              {
+                bleedState: { accumulatedTenths: 0, initializedRound: 1 },
+                effectGroup: "bleed",
+                id: `legacy-${input.type}-constants`,
+                modifierValue: 1,
+                roundNumber: 1,
+                type: input.type,
+              },
+            ]),
+            healthStat: 0,
+          },
+        },
+        state: advanceToStep(
+          initializeCombatRoundState({
+            encounter: encounter({ currentRound: input.roundNumber }),
+          }),
+          "round_summary",
+        ),
+      }).roundEndReview?.participantReviews.gladiator;
+
+    // Interval constant: 10 rounds. Round 9 is not yet due; round 10 is.
+    expect(reviewAtRound({ roundNumber: 9, type: "bleed" })?.proposedHealthRolls).toEqual([]);
+    expect(reviewAtRound({ roundNumber: 10, type: "bleed" })?.proposedHealthRolls).toHaveLength(1);
+
+    // External bleed difficulty constant: 21.
+    expect(reviewAtRound({ roundNumber: 10, type: "bleed" })?.proposedHealthRolls[0]).toMatchObject(
+      {
+        bleedType: "external",
+        difficulty: 21,
+        label: "Health check vs bleed 21",
+      },
+    );
+
+    // Internal bleed difficulty constant: 26.
+    expect(
+      reviewAtRound({ roundNumber: 10, type: "internal_bleed" })?.proposedHealthRolls[0],
+    ).toMatchObject({
+      bleedType: "internal",
+      difficulty: 26,
+      label: "Health check vs internal bleed 26",
+    });
+  });
+
+  it("pins that legacy bleed damage is proposed before the same round's Health check", () => {
+    const dueRoundReview = prepareCombatRoundEndReview({
+      participantInputs: {
+        gladiator: {
+          combatEffects: combatEffectsWith([
+            {
+              bleedState: { accumulatedTenths: 6, initializedRound: 1 },
+              effectGroup: "bleed",
+              id: "legacy-bleed-ordering",
+              modifierValue: 4,
+              roundNumber: 1,
+              type: "bleed",
+            },
+          ]),
+          healthStat: 0,
+        },
+      },
+      state: advanceToStep(
+        initializeCombatRoundState({ encounter: encounter({ currentRound: 10 }) }),
+        "round_summary",
+      ),
+    }).roundEndReview?.participantReviews.gladiator;
+    const damageProposal = dueRoundReview?.proposedDamage[0];
+    const healthRoll = dueRoundReview?.proposedHealthRolls[0];
+
+    // The due round's damage is accumulated and proposed at the full pre-check bleed rate.
+    expect(damageProposal).toMatchObject({
+      accumulatedTenths: 10,
+      amount: 1,
+      bleedRate: 4,
+      healthCheckDue: true,
+      previousAccumulatedTenths: 6,
+      remainingAccumulatedTenths: 0,
+    });
+
+    // The Health check is only proposed afterwards, still carrying that same pre-check
+    // rate, so no Health outcome can reduce the damage already applied this round.
+    expect(healthRoll).toMatchObject({
+      damageProposalId: damageProposal?.id,
+      id: `${damageProposal?.id}:health`,
+      previousBleedRate: 4,
+      status: "pending",
+    });
+    expect(healthRoll?.id.startsWith(damageProposal?.id ?? "")).toBe(true);
+  });
+
   it("accumulates bleed 3 using tenths and remainder", () => {
     const roundSummaryState = advanceToStep(
       initializeCombatRoundState({ encounter: encounter() }),
