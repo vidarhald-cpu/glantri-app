@@ -258,12 +258,19 @@ import {
   type CombatResultConsequence,
   type CombatResultPresentationFacts,
 } from "./combatResultPresentation";
-import { lookupCombatCriticalModifier } from "./critical";
+import {
+  applyWeaponPrimaryCriticalGradeMaximum,
+  combatCriticalGradeSchema,
+  lookupCombatCriticalModifier,
+  parseWeaponPrimaryCriticalGradeMaximum,
+  resolveSecondaryCriticalGrade,
+} from "./critical";
 import {
   buildCriticalEffectProposalFromDamageResult,
   buildCriticalEffectProposalSummary,
   getCriticalEffectSourceConflict,
   isCriticalEffectSourceConflictKey,
+  type CriticalEffectProposalAdditionalEffect,
 } from "./criticalEffectProposal";
 import { getCriticalResultWithEffects, type CriticalEffectTemplate } from "./criticalEffectsTable";
 import {
@@ -1193,6 +1200,7 @@ export const combatRoundAttackRollResultSchema = z
     rolledByUserId: idSchema.optional(),
     tableResult: z.string().min(1),
     weaponArmorClass: combatArmorModifierClassSchema.optional(),
+    /** The weapon's `Crit 1` code alone. Never a concatenation with the `Sec` code. */
     weaponCriticalCode: z.string().min(1).optional(),
     weaponDamageClass: z.string().min(1).optional(),
     weaponDmb: z.number().int().optional(),
@@ -1215,6 +1223,12 @@ export const combatRoundAttackRollResultSchema = z
     weaponModeSourceMetadata: ImportedWeaponSourceMetadataSchema.optional(),
     weaponInstanceId: idSchema.optional(),
     weaponName: z.string().min(1),
+    /**
+     * The weapon-authored raw `Sec` code, carried verbatim beside `weaponCriticalCode` rather than
+     * concatenated onto it (rule decision 0006 §1; `docs/rules/secondary-critical-sec-grammar.md`
+     * §5). Absent whenever the weapon authors no `Sec` value, which is an authored absence.
+     */
+    weaponSecondaryCriticalCode: z.string().min(1).optional(),
     weaponSourceId: idSchema.optional(),
     weaponSourceSlot: combatAttackSourceSlotSchema.optional(),
     weaponTemplateId: idSchema.optional(),
@@ -1294,6 +1308,7 @@ export const combatMissileIncomingAttackSchema = z
     rolledByUserId: idSchema.optional(),
     status: z.literal("awaiting_defense"),
     weaponArmorClass: combatArmorModifierClassSchema.optional(),
+    /** The weapon's `Crit 1` code alone. Never a concatenation with the `Sec` code. */
     weaponCriticalCode: z.string().min(1).optional(),
     weaponDamageClass: z.string().min(1).optional(),
     weaponDmbFormula: WeaponAttackModeSchema.shape.dmbFormula.unwrap().optional(),
@@ -1509,6 +1524,11 @@ export const combatRoundCriticalEffectRollReportSchema = z.object({
 export const combatRoundDamageReviewAdditionalEffectSchema = z
   .object({
     accepted: z.boolean().optional(),
+    /**
+     * Present only on rows produced by the Secondary Critical. Absent means the Primary, so a
+     * Primary-only attack keeps exactly the review shape it had before this field existed.
+     */
+    criticalRole: z.literal("secondary").optional(),
     durationRounds: z.number().int().positive().optional(),
     effectOrder: z.number().int().positive().optional(),
     id: idSchema,
@@ -1621,6 +1641,51 @@ export const combatRoundCriticalRollResultSchema = z
   .default({});
 export type CombatRoundCriticalRollResult = z.infer<typeof combatRoundCriticalRollResultSchema>;
 
+/**
+ * The persisted Secondary Critical result, rule decision 0006 §2-§5.
+ *
+ * It records the full derivation, not only the outcome: the resolved (already `Crit 1`-capped)
+ * Primary grade it reduced from, the universally reduced grade, the `Sec`-encoded maximum, whether
+ * that maximum bound, the raw authored `Sec` code and its normalized form, and the fresh
+ * independent 2d8 the Secondary was resolved from. The dice are persisted so that re-deriving the
+ * proposal during GM review never re-rolls them, exactly as the Primary's dice are fixed once.
+ */
+export const combatRoundSecondaryCriticalResultSchema = z.object({
+  armorCriticalModifier: z.number().int(),
+  bodyText: z.string().min(1).optional(),
+  /** The normalized recognized `Sec` code, one of `AP, AC, AS, BS, CC, DC`. */
+  code: z.string().min(1),
+  criticalDice: z.tuple([z.number().int().min(1).max(8), z.number().int().min(1).max(8)]),
+  criticalDiceTotal: z.number().int(),
+  /** The resolved Secondary grade, after the universal reduction and the `Sec` maximum cap. */
+  criticalGrade: combatCriticalGradeSchema,
+  criticalIndexStatus: z
+    .enum(["no_effect", "table_lookup", "unsupported_high", "unsupported"])
+    .optional(),
+  criticalTypeModifier: z.number().int(),
+  critIndex: z.number().int().positive().optional(),
+  critKey: z.string().min(1).optional(),
+  /** Routed by the `Sec` second character, never by the weapon's own damage class or `Crit 1`. */
+  family: z.string().min(1),
+  finalCriticalRoll: z.number().int(),
+  gradeCapApplied: z.boolean(),
+  location: z.string().min(1).optional(),
+  minDamageReason: z.string().min(1).optional(),
+  minDamageSourceEffectKey: z.string().min(1).optional(),
+  minTotalDamage: z.number().int().min(0).optional(),
+  primaryCriticalGrade: combatCriticalGradeSchema,
+  /** The raw authored `Sec` cell value, preserved verbatim for provenance. */
+  rawCode: z.string().min(1),
+  reducedCriticalGrade: combatCriticalGradeSchema,
+  rollReports: z.array(combatRoundCriticalEffectRollReportSchema).default([]),
+  secondaryGradeMaximum: combatCriticalGradeSchema,
+  title: z.string().min(1).optional(),
+  warnings: z.array(z.string().min(1)).default([]),
+});
+export type CombatRoundSecondaryCriticalResult = z.infer<
+  typeof combatRoundSecondaryCriticalResultSchema
+>;
+
 export const combatRoundDamageResultSchema = z.object({
   armorAppliesToDamage: z.boolean().default(true),
   armorAppliesToMinimumDamage: z.boolean().default(true),
@@ -1709,6 +1774,18 @@ export const combatRoundDamageResultSchema = z.object({
           minDamageSourceEffectKey: z.string().min(1).optional(),
           minTotalDamage: z.number().int().min(0).optional(),
           rollReports: z.array(combatRoundCriticalEffectRollReportSchema).default([]),
+          /**
+           * The Secondary Critical this attack also produced, when the weapon authors a recognized
+           * `Sec` code and the settled chain yields a grade (rule decision 0006 §2-§5). Absent
+           * whenever no Secondary occurs, so every Primary-only round keeps its previous shape.
+           */
+          secondary: combatRoundSecondaryCriticalResultSchema.optional(),
+          /**
+           * Secondary-Critical diagnostics, kept out of `warnings` so the Primary's own warning
+           * list stays byte-identical to what it was before Secondary Criticals existed. Omitted
+           * entirely when there is nothing to say.
+           */
+          secondaryWarnings: z.array(z.string().min(1)).optional(),
           title: z.string().min(1).optional(),
           warnings: z.array(z.string().min(1)).default([]),
         })
@@ -1738,6 +1815,13 @@ export const combatRoundDamageResultSchema = z.object({
   rawTotalDamage: z.number().int().min(0).optional(),
   totalDamage: z.number().int(),
   weaponArmorClass: combatArmorModifierClassSchema.optional(),
+  /**
+   * The weapon's `Crit 1` grade maximum, read from the first character of its `Crit 1` code.
+   * Rule decision 0006 §2 makes it the ceiling on the resolved Primary Critical grade, applied
+   * before the Secondary chain. Absent when the weapon authors no readable `Crit 1` grade letter,
+   * in which case no cap applies.
+   */
+  weaponCriticalGradeMaximum: combatCriticalGradeSchema.optional(),
   weaponName: z.string().min(1).optional(),
 });
 export type CombatRoundDamageResult = z.infer<typeof combatRoundDamageResultSchema>;
@@ -2236,7 +2320,105 @@ function buildCombatRoundCriticalOperationalConsequences(input: {
   return consequences;
 }
 
+/**
+ * Resolves the Secondary Critical for one attack, rule decision 0006 §2-§5 and the settled `Sec`
+ * grammar.
+ *
+ * Everything the rules fix is fixed here and nowhere else:
+ *
+ * - the grade chain (`Crit 1`-capped Primary -> universal two-step reduction -> `B`/`A` produce
+ *   nothing -> cap at the `Sec` maximum) lives in `resolveSecondaryCriticalGrade`;
+ * - the family comes from the `Sec` second character alone and is forced onto the proposal
+ *   builder, so the Primary's family precedence is never consulted for the Secondary;
+ * - the hit location is the Primary's, reused rather than re-rolled (§4);
+ * - the roll is a **fresh independent 2d8** (§5) that never reuses the Primary's dice, resolved
+ *   against the same `armorCriticalModifier` the Primary used at the same location.
+ *
+ * The dice are persisted and reused on every later re-derivation, so re-opening or re-saving the
+ * GM review recomputes the Secondary's lookup without ever re-rolling it.
+ */
+function resolveCombatRoundSecondaryCritical(input: {
+  armorCriticalModifier?: number;
+  existingCommittedDamageAmount: number;
+  persistedSecondary?: CombatRoundSecondaryCriticalResult;
+  resolvedPrimaryCriticalGrade?: string;
+  rng?: () => number;
+  selectedHitLocation?: HitLocation;
+  weaponSecondaryCriticalCode?: string;
+}): {
+  effects: readonly CriticalEffectProposalAdditionalEffect[];
+  secondary?: CombatRoundSecondaryCriticalResult;
+  warnings: readonly string[];
+} {
+  const resolution = resolveSecondaryCriticalGrade({
+    resolvedPrimaryCriticalGrade: input.resolvedPrimaryCriticalGrade,
+    weaponSecondaryCriticalCode: input.weaponSecondaryCriticalCode,
+  });
+
+  if (resolution.status === "unrecognized") {
+    return { effects: [], warnings: [`Secondary Critical: ${resolution.reason}`] };
+  }
+
+  if (resolution.status === "none") {
+    return { effects: [], warnings: [] };
+  }
+
+  const rng = input.rng ?? Math.random;
+  const persistedDice = input.persistedSecondary?.criticalDice;
+  const criticalDice: [number, number] = persistedDice
+    ? [persistedDice[0], persistedDice[1]]
+    : [rollClosedCombatD8(rng), rollClosedCombatD8(rng)];
+  const criticalDiceTotal = criticalDice[0] + criticalDice[1];
+  const criticalMetadata = lookupCombatCriticalModifier(resolution.secondaryCriticalGrade);
+  const armorCriticalModifier = input.armorCriticalModifier ?? 0;
+  const finalCriticalRoll =
+    criticalDiceTotal + criticalMetadata.criticalTypeModifier - armorCriticalModifier;
+  const proposal = buildCriticalEffectProposalFromDamageResult({
+    criticalRole: "secondary",
+    existingCommittedDamageAmount: input.existingCommittedDamageAmount,
+    finalCriticalRoll,
+    forcedCriticalFamily: resolution.family,
+    preservedRollReports: input.persistedSecondary?.rollReports,
+    rng,
+    selectedHitLocation: input.selectedHitLocation,
+  });
+  const summary = buildCriticalEffectProposalSummary(proposal);
+
+  return {
+    effects: proposal.proposedEffects,
+    secondary: combatRoundSecondaryCriticalResultSchema.parse({
+      armorCriticalModifier,
+      bodyText: summary.bodyText,
+      code: resolution.code,
+      criticalDice,
+      criticalDiceTotal,
+      criticalGrade: resolution.secondaryCriticalGrade,
+      criticalIndexStatus: summary.criticalIndexStatus,
+      criticalTypeModifier: criticalMetadata.criticalTypeModifier,
+      critIndex: summary.critIndex,
+      critKey: summary.critKey,
+      family: resolution.family,
+      finalCriticalRoll,
+      gradeCapApplied: resolution.gradeCapApplied,
+      location: summary.location,
+      minDamageReason: summary.minDamageReason,
+      minDamageSourceEffectKey: summary.minDamageSourceEffectKey,
+      minTotalDamage: summary.minTotalDamage,
+      primaryCriticalGrade: resolution.primaryCriticalGrade,
+      rawCode: resolution.rawCode,
+      reducedCriticalGrade: resolution.reducedCriticalGrade,
+      rollReports: summary.rollReports,
+      secondaryGradeMaximum: resolution.secondaryGradeMaximum,
+      title: summary.title,
+      warnings: summary.warnings,
+    }),
+    warnings: summary.warnings,
+  };
+}
+
 function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
+  armorCriticalModifier?: number;
+  criticalGrade?: string;
   damageResult: CombatRoundDamageResult;
   finalCriticalRoll?: number;
   rng?: () => number;
@@ -2246,6 +2428,7 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
   weaponDamageClass?: string;
   weaponArmorClass?: CombatArmorModifierClass;
   weaponDmb?: number;
+  weaponSecondaryCriticalCode?: string;
   weaponDmbRoll?: {
     diceCount: number;
     diceSides: number;
@@ -2262,15 +2445,27 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
   const existingReview = removeCombatRoundCriticalEffectProposalFromReview(
     sourceConflictSafeReview,
   ) ?? { additionalEffects: [], operationalConsequences: [] };
+  const existingCommittedDamageAmount = getCombatRoundEffectiveDamageResult(
+    input.damageResult,
+  ).effectiveTotalDamage;
   const proposal = buildCriticalEffectProposalFromDamageResult({
-    existingCommittedDamageAmount: getCombatRoundEffectiveDamageResult(input.damageResult)
-      .effectiveTotalDamage,
+    existingCommittedDamageAmount,
     finalCriticalRoll: input.finalCriticalRoll,
     preservedRollReports: sourceConflictSafeReview?.criticalEffectProposal?.rollReports,
     rng: input.rng,
     selectedHitLocation: input.selectedHitLocation,
     weaponCriticalCode: input.weaponCriticalCode,
     weaponDamageClass: input.weaponDamageClass,
+    weaponSecondaryCriticalCode: input.weaponSecondaryCriticalCode,
+  });
+  const secondary = resolveCombatRoundSecondaryCritical({
+    armorCriticalModifier: input.armorCriticalModifier,
+    existingCommittedDamageAmount,
+    persistedSecondary: sourceConflictSafeReview?.criticalEffectProposal?.secondary,
+    resolvedPrimaryCriticalGrade: input.criticalGrade,
+    rng: input.rng,
+    selectedHitLocation: input.selectedHitLocation,
+    weaponSecondaryCriticalCode: input.weaponSecondaryCriticalCode,
   });
   const operationalConsequences = buildCombatRoundCriticalOperationalConsequences({
     damageResult: input.damageResult,
@@ -2280,10 +2475,10 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
   const priorCriticalEffects = new Map(
     (sourceConflictSafeReview?.additionalEffects ?? [])
       .filter(isCombatRoundCriticalTableReviewEffect)
-      .map((effect) => [effect.sourceEffectKey, effect] as const),
+      .map((effect) => [effect.id, effect] as const),
   );
-  const proposedEffects = proposal.proposedEffects.map((effect) => {
-    const prior = priorCriticalEffects.get(effect.sourceEffectKey);
+  const proposedEffects = [...proposal.proposedEffects, ...secondary.effects].map((effect) => {
+    const prior = priorCriticalEffects.get(effect.id);
 
     return prior ? { ...effect, accepted: prior.accepted } : effect;
   });
@@ -2315,6 +2510,8 @@ function mergeCombatRoundCriticalEffectProposalIntoReview(input: {
           preservedCanonicalReview?.criticalKey === proposal.criticalResult?.critKey
             ? preservedCanonicalReview
             : undefined,
+        secondary: secondary.secondary,
+        secondaryWarnings: secondary.warnings.length > 0 ? secondary.warnings : undefined,
       },
       operationalConsequences: [
         ...(existingReview.operationalConsequences ?? []),
@@ -6437,6 +6634,8 @@ export function buildCombatRoundAttackRollResult(input: {
   weaponModeSourceMetadata?: z.input<typeof ImportedWeaponSourceMetadataSchema>;
   weaponInstanceId?: string;
   weaponName: string;
+  /** The weapon's raw `Sec` code, carried verbatim beside `weaponCriticalCode`, never joined to it. */
+  weaponSecondaryCriticalCode?: string;
   weaponSourceId?: string;
   weaponSourceSlot?: CombatAttackSourceSlot;
   weaponTemplateId?: string;
@@ -6492,6 +6691,7 @@ export function buildCombatRoundAttackRollResult(input: {
     weaponModeSourceMetadata: input.weaponModeSourceMetadata,
     weaponInstanceId: input.weaponInstanceId,
     weaponName: input.weaponName,
+    weaponSecondaryCriticalCode: input.weaponSecondaryCriticalCode,
     weaponSourceId: input.weaponSourceId,
     weaponSourceSlot: input.weaponSourceSlot,
     weaponTemplateId: input.weaponTemplateId,
@@ -10921,16 +11121,30 @@ function hasCombatRoundDamageReviewOverrides(review: CombatRoundDamageReview | u
   );
 }
 
+/**
+ * Resolves the Primary Critical grade and then applies the weapon's `Crit 1` maximum.
+ *
+ * Rule decision 0006 §2 states the cap without qualification: "`Crit 1` grade letter = maximum
+ * Primary Critical grade for the weapon. The resolved Primary Critical is capped by it before
+ * anything below applies." The cap is therefore applied to the *resolved* grade whatever produced
+ * it — the To Hit table or a GM `criticalGradeOverride` — because neither 0006 nor the settled
+ * grammar states an exception, and carving one out would be inventing a rule. The cap only ever
+ * lowers a grade, and `weaponCriticalGradeMaximum` records the ceiling that was in force.
+ */
 function getCombatRoundReviewedCriticalGrade(input: {
   computedCriticalGrade?: string;
   review?: CombatRoundDamageReview;
   tableCriticalGrade?: string;
+  weaponCriticalGradeMaximum?: string;
 }): string | undefined {
-  if (combatRoundReviewHasOwnField(input.review, "criticalGradeOverride")) {
-    return input.review?.criticalGradeOverride ?? undefined;
-  }
+  const resolvedGrade = combatRoundReviewHasOwnField(input.review, "criticalGradeOverride")
+    ? (input.review?.criticalGradeOverride ?? undefined)
+    : (input.tableCriticalGrade ?? input.computedCriticalGrade);
 
-  return input.tableCriticalGrade ?? input.computedCriticalGrade;
+  return applyWeaponPrimaryCriticalGradeMaximum({
+    criticalGrade: resolvedGrade,
+    weaponCriticalCode: input.weaponCriticalGradeMaximum,
+  });
 }
 
 function getCombatRoundCriticalMinimumTotalDamage(review?: CombatRoundDamageReview): {
@@ -11241,6 +11455,7 @@ export function getCombatRoundEffectiveDamageResult(
   let effectiveCriticalGrade = getCombatRoundReviewedCriticalGrade({
     computedCriticalGrade: damageResult.criticalGrade,
     review: damageResult.review,
+    weaponCriticalGradeMaximum: damageResult.weaponCriticalGradeMaximum,
   });
   let effectiveMaxDamageNote = damageResult.maxDamageNote;
   let effectiveMinDamage = damageResult.minDamage;
@@ -11279,6 +11494,7 @@ export function getCombatRoundEffectiveDamageResult(
         computedCriticalGrade: damageResult.criticalGrade,
         review: damageResult.review,
         tableCriticalGrade: undefined,
+        weaponCriticalGradeMaximum: damageResult.weaponCriticalGradeMaximum,
       });
 
       const referenceTableDamage = metadata.damage;
@@ -11332,6 +11548,7 @@ export function getCombatRoundEffectiveDamageResult(
         computedCriticalGrade: damageResult.criticalGrade,
         review: damageResult.review,
         tableCriticalGrade: metadata.criticalGrade,
+        weaponCriticalGradeMaximum: damageResult.weaponCriticalGradeMaximum,
       });
       const adjustedDamage = calculateCombatRoundArmorAdjustedDamage({
         armorDamageModifier: effectiveArmorModifier,
@@ -11573,7 +11790,12 @@ export function buildCombatRoundDamageResult(input: {
   } else {
     const damageMetadata = getCombatRoundDamageMetadataForLookup(normalDamageLookupTotal);
     tableDamage = damageMetadata.damage;
-    criticalGrade = damageMetadata.criticalGrade;
+    // Rule decision 0006 §2 step 1: the To Hit table's grade is capped by the weapon's `Crit 1`
+    // maximum before it is recorded as the resolved Primary Critical grade.
+    criticalGrade = applyWeaponPrimaryCriticalGradeMaximum({
+      criticalGrade: damageMetadata.criticalGrade,
+      weaponCriticalCode: input.attackResult.weaponCriticalCode,
+    });
     maxDamageNote = damageMetadata.maxDamageNote;
     minDamage = damageMetadata.minDamage;
   }
@@ -11653,6 +11875,9 @@ export function buildCombatRoundDamageResult(input: {
     rawTotalDamage: totalDamage,
     totalDamage,
     weaponArmorClass: input.weaponArmorClass,
+    weaponCriticalGradeMaximum: parseWeaponPrimaryCriticalGradeMaximum(
+      input.attackResult.weaponCriticalCode,
+    ),
     weaponName: input.attackResult.weaponName,
   });
 }
@@ -12164,6 +12389,12 @@ export function reviewCombatRoundDamageResult(input: {
   reviewedAt: string;
   reviewedByUserId?: string;
   review: Omit<CombatRoundDamageReview, "reviewedAt" | "reviewedByUserId">;
+  /**
+   * Only ever consumed when a GM review newly brings a Secondary Critical into existence that the
+   * stored review does not already carry dice for; an existing Secondary's fresh 2d8 is persisted
+   * and reused, never re-rolled.
+   */
+  rng?: () => number;
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
@@ -12183,24 +12414,28 @@ export function reviewCombatRoundDamageResult(input: {
       attackResultId: result.attackResultId,
       state: normalized,
     });
+    const reviewedDamageResult = {
+      ...result.damageResult,
+      review: nextReview,
+    };
+    const effectiveCriticalRoll = getCombatRoundEffectiveCriticalRoll({
+      criticalRoll: result.criticalRoll,
+      review: nextReview,
+    });
     const review =
       result.criticalRoll.status === "rolled"
         ? mergeCombatRoundCriticalEffectProposalIntoReview({
-            damageResult: {
-              ...result.damageResult,
-              review: nextReview,
-            },
-            finalCriticalRoll: getCombatRoundEffectiveCriticalRoll({
-              criticalRoll: result.criticalRoll,
-              review: nextReview,
-            }).finalCriticalRoll,
-            selectedHitLocation: getCombatRoundEffectiveCriticalRoll({
-              criticalRoll: result.criticalRoll,
-              review: nextReview,
-            }).criticalLocation,
+            armorCriticalModifier: effectiveCriticalRoll.armorCriticalModifier,
+            criticalGrade:
+              getCombatRoundEffectiveDamageResult(reviewedDamageResult).effectiveCriticalGrade,
+            damageResult: reviewedDamageResult,
+            finalCriticalRoll: effectiveCriticalRoll.finalCriticalRoll,
+            rng: input.rng,
+            selectedHitLocation: effectiveCriticalRoll.criticalLocation,
             state: normalized,
             weaponCriticalCode: attackResult?.weaponCriticalCode,
             weaponDamageClass: attackResult?.weaponDamageClass,
+            weaponSecondaryCriticalCode: attackResult?.weaponSecondaryCriticalCode,
           })
         : nextReview;
 
@@ -12233,6 +12468,8 @@ function recordCombatRoundCriticalRollCommand(input: {
     createdByUserId?: string;
   };
   criticalRoll: CombatRoundCriticalRollResult;
+  /** The resolved Secondary Critical, when the attack produced one (rule decision 0006). */
+  secondaryCritical?: CombatRoundSecondaryCriticalResult;
   state: CombatRoundState;
 }): CombatRoundState {
   const normalized = combatRoundStateSchema.parse(input.state);
@@ -12260,6 +12497,13 @@ function recordCombatRoundCriticalRollCommand(input: {
       finalCriticalRoll: input.criticalRoll.finalCriticalRoll,
       rolledByParticipantId: input.criticalRoll.rolledByParticipantId,
       rollPrivilege: "attacker",
+      ...(input.secondaryCritical
+        ? {
+            secondaryCriticalCode: input.secondaryCritical.code,
+            secondaryCriticalFamily: input.secondaryCritical.family,
+            secondaryCriticalGrade: input.secondaryCritical.criticalGrade,
+          }
+        : {}),
       selectedHitLocation: input.criticalRoll.selectedHitLocation,
     },
     id:
@@ -12302,6 +12546,16 @@ function recordCombatRoundCriticalRollCommand(input: {
       facts: {
         involvedOutcome: {
           criticalGrade: input.criticalRoll.criticalGrade,
+          /**
+           * The Secondary Critical's grade is public in exactly the same substance as the
+           * Primary's: the observable severity of a second Critical result the involved audience
+           * witnessed. Its dice, type modifier and final roll stay roller-private below. The key
+           * is present only when a Secondary actually occurred, so a Primary-only attack publishes
+           * exactly the facts it always did.
+           */
+          ...(input.secondaryCritical
+            ? { secondaryCriticalGrade: input.secondaryCritical.criticalGrade }
+            : {}),
           selectedHitLocation: input.criticalRoll.selectedHitLocation,
         },
         rollerPrivate: {
@@ -12310,6 +12564,14 @@ function recordCombatRoundCriticalRollCommand(input: {
           criticalDiceTotal: input.criticalRoll.criticalDiceTotal,
           criticalTypeModifier: input.criticalRoll.criticalTypeModifier,
           finalCriticalRoll: input.criticalRoll.finalCriticalRoll,
+          ...(input.secondaryCritical
+            ? {
+                secondaryCriticalDice: input.secondaryCritical.criticalDice,
+                secondaryCriticalDiceTotal: input.secondaryCritical.criticalDiceTotal,
+                secondaryCriticalTypeModifier: input.secondaryCritical.criticalTypeModifier,
+                secondaryFinalCriticalRoll: input.secondaryCritical.finalCriticalRoll,
+              }
+            : {}),
         },
       },
       ownerParticipantId: input.attackResult.defenderParticipantId,
@@ -12392,6 +12654,8 @@ export function recordCombatRoundCriticalRoll(input: {
   const damageResultWithCriticalProposal = combatRoundDamageResultSchema.parse({
     ...damageResult,
     review: mergeCombatRoundCriticalEffectProposalIntoReview({
+      armorCriticalModifier: criticalRoll.armorCriticalModifier,
+      criticalGrade: criticalRoll.criticalGrade,
       damageResult,
       finalCriticalRoll: criticalRoll.finalCriticalRoll,
       rng: input.rng,
@@ -12399,6 +12663,7 @@ export function recordCombatRoundCriticalRoll(input: {
       state: normalized,
       weaponCriticalCode: input.attackResult.weaponCriticalCode,
       weaponDamageClass: input.attackResult.weaponDamageClass,
+      weaponSecondaryCriticalCode: input.attackResult.weaponSecondaryCriticalCode,
     }),
   });
   const withCriticalRoll = upsertCombatRoundPhaseResolutionResults({
@@ -12418,6 +12683,8 @@ export function recordCombatRoundCriticalRoll(input: {
         attackResult: input.attackResult,
         command: input.command,
         criticalRoll,
+        secondaryCritical:
+          damageResultWithCriticalProposal.review?.criticalEffectProposal?.secondary,
         state: withCriticalRoll,
       })
     : withCriticalRoll;

@@ -670,7 +670,16 @@ function driveDistanceControlLifecycle(): CombatStepEvent[] {
 }
 
 /** Drives a real attack through failed parry, hit location, damage and critical. */
-function driveAttackDamageLifecycle(): CombatStepEvent[] {
+function driveAttackDamageLifecycle(
+  options: {
+    criticalDice?: [number, number];
+    dmb?: number;
+    rng?: () => number;
+    weaponCriticalCode?: string;
+    weaponDamageClass?: string;
+    weaponSecondaryCriticalCode?: string;
+  } = {},
+): CombatStepEvent[] {
   const actionId = "attack_parry";
   const declared = recordCombatRoundDeclaration({
     declaration: {
@@ -706,7 +715,10 @@ function driveAttackDamageLifecycle(): CombatStepEvent[] {
     rollD20: 14,
     rollTotal: 14,
     rolledAt: "2026-01-01T00:03:00.000Z",
+    weaponCriticalCode: options.weaponCriticalCode,
+    weaponDamageClass: options.weaponDamageClass,
     weaponName: "Broad sword",
+    weaponSecondaryCriticalCode: options.weaponSecondaryCriticalCode,
   });
   const afterAttack = recordCombatRoundAttackResult({
     command: { createdAt: attackResult.rolledAt, createdByUserId: "gm-1" },
@@ -772,7 +784,7 @@ function driveAttackDamageLifecycle(): CombatStepEvent[] {
     attackResult,
     command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: "gm-1" },
     defenderDm: 0,
-    dmb: 8,
+    dmb: options.dmb ?? 8,
     state: afterLocation,
     submittedBy: "gm",
     updatedAt: "2026-01-01T00:05:00.000Z",
@@ -780,7 +792,8 @@ function driveAttackDamageLifecycle(): CombatStepEvent[] {
   const afterCritical = recordCombatRoundCriticalRoll({
     attackResult,
     command: { createdAt: "2026-01-01T00:05:30.000Z", createdByUserId: "gm-1" },
-    criticalDice: [4, 5],
+    criticalDice: options.criticalDice ?? [4, 5],
+    rng: options.rng,
     rolledByParticipantId: "gladiator",
     state: afterDamage,
     submittedBy: "gm",
@@ -870,6 +883,18 @@ const DISARM_LIFECYCLE_EVENTS = driveDisarmLifecycle();
 const BREAK_OFF_LIFECYCLE_EVENTS = driveBreakOffLifecycle();
 const DISTANCE_CONTROL_LIFECYCLE_EVENTS = driveDistanceControlLifecycle();
 const ATTACK_LIFECYCLE_EVENTS = driveAttackDamageLifecycle();
+/**
+ * The same lifecycle driven with a Great sword, whose `Sec` code `DC` makes the attack produce a
+ * Secondary Critical beside the Primary (rule decision 0006). `dmb` lifts the Primary to grade F
+ * so the settled chain yields a Secondary at all, and the Secondary's fresh 2d8 is injected.
+ */
+const SECONDARY_CRITICAL_LIFECYCLE_EVENTS = driveAttackDamageLifecycle({
+  dmb: 16,
+  rng: () => 0.5,
+  weaponCriticalCode: "FS",
+  weaponDamageClass: "edged",
+  weaponSecondaryCriticalCode: "DC",
+});
 const HEALTH_CHECK_LIFECYCLE_EVENTS = driveHealthCheckLifecycle();
 
 const ALL_LIFECYCLE_EVENTS = [
@@ -877,6 +902,7 @@ const ALL_LIFECYCLE_EVENTS = [
   ...BREAK_OFF_LIFECYCLE_EVENTS,
   ...DISTANCE_CONTROL_LIFECYCLE_EVENTS,
   ...ATTACK_LIFECYCLE_EVENTS,
+  ...SECONDARY_CRITICAL_LIFECYCLE_EVENTS,
   ...HEALTH_CHECK_LIFECYCLE_EVENTS,
 ];
 
@@ -1053,6 +1079,52 @@ describe("published outcomes carry their real result into the Activity payload",
         expect(["boolean", "number", "string"]).toContain(typeof value);
       }
     }
+  });
+
+  it("publishes both Criticals of a two-Critical attack, and only their grades", () => {
+    const criticalEvent = eventOfType(SECONDARY_CRITICAL_LIFECYCLE_EVENTS, "critical");
+    const facts = buildCombatActivityFacts({ event: criticalEvent, toScenarioParticipantId });
+
+    expect(criticalEvent.facts.involvedOutcome["secondaryCriticalGrade"]).toBe("d");
+    expect(Object.keys(facts.involvedOutcomeDigest).sort()).toStrictEqual([
+      "criticalGrade",
+      "secondaryCriticalGrade",
+    ]);
+    expect(facts.involvedOutcomeDigest["secondaryCriticalGrade"]).toBe("d");
+
+    // The Secondary's dice, type modifier and final roll are roller-private and never published.
+    const serialized = JSON.stringify(facts);
+    for (const key of [
+      "secondaryCriticalDice",
+      "secondaryCriticalDiceTotal",
+      "secondaryCriticalTypeModifier",
+      "secondaryFinalCriticalRoll",
+    ]) {
+      expect(serialized, `critical leaked rollerPrivate.${key}`).not.toContain(`"${key}"`);
+    }
+
+    expect(
+      lifecycleSummaryFor({
+        eventType: "critical",
+        events: SECONDARY_CRITICAL_LIFECYCLE_EVENTS,
+        viewer: "guard",
+      }),
+    ).toBe("You suffered a grade F critical result. A grade D secondary critical followed.");
+    expect(
+      lifecycleSummaryFor({
+        eventType: "critical",
+        events: SECONDARY_CRITICAL_LIFECYCLE_EVENTS,
+        viewer: "gm",
+      }),
+    ).toBe("City guard suffered a grade F critical result. A grade D secondary critical followed.");
+    // A Primary-only attack keeps exactly its previous sentence.
+    expect(
+      lifecycleSummaryFor({
+        eventType: "critical",
+        events: ATTACK_LIFECYCLE_EVENTS,
+        viewer: "guard",
+      }),
+    ).toBe("You suffered a grade B critical result.");
   });
 
   it("keeps a gm_only outcome away from every player viewer", () => {

@@ -8,7 +8,7 @@ import type {
   ScenarioSessionView,
 } from "@glantri/domain";
 
-import { ScenarioSessionPanel } from "@/features/scenarios/ScenarioSessionPanel";
+import { ScenarioSituationView } from "@/features/scenarios/situation/ScenarioSituationView";
 import {
   loadScenarioSession,
   pickUpScenarioAvailableItemOnServer,
@@ -128,7 +128,7 @@ export default function ScenarioPlayerPageContent({
     session.scenario.status === "completed" || session.scenario.status === "archived";
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 960 }}>
+    <section style={{ display: "grid", gap: "1rem", maxWidth: 1400 }}>
       <div style={{ display: "grid", gap: "0.5rem" }}>
         <h1 style={{ margin: 0 }}>{session.scenario.name}</h1>
         <p style={{ margin: 0 }}>
@@ -147,7 +147,7 @@ export default function ScenarioPlayerPageContent({
       ) : null}
       {error ? <div role="alert">{error}</div> : null}
       {feedback ? <div role="status">{feedback}</div> : null}
-      <ScenarioSessionPanel
+      <ScenarioSituationView
         campaignId={campaignId}
         onPickUp={
           isTerminalScenario

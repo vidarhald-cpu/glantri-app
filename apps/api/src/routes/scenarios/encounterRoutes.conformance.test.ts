@@ -408,4 +408,20 @@ describe("combat route canonical-conformance guards", () => {
       20,
     );
   });
+
+  it("warns operationally when the equipment snapshot lacks a canonical Secondary Critical code", () => {
+    const routeStart = source.indexOf(
+      'app.post("/encounters/:encounterId/combat-round/roll-attack"',
+    );
+    const nextRoute = source.indexOf("app.post(", routeStart + 1);
+    const routeSource = source.slice(routeStart, nextRoute);
+
+    expect(routeStart).toBeGreaterThanOrEqual(0);
+    expect(nextRoute).toBeGreaterThan(routeStart);
+    expect(routeSource).toContain("detectSnapshotSecondaryCriticalCodeGap({");
+    expect(routeSource).toContain("request.log.warn(");
+    expect(routeSource).toContain("SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE");
+    // Report-only: the snapshot is compared, never written back.
+    expect(routeSource).not.toContain("secondCrit =");
+  });
 });

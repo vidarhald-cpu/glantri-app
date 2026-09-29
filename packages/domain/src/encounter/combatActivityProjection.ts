@@ -141,7 +141,7 @@ export type CombatActivityIdentity = z.infer<typeof combatActivityIdentitySchema
 export const COMBAT_ACTIVITY_INVOLVED_OUTCOME_WHITELIST = {
   break_off_committed: ["escaped"],
   break_off_result: ["escaped"],
-  critical: ["criticalGrade"],
+  critical: ["criticalGrade", "secondaryCriticalGrade"],
   disarm_committed: ["disarmed", "unbalanced"],
   disarm_result: ["disarmed", "unbalanced"],
   distance_control_result: ["outcome", "winnerParticipantId"],
@@ -445,11 +445,16 @@ function eventTypeSentence(input: {
     }
     case "critical": {
       const grade = stringFact(digest, "criticalGrade");
+      const secondaryGrade = stringFact(digest, "secondaryCriticalGrade");
       const title =
         stringFact(publicOutcome, "criticalTitle") ?? stringFact(publicOutcome, "title");
       return `${capitalize(targetText)} suffered a${
         grade ? ` grade ${grade.toLocaleUpperCase()}` : ""
-      } critical result${title ? `: ${title}` : ""}.`;
+      } critical result${title ? `: ${title}` : ""}.${
+        secondaryGrade
+          ? ` A grade ${secondaryGrade.toLocaleUpperCase()} secondary critical followed.`
+          : ""
+      }`;
     }
     /**
      * `observation` is suppressed for V1 (§12.13, Product Owner ruling 2026-09-24), so no new

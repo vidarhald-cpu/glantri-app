@@ -14,7 +14,7 @@ describe("ScenarioPlayerPageContent Scenario session", () => {
     const source = readSource();
 
     expect(source).toContain("loadScenarioSession");
-    expect(source).toContain("ScenarioSessionPanel");
+    expect(source).toContain("ScenarioSituationView");
     expect(source).toContain("pickUpScenarioAvailableItemOnServer");
     expect(source).toContain("shouldAcceptScenarioSessionResponse");
     expect(source).toContain('window.addEventListener("focus"');
@@ -29,6 +29,15 @@ describe("ScenarioPlayerPageContent Scenario session", () => {
     expect(source).not.toContain("Actions coming next");
     expect(source).not.toContain("Future phases will");
     expect(source).not.toContain("formatEncounterParticipantCountLabel");
+  });
+
+  it("composes the Situation body rather than the stacked session card list", () => {
+    const source = readSource();
+
+    expect(source).toContain(
+      'import { ScenarioSituationView } from "@/features/scenarios/situation/ScenarioSituationView"',
+    );
+    expect(source).not.toContain("ScenarioSessionPanel");
   });
 
   it("removes pickup commands from terminal Scenario history", () => {
