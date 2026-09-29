@@ -408,6 +408,10 @@ test.describe("Lost Seal Scenario happy path", () => {
     await expect(playerAPage.getByText("Encounter: Seal Library Investigation")).toBeVisible();
     await expect(playerAPage.getByText("Courtyard Ambush")).toHaveCount(0);
     await expect(playerAPage.getByText(hiddenParticipantName, { exact: false })).toHaveCount(0);
+    // The Situation body presents Items as selector rows and their available
+    // actions in the Inspector, so the Item is selected before its pickup
+    // control is reachable. The pickup route and contract are unchanged.
+    await playerAPage.getByRole("button", { exact: true, name: "Lost Seal" }).click();
     const pickUp = playerAPage.getByRole("button", {
       name: `Pick up as ${characterAName}`,
     });
