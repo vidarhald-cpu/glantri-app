@@ -7,7 +7,9 @@
 **Architecture status:** Ready\
 **Implementation status:** Future / activation-gated\
 **Amended:** Product Owner Maps ruling of **2026-09-26** (ruling points 1-13);
-see [section 1.1](#11-the-2026-09-26-maps-ruling)
+see [section 1.1](#11-the-2026-09-26-maps-ruling)\
+**Amended:** Product Owner live map sketching ruling of **2026-09-29**; see
+[section 1.2](#12-the-2026-09-29-live-map-sketching-ruling)
 
 ---
 
@@ -70,6 +72,47 @@ this contract rather than as a separate appendix. It amends:
 The content-intake half of the same ruling is recorded at
 [Content authoring, Scenario preparation and Artifact management §18.38](../product/content-authoring-scenario-preparation-and-artifact-management.md#1838-one-intake-session-for-many-kinds-of-material)
 onward, **not here**.
+
+## 1.2 The 2026-09-29 live map sketching ruling
+
+**Status:** **SETTLED FOR V1, 2026-09-29.** **Authority:** Product Owner.
+**Scope:** documentation only. It authorizes **no implementation**, **no
+dispatch**, and **no dependency installation**, and it does not activate #118.
+
+The Product Owner ruling of 2026-09-29 admits **in-app GM drawing as an
+authoring path into the ordinary Map facility**, and refines — it does **not**
+reverse — the replacement-versus-new-information rule of
+[section 8.2](#82-replacement-versus-new-knowledge). Like the 2026-09-26 ruling,
+it is recorded **in place** throughout this contract. It amends:
+
+- [section 2.3](#23-one-map-facility-many-authoring-paths) — imported, sketched
+  and mixed Maps are **one Map facility**;
+- [section 6](#6-coordinate-model) — a **stable Map-local coordinate frame**
+  that supports **expansion**;
+- [section 7.8](#78-retained-placement-arrangements) through
+  [section 7.10](#710-viewer-camera-is-individual-view-state) — retained
+  placement arrangements, explicit placement with live marker updates, and
+  independent viewer cameras;
+- [section 8.2](#82-replacement-versus-new-knowledge) — **the D1 disclosure
+  ruling**, which preserves Character-specific disclosure while establishing
+  that a layer is a **disclosure unit**, not a Map version;
+- [section 8.3](#83-a-visual-representation-may-be-authored-in-app) — publication
+  of a GM-authored image into an ordinary visual layer;
+- [section 13](#13-editing-and-update-model) — the narrow private-source versus
+  published-image boundary, which is **not** Map branching or revision history;
+- [section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics) — the
+  amended exclusion of drawing tools, and the exclusions retained;
+- [section 19](#19-resolved-po-decisions) and
+  [section 20](#20-remaining-po-decisions) — the new resolved decisions, and the
+  confirmation that **no new open decision** arises.
+
+The editor-specific authoring workflow — tools, tablet use, draft handling and
+the evaluation posture toward a candidate editor — is recorded at
+[Live map sketching](../product/live-map-sketching.md), **not here**. **The Map
+model is not duplicated there**; that document references this contract for all
+common Map behaviour.
+
+> **No editor or drawing library is canonically mandated by this contract.**
 
 ---
 
@@ -166,6 +209,29 @@ This principle is **why**
 it defers, and it is the standard every future spatial capability is measured
 against — see [section 7.7](#77-player-facing-marker-treatment).
 
+## 2.3 One Map facility, many authoring paths
+
+**Added 2026-09-29.**
+
+A Map may be authored from **imported imagery**, from an **in-app GM drawing**,
+or from **both**. These are **authoring paths into one canonical Map facility**.
+
+> **Map identity, coordinate frame, layers, placement, disclosure, player
+> presentation and persistence do not depend on the authoring path.**
+
+Published drawing content becomes an **ordinary visual layer representation**
+([section 8.1](#81-layers-carry-visual-representations)); the editable drawing
+source it came from remains **private GM authoring material** and is not
+canonical Map, Character, Item or knowledge data
+([section 8.3](#83-a-visual-representation-may-be-authored-in-app)).
+
+> **In-app sketching is an authoring path into the ordinary Map facility. It is
+> not a second Map engine, a second Map domain, or a canonical Sketch object.**
+
+Drawing a door creates no canonical Door object, and drawing a room creates no
+Place or SpatialRegion — see
+[section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics).
+
 ---
 
 # 3. Map Workspace V1 product outcome
@@ -255,16 +321,38 @@ The same mechanism supports transitions between world, area and tactical scales.
 
 # 6. Coordinate model
 
-Every Map has a **normalized Map-local coordinate space**.
+**Amended 2026-09-29.** Every Map has a **stable Map-local coordinate frame,
+independent of image resolution, export crop and viewer camera**.
 
 Conceptually:
 
-- X and Y describe relative position within Map space;
+- X and Y describe position within Map space;
 - marker placement does not depend on source-image pixel dimensions;
-- position remains stable when a background changes resolution;
-- a Map without a background still possesses the same coordinate space.
+- position remains stable when a representation changes resolution or crop;
+- position remains stable regardless of any viewer's current pan and zoom;
+- a Map without a visual representation still possesses the same coordinate
+  frame.
 
-The normalized coordinate system is the durable spatial foundation.
+The stable Map-local coordinate frame is the durable spatial foundation.
+
+## Expansion
+
+**Added 2026-09-29.**
+
+The coordinate frame supports **expansion beyond the current drawn or imported
+extent**, so a Map can grow as exploration or authoring proceeds.
+
+> **Adding space, or replacing an image representation, must not rescale or
+> reposition existing content or markers.**
+
+**The storage representation of coordinates is an implementation concern.** This
+contract requires the stability and expansion properties above, not a particular
+encoding; physical units and tactical measurement remain unnecessary.
+
+"Expansion" means users can continue into surrounding Map space without a fixed
+paper edge. **It is not a promise of unlimited raster size**, and practical
+image dimensions remain an implementation and evaluation concern
+([Live map sketching](../product/live-map-sketching.md)).
 
 ## Not required in V1
 
@@ -285,6 +373,11 @@ Those capabilities may later be layered onto the same spatial model.
 Replacing or revising a background does not automatically reposition markers.
 
 If the new background depicts materially altered geography, repositioning markers is an explicit GM edit.
+
+**Amended 2026-09-29.** That rule is **retained**.
+
+> **Expansion alone is not materially changed geography.** Extending a Map into
+> surrounding space requires no repositioning of existing content or markers.
 
 **Amended 2026-09-26.** "Background" means the Map's **base visual layer** in the
 sense of [section 8.1](#81-layers-carry-visual-representations). Replacing the
@@ -460,6 +553,12 @@ deliberate record:
 **V1 does not require historical Map-position replay**
 ([section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics)).
 
+**Clarified 2026-09-29.** "Transient" here means **not Character memory and not
+authored Map content**. It does **not** mean that the current arrangement is
+discarded when the GM navigates away —
+[section 7.8](#78-retained-placement-arrangements) records that it is retained.
+Everything this section says about knowledge is unchanged by that retention.
+
 ---
 
 ## 7.7 Player-facing marker treatment
@@ -497,6 +596,86 @@ visualization.
 
 > **These remain illustrative and must not make the Map authoritative for
 > Combat** ([section 2.2](#22-map-purpose--illustration-not-authoritative-rules-state)).
+
+---
+
+## 7.8 Retained placement arrangements
+
+**SETTLED FOR V1, 2026-09-29.**
+
+> **The latest explicitly authored placement arrangement belongs to the Map and
+> survives navigating away and returning.** The GM can switch Maps and resume
+> without repositioning objects.
+
+This applies **equally to imported, sketched and mixed Maps**
+([section 2.3](#23-one-map-facility-many-authoring-paths)). Retention covers
+position and authored visibility, subject to current viewer permissions.
+
+> **Navigation must not create, clear, duplicate or reposition markers.**
+
+What retention is **not**:
+
+- it is **not** authoritative entity location, Campaign runtime location or
+  Combat state — the [critical invariant](#critical-invariant) of
+  [section 7.2](#72-entity-reference-marker) is unchanged;
+- it is **not** Character knowledge, and **retention grants no player
+  visibility**. What a Character sees remains resolved from that Character's own
+  Map knowledge ([section 9.6](#96-map-knowledge-is-character-scoped)) and is
+  acquired only at actual projection
+  ([section 9.7](#97-how-a-character-acquires-map-knowledge));
+- it is **not** authored Map content, and adding, moving or clearing a retained
+  placement is still **not a Map revision**
+  ([section 13](#13-editing-and-update-model));
+- it is **not** a movement record. **No historical movement or token replay is
+  required**, and none may be inferred from retention
+  ([section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics)).
+
+> **Knowledge Library and Blackboard projections do not automatically include a
+> retained arrangement** ([section 7.6](#76-placement-state-is-normally-transient)
+> and [section 9.10](#910-blackboard-sharing-of-maps)).
+
+The same entity appearing in retained arrangements on two Maps is **not**
+reconciled as physical travel.
+
+---
+
+## 7.9 Placement is explicit, and marker movement is immediate
+
+**SETTLED FOR V1, 2026-09-29.**
+
+> **Placement is an explicit act. Opening, importing, associating or publishing
+> a Map never places an entity automatically.**
+
+Neither does changing Scenario or Encounter, saving a private drawing source, or
+publishing an image. This restates
+[section 2.1](#21-a-map-is-a-canonical-campaign-domain-object) and
+[section 9.7](#97-how-a-character-acquires-map-knowledge) for the placement case
+and adds no automatic-placement capability.
+
+> **An authorized movement of an existing marker updates permitted live viewers
+> immediately, and independently of any drawing publication.**
+
+Marker movement and image publication are separate updates. Neither implies the
+other, and existing positioning authority is unchanged: **this grants players no
+new movement or editing rights**
+([section 10](#10-player-editing-boundary)).
+
+---
+
+## 7.10 Viewer camera is individual view state
+
+**SETTLED FOR V1, 2026-09-29.**
+
+> **Each viewer pans and zooms independently. Viewport is individual view state,
+> not shared game state.**
+
+- A drawing publication **does not move another viewer's camera**.
+- A marker update **does not move another viewer's camera**.
+- Receiving an update **does not switch a viewer away** from the Map they are
+  looking at.
+
+The player-facing form of this rule is
+[Player Play V1 §12.1](player-play-v1.md#121-map).
 
 ---
 
@@ -594,6 +773,97 @@ disclosed it to every Character who knows the base layer.
 During intake the GM chooses between the two **explicitly**, and the choice is
 never inferred from a filename —
 [Content authoring §18.41](../product/content-authoring-scenario-preparation-and-artifact-management.md#1841-map-intake--identity-layer-choice-and-eligibility).
+
+### 8.2.1 The D1 disclosure ruling — a layer is a disclosure unit
+
+**SETTLED FOR V1, 2026-09-29.** **Authority:** Product Owner. This ruling
+**refines** the hard rule above. **It does not reverse it, and it authorizes no
+relaxation of Character-specific disclosure.**
+
+The question it answers: when a GM publishes an updated image that adds newly
+drawn information, what happens to the Characters who already knew the previous
+representation?
+
+> **Preserve Character-specific disclosure. A publication that adds new
+> fictional information does not automatically disclose that information to
+> every Character who knew the previous representation.**
+
+The two operations remain distinguished exactly as the table above states:
+
+| Operation                                 | Disclosure consequence                                                                                                                                   |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Representation correction/replacement** | May replace existing imagery **for its existing recipients**. Same information, same audience, no new knowledge.                                         |
+| **New information**                       | Creates a **new disclosure unit with an explicit eligible audience**. Prior recipients of the previous representation learn nothing by that publication. |
+
+> **Publishing pixels never silently redefines who knows what.**
+
+#### What the ruling clarifies
+
+A **layer is a disclosure unit**. It is **not** a Map version, and **not** a
+record of a publication event.
+
+- **New disclosure does not create another Map.** Players revisit **one stable
+  Map identity** ([section 4](#4-map-identity-model)).
+- **Each viewer receives one current composed presentation**, containing the
+  information that Character is entitled to know
+  ([section 9.6](#96-map-knowledge-is-character-scoped)). A player is never
+  presented with a pile of near-duplicate historical maps.
+- **Internal visual and disclosure layers may be consolidated when doing so
+  preserves all meaningful audience and knowledge distinctions.** Consolidation
+  that would merge two different eligible audiences, or that would deliver
+  information to a Character not entitled to it, is **prohibited**.
+
+> **Layer identity exists to preserve disclosure distinctions, not to preserve
+> every publication event as a historical player-visible Map version.**
+
+#### What the ruling does not permit
+
+> **Do not introduce general Map revision or history UI**
+> ([section 13](#13-editing-and-update-model) and
+> [section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics)).
+
+> **Do not use pixel differencing, or any other automatic inference, to decide
+> who knows what.** Whether a publication carries new information is a
+> **deliberate GM choice**, exactly as it is at intake
+> ([Content authoring §18.41](../product/content-authoring-scenario-preparation-and-artifact-management.md#1841-map-intake--identity-layer-choice-and-eligibility)).
+
+A GM who draws a newly discovered room and publishes it to the Characters who
+were present has made a **new disclosure to that subset**. A Character who was
+absent learns nothing, and remains unable to receive that information until the
+GM explicitly discloses it
+([section 9.7](#97-how-a-character-acquires-map-knowledge)). Ambiguous audience
+**fails closed** —
+[Authority and Information Projection, projection rule 6](information-authority-and-projection.md#projection-rules).
+
+## 8.3 A visual representation may be authored in app
+
+**Added 2026-09-29.**
+
+A visual layer's representation may be an **image generated by an in-app GM
+drawing editor**, rather than an uploaded or imported file.
+
+- The Map consumes that image through the **same representation and Artifact
+  lifecycle as any other imagery**
+  ([section 11](#11-map--artifact-relationship) and
+  [section 12](#12-artifact-revision-behavior)). **The V1 rule that one Map layer
+  corresponds to one visual Artifact representation is unchanged.**
+- The **editable drawing source is retained separately as private GM authoring
+  material**. It is not canonical Map, Character, Item or knowledge data, and
+  **the published image must contain no embedded private editable source**.
+- **A publish operation updates the image and its Map-space alignment together**,
+  so that expansion or a changed crop never moves existing content
+  ([section 6](#6-coordinate-model)).
+- **Saving an unfinished source does not activate a published Artifact
+  revision.** Only publication updates the player-facing representation, through
+  the normal authorized lifecycle.
+- **A failed publication retains the previous usable image and a recoverable
+  private draft.** Image and alignment must never be left mismatched.
+
+The disclosure consequence of a publication is governed by
+[section 8.2.1](#821-the-d1-disclosure-ruling--a-layer-is-a-disclosure-unit), and
+the private-source boundary by [section 13](#13-editing-and-update-model). The
+editor-side workflow lives at
+[Live map sketching](../product/live-map-sketching.md).
 
 ---
 
@@ -1127,6 +1397,37 @@ it is persistent.
 Editing authored content retains Map identity. Adding, moving or clearing a live
 placement is not a Map revision at all, and V1 requires no history of it.
 
+**Amended 2026-09-29.** A placement retained across navigation
+([section 7.8](#78-retained-placement-arrangements)) is still live contextual
+state under this section, and its retention creates no Map revision and no
+history requirement.
+
+## The private drawing source and the published image
+
+**Added 2026-09-29.** Draft/publish branching, Map revision history, rollback and
+historical snapshots **remain deferred**
+([section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics)). One
+narrow, bounded boundary is nevertheless required for in-app drawing:
+
+> **A GM drawing editor keeps a private working source separately from the last
+> published image** ([section 8.3](#83-a-visual-representation-may-be-authored-in-app)).
+
+> **This lightweight publication boundary does not establish general Map
+> branching, rollback, or revision history — of the Map, of its layers, or of
+> any other authored Map content.**
+
+Its entire extent is: a private editable source; an explicit publish that
+produces an ordinary image and its Map-space alignment; and a recoverable draft
+when publication fails. It creates **no player-visible Map version**, **no
+historical presentation**, and **no revision UI**. Publishing refreshes the
+applicable player presentations without resetting any viewer's camera
+([section 7.10](#710-viewer-camera-is-individual-view-state)), and marker
+movement remains a separate immediate update
+([section 7.9](#79-placement-is-explicit-and-marker-movement-is-immediate)).
+
+Secret or unfinished **Map** content still belongs on a GM-only Map, on GM-only
+Layers, or in hidden marker exceptions, as above.
+
 ---
 
 # 14. Core workflows
@@ -1467,14 +1768,44 @@ The following are outside Map Workspace V1:
 - player-owned annotations;
 - Map revision history;
 - rollback;
-- drawing tools;
+- general Map branching, and any Map revision-history UI;
 - live collaborative annotation;
+- simultaneous collaborative drawing;
+- player drawing and player-authored Map imagery;
 - VTT walls and lights;
 - automatic Item positioning;
 - historical placement or token replay;
-- exact geospatial coordinates.
+- exact geospatial coordinates;
+- a native iPad application;
+- dependency on AI generation;
+- a semantic Map-package importer;
+- automatic Place or SpatialRegion creation.
 
-**Amended 2026-09-26.** The last six entries were added by the 2026-09-26 ruling.
+**Amended 2026-09-26.** Six entries were added by the 2026-09-26 ruling: drawing
+tools (since amended, below), live collaborative annotation, VTT walls and
+lights, automatic Item positioning, historical placement or token replay, and
+exact geospatial coordinates.
+
+**Amended 2026-09-29.** The blanket exclusion of **drawing tools** is replaced.
+
+> **Bounded GM image-authoring tools are permitted**
+> ([section 2.3](#23-one-map-facility-many-authoring-paths) and
+> [section 8.3](#83-a-visual-representation-may-be-authored-in-app)).
+
+| Permitted                                                                       | Still deferred                                                     |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| illustrative rectangles, lines, freehand strokes, text and similar simple marks | tactical region geometry, collision geometry and polygon-based fog |
+| a GM manually drawing and publishing newly explored space                       | automated fog of war and automated exploration-based revelation    |
+| a bounded GM drawing surface producing an ordinary image                        | a full VTT, player drawing, and simultaneous collaborative drawing |
+
+> **Drawn shapes depict the fiction. They carry no collision, movement,
+> distance, line-of-sight or rules-engine meaning**
+> ([section 2.2](#22-map-purpose--illustration-not-authoritative-rules-state)).
+
+The remaining V1 exclusions above are **retained in full**, including the grid,
+tactical measurement and movement-rule exclusions, Combat synchronization,
+automatic entity placement, movement history, and general Map
+branching/rollback/revision-history UI.
 
 > **Do not turn V1 Maps into a full VTT.**
 
@@ -1638,6 +1969,91 @@ copies no knowledge into another Character's Knowledge Library.
 
 ---
 
+## M10 — One Map facility, and a stable expanding coordinate frame
+
+**Approved, 2026-09-29**
+
+Imported, sketched and mixed Maps are **one Map facility**. Authoring paths
+differ; Map identity, layers, placement, disclosure, player presentation and
+persistence are common, and sketching is **not a second Map engine**. Every Map
+has a **stable Map-local coordinate frame independent of image resolution,
+export crop and viewer camera**, supporting **expansion**; adding space or
+replacing an image must not rescale or reposition existing content or markers.
+**Expansion alone is not materially changed geography.**
+[Section 2.3](#23-one-map-facility-many-authoring-paths) and
+[section 6](#6-coordinate-model).
+
+---
+
+## M11 — Retained arrangements, explicit placement, individual cameras
+
+**Approved, 2026-09-29**
+
+Each Map **retains its latest placement arrangement** across navigating away and
+returning, for imported Maps as well as sketched ones. Retention is **not**
+authoritative entity location, Combat state or Character knowledge; it grants no
+player visibility; Knowledge Library and Blackboard projections do not
+automatically include it; and no movement history is required. **Placement is
+explicit** — opening, importing, associating or publishing a Map places nothing.
+**Authorized marker movement updates permitted viewers immediately and
+independently of drawing publication**, and **each viewer's camera is individual
+view state**. [Section 7.8](#78-retained-placement-arrangements) through
+[section 7.10](#710-viewer-camera-is-individual-view-state). This **extends** M8
+rather than replacing it.
+
+---
+
+## M12 — The publication boundary, and the D1 disclosure ruling
+
+**Approved, 2026-09-29**
+
+A visual layer's representation may be an image authored in app. A **private
+editable GM source** is separate from the **explicitly published image**, whose
+Map-space alignment updates coherently with it; saving an unfinished source
+activates no published revision; a failed publication retains the previous usable
+image and a recoverable draft; and the published image embeds no private source.
+**This lightweight boundary establishes no general Map branching or revision
+history.**
+
+> **D1: Preserve Character-specific disclosure.** Representation
+> correction/replacement may replace existing imagery for its existing
+> recipients; **new information creates a new disclosure unit with an explicit
+> eligible audience** and is not disclosed to prior recipients automatically.
+> **New disclosure does not create another Map** — one stable Map identity, one
+> current composed presentation per viewer — and internal layers **may be
+> consolidated only where that preserves all meaningful audience and knowledge
+> distinctions**. **No general Map revision/history UI, and no pixel differencing
+> or other automatic disclosure inference.**
+
+[Section 8.2.1](#821-the-d1-disclosure-ruling--a-layer-is-a-disclosure-unit),
+[section 8.3](#83-a-visual-representation-may-be-authored-in-app) and
+[section 13](#13-editing-and-update-model). This **refines** M6; the rule that
+replacement changes representation while new information creates a new layer is
+**unchanged**.
+
+---
+
+## M13 — Bounded GM image authoring, and no canonical engine
+
+**Approved, 2026-09-29**
+
+The blanket exclusion of drawing tools is amended to permit **bounded GM
+image-authoring tools**; illustrative rectangles, lines and freehand strokes are
+allowed, while tactical region geometry, collision and polygon fog remain
+deferred, and a GM manually drawing newly explored space is allowed while
+automated fog and exploration remain deferred.
+
+> **No editor or drawing library is canonically mandated.** A bounded evaluation
+> of a pinned released version of a candidate editor, behind the image-publication
+> boundary, is the intended **first authorized implementation phase** — see
+> [Live map sketching](../product/live-map-sketching.md). **Its failure leaves
+> this Map architecture unchanged**, with another editor evaluable against the
+> same boundary.
+
+[Section 17](#17-explicitly-deferred-tactical-and-spatial-mechanics).
+
+---
+
 # 20. Remaining PO decisions
 
 No material product or architecture decision remains unresolved for **Map Workspace V1**.
@@ -1648,6 +2064,15 @@ reaching only some Characters produces a shared Activity entry — is **already
 answered** by the settled rule at
 [Content authoring §18.37](../product/content-authoring-scenario-preparation-and-artifact-management.md#1837-character-scoped-knowledge-and-the-shared-activity-record),
 applied to Maps at [section 9.11](#911-map-disclosure-and-the-shared-activity-record).
+
+**Confirmed 2026-09-29.** The 2026-09-29 live map sketching ruling introduces
+**no new open decision** either. The one question it could have left open — how a
+publication that adds new information affects prior recipients of the previous
+representation — is **decided** by
+[section 8.2.1](#821-the-d1-disclosure-ruling--a-layer-is-a-disclosure-unit).
+Editor selection, export limits and draft-recovery mechanics are **evaluation
+and implementation questions, not product decisions**
+([Live map sketching](../product/live-map-sketching.md)).
 
 Future decisions will be required when later capabilities are activated, particularly around:
 
@@ -1693,6 +2118,18 @@ The conceptual contract now establishes:
 - **live placements** and their transience;
 - player-facing marker treatment and the identity anti-leak invariant;
 - **Blackboard Map sharing by known-Layer subset**.
+
+**Amended 2026-09-29.** The live map sketching ruling adds:
+
+- **one Map facility** across imported, sketched and mixed authoring paths;
+- the **stable, expandable Map-local coordinate frame**;
+- **retained placement arrangements**, explicit placement, immediate marker
+  updates and **individual viewer cameras**;
+- the **private-source versus published-image boundary**, which is not Map
+  branching or revision history;
+- the **D1 disclosure ruling** — a layer is a **disclosure unit**, not a Map
+  version;
+- **bounded GM image-authoring tools**, with no canonically mandated engine.
 
 No further product ruling is required before the architecture can be treated as complete.
 
