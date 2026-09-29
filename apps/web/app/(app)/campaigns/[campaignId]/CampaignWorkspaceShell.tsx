@@ -39,11 +39,13 @@ import {
 import { getCampaignWorkspaceSelectionKeys } from "@/lib/campaigns/RememberedCampaignWorkspaceEffect";
 import {
   buildCampaignEncounterHref,
+  buildCampaignPlayViews,
   buildCampaignScenarioHref,
   buildCampaignTaskHref,
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   isLiveCampaignScenario,
+  resolveActiveCampaignPlayView,
   resolveCampaignTaskTargetId,
   resolveCampaignWorkspaceState,
   type CampaignWorkspaceTabId,
@@ -305,6 +307,161 @@ export function CampaignWorkspaceNavigation({
           </Link>
         ))}
       </nav>
+    </div>
+  );
+}
+
+/**
+ * Navigation inside a live Scenario.
+ *
+ * A player sees the one Play arena: a shared header naming the Scenario and the
+ * active Encounter, and the five Play views
+ * `Situation | Action | Map | Blackboard | Character`. The separate player
+ * Combat entry point is retained beside them rather than folded into Action —
+ * Action composition is a later slice, and existing routes stay reachable.
+ *
+ * A GM's navigation is unchanged: the Scenario and Encounter tools row as it
+ * was, including the GM-only Combat link.
+ */
+export function ScenarioPlayNavigation({
+  activeEncounterId,
+  activeEncounterTitle,
+  activeTab,
+  buildWorkspaceHref,
+  campaignId,
+  canAccessGmEncounter,
+  scenarioId,
+  scenarioName,
+}: {
+  activeEncounterId?: string;
+  activeEncounterTitle?: string;
+  activeTab: CampaignWorkspaceTabId;
+  buildWorkspaceHref: (input: {
+    encounterId?: string | null;
+    scenarioId?: string | null;
+    tab?: CampaignWorkspaceTabId | null;
+  }) => string;
+  campaignId: string;
+  canAccessGmEncounter: boolean;
+  scenarioId: string;
+  scenarioName: string;
+}) {
+  if (canAccessGmEncounter) {
+    return (
+      <nav
+        aria-label="Scenario and Encounter tools"
+        style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}
+      >
+        <Link href={buildCampaignScenarioHref({ campaignId, scenarioId })}>Scenario</Link>
+        {activeEncounterId ? (
+          <Link
+            href={buildCampaignEncounterHref({
+              campaignId,
+              encounterId: activeEncounterId,
+              scenarioId,
+            })}
+          >
+            Encounter
+          </Link>
+        ) : null}
+        <Link
+          href={buildWorkspaceHref({
+            encounterId: activeEncounterId,
+            scenarioId,
+            tab: "character",
+          })}
+        >
+          Character
+        </Link>
+        {activeEncounterId ? (
+          <>
+            <Link
+              href={buildWorkspaceHref({
+                encounterId: activeEncounterId,
+                scenarioId,
+                tab: "skill-rolls",
+              })}
+            >
+              Skill rolls
+            </Link>
+            <Link
+              href={buildWorkspaceHref({
+                encounterId: activeEncounterId,
+                scenarioId,
+                tab: "combat",
+              })}
+            >
+              Combat
+            </Link>
+            <Link
+              href={buildWorkspaceHref({
+                encounterId: activeEncounterId,
+                scenarioId,
+                tab: "player-combat",
+              })}
+            >
+              Player combat
+            </Link>
+          </>
+        ) : null}
+      </nav>
+    );
+  }
+
+  const activePlayView = resolveActiveCampaignPlayView(activeTab);
+
+  return (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <section
+        aria-label="Play header"
+        style={{ alignItems: "baseline", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+      >
+        <strong>{scenarioName}</strong>
+        {activeEncounterTitle ? (
+          <span
+            data-testid="play-header-encounter"
+            style={{
+              border: "1px solid #b8c4bd",
+              borderRadius: "0.75rem",
+              fontSize: "0.85rem",
+              padding: "0.1rem 0.6rem",
+            }}
+          >
+            Encounter · {activeEncounterTitle}
+          </span>
+        ) : null}
+      </section>
+      <nav aria-label="Play views" style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+        {buildCampaignPlayViews().map((view) => (
+          <Link
+            aria-current={activePlayView === view.id ? "page" : undefined}
+            href={buildWorkspaceHref({
+              encounterId: activeEncounterId,
+              scenarioId,
+              tab: view.canonicalTab,
+            })}
+            key={view.id}
+          >
+            {view.label}
+          </Link>
+        ))}
+      </nav>
+      {activeEncounterId ? (
+        <nav
+          aria-label="Retained Play entry points"
+          style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}
+        >
+          <Link
+            href={buildWorkspaceHref({
+              encounterId: activeEncounterId,
+              scenarioId,
+              tab: "player-combat",
+            })}
+          >
+            Player combat
+          </Link>
+        </nav>
+      ) : null}
     </div>
   );
 }
@@ -1105,72 +1262,16 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             ) : null}
           </nav>
           {activeScenario.status !== "completed" && activeScenario.status !== "archived" ? (
-            <nav
-              aria-label="Scenario and Encounter tools"
-              style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}
-            >
-              <Link
-                href={buildCampaignScenarioHref({
-                  campaignId,
-                  scenarioId: activeScenario.id,
-                })}
-              >
-                Scenario
-              </Link>
-              {activeEncounterSummary ? (
-                <Link
-                  href={buildCampaignEncounterHref({
-                    campaignId,
-                    encounterId: activeEncounterSummary.id,
-                    scenarioId: activeScenario.id,
-                  })}
-                >
-                  Encounter
-                </Link>
-              ) : null}
-              <Link
-                href={buildWorkspaceHref({
-                  encounterId: activeEncounterSummary?.id,
-                  scenarioId: activeScenario.id,
-                  tab: "character",
-                })}
-              >
-                Character
-              </Link>
-              {activeEncounterSummary ? (
-                <>
-                  <Link
-                    href={buildWorkspaceHref({
-                      encounterId: activeEncounterSummary.id,
-                      scenarioId: activeScenario.id,
-                      tab: "skill-rolls",
-                    })}
-                  >
-                    Skill rolls
-                  </Link>
-                  {canAccessGmEncounter ? (
-                    <Link
-                      href={buildWorkspaceHref({
-                        encounterId: activeEncounterSummary.id,
-                        scenarioId: activeScenario.id,
-                        tab: "combat",
-                      })}
-                    >
-                      Combat
-                    </Link>
-                  ) : null}
-                  <Link
-                    href={buildWorkspaceHref({
-                      encounterId: activeEncounterSummary.id,
-                      scenarioId: activeScenario.id,
-                      tab: "player-combat",
-                    })}
-                  >
-                    Player combat
-                  </Link>
-                </>
-              ) : null}
-            </nav>
+            <ScenarioPlayNavigation
+              activeEncounterId={activeEncounterSummary?.id}
+              activeEncounterTitle={activeEncounterSummary?.title}
+              activeTab={workspaceState.activeTab}
+              buildWorkspaceHref={buildWorkspaceHref}
+              campaignId={campaignId}
+              canAccessGmEncounter={canAccessGmEncounter}
+              scenarioId={activeScenario.id}
+              scenarioName={activeScenario.name}
+            />
           ) : (
             <small>Historical inspection is read-only and does not resume this Scenario.</small>
           )}
