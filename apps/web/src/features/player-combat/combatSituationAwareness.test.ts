@@ -559,11 +559,18 @@ const UNIT_VALUE_LABELS: Record<CanonicalCombatModifierUnit, string> = {
 };
 
 /**
- * The player-facing indication that a value exists but cannot be stated. Kept as a
- * literal here rather than imported, so a change to the module's constant is a visible
- * test failure rather than a silently agreeing rename.
+ * The player-facing indication that the data carried a value this surface does not
+ * recognise. Kept as a literal here rather than imported, so a change to the module's
+ * constant is a visible test failure rather than a silently agreeing rename.
  */
-const UNRENDERABLE_VALUE_LABEL = "—";
+const UNRENDERABLE_VALUE_LABEL = "Unrecognised value";
+
+/**
+ * The absence glyph this surface already uses for "no value" — `hasDisplayValue` in
+ * `playerCombatPhaseModel.ts` returns `false` for it. The unrecognised-value indication
+ * must never collapse back onto it.
+ */
+const ABSENCE_GLYPH = "—";
 
 function effectWithUnit(input: {
   id?: string;
@@ -647,7 +654,7 @@ describe("formatEffectValue exhaustiveness", () => {
     expect(formatEffectValue(restrictionOnlyEffect())).toBeUndefined();
   });
 
-  it("renders an explicit unavailable indication for an unrecognised unit at runtime", () => {
+  it("renders an explicit unrecognised-value indication for an unrecognised unit at runtime", () => {
     const rendered = formatEffectValue(effectWithUnrecognisedUnit());
     expect(rendered).toBe(UNRENDERABLE_VALUE_LABEL);
     expect(rendered).not.toBeUndefined();
@@ -657,6 +664,16 @@ describe("formatEffectValue exhaustiveness", () => {
     expect(formatEffectValue(effectWithUnrecognisedUnit())).not.toBe(
       formatEffectValue(restrictionOnlyEffect()),
     );
+  });
+
+  it("renders an unrecognised unit visibly distinct from the absence glyph and from nothing", () => {
+    const rendered = formatEffectValue(effectWithUnrecognisedUnit());
+    // The glyph already means "no value" on this surface, so an error must not reuse it.
+    expect(rendered).not.toBe(ABSENCE_GLYPH);
+    expect(rendered).not.toBe("");
+    expect(rendered).not.toBeUndefined();
+    // Nor may it read as a number a player could mistake for a real value.
+    expect(Number.isNaN(Number(rendered))).toBe(true);
   });
 });
 
@@ -685,6 +702,7 @@ describe("formatEntryValue does not substitute another semantic value", () => {
 
     const row = model.calculationGroups[0]?.rows[0];
     expect(row?.valueLabel).toBe(UNRENDERABLE_VALUE_LABEL);
+    expect(row?.valueLabel).not.toBe(ABSENCE_GLYPH);
     // The entry.value fallback, with its suffix guessed from entry.application, is the
     // plausible wrong number this issue exists to prevent.
     expect(row?.valueLabel).not.toBe("-7%");

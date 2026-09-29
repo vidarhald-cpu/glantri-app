@@ -82,12 +82,21 @@ function formatSigned(value: number): string {
 }
 
 /**
- * The player-facing indication that a value exists but cannot be stated. `"—"` is the
- * established unavailable-value indication on this surface — see `getCombatTableCell`
- * and the phase-table placeholders in `playerCombatPhaseModel.ts`. It is reused here
- * rather than introducing a second unknown-value vocabulary.
+ * The player-facing indication that the data carried a value this surface does not
+ * recognise. This is an error state, not an absence, and it must read as visibly
+ * distinct from both.
+ *
+ * It is deliberately **not** `"—"`: that glyph already means "no value" here —
+ * `hasDisplayValue` in `playerCombatPhaseModel.ts` returns `false` for it — so reusing
+ * it would make unrecognised input indistinguishable from legitimate absence. It is
+ * also not `"Unavailable"`, which this codebase already uses for data that is
+ * legitimately missing or withheld (`FeintSkillPreview`, `currentActionPresentation`),
+ * and which would reproduce the same conflation one word further along.
+ *
+ * No unknown-input indication existed to reuse, so this is a new, deliberately
+ * unmistakable one: a word, never a number, and never mistakable for a real value.
  */
-const UNRENDERABLE_VALUE_LABEL = "—";
+const UNRENDERABLE_VALUE_LABEL = "Unrecognised value";
 
 /**
  * The three distinct outcomes of rendering a canonical effect's value.
@@ -153,8 +162,9 @@ function renderEffectValue(effect: CombatSituationLifecycleEffect): EffectValueR
  * The effect-derived value label for a display row, or `undefined` when the effect
  * carries no value of its own.
  *
- * An unrecognised unit resolves to the explicit unavailable indication rather than to
- * `undefined`, so it is visible on the surface instead of silently absent.
+ * An unrecognised unit resolves to the explicit unrecognised-value indication rather
+ * than to `undefined`, so it is visibly distinct on the surface from both a legitimate
+ * absence and a rendered value.
  */
 export function formatEffectValue(effect: CombatSituationLifecycleEffect): string | undefined {
   const rendering = renderEffectValue(effect);
