@@ -159,7 +159,12 @@ import {
 import {
   buildCombatExperiencePersistentLifecycle,
   buildDamagePersistentLifecycle,
+  buildManualPersistentLifecycle,
 } from "./combatPersistentModifierLifecycle";
+import {
+  classifyCanonicalCombatModifierDuration,
+  type CanonicalCombatModifierDuration,
+} from "./combatModifierLifecycle";
 import type { CombatModifierContribution } from "./combatModifierContributions";
 import {
   advanceCombatProgressionBoundary,
@@ -2745,7 +2750,7 @@ describe("combat round manager", () => {
       canonicalLifecycle: {
         applicability: { combatWide: true },
         lifecycle: {
-          duration: { creationRoundCounts: true, kind: "rounds", remaining: 4 },
+          duration: { creationRoundCounts: false, kind: "rounds", remaining: 4 },
           state: "active",
         },
         payload: { category: "general_fatigue", unit: "percentage", value: -2 },
@@ -5730,8 +5735,10 @@ describe("combat round manager", () => {
       skillTotal: 10,
       state: declarationState,
     });
+    // The CE row is created in round 1, so round 1's own Round End must not consume one of its
+    // four rounds. Round 2's Round End is the first subsequent boundary that may decrement it.
     const roundSummaryState = advanceToStep(
-      initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      initializeCombatRoundState({ encounter: encounter({ currentRound: 2 }) }),
       "round_summary",
     );
     const reviewed = prepareCombatRoundEndReview({
@@ -15619,7 +15626,7 @@ describe("combat round manager", () => {
         encounterId: "encounter-1",
         eventId: "ce-event",
         ownerParticipantId: "scenario-gladiator",
-        roundNumber: 3,
+        roundNumber: 2,
       },
       durationRounds: 2,
       effectId: "ce-effect",
@@ -15717,7 +15724,7 @@ describe("combat round manager", () => {
         encounterId: "encounter-1",
         eventId: "stun-event",
         ownerParticipantId: "scenario-gladiator",
-        roundNumber: 3,
+        roundNumber: 2,
       },
       durationRounds: 1,
       effectId: "stunned-effect",
@@ -21497,5 +21504,262 @@ describe("combat round manager", () => {
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ sourcePhase: "phase2", value: -4 })]),
     );
+  });
+});
+
+// #215 S4 — the canonical temporal vocabulary and its one shared transition engine, exercised
+// through the Round End boundary that consumes it. Appended deliberately: this file is a merge
+// hotspot, so new coverage lands at the end rather than inside existing blocks.
+describe("canonical temporal vocabulary at Round End", () => {
+  const temporalCreationContext = (roundNumber: number) => ({
+    commandId: "s4-command",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    createdRevision: "revision-s4",
+    createdSequence: 2,
+    encounterId: "encounter-1",
+    eventId: "s4-event",
+    ownerParticipantId: "scenario-gladiator",
+    roundNumber,
+  });
+
+  const temporalEffects = (input: {
+    createdRound: number;
+    duration: CanonicalCombatModifierDuration;
+    freeTextDuration?: string;
+  }) =>
+    combatEffectsWith([
+      {
+        canonicalLifecycle: buildManualPersistentLifecycle({
+          applicability: { combatWide: true, encounterId: "encounter-1", rollPurposes: [] },
+          context: temporalCreationContext(input.createdRound),
+          duration: input.duration,
+          effectId: "s4-effect",
+          payload: {
+            category: "general_fatigue",
+            contributionScope: "calculation",
+            kind: "numeric",
+            unit: "percentage",
+            value: -2,
+          },
+          publicLabel: "Temporal test effect",
+        }),
+        description: "Temporal test effect",
+        duration: input.freeTextDuration,
+        effectGroup: "general",
+        id: "s4-effect",
+        modifierValue: -2,
+        roundNumber: input.createdRound,
+        type: "general_modifier",
+      },
+    ]);
+
+  const reviewTemporalEffectsAtRound = (input: {
+    combatEffects: ReturnType<typeof combatEffectsWith>;
+    roundNumber: number;
+  }) =>
+    prepareCombatRoundEndReview({
+      participantInputs: { gladiator: { combatEffects: input.combatEffects } },
+      state: advanceToStep(
+        initializeCombatRoundState({
+          encounter: encounter({ currentRound: input.roundNumber }),
+        }),
+        "round_summary",
+      ),
+    });
+
+  const commitTemporalRound = (input: {
+    combatEffects: ReturnType<typeof combatEffectsWith>;
+    roundNumber: number;
+  }) => {
+    const reviewed = reviewTemporalEffectsAtRound(input);
+    const participantReview = reviewed.roundEndReview?.participantReviews.gladiator;
+    const committed = commitCombatRoundEndParticipantReview({
+      combatEffects: input.combatEffects,
+      command: { createdAt: `2026-01-01T00:${String(input.roundNumber).padStart(2, "0")}:00.000Z` },
+      createdRevision: `revision-s4-round-${input.roundNumber}`,
+      participantId: "gladiator",
+      scenarioParticipantId: "scenario-gladiator",
+      state: reviewed,
+    });
+    return { committed, participantReview };
+  };
+
+  const fixedDuration = (input: {
+    creationRoundCounts?: boolean;
+    remaining: number;
+    rolled?: { formula: string; rolledAtRound: number; value: number };
+    startRound: number;
+  }): CanonicalCombatModifierDuration => ({
+    creationRoundCounts: input.creationRoundCounts ?? false,
+    kind: "rounds",
+    remaining: input.remaining,
+    rolled: input.rolled,
+    startRound: input.startRound,
+    startSequence: 2,
+    transitionBoundary: "round_end_review",
+  });
+
+  // Acceptance example 1 — an effect created during round 7 for 2 rounds is present for the
+  // remainder of round 7, all of rounds 8 and 9, and expires after round 9's Round End.
+  it("does not let the creation round consume a round of a fixed duration", () => {
+    let combatEffects = temporalEffects({
+      createdRound: 7,
+      duration: fixedDuration({ remaining: 2, startRound: 7 }),
+      freeTextDuration: "2 rounds",
+    });
+
+    const roundSeven = commitTemporalRound({ combatEffects, roundNumber: 7 });
+    expect(roundSeven.participantReview?.canonicalReview?.proposals).toEqual([]);
+    expect(roundSeven.participantReview?.proposedEffects).toEqual([]);
+    expect(roundSeven.participantReview?.proposedRemovals).toEqual([]);
+    combatEffects = roundSeven.committed.combatEffects;
+    expect(combatEffects.effects[0]?.canonicalLifecycle?.lifecycle).toMatchObject({
+      duration: { kind: "rounds", remaining: 2 },
+      state: "active",
+    });
+    expect(combatEffects.effects[0]?.duration).toBe("2 rounds");
+
+    const roundEight = commitTemporalRound({ combatEffects, roundNumber: 8 });
+    expect(roundEight.participantReview?.canonicalReview?.proposals[0]).toMatchObject({
+      effectId: "s4-effect",
+      nextDuration: { kind: "rounds", remaining: 1 },
+      reason: "duration_decremented",
+      transitionType: "update",
+    });
+    combatEffects = roundEight.committed.combatEffects;
+    expect(combatEffects.effects[0]?.canonicalLifecycle?.lifecycle).toMatchObject({
+      duration: { kind: "rounds", remaining: 1 },
+      state: "active",
+    });
+
+    const roundNine = commitTemporalRound({ combatEffects, roundNumber: 9 });
+    expect(roundNine.participantReview?.canonicalReview?.proposals[0]).toMatchObject({
+      effectId: "s4-effect",
+      nextState: "expired",
+      reason: "natural_expiry",
+      transitionType: "expire",
+    });
+    expect(roundNine.committed.combatEffects.effects[0]?.canonicalLifecycle?.lifecycle.state).toBe(
+      "expired",
+    );
+  });
+
+  it("still counts the creation round for a duration that explicitly opts in", () => {
+    const legacyCounting = commitTemporalRound({
+      combatEffects: temporalEffects({
+        createdRound: 7,
+        duration: fixedDuration({ creationRoundCounts: true, remaining: 2, startRound: 7 }),
+        freeTextDuration: "2 rounds",
+      }),
+      roundNumber: 7,
+    });
+
+    expect(legacyCounting.participantReview?.canonicalReview?.proposals[0]).toMatchObject({
+      nextDuration: { kind: "rounds", remaining: 1 },
+      reason: "duration_decremented",
+    });
+  });
+
+  // Acceptance example 2 — remainder-only state is applied through its creation round's Round End
+  // and is absent when the next round begins. It is not encoded as "1 round".
+  it("expires remainder-only state at its own Round End without encoding it as one round", () => {
+    const duration: CanonicalCombatModifierDuration = {
+      kind: "remainder_of_round",
+      startRound: 7,
+      startSequence: 2,
+    };
+    expect(classifyCanonicalCombatModifierDuration(duration)).toBe("remainder_only");
+
+    const roundSeven = commitTemporalRound({
+      combatEffects: temporalEffects({ createdRound: 7, duration }),
+      roundNumber: 7,
+    });
+
+    expect(roundSeven.participantReview?.canonicalReview?.proposals[0]).toMatchObject({
+      effectId: "s4-effect",
+      nextState: "expired",
+      reason: "natural_expiry",
+      transitionType: "expire",
+    });
+    expect(roundSeven.participantReview?.canonicalReview?.requirements).toEqual([]);
+    expect(
+      roundSeven.committed.combatEffects.effects[0]?.canonicalLifecycle?.lifecycle,
+    ).toMatchObject({ duration: { kind: "remainder_of_round" }, state: "expired" });
+  });
+
+  // Acceptance example 3 — a bounded uncertain duration is rolled once, the retained roll stays
+  // reviewable, and the state then follows exactly the same lifecycle as a fixed duration.
+  it("treats a rolled bounded uncertain duration exactly like a fixed one and never rerolls it", () => {
+    const rolled = { formula: "d4", rolledAtRound: 7, value: 3 };
+    const duration = fixedDuration({ remaining: 3, rolled, startRound: 7 });
+    expect(classifyCanonicalCombatModifierDuration(duration)).toBe("bounded_uncertain");
+
+    let combatEffects = temporalEffects({ createdRound: 7, duration });
+    const roundSeven = commitTemporalRound({ combatEffects, roundNumber: 7 });
+    expect(roundSeven.participantReview?.canonicalReview?.proposals).toEqual([]);
+    combatEffects = roundSeven.committed.combatEffects;
+
+    const roundEight = commitTemporalRound({ combatEffects, roundNumber: 8 });
+    expect(roundEight.participantReview?.canonicalReview?.proposals[0]).toMatchObject({
+      nextDuration: { kind: "rounds", remaining: 2, rolled },
+      reason: "duration_decremented",
+    });
+
+    const nextDuration =
+      roundEight.committed.combatEffects.effects[0]?.canonicalLifecycle?.lifecycle.duration;
+    expect(nextDuration).toMatchObject({ kind: "rounds", remaining: 2, rolled });
+    expect(
+      classifyCanonicalCombatModifierDuration(nextDuration as CanonicalCombatModifierDuration),
+    ).toBe("bounded_uncertain");
+  });
+
+  it("never lets an instantaneous outcome survive a Round End", () => {
+    const duration: CanonicalCombatModifierDuration = {
+      kind: "instantaneous",
+      startRound: 7,
+      startSequence: 2,
+    };
+    expect(classifyCanonicalCombatModifierDuration(duration)).toBe("instantaneous");
+
+    const roundSeven = commitTemporalRound({
+      combatEffects: temporalEffects({ createdRound: 7, duration }),
+      roundNumber: 7,
+    });
+
+    expect(roundSeven.participantReview?.canonicalReview?.proposals[0]).toMatchObject({
+      effectId: "s4-effect",
+      nextState: "expired",
+      transitionType: "expire",
+    });
+    expect(roundSeven.committed.combatEffects.effects[0]?.canonicalLifecycle?.lifecycle.state).toBe(
+      "expired",
+    );
+  });
+
+  it("keeps condition and event durations on the nonblocking requirement path, with no roll", () => {
+    const roundSeven = reviewTemporalEffectsAtRound({
+      combatEffects: temporalEffects({
+        createdRound: 7,
+        duration: {
+          conditionId: "until-appropriate-care",
+          conditionKind: "participant_state",
+          kind: "until_condition",
+          startRound: 7,
+          startSequence: 2,
+        },
+      }),
+      roundNumber: 7,
+    });
+    const review = roundSeven.roundEndReview?.participantReviews.gladiator;
+
+    expect(review?.canonicalReview?.proposals).toEqual([]);
+    expect(review?.proposedHealthRolls).toEqual([]);
+    expect(review?.canonicalReview?.requirements[0]).toMatchObject({
+      blocksReview: false,
+      effectId: "s4-effect",
+      kind: "condition",
+      owner: "source_process",
+      resolved: false,
+    });
   });
 });

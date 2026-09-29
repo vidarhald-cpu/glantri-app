@@ -23,7 +23,7 @@ const context: PersistentCombatModifierCreationContext = {
 };
 
 describe("persistent combat modifier producers", () => {
-  it("makes combat-start CE explicitly combat-wide with a typed, counting round duration", () => {
+  it("makes combat-start CE combat-wide with a typed duration that excludes its creation round", () => {
     const lifecycle = buildCombatExperiencePersistentLifecycle({
       context,
       durationRounds: 4,
@@ -36,7 +36,7 @@ describe("persistent combat modifier producers", () => {
       applicability: { combatWide: true, rollPurposes: [] },
       lifecycle: {
         duration: {
-          creationRoundCounts: true,
+          creationRoundCounts: false,
           kind: "rounds",
           remaining: 4,
           transitionBoundary: "round_end_review",

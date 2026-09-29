@@ -31,6 +31,7 @@ import {
 import { projectProcessRestrictionToCanonicalModifierLifecycle } from "./combatModifierLifecycleCompatibility";
 import {
   canonicalCombatModifierEffectSchema,
+  evaluateCanonicalCombatModifierDurationAtRoundEnd,
   transitionCanonicalCombatModifierEffect,
 } from "./combatModifierLifecycle";
 import {
@@ -14803,35 +14804,91 @@ function buildCombatRoundEndParticipantReview(input: {
     }
 
     const canonicalDuration = effect.canonicalLifecycle?.lifecycle.duration;
+    // One shared transition engine owns every temporal decision this boundary may make. The
+    // manager only adds applicability concerns the engine deliberately does not know about:
+    // phase-scoped rows resolve at their own phase boundary, and Bleed owns its own cadence.
+    const temporalOutcome = canonicalDuration
+      ? evaluateCanonicalCombatModifierDurationAtRoundEnd({
+          duration: canonicalDuration,
+          roundNumber: input.roundNumber,
+        })
+      : undefined;
+    // `hold` is the creation-round exclusion: an effect created this round is present for the
+    // remainder of this round, so neither the canonical lifecycle nor the legacy duration mirror
+    // may tick at this Round End.
+    const heldForCreationRound = temporalOutcome?.kind === "hold";
+    const roundClockScoped =
+      temporalOutcome !== undefined &&
+      (temporalOutcome.kind === "hold" ||
+        temporalOutcome.kind === "decrement" ||
+        temporalOutcome.kind === "expire") &&
+      effect.canonicalLifecycle?.applicability.phase === undefined;
+
     if (effect.canonicalLifecycle) {
       effectVersions[effect.id] = effect.canonicalLifecycle.version;
-      if (
-        canonicalDuration?.kind === "rounds" &&
-        effect.canonicalLifecycle.applicability.phase === undefined
-      ) {
-        const proposalId = `round-end:${input.roundNumber}:${input.participantId}:${
-          canonicalDuration.remaining <= 1 ? "expire" : "duration"
-        }:${effect.id}`;
+    }
+    if (effect.canonicalLifecycle && temporalOutcome && canonicalDuration) {
+      if (roundClockScoped && temporalOutcome.kind !== "hold") {
+        const transition =
+          temporalOutcome.kind === "decrement"
+            ? {
+                nextDuration: temporalOutcome.nextDuration,
+                nextState: "active" as const,
+                reason: "duration_decremented" as const,
+                segment: "duration",
+                transitionType: "update" as const,
+              }
+            : {
+                nextDuration: undefined,
+                nextState: "expired" as const,
+                reason: "natural_expiry" as const,
+                segment: "expire",
+                transitionType: "expire" as const,
+              };
         canonicalProposals.push({
           automatic: true,
           effectId: effect.id,
           expectedEffectVersion: effect.canonicalLifecycle.version,
-          id: proposalId,
+          id: `round-end:${input.roundNumber}:${input.participantId}:${transition.segment}:${effect.id}`,
           mayOverride: false,
-          nextDuration:
-            canonicalDuration.remaining > 1
-              ? { ...canonicalDuration, remaining: canonicalDuration.remaining - 1 }
-              : undefined,
-          nextState: canonicalDuration.remaining <= 1 ? "expired" : "active",
+          nextDuration: transition.nextDuration,
+          nextState: transition.nextState,
           owner: "su",
           priorDuration: canonicalDuration,
           priorState: effect.canonicalLifecycle.lifecycle.state,
-          reason: canonicalDuration.remaining <= 1 ? "natural_expiry" : "duration_decremented",
-          transitionType: canonicalDuration.remaining <= 1 ? "expire" : "update",
+          reason: transition.reason,
+          transitionType: transition.transitionType,
         });
+        // Fixed durations already mirror their tick onto the free-text `duration` field below, and
+        // the Round End commit is driven by that mirror. Remainder-only and instantaneous state
+        // carries no round count to mirror, so its terminal transition is proposed directly here.
+        if (
+          temporalOutcome.kind === "expire" &&
+          (canonicalDuration.kind === "remainder_of_round" ||
+            canonicalDuration.kind === "instantaneous")
+        ) {
+          proposedRemovals.push(
+            combatRoundEndRemovalProposalSchema.parse({
+              effectId: effect.id,
+              id: `round-end:${input.roundNumber}:${input.participantId}:expire:${effect.id}`,
+              kind: "duration_expire",
+              label: effect.description
+                ? `Expire ${effect.description}`
+                : `Expire ${effect.type.replaceAll("_", " ")}`,
+              notes:
+                canonicalDuration.kind === "remainder_of_round"
+                  ? "Remainder-of-round state ends at this Round End."
+                  : "Instantaneous outcome does not persist past this Round End.",
+              participantId: input.participantId,
+              previousDuration: effect.duration,
+              previousExpiresAtRound: effect.expiresAtRound,
+              previousStatus: effect.status,
+            }),
+          );
+        }
       } else if (
-        (canonicalDuration?.kind === "until_check" ||
-          canonicalDuration?.kind === "until_condition") &&
+        temporalOutcome.kind === "requires_resolution" &&
+        temporalOutcome.requirement !== "legacy_incomplete" &&
         effect.canonicalLifecycle.sourceFamily !== "bleed"
       ) {
         canonicalRequirements.push({
@@ -14839,12 +14896,15 @@ function buildCombatRoundEndParticipantReview(input: {
           completeness: "unsupported_ambiguity",
           effectId: effect.id,
           id: `round-end:${input.roundNumber}:${input.participantId}:requirement:${effect.id}`,
-          kind: canonicalDuration.kind === "until_check" ? "recovery_check" : "condition",
+          kind: temporalOutcome.requirement,
           label: `${effect.description ?? effect.type}: pending canonical resolution`,
           owner: "source_process",
           resolved: false,
         });
-      } else if (canonicalDuration?.kind === "legacy_untyped") {
+      } else if (
+        temporalOutcome.kind === "requires_resolution" &&
+        temporalOutcome.requirement === "legacy_incomplete"
+      ) {
         canonicalRequirements.push({
           blocksReview: false,
           completeness: "legacy_incomplete",
@@ -14859,9 +14919,10 @@ function buildCombatRoundEndParticipantReview(input: {
     }
     // Legacy Bleed records can retain an explicit bounded round duration alongside their
     // condition-owned Bleed lifecycle. Preserve that compatibility without general text parsing.
-    const durationRounds =
-      canonicalDuration?.kind === "rounds" &&
-      effect.canonicalLifecycle?.applicability.phase === undefined
+    const durationRounds = heldForCreationRound
+      ? undefined
+      : canonicalDuration?.kind === "rounds" &&
+          effect.canonicalLifecycle?.applicability.phase === undefined
         ? canonicalDuration.remaining
         : canonicalDuration && effect.canonicalLifecycle?.sourceFamily !== "bleed"
           ? undefined
@@ -14906,7 +14967,11 @@ function buildCombatRoundEndParticipantReview(input: {
           }),
         );
       }
-    } else if (effect.expiresAtRound !== undefined && effect.expiresAtRound <= input.roundNumber) {
+    } else if (
+      !heldForCreationRound &&
+      effect.expiresAtRound !== undefined &&
+      effect.expiresAtRound <= input.roundNumber
+    ) {
       proposedRemovals.push(
         combatRoundEndRemovalProposalSchema.parse({
           effectId: effect.id,
