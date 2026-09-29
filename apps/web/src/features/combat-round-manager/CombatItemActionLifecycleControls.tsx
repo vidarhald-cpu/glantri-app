@@ -1,6 +1,10 @@
 "use client";
 
-import type { CombatGenericAction, CombatGenericActionDuration } from "@glantri/domain";
+import {
+  isCombatItemInteractionActionLive,
+  type CombatGenericAction,
+  type CombatGenericActionDuration,
+} from "@glantri/domain";
 
 /**
  * The GM half of the canonical Item action lifecycle, for the Combat Inspector — Forgejo issue
@@ -69,14 +73,14 @@ const statusLabels: Record<CombatGenericAction["status"], string> = {
   reviewed: "Reviewed",
 };
 
-/** An Item action the GM can still act on. Finished actions belong to the Combat Log. */
+/**
+ * An Item action the GM can still act on. Finished actions belong to the Combat Log.
+ *
+ * The liveness rule itself is canonical and lives in the domain, so this surface and the
+ * server-side one-live-Item-action refusal cannot drift apart.
+ */
 export function isOpenCombatItemAction(action: CombatGenericAction): boolean {
-  return (
-    action.preset === "item_interaction" &&
-    action.status !== "completed" &&
-    action.status !== "interrupted" &&
-    action.status !== "cancelled"
-  );
+  return isCombatItemInteractionActionLive(action);
 }
 
 /** Seeds the review duration field from the Item action's own current duration. */

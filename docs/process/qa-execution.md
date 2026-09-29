@@ -232,6 +232,45 @@ complete handoff; never silently follow a moving branch.
 `Running` means the visible QA child exists **and has passed this entry check**.
 An intended or merely queued dispatch is not started work.
 
+## Self-service observability
+
+A QA lane fetches its own evidence rather than relying on a relayed copy. Use
+the `tea` client with an explicit login; it needs no terminal and no Git
+credential helper, so it works from an unattended worker process. See
+[Forgejo API access route](./forgejo-agent-credentials.md#forgejo-api-access-route).
+
+```sh
+R=/repos/recovery-admin/glantri-app
+tea api --login glantri-qa "$R/issues/<n>"            # the live contract
+tea api --login glantri-qa "$R/pulls/<n>"             # PR thread and exact head
+tea api --login glantri-qa "$R/issues/<n>/comments"   # prior durable evidence
+tea api --login glantri-qa "$R/commits/<sha>/status"  # combined required contexts
+tea api --login glantri-qa "$R/actions/tasks"         # per-job status by head SHA
+```
+
+Prefer the fetched issue body over a supplied copy, and record that the contract
+was read directly. Where a copy was supplied as well, a diff against the live
+issue is evidence worth recording.
+
+For a failing protected context, `commits/<sha>/status` names the context and
+its state, and `actions/tasks` gives the per-job name, status, and head SHA, so
+QA can usually separate an infrastructure failure from a product failure without
+a relay. **Job log text has no API route in this Forgejo version** — the absence
+is version-level and identical for every identity, including write-scoped ones,
+so it is not a QA authorization gap. When the log text is genuinely needed,
+record the run and job from the status `target_url` and request it from the
+Development Orchestrator.
+
+Branch-protection settings are readable only by a repository administrator. The
+combined commit status is the supported substitute for required-context state.
+
+Publishing a verdict through `glantri-qa` is authorized evidence, not a widening
+of authority: the same credential is denied label changes, issue-state changes,
+branch creation, and PR merge server-side. Write the comment body to a file and
+post it with `tea api --login glantri-qa -X POST -d @<file> "$R/issues/<n>/comments"`.
+If that call fails, fall back to the recorder route below without changing the
+verdict or the credential.
+
 ## Substantive verification gates
 
 For substantive INITIAL or REPAIR QA, verify and record; for PRESERVATION,

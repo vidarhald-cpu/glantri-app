@@ -154,6 +154,75 @@ export const combatGenericActionSchema = z.object({
 });
 export type CombatGenericAction = z.infer<typeof combatGenericActionSchema>;
 
+/**
+ * A Combat generic action in one of these statuses is no longer live.
+ *
+ * This is the single terminal-status vocabulary for **every** generic-action family, Item
+ * interactions included: an Item action is an ordinary `CombatGenericAction` carrying
+ * `preset: "item_interaction"` and an `itemInteraction`, and it moves through the same
+ * `combatGenericActionStatusSchema` — `declared -> reviewed -> active` and then exactly one of
+ * `completed` (resolve), `interrupted` (interrupt) or `cancelled` (cancel), as the Item action
+ * lifecycle route's own terminal-status mapping shows. Rule decision 0007 §2 names the same three
+ * statuses for Perform Task; they are shared here rather than restated per family.
+ */
+export const COMBAT_GENERIC_ACTION_TERMINAL_STATUSES: ReadonlySet<CombatGenericActionStatus> =
+  new Set<CombatGenericActionStatus>(["completed", "interrupted", "cancelled"]);
+
+/** True while a Combat generic action has not yet reached a terminal status. */
+export function isCombatGenericActionLive(action: CombatGenericAction): boolean {
+  return !COMBAT_GENERIC_ACTION_TERMINAL_STATUSES.has(action.status);
+}
+
+/**
+ * True for a still-live action that **carries a canonical Item interaction**, whatever created it.
+ *
+ * `preset: "item_interaction"` means exactly one thing — this action owns a canonical
+ * `itemInteraction`, an invariant `declareCombatGenericAction` enforces in both directions. It is
+ * therefore the right predicate for the surfaces that drive the Item authority's own lifecycle
+ * (GM review/activate/resolve/interrupt/cancel), which legitimately reach an Item declared through
+ * the combat-declaration surface as well — behaviour that predates Forgejo issue #409 and is
+ * unchanged by it.
+ *
+ * **It is not the one-live-action guard's family marker.** Use
+ * {@link isCombatGuardedItemActionLive} for that.
+ */
+export function isCombatItemInteractionActionLive(action: CombatGenericAction): boolean {
+  return action.preset === "item_interaction" && isCombatGenericActionLive(action);
+}
+
+/**
+ * True for an action in the **guarded Item-action family** — the family the one-live-Item-action
+ * refusal protects (Product Owner ruling on Forgejo issue #409).
+ *
+ * The discriminator is `declarationKind`, not `preset`. `declarationKind` is the canonical
+ * declaration-family marker and is written in exactly one place,
+ * `materializeCombatDeclarationTasks`, which stamps every action it mints with `"perform_task"` or
+ * `"small_action"`. No helper ever adds, changes or removes it afterwards. An action that carries
+ * no `declarationKind` therefore did not come from the combat-declaration surface: on the Item
+ * side it can only have come from the Item-interaction authority route, which is the family this
+ * guard is about.
+ *
+ * `preset` alone cannot express this, because the M7 path (Forgejo issue #323) materializes a
+ * secondary `small_action` naming an Item with **both** `preset: "item_interaction"` and
+ * `declarationKind: "small_action"`. The Product Owner ruled that such an action is *a Small Action
+ * involving an Item*, not the Item-action family this guard protects — consistent with rule
+ * decision 0007 §2, which deliberately excludes `small_action`. A `perform_task` never reaches
+ * `preset: "item_interaction"` at all: `materializeCombatDeclarationTasks` attaches the declared
+ * Item to the secondary `small_action` slot only.
+ */
+export function isCombatGuardedItemAction(action: CombatGenericAction): boolean {
+  return action.preset === "item_interaction" && action.declarationKind === undefined;
+}
+
+/**
+ * True for a guarded Item-action-family member that is still live — the exact liveness the
+ * one-live-Item-action guard is scoped on. See {@link isCombatGuardedItemAction} for the family
+ * discriminator and {@link COMBAT_GENERIC_ACTION_TERMINAL_STATUSES} for the terminal vocabulary.
+ */
+export function isCombatGuardedItemActionLive(action: CombatGenericAction): boolean {
+  return isCombatGuardedItemAction(action) && isCombatGenericActionLive(action);
+}
+
 export function getCombatGenericActionTotalRounds(
   duration: CombatGenericActionDuration,
 ): number | undefined {

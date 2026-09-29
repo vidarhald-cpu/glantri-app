@@ -166,6 +166,8 @@ function headingForLogEvent(event: CombatLogEventPresentation): string {
   switch (event.summaryFacts.kind) {
     case "declaration_submitted":
       return "Declaration";
+    case "item_action_declared":
+      return "Item action";
     case "maneuver_attempt":
       return event.summaryFacts.maneuver === "feint" ? "Feint" : "Adjust Distance";
     case "participant_response":
