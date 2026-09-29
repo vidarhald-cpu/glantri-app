@@ -733,6 +733,32 @@ whose visibility, sharing and player-editing boundaries —
 including [the player-editing boundary](maps-spatial-play.md#10-player-editing-boundary) —
 are unchanged by this contract.
 
+**Amended 2026-09-29.** The Product Owner live map sketching ruling
+([Maps §1.2](maps-spatial-play.md#12-the-2026-09-29-live-map-sketching-ruling))
+settles the following player-facing consequences here:
+
+- The common Map view provides **independent pan and zoom for each viewer**.
+  Receiving a drawing or marker update **preserves that viewer's camera** and
+  does not switch them away from what they are looking at —
+  [Maps §7.10](maps-spatial-play.md#710-viewer-camera-is-individual-view-state).
+- **Switching between Map and Action preserves Action state**, exactly as the
+  `Action -> Map -> Action` rule above already requires.
+- **Switching between Maps does not clear retained placement arrangements** —
+  [Maps §7.8](maps-spatial-play.md#78-retained-placement-arrangements). Retention
+  grants no player visibility; what a player sees remains resolved from that
+  Character's own Map knowledge
+  ([Maps §9.6](maps-spatial-play.md#96-map-knowledge-is-character-scoped)).
+- **Players consume ordinary Map representations regardless of authoring path.**
+  Whether imagery was imported or drawn in app by the GM is not a player-facing
+  distinction —
+  [Maps §2.3](maps-spatial-play.md#23-one-map-facility-many-authoring-paths).
+
+> **This adds no view and redesigns nothing.** The GM drawing editor is **GM
+> authoring** ([Live map sketching](../product/live-map-sketching.md)); it does
+> not alter the five Play views, and it grants players **no drawing or
+> Map-editing rights**
+> ([Maps §10](maps-spatial-play.md#10-player-editing-boundary)).
+
 ### 12.2 Blackboard
 
 **Preserve the already-settled #268 Blackboard semantics.** They are recorded in

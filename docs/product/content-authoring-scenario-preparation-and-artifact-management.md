@@ -2246,6 +2246,52 @@ The knowledge consequence is the hard rule of
 [Maps / Spatial Play §8.2](../architecture/maps-spatial-play.md#82-replacement-versus-new-knowledge):
 **replacement means the same knowledge; a new layer means new information.**
 
+**Amended 2026-09-29.** The Product Owner **D1 disclosure ruling**
+([Maps / Spatial Play §8.2.1](../architecture/maps-spatial-play.md#821-the-d1-disclosure-ruling--a-layer-is-a-disclosure-unit))
+**refines that rule; it does not relax it.**
+
+> **Character-specific disclosure is preserved.** An incoming image that carries
+> **new fictional information** creates a **new disclosure unit with an explicit
+> eligible audience**, and is **not** disclosed to the prior recipients of a
+> representation merely because they knew that representation.
+
+What the ruling clarifies for intake: a layer is a **disclosure unit**, not a Map
+version and not a record of an import or publication event. **A new disclosure
+creates no second Map** — one stable Map identity remains, and each viewer
+receives one current composed presentation. Internal layers **may be consolidated
+only where that preserves every meaningful audience and knowledge distinction.**
+
+> **Do not infer the choice from pixels any more than from a filename.** Neither
+> pixel differencing nor any other automatic comparison may decide whether an
+> incoming image is a replacement or new information, or who knows it. **The GM
+> chooses, explicitly.** Ambiguous audience **fails closed** —
+> [Authority and Information Projection, projection rule 6](../architecture/information-authority-and-projection.md#projection-rules).
+
+**No general Map revision or history UI follows from this**, at intake or
+anywhere else
+([Maps / Spatial Play §13](../architecture/maps-spatial-play.md#13-editing-and-update-model)).
+
+#### Generated-image publication is not package import
+
+**Added 2026-09-29.** A Map layer representation may also be **authored in app**
+by the GM and **published** as an ordinary image
+([Maps / Spatial Play §8.3](../architecture/maps-spatial-play.md#83-a-visual-representation-may-be-authored-in-app),
+workflow at [Live map sketching](live-map-sketching.md)). That is a **different
+route from this section's external package import**, and the two must not be
+conflated:
+
+| Route                            | What arrives                                           | Governed by                                                                                                        |
+| -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| **External Map package import**  | a package with a manifest and one or more visual files | this section — staging, validation, explicit accept, identity choice and layer choice                              |
+| **In-app generated publication** | one image plus its Map-space alignment                 | [Maps / Spatial Play §8.3](../architecture/maps-spatial-play.md#83-a-visual-representation-may-be-authored-in-app) |
+
+> **Neither route enables a semantic Map importer.** This section still **does
+> not enable a Map importer**, and in-app publication is **not** authorization to
+> build one.
+
+The replacement-versus-new-information choice, and the D1 refinement above, apply
+to **both** routes.
+
 #### Player-safe is not disclosed
 
 **Importing a player-safe layer discloses it to no Character**, and GM-only layers
@@ -2267,6 +2313,14 @@ A later, richer Scenario package **may** propose such preparation. **Ordinary Ma
 intake remains reusable content intake**, and a package that carries placements
 does not thereby establish them, nor grant any Character knowledge
 ([Maps / Spatial Play §9.7](../architecture/maps-spatial-play.md#97-how-a-character-acquires-map-knowledge)).
+
+**Confirmed 2026-09-29.** Maps now **retain their latest placement arrangement**
+in the application across navigation
+([Maps / Spatial Play §7.8](../architecture/maps-spatial-play.md#78-retained-placement-arrangements)).
+
+> **That changes nothing here. Retaining placements in the app does not make them
+> importable content**, and **ordinary reusable Map packages remain free of
+> runtime placements.**
 
 #### Provenance is preserved and mostly derived
 
