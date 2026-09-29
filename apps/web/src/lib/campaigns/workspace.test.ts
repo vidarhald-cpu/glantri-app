@@ -4,10 +4,12 @@ import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/d
 
 import {
   buildCampaignEncounterHref,
+  buildCampaignPlayViews,
   buildCampaignScenarioHref,
   buildCampaignTaskHref,
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
+  resolveActiveCampaignPlayView,
   resolveCampaignTaskTargetId,
   resolveCampaignWorkspaceState,
 } from "./workspace";
@@ -177,6 +179,105 @@ describe("campaign workspace", () => {
       "character",
       "player-combat",
     ]);
+  });
+
+  it("presents the five Play views in their intended left-to-right order", () => {
+    expect(buildCampaignPlayViews().map((view) => view.id)).toEqual([
+      "situation",
+      "action",
+      "map",
+      "blackboard",
+      "character",
+    ]);
+
+    expect(buildCampaignPlayViews().map((view) => view.label)).toEqual([
+      "Situation",
+      "Action",
+      "Map",
+      "Blackboard",
+      "Character",
+    ]);
+  });
+
+  it("targets each Play view at an existing canonical workspace tab", () => {
+    const playViewTabs = Object.fromEntries(
+      buildCampaignPlayViews().map((view) => [view.id, view.canonicalTab]),
+    );
+
+    expect(playViewTabs).toEqual({
+      action: "player-skill-rolls",
+      blackboard: "blackboard",
+      character: "character",
+      map: "maps",
+      situation: "scenario",
+    });
+
+    const playerTabIds = buildCampaignWorkspaceTabs({ canAccessGmEncounter: false }).map(
+      (tab) => tab.id,
+    );
+
+    for (const view of buildCampaignPlayViews()) {
+      expect(playerTabIds).toContain(view.canonicalTab);
+    }
+  });
+
+  it("maps the consolidated player tabs onto their Play view", () => {
+    expect(resolveActiveCampaignPlayView("scenario")).toBe("situation");
+    expect(resolveActiveCampaignPlayView("encounter")).toBe("action");
+    expect(resolveActiveCampaignPlayView("player-encounter")).toBe("action");
+    expect(resolveActiveCampaignPlayView("skill-rolls")).toBe("action");
+    expect(resolveActiveCampaignPlayView("player-skill-rolls")).toBe("action");
+    expect(resolveActiveCampaignPlayView("maps")).toBe("map");
+    expect(resolveActiveCampaignPlayView("blackboard")).toBe("blackboard");
+    expect(resolveActiveCampaignPlayView("character")).toBe("character");
+  });
+
+  it("leaves the Campaign home, the retained player Combat entry point, and GM-only tabs outside the Play views", () => {
+    expect(resolveActiveCampaignPlayView("campaign")).toBeUndefined();
+    expect(resolveActiveCampaignPlayView("player-combat")).toBeUndefined();
+    expect(resolveActiveCampaignPlayView("items")).toBeUndefined();
+    expect(resolveActiveCampaignPlayView("combat")).toBeUndefined();
+    expect(resolveActiveCampaignPlayView("gm-encounter")).toBeUndefined();
+  });
+
+  it("keeps every consolidated player tab resolving as a requested tab", () => {
+    for (const requestedTab of [
+      "scenario",
+      "encounter",
+      "player-encounter",
+      "skill-rolls",
+      "player-skill-rolls",
+      "maps",
+      "blackboard",
+      "character",
+      "player-combat",
+    ] as const) {
+      const state = resolveCampaignWorkspaceState({
+        activeCampaignId: "camp-1",
+        canAccessGmEncounter: false,
+        currentUserId: "user-1",
+        encounters: [
+          encounter({
+            id: "enc-1",
+            scenarioId: "scn-1",
+            scenarioParticipantId: "part-1",
+            status: "active",
+          }),
+        ],
+        requestedScenarioId: "scn-1",
+        requestedTab,
+        scenarioParticipants: [
+          scenarioParticipant({
+            controlledByUserId: "user-1",
+            id: "part-1",
+            scenarioId: "scn-1",
+          }),
+        ],
+        scenarios: [scenario({ id: "scn-1", name: "Session one", status: "live" })],
+      });
+
+      expect(state.activeTab).not.toBe("campaign");
+    }
   });
 
   it("opens the Campaign Blackboard for both GM and player access", () => {
