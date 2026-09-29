@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
@@ -34,6 +35,33 @@ const panelStyle = {
   gap: "0.75rem",
   padding: "1rem",
 } as const;
+
+const canonicalDetailNavStyle = {
+  alignItems: "baseline",
+  border: "1px solid #d9ddd8",
+  borderRadius: 12,
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.75rem",
+  padding: "0.6rem 1rem",
+} as const;
+
+/**
+ * Canonical Character destinations reachable from the Play Character view.
+ *
+ * `player-play-v1.md` §13 — compact summary in Play, click through to the canonical
+ * full view. Both destinations stay on the Characters side of §11.2's ownership
+ * boundary. The Campaign-side game-world equipment surface is GM-only and is
+ * deliberately not a player destination (Product Owner ruling on #432).
+ */
+export function buildPlayerCharacterCanonicalDetailLinks(
+  characterId: string,
+): Array<{ href: string; label: string }> {
+  return [
+    { href: `/characters/${characterId}`, label: "Open the full character sheet" },
+    { href: `/characters/${characterId}/equipment`, label: "Open the full equipment inventory" },
+  ];
+}
 
 export default function CharacterWorkspacePanel({
   activeEncounter,
@@ -156,6 +184,19 @@ export default function CharacterWorkspacePanel({
         screenName="Character"
         selectedCandidate={selectedCandidate}
       />
+
+      {!isGameMaster && selectedCandidate ? (
+        <nav aria-label="Character detail" data-testid="character-play-canonical-detail">
+          <section style={canonicalDetailNavStyle}>
+            <span>Full detail lives on your Character pages.</span>
+            {buildPlayerCharacterCanonicalDetailLinks(selectedCandidate.characterId).map((link) => (
+              <Link href={link.href} key={link.href}>
+                {link.label}
+              </Link>
+            ))}
+          </section>
+        </nav>
+      ) : null}
 
       {selectedCandidate ? (
         <>
