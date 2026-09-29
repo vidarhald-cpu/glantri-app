@@ -6,8 +6,14 @@ import type { WeaponTemplate } from "@glantri/domain";
  *
  * `resolveDeclaredWeaponSource` resolves an attack from the **participant equipment snapshot**,
  * not from the live catalogue. A weapon template that was snapshotted before the `secondCrit`
- * enrichment carries no `Sec` code, so rule decision 0006's Secondary Critical chain fails closed
- * and silently under-fires for that participant.
+ * enrichment carries no `Sec` code, so the persisted snapshot is **stale** against the canonical
+ * catalogue for rule decision 0006's Secondary Critical chain.
+ *
+ * Resolution is not currently affected. `getEquipmentItemTemplate` prefers the canonical
+ * catalogue's `attackModes` whenever a canonical counterpart exists, which is exactly the
+ * condition under which this warning fires. The warning is therefore a truthful staleness signal —
+ * a prompt to refresh or reconcile the snapshot — and not a claim that the Secondary Critical
+ * under-fires.
  *
  * This module never repairs the snapshot, never mutates it, and never changes resolution. It only
  * compares the persisted snapshot template against the canonical catalogue and reports the gap so
@@ -19,7 +25,7 @@ import type { WeaponTemplate } from "@glantri/domain";
 export const SNAPSHOT_SECONDARY_CRITICAL_WARNING_CODE = "snapshot_secondary_critical_code_missing";
 
 export const SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE =
-  "The participant equipment snapshot lacks the canonical Secondary Critical `Sec` code for this attack mode; the Secondary Critical fails closed and under-fires for this participant.";
+  "The participant equipment snapshot is stale against the canonical weapon catalogue: it lacks the Secondary Critical `Sec` code the catalogue authors for this attack mode. Resolution is currently unaffected, because the canonical attack modes are preferred when the template is read. Refresh or reconcile the equipment snapshot for this participant; the canonical and snapshot `Sec` codes, the weapon template and the attack mode are reported alongside this message.";
 
 export type SnapshotSecondaryCriticalWarning = {
   attackModeId: string;

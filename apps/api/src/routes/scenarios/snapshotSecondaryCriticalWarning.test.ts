@@ -4,6 +4,7 @@ import { weaponTemplates } from "@glantri/content";
 import {
   detectSnapshotSecondaryCriticalCodeGap,
   SNAPSHOT_SECONDARY_CRITICAL_WARNING_CODE,
+  SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE,
 } from "./snapshotSecondaryCriticalWarning";
 
 const GREAT_SWORD_TEMPLATE_ID = "weapon-template-great-sword";
@@ -226,5 +227,15 @@ describe("snapshot Secondary Critical `Sec` code warning", () => {
         weaponTemplateId: GREAT_SWORD_TEMPLATE_ID,
       }),
     ).toBeUndefined();
+  });
+
+  it("reports snapshot staleness without claiming the Secondary Critical under-fires", () => {
+    // The warning fires exactly when a canonical counterpart exists, which is exactly when
+    // `getEquipmentItemTemplate` supplies the canonical `attackModes`. The emitted text must
+    // therefore never assert that resolution is currently wrong.
+    expect(SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE).toMatch(/stale/i);
+    expect(SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE).toMatch(/refresh|reconcile/i);
+    expect(SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE).toContain("`Sec`");
+    expect(SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE).not.toMatch(/under-fire/i);
   });
 });

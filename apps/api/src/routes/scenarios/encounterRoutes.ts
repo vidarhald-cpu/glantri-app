@@ -17094,7 +17094,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
       // Operational, GM-side only. `resolveDeclaredWeaponSource` reads the participant equipment
       // snapshot rather than the live catalogue, so a template snapshotted before the `secondCrit`
-      // enrichment silently under-fires the Secondary Critical. The comparison lives here because
+      // enrichment is stale against the canonical catalogue. The comparison lives here because
       // `packages/domain` may not import `packages/content`; this route holds both. It reports and
       // never repairs: the snapshot is not mutated, and resolution is unchanged.
       const snapshotSecondaryCriticalWarning = detectSnapshotSecondaryCriticalCodeGap({
