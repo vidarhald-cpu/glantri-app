@@ -218,7 +218,7 @@ describe("ScenarioSituationView", () => {
     });
 
     expect(screen.getByText("No visible participants are present.")).toBeInTheDocument();
-    expect(screen.getByText("No Items are available to you right now.")).toBeInTheDocument();
+    expect(screen.getByText("No objects are currently available.")).toBeInTheDocument();
     expect(
       screen.getByText("No objective Scenario history has been recorded yet."),
     ).toBeInTheDocument();

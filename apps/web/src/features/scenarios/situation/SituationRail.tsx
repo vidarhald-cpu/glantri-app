@@ -124,6 +124,7 @@ export function SituationRail<TFilterId extends string>({
             <li key={row.id}>
               <button
                 aria-current={selectedId === row.id ? "true" : undefined}
+                aria-label={row.label}
                 onClick={() => onSelect(row.id)}
                 style={{
                   ...rowButtonStyle,

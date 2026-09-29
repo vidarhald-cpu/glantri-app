@@ -93,7 +93,7 @@ export function ScenarioSituationView({
         .map((participant) => ({
           cue:
             participant.presence.kind === "encounter"
-              ? `Encounter · ${participant.presence.encounterName}`
+              ? `Encounter: ${participant.presence.encounterName}`
               : "Scenario",
           id: participant.id,
           label: `${participant.displayName}${participant.isControlledByViewer ? " (you)" : ""}`,
@@ -134,13 +134,13 @@ export function ScenarioSituationView({
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
             {session.encounters.map((encounter) => (
               <span key={encounter.id} style={{ display: "flex", gap: "0.35rem" }}>
-                <span>
-                  {encounter.title} · {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"} ·{" "}
-                  {encounter.status === "completed"
+                <span>{encounter.title}</span>
+                <span>{`${encounter.kind === "roleplay" ? "Roleplaying" : "Combat"} · ${
+                  encounter.status === "completed"
                     ? "Closed"
-                    : encounter.status.charAt(0).toUpperCase() + encounter.status.slice(1)}
-                  {encounter.outcome ? ` · ${encounter.outcome}` : ""}
-                </span>
+                    : encounter.status.charAt(0).toUpperCase() + encounter.status.slice(1)
+                }`}</span>
+                {encounter.outcome ? <span>{`Outcome: ${encounter.outcome}`}</span> : null}
                 {campaignId ? (
                   <Link
                     href={buildCampaignWorkspaceHref({
@@ -190,7 +190,7 @@ export function ScenarioSituationView({
             title="People"
           />
           <SituationRail
-            emptyMessage="No Items are available to you right now."
+            emptyMessage="No objects are currently available."
             onSelect={(id) => setSelection({ id, kind: "item" })}
             rows={itemRows}
             searchLabel="Search Items"
