@@ -4,7 +4,11 @@ import { describe, expect, it } from "vitest";
 import type { EncounterSessionSummary, PlayerAccessibleScenario } from "@glantri/domain";
 
 import { buildCampaignWorkspaceHref, type CampaignWorkspaceTabId } from "@/lib/campaigns/workspace";
-import { CampaignWorkspaceNavigation, CurrentScenarioContextPanel } from "./CampaignWorkspaceShell";
+import {
+  CampaignWorkspaceNavigation,
+  CurrentScenarioContextPanel,
+  ScenarioPlayNavigation,
+} from "./CampaignWorkspaceShell";
 
 const scenarios: PlayerAccessibleScenario[] = [
   {
@@ -174,5 +178,205 @@ describe("Campaign workspace task navigation", () => {
     expect(within(navigation).getByRole("link", { name: "Blackboard" })).toBeVisible();
     expect(within(navigation).getByRole("link", { name: "Maps" })).toBeVisible();
     expect(within(navigation).queryByRole("link", { name: "Membership" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Scenario Play navigation", () => {
+  const playNavigationProps = {
+    buildWorkspaceHref,
+    campaignId: "campaign-1",
+    scenarioId: "scenario-1",
+    scenarioName: "The Library",
+  };
+
+  it("gives a player one Play arena of five views, with the retained Combat entry point beside them", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeEncounterId="encounter-1"
+        activeEncounterTitle="Search the stacks"
+        activeTab="player-skill-rolls"
+        canAccessGmEncounter={false}
+      />,
+    );
+
+    const playViews = screen.getByRole("navigation", { name: "Play views" });
+    expect(
+      within(playViews)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Situation", "Action", "Map", "Blackboard", "Character"]);
+
+    expect(within(playViews).getByRole("link", { name: "Situation" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=scenario&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+    expect(within(playViews).getByRole("link", { name: "Action" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+    expect(within(playViews).getByRole("link", { name: "Map" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=maps&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+    expect(within(playViews).getByRole("link", { name: "Blackboard" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=blackboard&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+    expect(within(playViews).getByRole("link", { name: "Character" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=character&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+
+    // The consolidated tabs are no longer separate player entry points.
+    expect(within(playViews).queryByRole("link", { name: "Scenario" })).not.toBeInTheDocument();
+    expect(within(playViews).queryByRole("link", { name: "Encounter" })).not.toBeInTheDocument();
+    expect(within(playViews).queryByRole("link", { name: "Skill rolls" })).not.toBeInTheDocument();
+
+    // A player never sees the GM-only Combat tooling.
+    expect(screen.queryByRole("link", { name: "Combat" })).not.toBeInTheDocument();
+
+    // Existing routes remain reachable: Player combat is retained, not folded in.
+    const retained = screen.getByRole("navigation", { name: "Retained Play entry points" });
+    expect(within(retained).getByRole("link", { name: "Player combat" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+  });
+
+  it("names the Scenario and the active Encounter in the shared Play header", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeEncounterId="encounter-1"
+        activeEncounterTitle="Search the stacks"
+        activeTab="scenario"
+        canAccessGmEncounter={false}
+      />,
+    );
+
+    const header = screen.getByRole("region", { name: "Play header" });
+    expect(within(header).getByText("The Library")).toBeVisible();
+    expect(within(header).getByText("Encounter · Search the stacks")).toBeVisible();
+  });
+
+  it("omits the Encounter indication and the retained Combat link when no Encounter is active", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeTab="scenario"
+        canAccessGmEncounter={false}
+      />,
+    );
+
+    const header = screen.getByRole("region", { name: "Play header" });
+    expect(within(header).getByText("The Library")).toBeVisible();
+    expect(screen.queryByTestId("play-header-encounter")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Retained Play entry points" }),
+    ).not.toBeInTheDocument();
+
+    expect(screen.getByRole("navigation", { name: "Play views" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Action" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-1",
+    );
+  });
+
+  it("marks the Play view that presents each consolidated tab as current", () => {
+    for (const [activeTab, currentView] of [
+      ["scenario", "Situation"],
+      ["encounter", "Action"],
+      ["player-encounter", "Action"],
+      ["skill-rolls", "Action"],
+      ["player-skill-rolls", "Action"],
+      ["maps", "Map"],
+      ["blackboard", "Blackboard"],
+      ["character", "Character"],
+    ] as Array<[CampaignWorkspaceTabId, string]>) {
+      const { unmount } = render(
+        <ScenarioPlayNavigation
+          {...playNavigationProps}
+          activeTab={activeTab}
+          canAccessGmEncounter={false}
+        />,
+      );
+
+      expect(screen.getByRole("link", { name: currentView })).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      expect(
+        screen.getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page"),
+      ).toHaveLength(1);
+
+      unmount();
+    }
+  });
+
+  it("leaves the retained player Combat view outside the five Play views", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeEncounterId="encounter-1"
+        activeEncounterTitle="Search the stacks"
+        activeTab="player-combat"
+        canAccessGmEncounter={false}
+      />,
+    );
+
+    expect(
+      screen.getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page"),
+    ).toHaveLength(0);
+    expect(screen.getByRole("link", { name: "Player combat" })).toBeVisible();
+  });
+
+  it("leaves the GM Scenario and Encounter tools unchanged", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeEncounterId="encounter-1"
+        activeEncounterTitle="Search the stacks"
+        activeTab="combat"
+        canAccessGmEncounter
+      />,
+    );
+
+    const tools = screen.getByRole("navigation", { name: "Scenario and Encounter tools" });
+    expect(
+      within(tools)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Scenario", "Encounter", "Character", "Skill rolls", "Combat", "Player combat"]);
+
+    expect(within(tools).getByRole("link", { name: "Scenario" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1/scenarios/scenario-1",
+    );
+    expect(within(tools).getByRole("link", { name: "Encounter" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1/scenarios/scenario-1/encounters/encounter-1",
+    );
+    expect(within(tools).getByRole("link", { name: "Combat" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=combat&scenarioId=scenario-1&encounterId=encounter-1",
+    );
+
+    // A GM keeps their own tabs and does not get the player Play arena.
+    expect(screen.queryByRole("navigation", { name: "Play views" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Play header" })).not.toBeInTheDocument();
+  });
+
+  it("hides the GM Encounter tools that need an Encounter when none is active", () => {
+    render(
+      <ScenarioPlayNavigation {...playNavigationProps} activeTab="scenario" canAccessGmEncounter />,
+    );
+
+    const tools = screen.getByRole("navigation", { name: "Scenario and Encounter tools" });
+    expect(
+      within(tools)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Scenario", "Character"]);
   });
 });

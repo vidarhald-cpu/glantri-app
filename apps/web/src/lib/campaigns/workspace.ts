@@ -29,6 +29,62 @@ export interface CampaignWorkspaceTab {
   label: string;
 }
 
+/**
+ * The five player-facing Play views of the Scenario Play arena.
+ *
+ * These are a presentation layer over the existing `CampaignWorkspaceTabId`
+ * model: every Play view resolves to one canonical existing tab id, and the
+ * consolidation removes no tab id, no route, and no accepted `?tab=` value.
+ */
+export type CampaignPlayViewId = "situation" | "action" | "map" | "blackboard" | "character";
+
+export interface CampaignPlayView {
+  /** The canonical existing tab id a Play view link targets. */
+  canonicalTab: CampaignWorkspaceTabId;
+  id: CampaignPlayViewId;
+  label: string;
+}
+
+const orderedPlayViews: CampaignPlayView[] = [
+  { canonicalTab: "scenario", id: "situation", label: "Situation" },
+  { canonicalTab: "player-skill-rolls", id: "action", label: "Action" },
+  { canonicalTab: "maps", id: "map", label: "Map" },
+  { canonicalTab: "blackboard", id: "blackboard", label: "Blackboard" },
+  { canonicalTab: "character", id: "character", label: "Character" },
+];
+
+export function buildCampaignPlayViews(): CampaignPlayView[] {
+  return orderedPlayViews;
+}
+
+/**
+ * Maps an active workspace tab onto the Play view that presents it, or
+ * `undefined` for tabs that are not Play views: the Campaign home, the retained
+ * `player-combat` entry point, and the GM-only `items`, `combat` and
+ * `gm-encounter` tabs.
+ */
+export function resolveActiveCampaignPlayView(
+  tab: CampaignWorkspaceTabId,
+): CampaignPlayViewId | undefined {
+  switch (tab) {
+    case "scenario":
+      return "situation";
+    case "encounter":
+    case "player-encounter":
+    case "skill-rolls":
+    case "player-skill-rolls":
+      return "action";
+    case "maps":
+      return "map";
+    case "blackboard":
+      return "blackboard";
+    case "character":
+      return "character";
+    default:
+      return undefined;
+  }
+}
+
 export interface CampaignWorkspaceState {
   activeCampaignId: string;
   activeEncounterId?: string;
