@@ -81,30 +81,118 @@ function formatSigned(value: number): string {
   return `${value >= 0 ? "+" : ""}${value}`;
 }
 
-function formatEffectValue(effect: CombatSituationLifecycleEffect): string | undefined {
-  if (effect.payload.kind !== "numeric") return undefined;
-  switch (effect.payload.unit) {
+/**
+ * The player-facing indication that a value exists but cannot be stated. `"—"` is the
+ * established unavailable-value indication on this surface — see `getCombatTableCell`
+ * and the phase-table placeholders in `playerCombatPhaseModel.ts`. It is reused here
+ * rather than introducing a second unknown-value vocabulary.
+ */
+const UNRENDERABLE_VALUE_LABEL = "—";
+
+/**
+ * The three distinct outcomes of rendering a canonical effect's value.
+ *
+ * A single `string | undefined` return cannot express them, and that conflation is the
+ * defect this type exists to close: `no_effect_value` and `unrenderable` are both
+ * "no string", but only the first may fall through to the ordinary entry rendering.
+ *
+ * - `rendered` — the payload is numeric and its unit has an explicit rendering.
+ * - `no_effect_value` — the payload is not numeric, so the effect carries no value of
+ *   its own. Legitimate and expected, not an error.
+ * - `unrenderable` — the payload is numeric but its unit is not one this surface knows
+ *   how to state. Only reachable when data escapes the type boundary, and an error.
+ */
+type EffectValueRendering =
+  | { kind: "no_effect_value" }
+  | { kind: "rendered"; label: string }
+  | { kind: "unrenderable" };
+
+/**
+ * Renders the player-facing value for a canonical lifecycle effect.
+ *
+ * Every member of `CanonicalCombatModifierUnit` must have an explicit `case` arm. The
+ * `default` arm binds the narrowed `unit` to `never`, so adding a payload unit without a
+ * case arm is a compile-time failure.
+ *
+ * The `never` binding is erased at runtime, so it cannot protect against malformed,
+ * downlevel or hand-edited persisted data. The `default` arm therefore also returns an
+ * explicit `unrenderable` outcome at runtime. Callers must not substitute another
+ * semantic value for it: an unrecognised unit renders `UNRENDERABLE_VALUE_LABEL`, never
+ * a number drawn from a different source.
+ */
+function renderEffectValue(effect: CombatSituationLifecycleEffect): EffectValueRendering {
+  // Deliberate non-value: a restriction payload carries no numeric value to state, which
+  // is expected rather than an error, so the ordinary entry rendering may still apply.
+  if (effect.payload.kind !== "numeric") return { kind: "no_effect_value" };
+  const payload = effect.payload;
+  switch (payload.unit) {
     case "percentage":
-      return `${formatSigned(effect.payload.value)}%`;
+      return { kind: "rendered", label: `${formatSigned(payload.value)}%` };
     case "flat_db":
-      return formatSigned(effect.payload.value);
+      return { kind: "rendered", label: formatSigned(payload.value) };
     case "initiative_value":
-      return formatSigned(effect.payload.value);
+      return { kind: "rendered", label: formatSigned(payload.value) };
     case "damage":
-      return `${effect.payload.value} HP`;
+      return { kind: "rendered", label: `${payload.value} HP` };
     case "bleed_rate":
-      return `${effect.payload.value}/10 HP per round`;
+      return { kind: "rendered", label: `${payload.value}/10 HP per round` };
     case "integer_count":
-      return String(effect.payload.value);
+      return { kind: "rendered", label: String(payload.value) };
+    default: {
+      // Compile-time half of the guard: this binding fails to compile if a unit has no
+      // case arm. It is erased at runtime, so the `unrenderable` return below is the
+      // runtime half and the two are not interchangeable.
+      const exhaustive: never = payload.unit;
+      void exhaustive;
+      return { kind: "unrenderable" };
+    }
+  }
+}
+
+/**
+ * The effect-derived value label for a display row, or `undefined` when the effect
+ * carries no value of its own.
+ *
+ * An unrecognised unit resolves to the explicit unavailable indication rather than to
+ * `undefined`, so it is visible on the surface instead of silently absent.
+ */
+export function formatEffectValue(effect: CombatSituationLifecycleEffect): string | undefined {
+  const rendering = renderEffectValue(effect);
+  switch (rendering.kind) {
+    case "rendered":
+      return rendering.label;
+    case "unrenderable":
+      return UNRENDERABLE_VALUE_LABEL;
+    case "no_effect_value":
+      return undefined;
+    default: {
+      const exhaustive: never = rendering;
+      return exhaustive;
+    }
   }
 }
 
 function formatEntryValue(entry: CombatSituationModifierRowInput): string {
-  const effectValue = entry.canonicalLifecycle
-    ? formatEffectValue(entry.canonicalLifecycle)
-    : undefined;
-  if (effectValue !== undefined) return effectValue;
-  return `${formatSigned(entry.value)}${entry.application !== "flat_db" ? "%" : ""}`;
+  const entryValueLabel = `${formatSigned(entry.value)}${entry.application !== "flat_db" ? "%" : ""}`;
+  if (!entry.canonicalLifecycle) return entryValueLabel;
+  const rendering = renderEffectValue(entry.canonicalLifecycle);
+  switch (rendering.kind) {
+    case "rendered":
+      return rendering.label;
+    // An unrecognised unit must not fall back to `entry.value`: that is a different value
+    // from a different source, with a suffix guessed from `entry.application`, and it
+    // would read as a plausible figure while being wrong.
+    case "unrenderable":
+      return UNRENDERABLE_VALUE_LABEL;
+    // A non-numeric payload has no value of its own, so the ordinary entry rendering is
+    // the correct answer rather than a substitution.
+    case "no_effect_value":
+      return entryValueLabel;
+    default: {
+      const exhaustive: never = rendering;
+      return exhaustive;
+    }
+  }
 }
 
 /**
