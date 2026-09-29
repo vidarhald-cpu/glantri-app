@@ -107,7 +107,19 @@ function formatEntryValue(entry: CombatSituationModifierRowInput): string {
   return `${formatSigned(entry.value)}${entry.application !== "flat_db" ? "%" : ""}`;
 }
 
-function formatDuration(effect: CombatSituationLifecycleEffect): string | undefined {
+/**
+ * Renders the player-facing duration chip for a canonical lifecycle effect.
+ *
+ * Every member of `CanonicalCombatModifierDuration["kind"]` must have an explicit
+ * `case` arm. The `default` arm below binds the narrowed `duration` to `never`, so
+ * adding a duration kind without a case arm is a compile-time failure rather than a
+ * silent `undefined` and a missing chip on the Situation surface.
+ *
+ * The arms returning `undefined` are deliberate blanks, not forgotten cases: a named
+ * arm returning `undefined` records the intent, whereas falling off the end of the
+ * switch records nothing.
+ */
+export function formatDuration(effect: CombatSituationLifecycleEffect): string | undefined {
   const duration = effect.lifecycle.duration;
   switch (duration.kind) {
     case "phase":
@@ -120,13 +132,22 @@ function formatDuration(effect: CombatSituationLifecycleEffect): string | undefi
       return "Check required";
     case "until_condition":
       return "Until cleared";
+    // Deliberate blank: no duration chip is intended for a relationship-bound effect.
     case "relationship":
       return undefined;
+    // Deliberate blank: no duration chip is intended for a GM-removable or open-ended
+    // effect, which has no remaining duration to state.
     case "manual":
     case "indefinite":
       return undefined;
+    // Deliberate blank: no duration chip is intended for a legacy untyped duration,
+    // which carries no remaining duration to state.
     case "legacy_untyped":
       return undefined;
+    default: {
+      const exhaustive: never = duration;
+      return exhaustive;
+    }
   }
 }
 
