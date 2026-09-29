@@ -83,20 +83,21 @@ function formatSigned(value: number): string {
 
 /**
  * The player-facing indication that the data carried a value this surface does not
- * recognise. This is an error state, not an absence, and it must read as visibly
+ * recognize. This is an error state, not an absence, and it must read as visibly
  * distinct from both.
  *
  * It is deliberately **not** `"—"`: that glyph already means "no value" here —
  * `hasDisplayValue` in `playerCombatPhaseModel.ts` returns `false` for it — so reusing
- * it would make unrecognised input indistinguishable from legitimate absence. It is
+ * it would make unrecognized input indistinguishable from legitimate absence. It is
  * also not `"Unavailable"`, which this codebase already uses for data that is
  * legitimately missing or withheld (`FeintSkillPreview`, `currentActionPresentation`),
  * and which would reproduce the same conflation one word further along.
  *
- * No unknown-input indication existed to reuse, so this is a new, deliberately
- * unmistakable one: a word, never a number, and never mistakable for a real value.
+ * It joins the existing player-facing `"Unknown X"` vocabulary (`"Unknown item"` in
+ * `features/equipment`, `"Unknown participant"` and `"Unknown skill"` in
+ * `features/roleplay`): a word, never a number, and never mistakable for a real value.
  */
-const UNRENDERABLE_VALUE_LABEL = "Unrecognised value";
+const UNRENDERABLE_VALUE_LABEL = "Unknown value";
 
 /**
  * The three distinct outcomes of rendering a canonical effect's value.
@@ -126,7 +127,7 @@ type EffectValueRendering =
  * The `never` binding is erased at runtime, so it cannot protect against malformed,
  * downlevel or hand-edited persisted data. The `default` arm therefore also returns an
  * explicit `unrenderable` outcome at runtime. Callers must not substitute another
- * semantic value for it: an unrecognised unit renders `UNRENDERABLE_VALUE_LABEL`, never
+ * semantic value for it: an unrecognized unit renders `UNRENDERABLE_VALUE_LABEL`, never
  * a number drawn from a different source.
  */
 function renderEffectValue(effect: CombatSituationLifecycleEffect): EffectValueRendering {
@@ -162,7 +163,7 @@ function renderEffectValue(effect: CombatSituationLifecycleEffect): EffectValueR
  * The effect-derived value label for a display row, or `undefined` when the effect
  * carries no value of its own.
  *
- * An unrecognised unit resolves to the explicit unrecognised-value indication rather
+ * An unrecognized unit resolves to the explicit unknown-value indication rather
  * than to `undefined`, so it is visibly distinct on the surface from both a legitimate
  * absence and a rendered value.
  */
@@ -189,7 +190,7 @@ function formatEntryValue(entry: CombatSituationModifierRowInput): string {
   switch (rendering.kind) {
     case "rendered":
       return rendering.label;
-    // An unrecognised unit must not fall back to `entry.value`: that is a different value
+    // An unrecognized unit must not fall back to `entry.value`: that is a different value
     // from a different source, with a suffix guessed from `entry.application`, and it
     // would read as a plausible figure while being wrong.
     case "unrenderable":

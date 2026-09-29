@@ -560,14 +560,14 @@ const UNIT_VALUE_LABELS: Record<CanonicalCombatModifierUnit, string> = {
 
 /**
  * The player-facing indication that the data carried a value this surface does not
- * recognise. Kept as a literal here rather than imported, so a change to the module's
+ * recognize. Kept as a literal here rather than imported, so a change to the module's
  * constant is a visible test failure rather than a silently agreeing rename.
  */
-const UNRENDERABLE_VALUE_LABEL = "Unrecognised value";
+const UNRENDERABLE_VALUE_LABEL = "Unknown value";
 
 /**
  * The absence glyph this surface already uses for "no value" — `hasDisplayValue` in
- * `playerCombatPhaseModel.ts` returns `false` for it. The unrecognised-value indication
+ * `playerCombatPhaseModel.ts` returns `false` for it. The unknown-value indication
  * must never collapse back onto it.
  */
 const ABSENCE_GLYPH = "—";
@@ -654,7 +654,7 @@ describe("formatEffectValue exhaustiveness", () => {
     expect(formatEffectValue(restrictionOnlyEffect())).toBeUndefined();
   });
 
-  it("renders an explicit unrecognised-value indication for an unrecognised unit at runtime", () => {
+  it("renders an explicit unknown-value indication for an unrecognized unit at runtime", () => {
     const rendered = formatEffectValue(effectWithUnrecognisedUnit());
     expect(rendered).toBe(UNRENDERABLE_VALUE_LABEL);
     expect(rendered).not.toBeUndefined();
