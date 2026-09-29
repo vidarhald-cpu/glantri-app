@@ -184,6 +184,20 @@ export class CharacterService {
     return this.repository.findOwnedById(ownerId, characterId);
   }
 
+  /**
+   * Resolve a Character the given user currently holds authorized player control of.
+   *
+   * Control means an active `player_character` Scenario participant sourced from this
+   * Character, controlled by this user, on a Scenario that is open to player reads. It is
+   * strictly a **read** authority: control is not ownership and confers no write authority.
+   */
+  async getCharacterUnderPlayerControl(
+    controllerUserId: string,
+    characterId: string,
+  ): Promise<CharacterRecord | null> {
+    return this.repository.findUnderPlayerControl(controllerUserId, characterId);
+  }
+
   async saveExistingCharacter(input: {
     build: CreateCharacterRecordInput["build"];
     characterId: string;

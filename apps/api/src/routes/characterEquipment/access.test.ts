@@ -1,16 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { NotFoundError } from "../../lib/errors";
-import { equipmentViewerForAccessibleCharacter, requireAccessibleCharacter } from "./access";
+import {
+  equipmentViewerForAccessibleCharacter,
+  requireAccessibleCharacter,
+  requireReadableCharacter,
+} from "./access";
 
 const characterId = "character-1";
 
-function accessibleCharacterService(input: { managed?: boolean; owned?: boolean }) {
+function accessibleCharacterService(input: {
+  controlled?: boolean;
+  managed?: boolean;
+  owned?: boolean;
+}) {
   const character = { id: characterId } as never;
 
   return {
     getCharacterById: vi.fn().mockResolvedValue(null),
     getCharacterByIdInGmCampaigns: vi.fn().mockResolvedValue(input.managed ? character : null),
+    getCharacterUnderPlayerControl: vi.fn().mockResolvedValue(input.controlled ? character : null),
     getOwnedCharacter: vi.fn().mockResolvedValue(input.owned ? character : null),
   };
 }
@@ -110,5 +119,75 @@ describe("equipment viewer authorization", () => {
       ),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(service.getCharacterByIdInGmCampaigns).not.toHaveBeenCalled();
+  });
+});
+
+describe("equipment read access under current authorized control", () => {
+  it("lets a controller who does not own the Character read it at holder visibility", async () => {
+    const service = accessibleCharacterService({ controlled: true });
+
+    await expect(
+      requireReadableCharacter(
+        { id: "controlling-player", roles: ["player"] },
+        characterId,
+        service,
+      ),
+    ).resolves.toEqual({ characterId, kind: "holder" });
+    expect(service.getCharacterUnderPlayerControl).toHaveBeenCalledWith(
+      "controlling-player",
+      characterId,
+    );
+  });
+
+  it("never escalates a controlling GM-role user to full GM Item visibility", async () => {
+    const service = accessibleCharacterService({ controlled: true });
+
+    await expect(
+      requireReadableCharacter(
+        { id: "controlling-global-gm", roles: ["game_master"] },
+        characterId,
+        service,
+      ),
+    ).resolves.toEqual({ characterId, kind: "holder" });
+  });
+
+  it("denies a player who neither owns nor controls the Character", async () => {
+    const service = accessibleCharacterService({});
+
+    await expect(
+      requireReadableCharacter({ id: "unrelated-player", roles: ["player"] }, characterId, service),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it("does not consult control when ownership already authorizes the read", async () => {
+    const service = accessibleCharacterService({ controlled: true, owned: true });
+
+    await expect(
+      requireReadableCharacter({ id: "owner", roles: ["player"] }, characterId, service),
+    ).resolves.toEqual({ characterId, kind: "holder" });
+    expect(service.getCharacterUnderPlayerControl).not.toHaveBeenCalled();
+  });
+
+  it("keeps the managing Campaign GM at full Item visibility", async () => {
+    const service = accessibleCharacterService({ managed: true });
+
+    await expect(
+      requireReadableCharacter({ id: "campaign-gm", roles: ["game_master"] }, characterId, service),
+    ).resolves.toEqual({ kind: "gm" });
+  });
+});
+
+describe("equipment write access is not widened by control", () => {
+  it("still refuses the equipment write gate for control without ownership", async () => {
+    const service = accessibleCharacterService({ controlled: true });
+
+    await expect(
+      requireAccessibleCharacter(
+        { id: "controlling-player", roles: ["player"] },
+        characterId,
+        service,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+    expect(service.getCharacterUnderPlayerControl).not.toHaveBeenCalled();
   });
 });

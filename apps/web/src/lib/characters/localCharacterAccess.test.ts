@@ -42,4 +42,23 @@ describe("canPresentRetainedLocalCharacter", () => {
       }),
     ).toBe(true);
   });
+
+  it("admits a controlling player that the server authorized, and still denies one it did not", () => {
+    // Forgejo #439: the browser gate defers to server read authorization, so widening the
+    // server read gate to accept current authorized control needs no separate client rule.
+    expect(
+      canPresentRetainedLocalCharacter({
+        currentUser: user("controlling-player", ["player"]),
+        hasServerAccess: true,
+        record,
+      }),
+    ).toBe(true);
+    expect(
+      canPresentRetainedLocalCharacter({
+        currentUser: user("controlling-player", ["player"]),
+        hasServerAccess: false,
+        record,
+      }),
+    ).toBe(false);
+  });
 });

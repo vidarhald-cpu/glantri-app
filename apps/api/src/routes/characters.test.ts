@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   const characterService = {
     deleteExistingCharacter: vi.fn(),
     findById: vi.fn(),
+    getCharacterUnderPlayerControl: vi.fn(),
     listAccessibleCharacters: vi.fn(),
     saveCharacter: vi.fn(),
     saveExistingCharacter: vi.fn(),
@@ -109,6 +110,7 @@ describe("characters route contract", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    mocks.characterService.getCharacterUnderPlayerControl.mockResolvedValue(null);
   });
 
   it("lists characters owned by the authenticated player", async () => {
@@ -190,6 +192,121 @@ describe("characters route contract", () => {
 
     expect(response.statusCode).toBe(404);
     expect(response.json()).toEqual({ error: "Character not found." });
+    expect(mocks.characterService.getCharacterUnderPlayerControl).toHaveBeenCalledWith(
+      "player-1",
+      "char-999",
+    );
+  });
+
+  it("returns a GM-authored pregen with a null ownerId to the controlling player", async () => {
+    const pregen = {
+      ...stubCharacter,
+      id: "pregen-1",
+      owner: null,
+      ownerId: null,
+    };
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(null);
+    mocks.characterService.getCharacterUnderPlayerControl.mockResolvedValue(pregen);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/pregen-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ character: pregen });
+  });
+
+  it("withholds the owner account block from a controller of another user's Character", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(null);
+    mocks.characterService.getCharacterUnderPlayerControl.mockResolvedValue({
+      ...stubCharacter,
+      owner: { displayName: "Game Master", email: "gm@example.test", id: "gm-1" },
+      ownerId: "gm-1",
+    });
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/char-1" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().character.owner).toBeNull();
+    expect(JSON.stringify(response.json())).not.toContain("gm@example.test");
+  });
+
+  it("projects a controller's retained Skill read as entitled_player, not as a campaign GM", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(null);
+    mocks.characterService.getCharacterUnderPlayerControl.mockResolvedValue({
+      ...stubCharacter,
+      ownerId: "gm-1",
+    });
+    mocks.retainedCharacterService.getCurrentProjection.mockResolvedValue({
+      characterId: "char-1",
+      effectiveSkills: { rows: [] },
+      perspective: "entitled_player",
+      provenanceDetail: "summary_only",
+    });
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/char-1/effective-skills" });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.retainedCharacterService.getCurrentProjection).toHaveBeenCalledWith({
+      characterId: "char-1",
+      perspective: "entitled_player",
+    });
+  });
+
+  it("still projects a campaign GM read as current_campaign_gm", async () => {
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.gmUser);
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(stubCharacter);
+    mocks.retainedCharacterService.getCurrentProjection.mockResolvedValue({
+      characterId: "char-1",
+      effectiveSkills: { rows: [] },
+      perspective: "current_campaign_gm",
+      provenanceDetail: "full",
+    });
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({ method: "GET", url: "/char-1/effective-skills" });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.retainedCharacterService.getCurrentProjection).toHaveBeenCalledWith({
+      characterId: "char-1",
+      perspective: "current_campaign_gm",
+    });
+  });
+
+  it("does not let control reach the update path", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(null);
+    mocks.characterService.getCharacterUnderPlayerControl.mockResolvedValue(stubCharacter);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: "/char-1",
+      payload: {
+        build: stubCharacter.build,
+        expectedUpdatedAt: stubCharacter.updatedAt,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(mocks.characterService.saveExistingCharacter).not.toHaveBeenCalled();
+    expect(mocks.characterService.getCharacterUnderPlayerControl).not.toHaveBeenCalled();
+  });
+
+  it("does not let control reach the delete path", async () => {
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(null);
+    mocks.characterService.getCharacterUnderPlayerControl.mockResolvedValue(stubCharacter);
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/char-1",
+      payload: { expectedUpdatedAt: stubCharacter.updatedAt },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(mocks.characterService.deleteExistingCharacter).not.toHaveBeenCalled();
+    expect(mocks.characterService.getCharacterUnderPlayerControl).not.toHaveBeenCalled();
   });
 
   it("saves a new character and returns the record", async () => {

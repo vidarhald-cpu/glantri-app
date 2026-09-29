@@ -99,6 +99,7 @@ function createRepositoryStub(existingCharacter?: CharacterRecord | null) {
       existingCharacter && existingCharacter.id === id ? existingCharacter : null,
     findInGmCampaigns: async () => null,
     findOwnedById: async () => null,
+    findUnderPlayerControl: async () => null,
     listAll: async () => (existingCharacter ? [existingCharacter] : []),
     listInGmCampaigns: async () => (existingCharacter ? [existingCharacter] : []),
     listByOwner: async () => [],

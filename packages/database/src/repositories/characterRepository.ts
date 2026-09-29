@@ -18,12 +18,29 @@ export interface VersionedCharacterRecordInput extends CreateCharacterRecordInpu
   expectedUpdatedAt: string;
 }
 
+/**
+ * Scenario statuses whose participant rows still express *current* authorized control.
+ *
+ * Deliberately identical to the player scenario-access statuses already used by
+ * `listCampaignsByPlayerAccess` / `listScenariosByCampaignPlayerAccess` in
+ * `scenarioRepository`: a player who may still read the Scenario may still read the
+ * Character they were given to play in it. `draft` is excluded, so a participant row on a
+ * Scenario that never opened for play grants nothing.
+ */
+export const CHARACTER_CONTROL_READABLE_SCENARIO_STATUSES = [
+  "live",
+  "paused",
+  "completed",
+  "archived",
+] as const;
+
 export interface CharacterRepository {
   createOwned(input: CreateCharacterRecordInput): Promise<CharacterRecord>;
   deleteVersioned(id: string, expectedUpdatedAt: string): Promise<boolean>;
   findById(id: string): Promise<CharacterRecord | null>;
   findInGmCampaigns(gmUserId: string, id: string): Promise<CharacterRecord | null>;
   findOwnedById(ownerId: string, id: string): Promise<CharacterRecord | null>;
+  findUnderPlayerControl(controllerUserId: string, id: string): Promise<CharacterRecord | null>;
   listAll(): Promise<CharacterRecord[]>;
   listInGmCampaigns(gmUserId: string): Promise<CharacterRecord[]>;
   listByOwner(ownerId: string): Promise<CharacterRecord[]>;
@@ -195,6 +212,43 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
           },
         },
         where: { id },
+      });
+
+      return character ? mapCharacterRecord(character) : null;
+    },
+    async findUnderPlayerControl(controllerUserId, id) {
+      const character = await prisma.character.findFirst({
+        include: {
+          currentRetainedRevision: {
+            select: {
+              effectiveSkillsJson: true,
+              id: true,
+              sequence: true,
+              versionEnvelopeJson: true,
+            },
+          },
+          owner: {
+            select: {
+              displayName: true,
+              email: true,
+              id: true,
+            },
+          },
+        },
+        where: {
+          id,
+          scenarioParticipants: {
+            some: {
+              controlledByUserId: controllerUserId,
+              isActive: true,
+              role: "player_character",
+              scenario: {
+                status: { in: [...CHARACTER_CONTROL_READABLE_SCENARIO_STATUSES] },
+              },
+              sourceType: "character",
+            },
+          },
+        },
       });
 
       return character ? mapCharacterRecord(character) : null;
