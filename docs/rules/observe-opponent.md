@@ -2,7 +2,7 @@
 
 ## Implemented V1 rule
 
-Observe Opponent is a typed secondary action available only with the untargeted primary action
+Observe Opponent is a typed secondary action available with the untargeted primary actions Pass or
 Parry. A declaration may contain at most one secondary action in V1:
 
 ```text
@@ -12,8 +12,8 @@ Parry. A declaration may contain at most one secondary action in V1:
 The canonical declaration retains the existing singular secondary-action fields while also
 projecting the typed `secondaryActions` collection. This keeps persisted declarations without that
 collection readable. Compatibility and target validation are server-owned: the target must be a
-different, currently eligible encounter participant, and every primary combination other than
-Parry is rejected.
+different, currently eligible encounter participant, and every primary combination other than Pass
+or Parry is rejected.
 
 Observation is directional. `A -> B` and `B -> A` are distinct relationships, and one observer can
 hold independent relationships with several targets.
@@ -25,7 +25,7 @@ round's canonical declaration and attack results.
 
 A round counts when:
 
-- the observer declared Parry plus Observe Opponent against the relationship target; and
+- the observer declared Pass or Parry plus Observe Opponent against the relationship target; and
 - no attack by that target resolved as a hit against the observer during that round.
 
 A hit suppresses only the current round's progress. It does not erase accumulated rounds or the
@@ -34,10 +34,10 @@ best bonus. A miss does not suppress progress.
 The attempt schedule is:
 
 | Completed attempts | Qualifying rounds required |
-| ------------------ | --------------------------- |
-| 0                  | 3                           |
-| 1                  | 6                           |
-| 2 or more          | 10                          |
+| ------------------ | -------------------------- |
+| 0                  | 3                          |
+| 1                  | 6                          |
+| 2 or more          | 10                         |
 
 The duration remains capped at ten qualifying rounds, so later attempts continue indefinitely.
 
@@ -51,12 +51,12 @@ contribution.
 
 The observer's margin produces:
 
-| Margin | Candidate bonus |
-| ------ | --------------- |
-| tie/loss or 0–5 | +0% |
-| 6–10 | +1% |
-| 11–15 | +2% |
-| 16+ | +3% |
+| Margin          | Candidate bonus |
+| --------------- | --------------- |
+| tie/loss or 0–5 | +0%             |
+| 6–10            | +1%             |
+| 11–15           | +2%             |
+| 16+             | +3%             |
 
 Every completed attempt resets progress and increments the completed-attempt count. The canonical
 relationship retains `max(existing best, candidate)`, so a later weak or failed result cannot

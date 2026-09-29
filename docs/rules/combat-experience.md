@@ -131,6 +131,12 @@ for further Clear operations. Other declaration modifiers remain in place.
 | `16-20`               | Active  |     `-1` |        `1` round | Yes        |
 | `21+`                 | Active  |      `0` |              `0` | No         |
 
+Provenance — Panic duration `1d6 + 4`. The historical source table certifies only the range `5 to
+10` for Panic duration; it names no die and no distribution. Uniform `1d6 + 4` over `5-10` is the
+selection method ratified by the Product Owner (Forgejo #215, ruling 1), certifying the behaviour
+already implemented and published here. This is a provenance certification only; it changes no
+behaviour.
+
 Panic duration is rolled at the time of the CE command and stored on the result/effect.
 
 ## Effect Storage
