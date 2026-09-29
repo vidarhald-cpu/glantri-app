@@ -380,6 +380,10 @@ import {
 } from "./combatDefenseSnapshotResolution";
 import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeResolution";
 import {
+  detectSnapshotSecondaryCriticalCodeGap,
+  SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE,
+} from "./snapshotSecondaryCriticalWarning";
+import {
   resolveCanonicalAttackOffense,
   resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
@@ -17087,6 +17091,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           code: "identity_mismatch",
           error: `The ${body.phase === "phase1" ? "Phase 1" : "Phase 2"} attack source or mode is unavailable.`,
         });
+      }
+      // Operational, GM-side only. `resolveDeclaredWeaponSource` reads the participant equipment
+      // snapshot rather than the live catalogue, so a template snapshotted before the `secondCrit`
+      // enrichment silently under-fires the Secondary Critical. The comparison lives here because
+      // `packages/domain` may not import `packages/content`; this route holds both. It reports and
+      // never repairs: the snapshot is not mutated, and resolution is unchanged.
+      const snapshotSecondaryCriticalWarning = detectSnapshotSecondaryCriticalCodeGap({
+        attackModeId: canonicalWeaponFacts.attackModeId,
+        participantId: encounterParticipant.id,
+        snapshotTemplatesById: getEquipmentTemplatesById(
+          getSnapshotEquipmentState(scenarioParticipant),
+        ),
+        weaponName: canonicalWeaponFacts.weaponName,
+        weaponTemplateId: declaredOpportunity.weaponTemplateId,
+      });
+      if (snapshotSecondaryCriticalWarning) {
+        request.log.warn(
+          {
+            ...snapshotSecondaryCriticalWarning,
+            encounterId: encounter.id,
+            phase: body.phase,
+            scenarioParticipantId: scenarioParticipant.id,
+          },
+          SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE,
+        );
       }
       const declaredTargetId =
         (attackerRoundParticipant?.declaration?.actionId === "feint_attack" &&
