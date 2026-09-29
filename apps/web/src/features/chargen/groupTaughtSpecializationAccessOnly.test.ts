@@ -15,8 +15,8 @@
  * `withCompetencyContentV2(buildTargetRuntimeContent(createTargetCompetencyChargenSource(...)))`,
  * the construction in `useChargenWizardState.tsx` — as
  * `docs/testing-regression-matrix.md` ("Which competency catalogue a Chargen reproduction must
- * use") requires. The legacy `getApprovedTargetChargenContent()` catalogue is not a valid
- * source of evidence about player-facing Chargen behaviour.
+ * use") requires. The legacy 59-group projection, retired with its accessor in Forgejo #387, was
+ * never a valid source of evidence about player-facing Chargen behaviour.
  *
  * The point pools are widened past the standard allowances so a single case can drive a
  * Learning Group to the ranks the defect needs. Only the pool sizes are widened; the content,

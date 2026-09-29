@@ -1,4 +1,3 @@
-import { withTargetLearningGroupsAndProfessions } from "./targetProfessions";
 import { withCompetencyContentV2 } from "./competencyV2Runtime";
 import { validateTargetProgressionMetadata } from "@glantri/domain";
 import { defaultCanonicalContent } from "./seeds/defaultContent";
@@ -400,16 +399,4 @@ export function getApprovedTargetDefinitions() {
 export function assertApprovedTargetProgression(progression: CharacterProgression): void {
   const errors = getTargetProgressionValidationErrors(progression);
   if (errors.length) throw new Error(errors.join(" "));
-}
-
-export function getApprovedTargetChargenContent(): CanonicalContent {
-  /*
-   * NO LIVE CALLER. This is the legacy 59-group projection; `/skills` goes through
-   * `getCompetencyV2ReferenceSource()`, and every Chargen and Character path uses the V2 accessor
-   * `getApprovedV2RuntimeContent()`. Retiring or fencing off this accessor is issue #387.
-   *
-   * Do not use it to establish player-facing behaviour: it has produced repeated wrong conclusions
-   * because it loads a catalogue no Chargen path loads.
-   */
-  return withTargetLearningGroupsAndProfessions(trustedContent());
 }

@@ -17,8 +17,8 @@ import { SESSION_COOKIE_NAME } from "../lib/sessionAuth";
  *
  * 1. It reads the canonical V2 runtime projection `getApprovedV2RuntimeContent()` — 95 Learning
  *    Groups, 86 Profession paths — because that is the catalogue `CharacterService` validates
- *    submitted builds against. The retired 59-group `getApprovedTargetChargenContent()`
- *    projection, and the `profession:soldier:military-archer` / `F38` fixture that lives only in
+ *    submitted builds against. The legacy 59-group projection, whose accessor was retired in
+ *    Forgejo #387, and the `profession:soldier:military-archer` / `F38` fixture that lived only in
  *    it, must never come back here: that Profession path does not exist in the projection the
  *    product serves, so the fixture could not round-trip even with a database.
  * 2. It never disappears silently. The catalogue-bound half runs in the ordinary suite with no
