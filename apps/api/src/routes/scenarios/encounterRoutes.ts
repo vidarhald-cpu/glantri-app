@@ -380,6 +380,10 @@ import {
 } from "./combatDefenseSnapshotResolution";
 import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeResolution";
 import {
+  detectSnapshotSecondaryCriticalCodeGap,
+  SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE,
+} from "./snapshotSecondaryCriticalWarning";
+import {
   resolveCanonicalAttackOffense,
   resolveCanonicalWeaponParryBase,
 } from "./combatManualCalculationResolution";
@@ -3923,6 +3927,7 @@ function resolveDeclaredWeaponSource(input: {
         weaponArmorClass?: ReturnType<typeof normalizeCombatArmorModifierClass>;
         weaponCriticalCode?: string;
         weaponDamageClass?: string;
+        weaponSecondaryCriticalCode?: string;
         weaponDmb?: number;
         weaponDmbFormula?: NonNullable<
           NonNullable<WeaponTemplate["attackModes"]>[number]["dmbFormula"]
@@ -4008,9 +4013,13 @@ function resolveDeclaredWeaponSource(input: {
       missileProfile: isExplicitMissileMode ? (template.missileProfile ?? undefined) : undefined,
       repeatEligible: canRepeatWeaponAttackInRound(mode),
       weaponArmorClass: normalizeCombatArmorModifierClass(mode.armorModifier),
-      weaponCriticalCode:
-        mode.crit && mode.secondCrit ? `${mode.crit}${mode.secondCrit}` : (mode.crit ?? undefined),
+      // The weapon's own `Crit 1` code and its `Sec` code are separate weapon-table fields
+      // (rule decision 0006 §1). They are carried separately and are never concatenated:
+      // `docs/rules/secondary-critical-sec-grammar.md` §5 forbids deriving a Critical family
+      // from a concatenation, and a four-character join is neither a `Crit 1` nor a `Sec` code.
+      weaponCriticalCode: mode.crit ?? undefined,
       weaponDamageClass: mode.damageClass ?? undefined,
+      weaponSecondaryCriticalCode: mode.secondCrit ?? undefined,
       weaponDmb: mode.dmb ?? undefined,
       weaponDmbFormula: mode.dmbFormula ?? undefined,
       weaponDmbRaw: mode.dmbRaw ?? undefined,
@@ -4103,6 +4112,7 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
       weaponArmorClass?: ReturnType<typeof normalizeCombatArmorModifierClass>;
       weaponCriticalCode?: string;
       weaponDamageClass?: string;
+      weaponSecondaryCriticalCode?: string;
       weaponDmb?: number;
       weaponDmbFormula?: NonNullable<
         NonNullable<WeaponTemplate["attackModes"]>[number]["dmbFormula"]
@@ -4147,6 +4157,7 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
           weaponArmorClass: resolution.source.weaponArmorClass,
           weaponCriticalCode: resolution.source.weaponCriticalCode,
           weaponDamageClass: resolution.source.weaponDamageClass,
+          weaponSecondaryCriticalCode: resolution.source.weaponSecondaryCriticalCode,
           weaponDmb: resolution.source.weaponDmb,
           weaponDmbFormula: resolution.source.weaponDmbFormula,
           weaponDmbRaw: resolution.source.weaponDmbRaw,
@@ -4171,9 +4182,11 @@ function resolveCanonicalAttackOpportunityWeaponFacts(input: {
     isMissileAttack: false,
     isThrownAttack: false,
     weaponArmorClass: normalizeCombatArmorModifierClass(mode.armorModifier),
-    weaponCriticalCode:
-      mode.crit && mode.secondCrit ? `${mode.crit}${mode.secondCrit}` : (mode.crit ?? undefined),
+    // Separate fields, never concatenated — see `resolveDeclaredWeaponSource` above. No unarmed
+    // row authors a `Sec` code (`docs/rules/secondary-critical-sec-grammar.md` §4.8).
+    weaponCriticalCode: mode.crit ?? undefined,
     weaponDamageClass: mode.damageClass ?? undefined,
+    weaponSecondaryCriticalCode: mode.secondCrit ?? undefined,
     weaponDmb: mode.dmb ?? undefined,
     weaponDmbFormula: mode.dmbFormula ?? undefined,
     weaponDmbRaw: mode.dmbRaw ?? undefined,
@@ -17079,6 +17092,31 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           error: `The ${body.phase === "phase1" ? "Phase 1" : "Phase 2"} attack source or mode is unavailable.`,
         });
       }
+      // Operational, GM-side only. `resolveDeclaredWeaponSource` reads the participant equipment
+      // snapshot rather than the live catalogue, so a template snapshotted before the `secondCrit`
+      // enrichment is stale against the canonical catalogue. The comparison lives here because
+      // `packages/domain` may not import `packages/content`; this route holds both. It reports and
+      // never repairs: the snapshot is not mutated, and resolution is unchanged.
+      const snapshotSecondaryCriticalWarning = detectSnapshotSecondaryCriticalCodeGap({
+        attackModeId: canonicalWeaponFacts.attackModeId,
+        participantId: encounterParticipant.id,
+        snapshotTemplatesById: getEquipmentTemplatesById(
+          getSnapshotEquipmentState(scenarioParticipant),
+        ),
+        weaponName: canonicalWeaponFacts.weaponName,
+        weaponTemplateId: declaredOpportunity.weaponTemplateId,
+      });
+      if (snapshotSecondaryCriticalWarning) {
+        request.log.warn(
+          {
+            ...snapshotSecondaryCriticalWarning,
+            encounterId: encounter.id,
+            phase: body.phase,
+            scenarioParticipantId: scenarioParticipant.id,
+          },
+          SNAPSHOT_SECONDARY_CRITICAL_WARNING_MESSAGE,
+        );
+      }
       const declaredTargetId =
         (attackerRoundParticipant?.declaration?.actionId === "feint_attack" &&
         body.phase === "phase2"
@@ -17417,6 +17455,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             weaponModeSourceMetadata: canonicalWeaponFacts.weaponModeSourceMetadata,
             weaponInstanceId: canonicalOpportunityIdentity.weaponInstanceId,
             weaponName,
+            weaponSecondaryCriticalCode: canonicalWeaponFacts.weaponSecondaryCriticalCode,
             weaponSourceId: canonicalOpportunityIdentity.weaponSourceId,
             weaponSourceSlot: canonicalOpportunityIdentity.weaponSourceSlot,
             weaponTemplateId: canonicalOpportunityIdentity.weaponTemplateId,
