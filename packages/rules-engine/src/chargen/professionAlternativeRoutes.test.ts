@@ -7,6 +7,7 @@ import {
   finalizeChargenDraft,
   getChargenGroupBundleCost,
   spendPrimaryPoint,
+  spendSecondaryPoint,
 } from "./primaryAllocation";
 import { validateTargetChargenBuild } from "./validateTargetChargenBuild";
 
@@ -29,6 +30,8 @@ const content = getApprovedV2RuntimeContent();
 const FENCING_ROUTE_GROUP_ID = "F30";
 const CLOSE_COMBAT_ROUTE_GROUP_ID = "M01";
 const CORE_ROUTE_GROUP_ID = "K24";
+/** A flexible competency outside the Profession's normal access, reachable only with secondary points. */
+const SECONDARY_SKILL_ID = "skill:deception";
 const context = {
   content,
   professionId: "profession:guard-escort",
@@ -124,6 +127,24 @@ describe("Profession alternative training routes coexist (#387)", () => {
           expect.arrayContaining([first, second]),
         );
       }
+
+      // `spendSecondaryPoint` is the third acquisition entry point. It cannot target a Learning
+      // Group, so what it must guarantee is that holding both routes never blocks a secondary
+      // acquisition: an exclusion reintroduced only here would refuse this purchase outright.
+      const holdingBoth = buy(purchased.progression, second);
+      const secondary = spendSecondaryPoint({
+        ...context,
+        profile,
+        progression: holdingBoth.progression,
+        targetId: SECONDARY_SKILL_ID,
+        targetType: "skill",
+      });
+
+      expect(secondary.error).toBeUndefined();
+      expect(secondary.spentCost).toBeGreaterThan(0);
+      expect(secondary.progression.skillGroups.map((group) => group.groupId)).toEqual(
+        expect.arrayContaining([first, second]),
+      );
     });
   }
 
