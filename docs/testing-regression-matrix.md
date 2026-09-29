@@ -157,7 +157,10 @@ Three additional traps, each of which cost a real lane real time. They are
   returns 404 / `/_not-found`, with `Watchpack Error: EMFILE` in the log. This is
   **not** plain descriptor exhaustion: one lane confirmed `ulimit -n` at 1048576
   with `kern.num_files` well below its own limit, so raising the descriptor limit
-  is not the fix. Two independent lanes fell back to **`next start` against a
+  is not the fix. **That last sentence is corrected below**: the descriptor limit
+  is implicated, but because it is too high — see
+  [the macOS file limit behind the EMFILE 404s](#the-macos-file-limit-behind-the-emfile-404s--recorded-2026-09-29).
+  Two independent lanes fell back to **`next start` against a
   build produced inside `db:task:exec`**, so that `NEXT_PUBLIC_API_BASE_URL`
   bakes to that worktree's own API rather than to a foreign stack. Record the
   fallback as the current working procedure. Caveat: `next start` warns about
@@ -177,6 +180,36 @@ Three additional traps, each of which cost a real lane real time. They are
 
   **Re-judge any lint failure on a clean tree before attributing it to a
   change.**
+
+### The macOS file limit behind the EMFILE 404s — recorded 2026-09-29
+
+**This corrects the "raising the descriptor limit is not the fix" sentence in the
+`pnpm dev` trap above; the rest of that bullet, including the `next start`
+fallback, stands.** The descriptor limit is implicated, but because it is **too
+high**: the inherited `RLIMIT_NOFILE` soft limit of **1048576 exceeds macOS
+`kern.maxfilesperproc` (184320)**, which makes `open()` and `fs.watch` fail
+spuriously. Next's Watchpack then dies with `EMFILE: too many open files`, and
+the dev server afterwards serves **404 for every page**. Nothing in that sequence
+announces itself as an environment fault, so it reads as broad application or
+test failure.
+
+Two separate lanes reproduced this independently. What they established:
+
+- **`ulimit -n 184320` inside the run fixes it**, with `EMFILE` occurrences
+  dropping to zero. **10240, 12288, 30000 and 65536 were each tried and each
+  still failed**, so do not treat an intermediate value as good enough.
+- **It is intermittent.** One run can look fine and the next serve 404, so a
+  single clean run is not proof that the environment is sound.
+- **Gate on the web root before starting Playwright.** Both lanes refused to
+  start Playwright unless the web root returned 200, and that gate is why the bad
+  runs were caught rather than reported as product failures. The second lane's
+  gate passed at about 20 seconds with zero `EMFILE` lines.
+
+This records what those two lanes reproduced on this machine and nothing beyond
+it: no cause is claimed for the intermittency, and nothing here is established
+for CI runners or for non-macOS hosts. The environment requirements already above
+— the single `db:task:exec`, `ARTIFACT_LOCAL_ROOT` exported before the stack
+starts, and derived ports left alone — are unchanged.
 
 ### Which Playwright environment to trust — recorded 2026-09-26
 
