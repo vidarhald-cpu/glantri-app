@@ -277,27 +277,36 @@ baseline, not product defects.
 ## Which competency catalogue a Chargen reproduction must use — recorded 2026-09-27
 
 **A reproduction is only meaningful against the catalogue the consumer actually
-loads.** Two competency catalogues currently exist and they disagree about which
-Learning Groups exist, so a Chargen test or reproduction that builds the wrong
-one proves nothing about the player-facing surface.
+loads.** A legacy 59-group projection used to be reachable through a
+Chargen-sounding content accessor, and a test or reproduction that built it proved
+nothing about the player-facing surface. **Forgejo #387 retired that accessor**, so
+there is now one catalogue any Chargen test can load.
 
 - Chargen loads
   `withCompetencyContentV2(buildTargetRuntimeContent(createTargetCompetencyChargenSource(...)))`
   — `apps/web/src/features/chargen/useChargenWizardState.tsx:179`, from the source
-  seeded at `:126` — which yields **95 Learning Groups**.
-- `getApprovedTargetChargenContent()` yields **59**, and is retained _"solely for
-  /skills until #252"_ (`packages/content/src/targetCompetencies.ts:406`).
-- **`F35`, `G08` and `G13` exist only in the 59-group catalogue.** Verified by
-  building both catalogues: the 95-group catalogue reports
-  `F35=false G08=false G13=false`, while `F30` and `F24` exist in both.
+  seeded at `:126` — which yields **95 Learning Groups**. `getApprovedV2RuntimeContent()`
+  is the accessor that resolves it, and every Chargen and Character path uses it.
+- **`F35`, `G08` and `G13` never existed in that catalogue.** They belonged to the
+  retired 59-group projection, whose accessor is gone; the 95-group catalogue
+  reports `F35=false G08=false G13=false`, while `F30` and `F24` exist.
+- The legacy projection builder `withTargetLearningGroupsAndProfessions`
+  (`packages/content/src/targetProfessions.ts:182`) still exists for its own direct
+  consumer. **Retiring the accessor did not retire the projection** — that is
+  Forgejo #252. Nothing in Chargen may reach for it.
 
 Therefore a reproduction or acceptance claim about **player-facing Chargen
-behaviour** must be built on the 95-group construction. A rules-layer regression
-test may legitimately use the 59-group catalogue where the case exists only there
-— `packages/rules-engine/src/chargen/overlappingLearningGroupPricing.test.ts`
-does, deliberately, because the ruled `[6, 11, 16, 16, 15, 15]` sequence is not
-reachable in the other one — **but it must not be read as evidence about the
-player-facing surface.**
+behaviour** must be built on the 95-group construction.
+
+Where a rules-layer arithmetic case is **not reachable from any authored V2 pair**,
+the regression test constructs the overlap shape explicitly on top of
+`getApprovedV2RuntimeContent()` rather than loading another catalogue —
+`packages/rules-engine/src/chargen/overlappingLearningGroupPricing.test.ts` does
+this for the ruled `[6, 11, 16, 16, 15, 15]` negative-marginal sequence, which the
+V2 melee cross-training data still produces but which no pair of the 95 canonical
+Groups is authored to trigger. **Such a construction is rules-layer evidence only
+and must not be read as evidence about the player-facing surface**, and it remains
+prohibited for the browser acceptance case below.
 
 ### The withdrawn F35/G08 browser acceptance case — recorded 2026-09-27
 

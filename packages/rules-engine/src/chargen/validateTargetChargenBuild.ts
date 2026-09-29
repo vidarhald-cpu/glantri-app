@@ -1,5 +1,4 @@
 import { applyRelationshipMinimumGrants } from "../skills/deriveSkillRelationships";
-import { getExclusiveProfessionGroupErrors } from "./exclusiveProfessionGroups";
 import type { CharacterBuild } from "@glantri/domain";
 import type { CanonicalContentShape } from "./primaryAllocation/_helpers";
 import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
@@ -21,11 +20,7 @@ export function validateTargetChargenBuild(
     )
   )
     return [];
-  const errors: string[] = getExclusiveProfessionGroupErrors({
-    content,
-    professionId: build.professionId,
-    progression: build.progression,
-  });
+  const errors: string[] = [];
   const profession = content.professions.find((p) => p.id === build.professionId);
   if (!profession) return ["Unknown target Profession or track."];
   const expected = {

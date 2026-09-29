@@ -120,6 +120,14 @@ Two Profession-specific alternatives apply:
   alternative; in the current corpus the ordinary close-combat route is Guard
   and rough-fighting drill.
 
+**"Alternative" here means a choice of route, not a prohibition.** Product Owner
+ruling, 2026-09-29 (Forgejo #387): these two alternatives are **not mutually
+exclusive**. Both may legitimately be acquired, each is paid for independently
+under the ordinary acquisition arithmetic, and **no exclusive-pair prohibition
+applies in the current corpus**. A Character who trains in only one route buys
+only that one; a Character who genuinely trains in both buys both. The runtime
+carries no exclusive-pair encoding, and that absence is correct.
+
 These alternatives do not create tracks, prohibit independent purchases, or
 apply to other Professions.
 
@@ -245,10 +253,12 @@ arithmetic, the complete purchased bundle is priced once, and the price of a sin
 purchase is the change in that bundle price. It must not be invented in the UI.
 
 **Mutually exclusive Profession routes are a separate concept from ordinary
-overlap.** Where the Profession reference says `choose one` — as for the two
-Profession-specific alternatives under [Professions](#professions) — the routes
-are alternatives and must be enforced as alternatives, not reconciled as
-overlap.
+overlap.** Where the Profession reference says `choose one`, the routes are
+alternatives and must be enforced as alternatives, not reconciled as overlap.
+**The two Profession-specific alternatives under [Professions](#professions) are
+not such a case**: by the Product Owner ruling of 2026-09-29 recorded there, both
+may be acquired and each is paid for independently, so their shared competence is
+handled by the ordinary overlap arithmetic and nothing is prohibited.
 
 The question of what a Learning Group's explicit Specialization membership provides
 mechanically is **settled for V1** by
