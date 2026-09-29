@@ -44,34 +44,37 @@ function participant(participantId: string, targetParticipantId?: string) {
   };
 }
 
-function state(input: {
-  attackerParticipantId?: "b" | "c";
-  hit?: boolean;
-  parrySuccess?: boolean;
-  relationships?: CombatRoundState["observationRelationships"];
-  secondTarget?: boolean;
-} = {}): CombatRoundState {
+function state(
+  input: {
+    attackerParticipantId?: "b" | "c";
+    hit?: boolean;
+    parrySuccess?: boolean;
+    relationships?: CombatRoundState["observationRelationships"];
+    secondTarget?: boolean;
+  } = {},
+): CombatRoundState {
   const attackerParticipantId = input.attackerParticipantId ?? "b";
-  const attackResult = input.hit === undefined
-    ? undefined
-    : {
-        actionId: "attack_parry",
-        attackerParticipantId,
-        defenderDb: 0,
-        defenderParticipantId: "a",
-        grazing: false,
-        hit: input.hit,
-        kind: "attackRoll" as const,
-        lookupTotal: input.hit ? 20 : 0,
-        marginOverMissThreshold: input.hit ? 1 : -1,
-        ob: 0,
-        phase: "phase1" as const,
-        rollD20: 10,
-        rollTotal: 10,
-        rolledAt: at,
-        tableResult: input.hit ? "Hit" : "Miss",
-        weaponName: "Sword",
-      };
+  const attackResult =
+    input.hit === undefined
+      ? undefined
+      : {
+          actionId: "attack_parry",
+          attackerParticipantId,
+          defenderDb: 0,
+          defenderParticipantId: "a",
+          grazing: false,
+          hit: input.hit,
+          kind: "attackRoll" as const,
+          lookupTotal: input.hit ? 20 : 0,
+          marginOverMissThreshold: input.hit ? 1 : -1,
+          ob: 0,
+          phase: "phase1" as const,
+          rollD20: 10,
+          rollTotal: 10,
+          rolledAt: at,
+          tableResult: input.hit ? "Hit" : "Miss",
+          weaponName: "Sword",
+        };
   return combatRoundStateSchema.parse({
     currentStep: "round_summary",
     encounterId: "encounter-1",
@@ -156,16 +159,11 @@ function completeObservationAttempt(current: CombatRoundState): CombatRoundState
   }).state;
 }
 
-function completeQualifyingRounds(
-  initial: CombatRoundState,
-  count: number,
-): CombatRoundState {
+function completeQualifyingRounds(initial: CombatRoundState, count: number): CombatRoundState {
   let current = initial;
   for (let index = 0; index < count; index += 1) {
     const pending = getPendingCombatObservationAttempts(current);
-    current = pending.length
-      ? completeObservationAttempt(current)
-      : resolveRound(current).state;
+    current = pending.length ? completeObservationAttempt(current) : resolveRound(current).state;
     if (index < count - 1) current = nextRound(current);
   }
   return current;
@@ -221,9 +219,7 @@ describe("Observe Opponent", () => {
     expect(progressEvent!.sequence).toBeLessThan(observerReviewEvent!.sequence);
 
     const noProgress = finishReviews(state({ hit: true }));
-    expect(
-      noProgress.events.find((event) => event.type === "observation"),
-    ).toMatchObject({
+    expect(noProgress.events.find((event) => event.type === "observation")).toMatchObject({
       facts: {
         involvedOutcome: {
           observationNoProgressReason: "observer_hit",
@@ -328,9 +324,7 @@ describe("Observe Opponent", () => {
       kind: "observation_roll",
       participantId: "a",
     });
-    expect(
-      completedReview.events.find((event) => event.type === "observation"),
-    ).toMatchObject({
+    expect(completedReview.events.find((event) => event.type === "observation")).toMatchObject({
       facts: {
         involvedOutcome: {
           observationAttemptId: "observation:a:b:attempt:1",
@@ -342,8 +336,7 @@ describe("Observe Opponent", () => {
     });
     expect(
       completedReview.events.find(
-        (event) =>
-          event.type === "participant_su_review" && event.ownerParticipantId === "a",
+        (event) => event.type === "participant_su_review" && event.ownerParticipantId === "a",
       )?.status,
     ).toBe("proposed");
     const rolled = completeObservationAttempt(completedReview);
@@ -366,11 +359,7 @@ describe("Observe Opponent", () => {
       undone?.events
         .filter((event) => event.ownerParticipantId === "a")
         .sort((left, right) => left.sequence - right.sequence)
-        .map((event) => [
-          event.type,
-          event.facts.involvedOutcome.observationStatus,
-          event.status,
-        ]),
+        .map((event) => [event.type, event.facts.involvedOutcome.observationStatus, event.status]),
     ).toEqual([
       ["observation", "period_complete", "recorded"],
       ["participant_su_review", undefined, "proposed"],
@@ -515,16 +504,12 @@ describe("Observe Opponent", () => {
     });
     expect(
       observerPresentation.processes.flatMap((process) =>
-        process.stages.flatMap((stage) =>
-          stage.executionGroups.flatMap((group) => group.tasks),
-        ),
+        process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
       ),
     ).toHaveLength(1);
     expect(
       targetPresentation.processes.flatMap((process) =>
-        process.stages.flatMap((stage) =>
-          stage.executionGroups.flatMap((group) => group.tasks),
-        ),
+        process.stages.flatMap((stage) => stage.executionGroups.flatMap((group) => group.tasks)),
       ),
     ).toEqual([]);
     expect(
@@ -572,9 +557,7 @@ describe("Observe Opponent", () => {
       completedAtRevision: at,
       executionGroupId: tasks[0]!.executionGroupId,
       observerBasis: {
-        appliedModifiers: [
-          { bucket: "general_fatigue", label: "Combat Experience", value: 1 },
-        ],
+        appliedModifiers: [{ bucket: "general_fatigue", label: "Combat Experience", value: 1 }],
         baseValue: 30,
         effectiveSkillValue: 31,
         intelligenceValue: 11,
@@ -601,19 +584,16 @@ describe("Observe Opponent", () => {
       targetParticipantId: "b",
     });
 
-    expect(rolled.state.commands.filter((command) => command.type === "roll_observation")).toHaveLength(
-      1,
-    );
+    expect(
+      rolled.state.commands.filter((command) => command.type === "roll_observation"),
+    ).toHaveLength(1);
     expect(rolled.attempt.targetRoll).toBeDefined();
     const observationEvent = rolled.state.events.find(
       (event) =>
-        event.type === "observation" &&
-        event.facts.involvedOutcome.difference !== undefined,
+        event.type === "observation" && event.facts.involvedOutcome.difference !== undefined,
     );
     expect(observationEvent?.facts.rollerPrivate).toMatchObject({
-      appliedModifiers: [
-        { bucket: "general_fatigue", label: "Combat Experience", value: 1 },
-      ],
+      appliedModifiers: [{ bucket: "general_fatigue", label: "Combat Experience", value: 1 }],
       intelligenceValue: 11,
       intelligenceXp: 3,
       skillLabel: "Dodge",
@@ -748,23 +728,27 @@ describe("Observe Opponent", () => {
 
   it("pauses a hit round without erasing progress and counts a miss", () => {
     const first = resolveRound(state()).state;
-    const hit = resolveRound(state({
-      hit: true,
-      relationships: first.observationRelationships,
-    })).state;
+    const hit = resolveRound(
+      state({
+        hit: true,
+        relationships: first.observationRelationships,
+      }),
+    ).state;
     expect(hit.observationRelationships[0]?.roundsTowardNextAttempt).toBe(1);
 
-    const miss = resolveRound(state({
-      hit: false,
-      relationships: hit.observationRelationships,
-    })).state;
+    const miss = resolveRound(
+      state({
+        hit: false,
+        relationships: hit.observationRelationships,
+      }),
+    ).state;
     expect(miss.observationRelationships[0]?.roundsTowardNextAttempt).toBe(2);
   });
 
   it("maps margins and retains the best non-additive bonus", () => {
-    expect([-2, 0, 5, 6, 10, 11, 15, 16].map(resolveCombatObservationCandidateBonus)).toEqual(
-      [0, 0, 0, 1, 1, 2, 2, 3],
-    );
+    expect([-2, 0, 5, 6, 10, 11, 15, 16].map(resolveCombatObservationCandidateBonus)).toEqual([
+      0, 0, 0, 1, 1, 2, 2, 3,
+    ]);
     let current = completeQualifyingRounds(state(), 3);
     expect(current.observationRelationships[0]?.bestBonus).toBe(0);
 
@@ -971,5 +955,139 @@ describe("Observe Opponent", () => {
       relationships: current.observationRelationships,
     });
     expect(targetSafe).toEqual([]);
+  });
+});
+
+describe("Observe Opponent — Pass or Parry", () => {
+  function observerWithPrimaryAction(input: {
+    primaryAction: "attack_parry" | "parry" | "pass";
+    targetParticipantId: string;
+  }) {
+    return {
+      declaration: {
+        actionId: input.primaryAction,
+        roundNumber: 1,
+        secondaryActions: [
+          { action: "observe_opponent", targetParticipantId: input.targetParticipantId },
+        ],
+        secondaryActionContext: {
+          action: "observe_opponent",
+          targetParticipantId: input.targetParticipantId,
+        },
+        secondaryActionId: "observe_opponent",
+        submittedBy: "player",
+      },
+      label: "a",
+      participantId: "a",
+    };
+  }
+
+  function stateWithPrimaryAction(
+    primaryAction: "attack_parry" | "parry" | "pass",
+  ): CombatRoundState {
+    return combatRoundStateSchema.parse({
+      currentStep: "round_summary",
+      encounterId: "encounter-1",
+      participants: [
+        observerWithPrimaryAction({ primaryAction, targetParticipantId: "b" }),
+        { label: "b", participantId: "b" },
+      ],
+      roundNumber: 1,
+    });
+  }
+
+  it("progresses an Observe relationship declared with Pass, exactly as with Parry", () => {
+    const passProgress = resolveCombatObservationRoundBoundary({
+      state: stateWithPrimaryAction("pass"),
+    }).state;
+    const parryProgress = resolveCombatObservationRoundBoundary({
+      state: stateWithPrimaryAction("parry"),
+    }).state;
+
+    // The live defect this closes: Pass + Observe was offered by
+    // combatDeclarationCompatibility.ts and then silently produced nothing.
+    expect(passProgress.observationRelationships).toHaveLength(1);
+    expect(passProgress.observationRelationships[0]).toMatchObject({
+      bestBonus: 0,
+      completedAttempts: 0,
+      id: "observation:a:b",
+      observerParticipantId: "a",
+      roundsTowardNextAttempt: 1,
+      targetParticipantId: "b",
+    });
+    expect(passProgress.observationRelationships).toEqual(parryProgress.observationRelationships);
+  });
+
+  it("reaches the first threshold attempt from Pass after the same three qualifying rounds", () => {
+    let current = stateWithPrimaryAction("pass");
+    expect(getPendingCombatObservationAttempts(current)).toEqual([]);
+
+    current = nextRound(resolveCombatObservationRoundBoundary({ state: current }).state);
+    expect(getPendingCombatObservationAttempts(current)).toEqual([]);
+
+    current = nextRound(resolveCombatObservationRoundBoundary({ state: current }).state);
+    const pending = getPendingCombatObservationAttempts(current);
+
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({
+      attemptId: "observation:a:b:attempt:1",
+      observerParticipantId: "a",
+      relationshipId: "observation:a:b",
+      requiredQualifyingRounds: 3,
+      targetParticipantId: "b",
+    });
+  });
+
+  it("widens nothing beyond Pass — other primary actions still yield no Observe progress", () => {
+    const attackParry = resolveCombatObservationRoundBoundary({
+      state: stateWithPrimaryAction("attack_parry"),
+    });
+
+    expect(attackParry.state.observationRelationships).toEqual([]);
+    expect(attackParry.undoFacts).toEqual([]);
+    expect(getPendingCombatObservationAttempts(attackParry.state)).toEqual([]);
+  });
+
+  it("leaves the Observe schedule, bonus bands and best-bonus retention unchanged", () => {
+    // Schedule 3 / 6 / 10 — combatObservation.ts is not modified by this slice.
+    expect(getCombatObservationRequiredRounds(0)).toBe(3);
+    expect(getCombatObservationRequiredRounds(1)).toBe(6);
+    expect(getCombatObservationRequiredRounds(2)).toBe(10);
+    expect(getCombatObservationRequiredRounds(3)).toBe(10);
+
+    // Bonus bands.
+    expect(resolveCombatObservationCandidateBonus(-1)).toBe(0);
+    expect(resolveCombatObservationCandidateBonus(0)).toBe(0);
+    expect(resolveCombatObservationCandidateBonus(5)).toBe(0);
+    expect(resolveCombatObservationCandidateBonus(6)).toBe(1);
+    expect(resolveCombatObservationCandidateBonus(10)).toBe(1);
+    expect(resolveCombatObservationCandidateBonus(11)).toBe(2);
+    expect(resolveCombatObservationCandidateBonus(15)).toBe(2);
+    expect(resolveCombatObservationCandidateBonus(16)).toBe(3);
+
+    // `max(existing, candidate)` retention: a weaker later result cannot destroy a good one.
+    const strongRelationship = resolveCombatObservationAttempt({
+      completedAt: at,
+      completedAtRevision: at,
+      observerBasis: { baseValue: 40, skillId: "dodge", skillLabel: "Dodge" },
+      observerParticipantId: "a",
+      roundNumber: 1,
+      targetBasis: { baseValue: 0, skillId: "sword", skillLabel: "Sword" },
+      targetParticipantId: "b",
+    });
+    const afterWeakAttempt = resolveCombatObservationAttempt({
+      completedAt: at,
+      completedAtRevision: at,
+      observerBasis: { baseValue: 0, skillId: "dodge", skillLabel: "Dodge" },
+      observerParticipantId: "a",
+      previousRelationship: strongRelationship,
+      roundNumber: 2,
+      targetBasis: { baseValue: 40, skillId: "sword", skillLabel: "Sword" },
+      targetParticipantId: "b",
+    });
+
+    expect(strongRelationship.bestBonus).toBe(3);
+    expect(afterWeakAttempt.lastAttempt?.candidateBonus).toBe(0);
+    expect(afterWeakAttempt.bestBonus).toBe(3);
   });
 });

@@ -3150,7 +3150,13 @@ function getCombatRoundObservationDeclaration(
       ? declaration.secondaryActionContext
       : undefined);
 
-  return declaration?.actionId === "parry" && secondaryAction?.action === "observe_opponent"
+  // Observe is permitted with the untargeted primary actions Pass or Parry (#215 ruling 3).
+  // `combatDeclarationCompatibility.ts` already offers it for both; gating here on Parry alone
+  // meant a Pass + Observe declaration was offered and then silently did nothing.
+  const observePrimaryActionAllowed =
+    declaration?.actionId === "parry" || declaration?.actionId === "pass";
+
+  return observePrimaryActionAllowed && secondaryAction?.action === "observe_opponent"
     ? { targetParticipantId: secondaryAction.targetParticipantId }
     : undefined;
 }
