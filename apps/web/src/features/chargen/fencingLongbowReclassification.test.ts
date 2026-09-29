@@ -8,8 +8,8 @@
  *
  * Every claim here uses the REAL consumer construction that `useChargenWizardState.tsx` uses —
  * `withCompetencyContentV2(buildTargetRuntimeContent(createTargetCompetencyChargenSource(...)))` —
- * never `getApprovedTargetChargenContent()`, which is a legacy 59-group catalogue no Chargen path
- * loads.
+ * never the legacy 59-group catalogue, which no Chargen path loaded and which was retired with its
+ * accessor in Forgejo #387.
  *
  * THE FAILURE MODE THIS FILE EXISTS FOR IS DISAPPEARANCE, NOT DUPLICATION. Deleting the bridge alone
  * would have removed the synthetic Longbow Specialization row while `specializationOfSkillId` still

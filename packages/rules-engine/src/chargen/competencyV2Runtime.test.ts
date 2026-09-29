@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   competencyContentV2WrittenLanguageCompetencyIds,
-  getApprovedTargetChargenContent,
   getApprovedV2RuntimeContent,
 } from "@glantri/content";
 import {
@@ -48,7 +47,6 @@ describe("canonical V2 runtime projection", () => {
       new Set(projection.paths.filter((path) => path.trackId).map((path) => path.familyId)),
     ).toEqual(new Set(["profession:sailor", "profession:surgeon"]));
     expect(content.skillGroups.flatMap((group) => group.selectionSlots ?? [])).toHaveLength(7);
-    expect(getApprovedTargetChargenContent().skillGroups).toHaveLength(59);
   });
 
   it("reaches all 38 offered Specialization and parent pairs from projected paths", () => {
