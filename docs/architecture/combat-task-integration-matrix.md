@@ -76,7 +76,8 @@ Declaration-context ownership (2026-07-25): Parry is an untargeted primary actio
 projects no outgoing A1/A2 opportunity. Its one deterministic round modifier is derived from the
 stable total Dodge skill identity as `floor(Dodge / 5)%`, stored in the DB/Parry bucket, reviewed
 and consumed by the ordinary parry pipeline. Observe Opponent is primary-ineligible and is
-selectable only as a typed Parry secondary declaration. Its independently persisted participant
+selectable as a typed secondary declaration only alongside the untargeted primary actions Pass or
+Parry (#215 ruling 3). Its independently persisted participant
 target appears in Phase 1 and creates no attack-phase task. The complete-round boundary
 first authorizes the exact currently projected `complete_round` descriptor, then advances
 non-threshold progress from immutable declaration and attack-result facts before archiving the

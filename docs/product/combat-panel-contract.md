@@ -282,9 +282,10 @@ make a control fit.**
 
 - **M1 — `look_around` has no declaration identity.** The preset selects a static
   Perception roll, but there is no `look_around` primary action id. The nearest existing
-  concept, `observe_opponent`, is primary-ineligible and is selectable only as a typed Parry
-  secondary declaration with an independently persisted participant target, per the
-  declaration-context ownership rule in
+  concept, `observe_opponent`, is primary-ineligible and is selectable as a typed secondary
+  declaration only alongside the untargeted primary actions Pass or Parry (#215 ruling 3),
+  with an independently persisted participant target, per the declaration-context ownership
+  rule in
   [Combat task integration matrix](../architecture/combat-task-integration-matrix.md).
   Routing `look_around` to either would change a declaration's meaning.
 - **M2 — Perform Task carries no rule inputs.** The Perform Task declaration path records
