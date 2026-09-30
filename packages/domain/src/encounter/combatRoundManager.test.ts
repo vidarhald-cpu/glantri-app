@@ -10934,7 +10934,9 @@ describe("combat round manager", () => {
     expect(damageResult?.review?.additionalEffects).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          durationRounds: 2,
+          // One next round is stored as exactly 1: the creation round is the remainder of a
+          // round, not one of the counted rounds.
+          durationRounds: 1,
           label: "Action limited to parry",
           rowCategory: "no_combat_action",
           sourceEffectKey: "sharp|head|02|01",
@@ -11007,7 +11009,7 @@ describe("combat round manager", () => {
     expect(parryRows).toHaveLength(1);
     expect(parryRows[0]).toMatchObject({
       description: "Action limited to parry next round.",
-      duration: "2",
+      duration: "1",
       effectGroup: "special",
       status: "active",
       targetParticipantId: "scenario-guard",
@@ -11059,7 +11061,9 @@ describe("combat round manager", () => {
     });
     expect(damageResult?.review?.additionalEffects).toContainEqual(
       expect.objectContaining({
-        durationRounds: 2,
+        // One next round is stored as exactly 1; the creation round is not one of the counted
+        // rounds, so no compatibility tick is added on top of the source duration.
+        durationRounds: 1,
         rowCategory: "no_combat_action",
       }),
     );
@@ -11088,7 +11092,7 @@ describe("combat round manager", () => {
     expect(noActionRows).toHaveLength(1);
     expect(noActionRows[0]).toMatchObject({
       description: "No combat action possible next round.",
-      duration: "2",
+      duration: "1",
       effectGroup: "special",
       status: "active",
       targetParticipantId: "scenario-guard",
