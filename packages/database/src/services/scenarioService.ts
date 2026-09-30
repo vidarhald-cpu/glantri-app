@@ -777,6 +777,65 @@ export class ScenarioService {
     return participant;
   }
 
+  /**
+   * Explicitly revoke a Scenario participant's control assignment.
+   *
+   * This is deliberately **not** `updateScenarioParticipantMetadata`. Metadata updates are
+   * gameplay edits and are correctly refused by `canMutateScenarioInStatus` outside `live`.
+   * Revoking control is an **authorization withdrawal**, not a gameplay edit: the Product
+   * Owner ruling on Forgejo #439 extends control-derived Character read access into
+   * `completed` and `archived` Scenarios "unless the control relationship is explicitly
+   * revoked", so revocation must stay reachable in exactly those read-only statuses.
+   *
+   * The only column written is `controlledByUserId`, and the only value written is `null`.
+   * Nothing else about a read-only Scenario becomes mutable through this path: not
+   * `isActive`, not `role`, not the snapshot, state, grouping or ordering, and no Character
+   * or ownership field anywhere. The `ScenarioParticipant` row is preserved, so the
+   * historical record that this Character took part in this Scenario survives.
+   */
+  async revokeScenarioParticipantControl(input: {
+    participantId: string;
+    scenarioId: string;
+  }): Promise<ScenarioParticipant> {
+    const scenario = await this.repository.getScenarioById(input.scenarioId);
+
+    if (!scenario) {
+      throw new Error("Scenario not found.");
+    }
+
+    const existingParticipant = await this.repository.getScenarioParticipantById(
+      input.participantId,
+      input.scenarioId,
+    );
+
+    if (!existingParticipant) {
+      throw new Error("Scenario participant not found.");
+    }
+
+    if (existingParticipant.controlledByUserId == null) {
+      return existingParticipant;
+    }
+
+    const revokedFromUserId = existingParticipant.controlledByUserId;
+    const participant = await this.repository.revokeScenarioParticipantControl(input.participantId);
+
+    await this.repository.createScenarioEventLog({
+      eventType: "participant_control_revoked",
+      participantId: participant.id,
+      payload: {
+        isActive: participant.isActive,
+        revokedFromUserId,
+        role: participant.role,
+      },
+      phase: scenario.liveState?.phase,
+      roundNumber: scenario.liveState?.roundNumber,
+      scenarioId: input.scenarioId,
+      summary: `Revoked player control of ${participant.snapshot.displayName}.`,
+    });
+
+    return participant;
+  }
+
   async listScenarioEventLogs(scenarioId: string) {
     return this.repository.listScenarioEventLogs(scenarioId);
   }

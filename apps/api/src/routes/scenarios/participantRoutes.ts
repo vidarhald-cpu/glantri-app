@@ -412,6 +412,55 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
     reconcileCharacterEquipment,
   );
 
+  /**
+   * Explicitly revoke a participant's control assignment.
+   *
+   * Deliberately separate from the metadata route below, and deliberately **not** gated on
+   * `isScenarioLiveInteractive`. Product Owner ruling on Forgejo #439 keeps control-derived
+   * Character read access valid in `completed` and `archived` Scenarios "unless the control
+   * relationship is explicitly revoked"; the liveness gate exists to stop *gameplay* edits to
+   * a finished Scenario, and withdrawing an authorization is not a gameplay edit.
+   *
+   * The scope is exactly one column. The route takes no body, and the service writes only
+   * `controlledByUserId = null`. No other field of a completed or archived Scenario becomes
+   * mutable through this path, the participation record is preserved, and the campaign-GM
+   * authorization required is the same one the metadata route already requires.
+   */
+  app.post(
+    "/scenarios/:scenarioId/participants/:participantId/revoke-control",
+    async (request, reply) => {
+      const user = await requireAdminUser(request, reply);
+
+      if (!user) {
+        return;
+      }
+
+      try {
+        const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
+        const participantId = parseId(request.params, "participantId", "Participant id");
+        const access = await resolveScenarioWorkspaceAccess(
+          { campaignService, scenarioService },
+          { scenarioId, userId: user.id, userRoles: user.roles },
+        );
+
+        if (!access || access.mode !== "gm") {
+          return reply.code(404).send({ error: "Scenario not found." });
+        }
+
+        const participant = await scenarioService.revokeScenarioParticipantControl({
+          participantId,
+          scenarioId,
+        });
+
+        return { participant };
+      } catch (error) {
+        return reply.code(400).send({
+          error: error instanceof Error ? error.message : "Unable to revoke participant control.",
+        });
+      }
+    },
+  );
+
   app.put("/scenarios/:scenarioId/participants/:participantId/metadata", async (request, reply) => {
     const user = await requireAdminUser(request, reply);
 

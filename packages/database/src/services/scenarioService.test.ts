@@ -532,6 +532,143 @@ describe("ScenarioService controller assignment", () => {
     expect(first.controlledByUserId).toBe("user-1");
   });
 
+  /**
+   * Forgejo #439. Revoking control is an authorization withdrawal, not a gameplay edit, so it
+   * stays reachable in the read-only terminal statuses where general participant metadata
+   * updates are correctly refused.
+   */
+  it.each(["live", "paused", "completed", "archived"] as const)(
+    "revokes participant control in a %s Scenario without touching anything else",
+    async (status) => {
+      const { eventLogs, repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+      scenario.status = "live";
+      const character = createCharacterRecord({ id: "character-1", name: "Ari" });
+      rosterCharacters(rosterEntries, character.id);
+      const service = new ScenarioService(
+        repository,
+        { getCharacterById: async () => character } as never,
+        {
+          getCharacterEquipmentState: async () => ({
+            activeLoadoutByCharacterId: {},
+            itemsById: {},
+            locationsById: {},
+            templatesById: {},
+          }),
+        } as never,
+      );
+
+      const participant = await service.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: "controller-1",
+        joinSource: "gm_added",
+        roleTag: "scout",
+        scenarioId: "scenario-1",
+      });
+
+      scenario.status = status;
+
+      const revoked = await service.revokeScenarioParticipantControl({
+        participantId: participant.id,
+        scenarioId: "scenario-1",
+      });
+
+      expect(revoked.controlledByUserId).toBeUndefined();
+      expect(revoked.characterId).toBe(character.id);
+      expect(revoked.isActive).toBe(true);
+      expect(revoked.role).toBe(participant.role);
+      expect(revoked.roleTag).toBe("scout");
+      expect(revoked.sourceType).toBe("character");
+      expect(eventLogs.at(-1)).toMatchObject({
+        eventType: "participant_control_revoked",
+        participantId: participant.id,
+      });
+    },
+  );
+
+  it.each(["completed", "archived"] as const)(
+    "still refuses general participant metadata updates in a %s Scenario",
+    async (status) => {
+      const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+      scenario.status = "live";
+      const character = createCharacterRecord({ id: "character-1", name: "Ari" });
+      rosterCharacters(rosterEntries, character.id);
+      const service = new ScenarioService(
+        repository,
+        { getCharacterById: async () => character } as never,
+        {
+          getCharacterEquipmentState: async () => ({
+            activeLoadoutByCharacterId: {},
+            itemsById: {},
+            locationsById: {},
+            templatesById: {},
+          }),
+        } as never,
+      );
+
+      const participant = await service.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: "controller-1",
+        joinSource: "gm_added",
+        scenarioId: "scenario-1",
+      });
+
+      scenario.status = status;
+
+      for (const update of [
+        { isActive: false },
+        { controlledByUserId: "controller-2" },
+        { roleTag: "changed" },
+        { tacticalGroupId: "squad-a" },
+        { displayOrder: 9 },
+        { factionId: "red" },
+      ]) {
+        await expect(
+          service.updateScenarioParticipantMetadata({
+            ...update,
+            participantId: participant.id,
+            scenarioId: "scenario-1",
+          }),
+        ).rejects.toThrow("Scenario is not editable in its current status.");
+      }
+
+      expect(participant.controlledByUserId).toBe("controller-1");
+      expect(participant.isActive).toBe(true);
+    },
+  );
+
+  it("refuses to revoke control on a participant of a different Scenario", async () => {
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    const character = createCharacterRecord({ id: "character-1", name: "Ari" });
+    rosterCharacters(rosterEntries, character.id);
+    const service = new ScenarioService(
+      repository,
+      { getCharacterById: async () => character } as never,
+      {
+        getCharacterEquipmentState: async () => ({
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        }),
+      } as never,
+    );
+
+    await service.addCharacterParticipant({
+      characterId: character.id,
+      controlledByUserId: "controller-1",
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+
+    await expect(
+      service.revokeScenarioParticipantControl({
+        participantId: "participant-missing",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toThrow("Scenario participant not found.");
+  });
+
   it("rejects Scenario lifecycle regressions not present in the transition matrix", async () => {
     const { repository, scenario } = createScenarioRepositoryStub();
     const service = new ScenarioService(repository);

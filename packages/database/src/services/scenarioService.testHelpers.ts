@@ -292,6 +292,34 @@ export function createScenarioRepositoryStub() {
       participant.updatedAt = "2026-04-21T00:00:00.000Z";
       return participant;
     },
+    revokeScenarioParticipantControl: async (participantId) => {
+      const participant = participants.find((entry) => entry.id === participantId);
+
+      if (!participant) {
+        throw new Error("Scenario participant not found.");
+      }
+
+      participant.controlledByUserId = undefined;
+      participant.updatedAt = "2026-04-21T00:00:00.000Z";
+      return participant;
+    },
+    revokeCampaignCharacterParticipantControl: async (input) => {
+      const matching = participants.filter(
+        (entry) =>
+          entry.sourceType === "character" &&
+          entry.characterId === input.characterId &&
+          entry.controlledByUserId != null &&
+          entry.scenarioId === scenario.id &&
+          scenario.campaignId === input.campaignId,
+      );
+
+      for (const participant of matching) {
+        participant.controlledByUserId = undefined;
+        participant.updatedAt = "2026-04-21T00:00:00.000Z";
+      }
+
+      return matching.length;
+    },
     createCampaignAsset: async () => {
       throw new Error("Not implemented in test stub.");
     },
