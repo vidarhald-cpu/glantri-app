@@ -225,6 +225,16 @@ export function formatDuration(effect: CombatSituationLifecycleEffect): string |
       return duration.phase === "phase1" ? "Phase 1" : "Phase 2";
     case "rounds":
       return `${duration.remaining} ${duration.remaining === 1 ? "round" : "rounds"}`;
+    // Remainder-only state runs from creation through that same round's Round End and is absent
+    // when the next round begins. It is deliberately not encoded as `rounds` with `remaining: 1`,
+    // so its chip must not read as "1 round" either.
+    case "remainder_of_round":
+      return "Rest of this round";
+    // An instantaneous outcome resolves where it is created and never persists across a boundary.
+    // It is still reachable here: `formatDuration` runs for every collected effect, including
+    // effects in a pending state and effects still live within their creation round.
+    case "instantaneous":
+      return "Instantaneous";
     case "attack_opportunity_count":
       return `${duration.remaining} ${duration.remaining === 1 ? "attack" : "attacks"}`;
     case "until_check":

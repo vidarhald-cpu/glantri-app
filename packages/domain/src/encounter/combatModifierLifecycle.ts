@@ -163,6 +163,19 @@ const durationStartSchema = z.object({
   startSequence: sequenceSchema,
 });
 
+/**
+ * A bounded uncertain duration is rolled once at creation and retained as reviewable evidence. It
+ * then behaves exactly like a fixed duration of the rolled length: no later boundary rerolls it.
+ */
+export const canonicalCombatModifierRolledDurationSchema = z.object({
+  formula: z.string().min(1),
+  rolledAtRound: z.number().int().positive(),
+  value: z.number().int().positive(),
+});
+export type CanonicalCombatModifierRolledDuration = z.infer<
+  typeof canonicalCombatModifierRolledDurationSchema
+>;
+
 export const canonicalCombatModifierDurationSchema = z.discriminatedUnion("kind", [
   durationStartSchema.extend({
     expiresAt: z.literal("phase_boundary"),
@@ -176,10 +189,25 @@ export const canonicalCombatModifierDurationSchema = z.discriminatedUnion("kind"
     remaining: z.number().int().positive(),
   }),
   durationStartSchema.extend({
+    // `false` is the canonical rule: creation alone does not consume a full round, so the creation
+    // round's own Round End does not decrement. `true` preserves legacy/phase-scoped rows that
+    // deliberately count their creation round.
     creationRoundCounts: z.boolean(),
     kind: z.literal("rounds"),
     remaining: z.number().int().positive(),
+    rolled: canonicalCombatModifierRolledDurationSchema.optional(),
     transitionBoundary: z.enum(["round_end_review", "round_boundary"]),
+  }),
+  // Remainder-only state runs from creation through that same round's Round End and is absent when
+  // the next round begins. It is deliberately NOT encoded as `rounds` with `remaining: 1`.
+  durationStartSchema.extend({
+    kind: z.literal("remainder_of_round"),
+  }),
+  // Instantaneous outcomes resolve where they are created and must never persist across a
+  // boundary. The shape exists so a source can state "instantaneous" instead of borrowing a
+  // one-round duration that would survive a Round End.
+  durationStartSchema.extend({
+    kind: z.literal("instantaneous"),
   }),
   durationStartSchema.extend({
     check: z.object({
@@ -219,6 +247,112 @@ export const canonicalCombatModifierDurationSchema = z.discriminatedUnion("kind"
   }),
 ]);
 export type CanonicalCombatModifierDuration = z.infer<typeof canonicalCombatModifierDurationSchema>;
+
+/**
+ * The canonical temporal vocabulary for Combat effects and recovery. Every duration shape above
+ * belongs to exactly one class, so effects, critical outcomes, Combat Experience and Combat Tasks
+ * all describe time in the same terms:
+ *
+ * - `fixed` — deterministic expiry after N full subsequent rounds. The creation round is the
+ *   remainder of a round, not one of the N.
+ * - `bounded_uncertain` — rolled once at creation, retained as evidence, then exactly `fixed`.
+ * - `scheduled` — a named check becomes due at a boundary. Becoming due is not expiry.
+ * - `condition_event` — state persists until its explicit condition/event transition. No boundary
+ *   may invent a recovery roll for it.
+ * - `remainder_only` — from creation through that round's Round End, and no further.
+ * - `instantaneous` — resolves at creation and never persists across a boundary.
+ * - `other` — shapes whose lifetime is not driven by the round clock at all (phase scope,
+ *   attack-opportunity counts, relationships, manual/indefinite state, untyped legacy rows).
+ */
+export const canonicalCombatModifierTemporalClassSchema = z.enum([
+  "fixed",
+  "bounded_uncertain",
+  "scheduled",
+  "condition_event",
+  "remainder_only",
+  "instantaneous",
+  "other",
+]);
+export type CanonicalCombatModifierTemporalClass = z.infer<
+  typeof canonicalCombatModifierTemporalClassSchema
+>;
+
+export function classifyCanonicalCombatModifierDuration(
+  duration: CanonicalCombatModifierDuration,
+): CanonicalCombatModifierTemporalClass {
+  switch (duration.kind) {
+    case "rounds":
+      return duration.rolled ? "bounded_uncertain" : "fixed";
+    case "remainder_of_round":
+      return "remainder_only";
+    case "instantaneous":
+      return "instantaneous";
+    case "until_check":
+      return "scheduled";
+    case "until_condition":
+      return "condition_event";
+    default:
+      return "other";
+  }
+}
+
+/**
+ * The single decision a round boundary may make about a canonical duration.
+ *
+ * `hold` is the `creationRoundCounts` correction: the creation round's own Round End must not
+ * consume a round of a duration that is measured in full subsequent rounds.
+ */
+export type CanonicalCombatModifierBoundaryOutcome =
+  | { kind: "hold"; reason: "creation_round_excluded" }
+  | { kind: "decrement"; nextDuration: CanonicalCombatModifierDuration }
+  | { kind: "expire"; reason: "natural_expiry" | "remainder_of_round_ended" | "never_persists" }
+  | {
+      kind: "requires_resolution";
+      requirement: "recovery_check" | "condition" | "legacy_incomplete";
+    }
+  | { kind: "not_time_driven" };
+
+/**
+ * The one shared transition engine for the canonical temporal vocabulary. Every consumer that
+ * advances effects at a Round End must route through this function rather than re-deriving
+ * duration semantics locally; that is what keeps fixed, bounded uncertain, scheduled,
+ * condition/event, remainder-only and instantaneous outcomes on a single rule.
+ *
+ * Applicability (phase scope, source family) is deliberately NOT considered here — it is a
+ * separate concern owned by the caller.
+ */
+export function evaluateCanonicalCombatModifierDurationAtRoundEnd(input: {
+  duration: CanonicalCombatModifierDuration;
+  roundNumber: number;
+}): CanonicalCombatModifierBoundaryOutcome {
+  const duration = input.duration;
+  switch (duration.kind) {
+    case "rounds": {
+      if (!duration.creationRoundCounts && input.roundNumber <= duration.startRound) {
+        return { kind: "hold", reason: "creation_round_excluded" };
+      }
+      return duration.remaining > 1
+        ? { kind: "decrement", nextDuration: { ...duration, remaining: duration.remaining - 1 } }
+        : { kind: "expire", reason: "natural_expiry" };
+    }
+    case "remainder_of_round":
+      return input.roundNumber >= duration.startRound
+        ? { kind: "expire", reason: "remainder_of_round_ended" }
+        : { kind: "hold", reason: "creation_round_excluded" };
+    // An instantaneous outcome must not survive a boundary. Terminating it here carries no new
+    // persisted transition reason: `natural_expiry` is exactly its declared lifecycle end.
+    case "instantaneous":
+      return { kind: "expire", reason: "never_persists" };
+    case "until_check":
+      return { kind: "requires_resolution", requirement: "recovery_check" };
+    case "until_condition":
+      return { kind: "requires_resolution", requirement: "condition" };
+    case "legacy_untyped":
+      return { kind: "requires_resolution", requirement: "legacy_incomplete" };
+    default:
+      return { kind: "not_time_driven" };
+  }
+}
 
 export const canonicalCombatModifierActivationCutoffSchema = z.discriminatedUnion("kind", [
   z.object({ afterSequence: sequenceSchema, kind: z.literal("sequence") }),

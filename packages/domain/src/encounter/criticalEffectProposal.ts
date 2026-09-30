@@ -521,11 +521,12 @@ export function getCriticalEffectStoredDurationRounds(
     durationRounds = 1;
   }
 
-  if (durationRounds === undefined) {
-    return undefined;
-  }
-
-  return criticalEffectDurationBeginsNextRound(effect) ? durationRounds + 1 : durationRounds;
+  // A next-round source duration is stored exactly as written. It used to carry one extra
+  // compatibility tick, because the creation round's own Round End consumed a round of every
+  // stored duration; that tick paid for the consumed round rather than describing the source. The
+  // canonical temporal rule now excludes the creation round from the count, so the tick would be
+  // counted a second time and the penalty would last one full round too long.
+  return durationRounds;
 }
 
 function getCriticalEffectLabel(effect: CriticalEffectTemplate): string {

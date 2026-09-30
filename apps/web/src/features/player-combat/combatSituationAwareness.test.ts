@@ -421,6 +421,7 @@ const DURATION_FIXTURES: Record<CanonicalDurationKind, CanonicalCombatModifierDu
     startSequence: 12,
   },
   indefinite: { kind: "indefinite", startRound: 3, startSequence: 12 },
+  instantaneous: { kind: "instantaneous", startRound: 3, startSequence: 12 },
   legacy_untyped: { kind: "legacy_untyped", reason: "missing_duration" },
   manual: { kind: "manual", removableBy: "gm", startRound: 3, startSequence: 12 },
   phase: {
@@ -438,6 +439,7 @@ const DURATION_FIXTURES: Record<CanonicalDurationKind, CanonicalCombatModifierDu
     startRound: 3,
     startSequence: 12,
   },
+  remainder_of_round: { kind: "remainder_of_round", startRound: 3, startSequence: 12 },
   rounds: {
     creationRoundCounts: true,
     kind: "rounds",
@@ -539,6 +541,31 @@ describe("formatDuration exhaustiveness", () => {
     );
     expect(formatDuration(effectWithDuration(DURATION_FIXTURES.until_condition))).toBe(
       "Until cleared",
+    );
+  });
+
+  it("renders remainder-only state without collapsing it into a one-round duration", () => {
+    const label = formatDuration(effectWithDuration(DURATION_FIXTURES.remainder_of_round));
+    expect(label).toBe("Rest of this round");
+    // The distinction from `rounds` with `remaining: 1` is the reason this kind exists, so the
+    // chip must not render the same text a one-round duration would.
+    const oneRound = formatDuration(
+      effectWithDuration({
+        creationRoundCounts: true,
+        kind: "rounds",
+        remaining: 1,
+        startRound: 3,
+        startSequence: 12,
+        transitionBoundary: "round_boundary",
+      }),
+    );
+    expect(oneRound).toBe("1 round");
+    expect(label).not.toBe(oneRound);
+  });
+
+  it("renders instantaneous outcomes explicitly rather than leaving the chip blank", () => {
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.instantaneous))).toBe(
+      "Instantaneous",
     );
   });
 });
