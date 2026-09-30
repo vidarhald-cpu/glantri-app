@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { CampaignMapCreate, CampaignMapMutation } from "@glantri/domain";
@@ -83,6 +85,13 @@ export class CampaignMapReferenceError extends Error {
 
 type TransactionClient = Prisma.TransactionClient;
 
+/**
+ * The Layer every new Map is created with. It is GM-only, exactly like a Layer
+ * the GM adds by hand, so seeding it changes convenience and never disclosure.
+ */
+const DEFAULT_LAYER_NAME = "Layer 1";
+const newDefaultLayerId = () => `layer-${randomUUID()}`;
+
 export class CampaignMapRepository {
   constructor(private readonly client: PrismaClient = prisma) {}
 
@@ -135,6 +144,17 @@ export class CampaignMapRepository {
           campaignId: input.campaignId,
           createdByUserId: input.actorUserId,
           description: input.create.description,
+          layers: {
+            // A new Map arrives ready to annotate. Without a seeded Layer the
+            // GM must add one before any marker can be placed at all, which is
+            // a step the product never intended to require.
+            create: {
+              id: newDefaultLayerId(),
+              name: DEFAULT_LAYER_NAME,
+              sortOrder: 0,
+              visibility: "gm_only",
+            },
+          },
           name: input.create.name,
           role: input.create.role,
           updatedByUserId: input.actorUserId,

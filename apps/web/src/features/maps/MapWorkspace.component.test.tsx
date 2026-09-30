@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -233,5 +233,57 @@ describe("MapWorkspace", () => {
         layers: [{ markers: [{ id: "marker-1", x: 0.45, y: 0.5 }] }],
       },
     });
+  });
+
+  it.each([
+    { height: 1600, label: "a tall portrait plan", ratio: 1000 / 1600, width: 1000 },
+    { height: 1000, label: "a square battle mat", ratio: 1, width: 1000 },
+    { height: 600, label: "a wide regional chart", ratio: 2400 / 600, width: 2400 },
+  ])("shows $label at its own proportions instead of stretching it", async (prepared) => {
+    mocks.load.mockResolvedValue({
+      map: {
+        ...gmMap,
+        background: {
+          altText: "A prepared plan",
+          artifactId: "artifact-1",
+          available: true,
+          playerCanView: true,
+          title: "Old Gatehouse",
+        },
+        backgroundArtifactId: "artifact-1",
+      },
+      mode: "gm",
+    });
+
+    render(
+      <MapWorkspace
+        campaignId="campaign-1"
+        initialMapId="map-1"
+        isGameMaster
+        onMapRouteChange={vi.fn()}
+      />,
+    );
+
+    const image = await screen.findByAltText("A prepared plan");
+    const canvas = screen.getByTestId("map-canvas");
+    // The style value may be serialized as "a / b" or as a single number.
+    const canvasRatio = () => {
+      const [width, height = "1"] = canvas.style.aspectRatio.split("/");
+      return Number(width) / Number(height);
+    };
+    // Until the prepared image reports its own proportions nothing is stretched.
+    expect(canvasRatio()).toBeCloseTo(16 / 9);
+    expect(image.style.objectFit).toBe("contain");
+
+    Object.defineProperty(image, "naturalWidth", { configurable: true, value: prepared.width });
+    Object.defineProperty(image, "naturalHeight", { configurable: true, value: prepared.height });
+    fireEvent.load(image);
+
+    await waitFor(() => expect(canvasRatio()).toBeCloseTo(prepared.ratio));
+    // The canvas now matches the image exactly, so filling it cannot distort
+    // the image and the normalized marker frame still covers what is shown.
+    expect(image.style.objectFit).toBe("fill");
+    expect(canvas.style.minHeight).toBe("");
+    expect(screen.getByRole("button", { name: "Old Gate" })).toBeInTheDocument();
   });
 });

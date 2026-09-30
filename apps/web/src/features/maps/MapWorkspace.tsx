@@ -68,6 +68,13 @@ function makeId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+/**
+ * The canvas shape before a prepared background reports its own proportions,
+ * and the viewport height a very tall prepared Map is allowed to occupy.
+ */
+const DEFAULT_CANVAS_ASPECT_RATIO = 16 / 9;
+const MAX_CANVAS_VIEWPORT_HEIGHT = "70vh";
+
 interface MapCanvasProps {
   campaignId: string;
   isGameMaster: boolean;
@@ -96,6 +103,15 @@ function MapCanvas({
       : [...map.layers.flatMap((layer) => layer.markers), ...map.revealedMarkers];
   const hasBackground = gmMap ? gmMap.background?.available : Boolean(map.background?.available);
   const altText = gmMap?.background?.altText ?? map.background?.altText ?? `${map.name} background`;
+  /**
+   * A prepared Map is whatever shape its author drew. The canvas adopts the
+   * background's own proportions as soon as the image reports them, so an
+   * arbitrary ratio is never stretched to fit a fixed frame, and the normalized
+   * 0..1 marker frame keeps covering exactly the visible image.
+   */
+  const [naturalAspectRatio, setNaturalAspectRatio] = useState<number>();
+  useEffect(() => setNaturalAspectRatio(undefined), [map.id, hasBackground]);
+  const aspectRatio = naturalAspectRatio ?? DEFAULT_CANVAS_ASPECT_RATIO;
 
   return (
     <section style={{ ...panelStyle, padding: "0.75rem" }} aria-label={`${map.name} Map canvas`}>
@@ -108,25 +124,42 @@ function MapCanvas({
             Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
           );
         }}
+        data-testid="map-canvas"
         style={{
-          aspectRatio: "16 / 9",
+          aspectRatio: String(aspectRatio),
           background: hasBackground ? "#dfe5e1" : "#eef1ed",
           border: "1px solid #9da8a2",
           borderRadius: 10,
-          minHeight: 240,
+          margin: "0 auto",
           overflow: "hidden",
           position: "relative",
-          width: "100%",
+          // A fixed minimum height would override the declared ratio and
+          // reintroduce the distortion it exists to prevent.
+          ...(naturalAspectRatio ? {} : { minHeight: 240 }),
+          // Bound a very tall prepared Map by width rather than by height, so
+          // the ratio is preserved instead of being clipped or squashed.
+          width: naturalAspectRatio
+            ? `min(100%, calc(${MAX_CANVAS_VIEWPORT_HEIGHT} * ${aspectRatio}))`
+            : "100%",
         }}
       >
         {hasBackground ? (
           <img
             alt={altText}
+            onLoad={(event) => {
+              const { naturalHeight, naturalWidth } = event.currentTarget;
+              if (naturalWidth > 0 && naturalHeight > 0) {
+                setNaturalAspectRatio(naturalWidth / naturalHeight);
+              }
+            }}
             src={campaignMapBackgroundUrl(campaignId, map.id)}
             style={{
               height: "100%",
               inset: 0,
-              objectFit: "fill",
+              // Once the canvas carries the image's own ratio, "fill" is exact
+              // and keeps marker coordinates aligned with image pixels. Until
+              // then "contain" shows the image undistorted rather than stretched.
+              objectFit: naturalAspectRatio ? "fill" : "contain",
               position: "absolute",
               width: "100%",
             }}
