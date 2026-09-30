@@ -429,6 +429,10 @@ function formatContinuingConsequenceDuration(
   switch (duration.kind) {
     case "rounds":
       return `${duration.remaining} ${duration.remaining === 1 ? "round" : "rounds"} remaining`;
+    case "remainder_of_round":
+      return "Rest of this round";
+    case "instantaneous":
+      return "Instantaneous";
     case "phase":
       return duration.phase === "phase1" ? "Phase 1" : "Phase 2";
     case "attack_opportunity_count":

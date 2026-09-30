@@ -283,7 +283,10 @@ function appendTransition(input: {
   replacementEffectId?: string;
   transitionId: string;
   transitionType: Exclude<z.infer<typeof canonicalCombatModifierTransitionTypeSchema>, "restore">;
-}): { effect: CanonicalCombatModifierEffect; transition: CanonicalCombatModifierLifecycleTransition } {
+}): {
+  effect: CanonicalCombatModifierEffect;
+  transition: CanonicalCombatModifierLifecycleTransition;
+} {
   return transitionCanonicalCombatModifierEffect(input);
 }
 
@@ -328,7 +331,9 @@ export function commitCanonicalCombatModifierReview(input: {
     effectsById.set(effect.id, effect);
   }
 
-  const proposalsById = new Map(review.automaticProposals.map((proposal) => [proposal.id, proposal]));
+  const proposalsById = new Map(
+    review.automaticProposals.map((proposal) => [proposal.id, proposal]),
+  );
   const transitions: CanonicalCombatModifierLifecycleTransition[] = [];
   const changes: CanonicalCombatModifierReviewChange[] = [];
   const decidedProposalIds = new Set<string>();
@@ -433,11 +438,7 @@ export function commitCanonicalCombatModifierReview(input: {
       continue;
     }
 
-    const effect = ensureExpectedVersion(
-      effectsById,
-      decision.effectId,
-      decision.expectedVersion,
-    );
+    const effect = ensureExpectedVersion(effectsById, decision.effectId, decision.expectedVersion);
     if (decision.kind === "edit") {
       if (
         decision.nextPayload &&
@@ -578,6 +579,10 @@ function reviewDurationLabel(duration: CanonicalCombatModifierDuration): string 
       return `${duration.remaining} attack${duration.remaining === 1 ? "" : "s"}`;
     case "rounds":
       return `${duration.remaining} round${duration.remaining === 1 ? "" : "s"}`;
+    case "remainder_of_round":
+      return "Rest of this round";
+    case "instantaneous":
+      return "Instantaneous";
     case "until_check":
       return `Until ${duration.check.checkKind} check`;
     case "until_condition":

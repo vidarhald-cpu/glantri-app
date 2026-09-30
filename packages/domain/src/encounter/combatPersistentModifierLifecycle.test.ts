@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { combatEffectSchema, combatEffectsStateSchema } from "./combatEffects";
 import {
+  evaluateCanonicalCombatModifierDurationAtRoundEnd,
+  type CanonicalCombatModifierEffect,
+} from "./combatModifierLifecycle";
+import {
   attachCanonicalPersistentEffectLifecycles,
   buildCombatExperiencePersistentLifecycle,
   buildDamagePersistentLifecycle,
@@ -10,6 +14,9 @@ import {
   transitionPersistentCombatEffect,
   type PersistentCombatModifierCreationContext,
 } from "./combatPersistentModifierLifecycle";
+import { getCriticalEffectStoredDurationRounds } from "./criticalEffectProposal";
+import { CRITICAL_EFFECT_TEMPLATES } from "./criticalEffectsTableData";
+import type { CriticalEffectTemplate } from "./criticalEffectsTable";
 
 const context: PersistentCombatModifierCreationContext = {
   commandId: "command-1",
@@ -23,7 +30,7 @@ const context: PersistentCombatModifierCreationContext = {
 };
 
 describe("persistent combat modifier producers", () => {
-  it("makes combat-start CE explicitly combat-wide with a typed, counting round duration", () => {
+  it("makes combat-start CE combat-wide with a typed duration that excludes its creation round", () => {
     const lifecycle = buildCombatExperiencePersistentLifecycle({
       context,
       durationRounds: 4,
@@ -36,7 +43,7 @@ describe("persistent combat modifier producers", () => {
       applicability: { combatWide: true, rollPurposes: [] },
       lifecycle: {
         duration: {
-          creationRoundCounts: true,
+          creationRoundCounts: false,
           kind: "rounds",
           remaining: 4,
           transitionBoundary: "round_end_review",
@@ -351,5 +358,202 @@ describe("persistent combat modifier producers", () => {
       sourceFamily: "bleed",
     });
     expect(imported.effects[1]?.canonicalLifecycle).toBeUndefined();
+  });
+});
+
+/**
+ * Executable creation-boundary coverage for the damage producer.
+ *
+ * The producer's own `creationRoundCounts` flag is only meaningful once it is driven through the
+ * shared Round End transition engine, so these tests assert the observable lifetime rather than
+ * the emitted flag. Each one fails if the damage producer stops excluding its creation round, and
+ * the Critical cases additionally fail if the retired next-round compatibility tick is restored.
+ */
+function findCriticalEffectTemplate(effectKey: string): CriticalEffectTemplate {
+  const template = (CRITICAL_EFFECT_TEMPLATES as CriticalEffectTemplate[]).find(
+    (candidate) => candidate.effectKey === effectKey,
+  );
+
+  if (!template) {
+    throw new Error(`Critical effect template ${effectKey} is missing from the table.`);
+  }
+
+  return template;
+}
+
+function walkRoundEndsFromCreation(input: {
+  createdInRound: number;
+  lifecycle: CanonicalCombatModifierEffect | undefined;
+  throughRounds: number;
+}): { expiredAtRound: number | undefined; outcomesByRound: string[] } {
+  let duration = input.lifecycle?.lifecycle.duration;
+
+  if (!duration) {
+    throw new Error("The damage producer emitted no canonical duration to advance.");
+  }
+
+  const outcomesByRound: string[] = [];
+
+  for (
+    let roundNumber = input.createdInRound;
+    roundNumber < input.createdInRound + input.throughRounds;
+    roundNumber += 1
+  ) {
+    const outcome = evaluateCanonicalCombatModifierDurationAtRoundEnd({ duration, roundNumber });
+
+    if (outcome.kind === "hold") {
+      outcomesByRound.push(`R${roundNumber}: hold`);
+      continue;
+    }
+
+    if (outcome.kind === "decrement") {
+      duration = outcome.nextDuration;
+      outcomesByRound.push(
+        `R${roundNumber}: decrement to ${"remaining" in duration ? duration.remaining : "?"}`,
+      );
+      continue;
+    }
+
+    if (outcome.kind === "expire") {
+      outcomesByRound.push(`R${roundNumber}: expire`);
+
+      return { expiredAtRound: roundNumber, outcomesByRound };
+    }
+
+    throw new Error(`Unexpected round-clock outcome ${outcome.kind}.`);
+  }
+
+  return { expiredAtRound: undefined, outcomesByRound };
+}
+
+describe("damage producer creation-boundary lifetime", () => {
+  it("keeps a one-round damage effect alive through its own creation Round End", () => {
+    const walk = walkRoundEndsFromCreation({
+      createdInRound: context.roundNumber,
+      lifecycle: buildDamagePersistentLifecycle({
+        combatModifierBucket: "general",
+        context,
+        durationRounds: 1,
+        effectId: "damage-one-round",
+        isStunned: false,
+        label: "One round penalty",
+        modifierValue: -10,
+        rowCategory: "general_modifier",
+        status: "active",
+        type: "general_modifier",
+      }),
+      throughRounds: 6,
+    });
+
+    expect(walk.outcomesByRound).toEqual(["R2: hold", "R3: expire"]);
+    expect(walk.expiredAtRound).toBe(context.roundNumber + 1);
+  });
+
+  it("gives a two-round damage effect two full rounds after the round it was created in", () => {
+    const walk = walkRoundEndsFromCreation({
+      createdInRound: context.roundNumber,
+      lifecycle: buildDamagePersistentLifecycle({
+        combatModifierBucket: "general",
+        context,
+        durationRounds: 2,
+        effectId: "damage-two-rounds",
+        isStunned: false,
+        label: "Two round penalty",
+        modifierValue: -10,
+        rowCategory: "general_modifier",
+        status: "active",
+        type: "general_modifier",
+      }),
+      throughRounds: 6,
+    });
+
+    expect(walk.outcomesByRound).toEqual(["R2: hold", "R3: decrement to 1", "R4: expire"]);
+    expect(walk.expiredAtRound).toBe(context.roundNumber + 2);
+  });
+
+  it("expires a committed next-round Critical penalty at the end of that next round", () => {
+    // `sharp|head|01|01` is a real numeric DB penalty whose source duration is one next round.
+    const template = findCriticalEffectTemplate("sharp|head|01|01");
+    const storedDurationRounds = getCriticalEffectStoredDurationRounds(template, []);
+
+    expect(template.durationRaw).toBe("next round; parry only next round");
+    expect(storedDurationRounds).toBe(1);
+
+    const walk = walkRoundEndsFromCreation({
+      createdInRound: context.roundNumber,
+      lifecycle: buildDamagePersistentLifecycle({
+        combatModifierBucket: "db_parry",
+        context,
+        durationRounds: storedDurationRounds,
+        effectId: "critical-next-round",
+        isStunned: false,
+        label: "Balance or stance",
+        modifierValue: template.penaltyPct,
+        rowCategory: "db_modifier",
+        sourceCritKey: template.critKey,
+        sourceEffectKey: template.effectKey,
+        status: "active",
+        type: "db_modifier",
+      }),
+      throughRounds: 6,
+    });
+
+    expect(walk.outcomesByRound).toEqual(["R2: hold", "R3: expire"]);
+    expect(walk.expiredAtRound).toBe(context.roundNumber + 1);
+  });
+
+  it("expires a rolled next-D6 Critical penalty exactly its rolled number of rounds later", () => {
+    const template: CriticalEffectTemplate = {
+      critKey: "test|head|01",
+      durationMode: "roll",
+      durationRaw: "no actions for the next D6 rounds",
+      durationRoll: "d6",
+      effectKey: "test|head|01|01",
+      effectOrder: 1,
+      group: "Stun/Action",
+      rateMode: "none",
+      subtype: "shock_or_action_lock",
+      target: "general_action",
+      type: "Stun",
+      urgency: 1,
+    };
+    const storedDurationRounds = getCriticalEffectStoredDurationRounds(template, [
+      {
+        effectKey: template.effectKey,
+        formula: "d6",
+        purpose: "duration",
+        rolls: [3],
+        sourceField: "durationRoll",
+        total: 3,
+      },
+    ]);
+
+    expect(storedDurationRounds).toBe(3);
+
+    const walk = walkRoundEndsFromCreation({
+      createdInRound: context.roundNumber,
+      lifecycle: buildDamagePersistentLifecycle({
+        context,
+        durationRounds: storedDurationRounds,
+        effectId: "critical-next-d6",
+        isStunned: true,
+        label: "Stunned",
+        notes: "No combat action possible while stunned.",
+        rowCategory: "no_combat_action",
+        sourceCritKey: template.critKey,
+        sourceEffectKey: template.effectKey,
+        status: "active",
+        type: "special",
+      }),
+      throughRounds: 8,
+    });
+
+    expect(walk.outcomesByRound).toEqual([
+      "R2: hold",
+      "R3: decrement to 2",
+      "R4: decrement to 1",
+      "R5: expire",
+    ]);
+    expect(walk.expiredAtRound).toBe(context.roundNumber + 3);
   });
 });
