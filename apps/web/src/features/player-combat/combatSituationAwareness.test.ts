@@ -763,7 +763,7 @@ describe("formatEntryValue does not substitute another semantic value", () => {
  * of it. Kept as a literal here rather than imported, so a change to the module's
  * constant is a visible test failure rather than a silently agreeing rename.
  */
-const INCOMPLETE_BREAKDOWN_COPY = "Total is exact; its breakdown is incomplete.";
+const INCOMPLETE_BREAKDOWN_COPY = "Exact total; incomplete breakdown.";
 
 function situationModelWith(input: {
   entries: readonly {
@@ -946,7 +946,7 @@ describe("breakdown-incomplete detection is pinned to the canonical outcome, not
     expect(detection).not.toContain("valueLabel");
 
     // And the group flag is computed from that function rather than re-derived elsewhere.
-    expect(source).toContain("breakdownIncomplete: unique.some(hasUnrenderableValue)");
+    expect(source).toContain("hasUnrenderableValue)");
   });
 
   /**

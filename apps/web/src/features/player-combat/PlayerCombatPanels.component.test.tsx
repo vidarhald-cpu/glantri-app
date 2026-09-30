@@ -1151,7 +1151,7 @@ function unrenderableDerivedEffect(): CombatSituationLifecycleEffect {
 }
 
 describe("a calculation group whose breakdown is incomplete", () => {
-  const INCOMPLETE_BREAKDOWN_COPY = "Total is exact; its breakdown is incomplete.";
+  const INCOMPLETE_BREAKDOWN_COPY = "Exact total; incomplete breakdown.";
 
   it("states both that the total is exact and that the breakdown is incomplete", () => {
     render(

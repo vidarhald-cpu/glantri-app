@@ -115,7 +115,8 @@ const UNRENDERABLE_VALUE_LABEL = "Unknown value";
  * it because at least one contribution could not be rendered.
  *
  * It states **both** facts the ruling on this condition requires: the number is exact,
- * and its decomposition is not complete. A shorter marker would state only the second.
+ * and its decomposition is not complete. It does so tersely: each fact is named once, and
+ * dropping either half would leave the other unstated.
  *
  * It is deliberately **not** `UNRENDERABLE_VALUE_LABEL`. That is a row-level statement
  * about one value; this is a group-level statement about the relationship between the
@@ -129,7 +130,7 @@ const UNRENDERABLE_VALUE_LABEL = "Unknown value";
  * `"Combat state incomplete"` in `currentActionPresentation`), so this joins a family
  * rather than inventing a vocabulary.
  */
-export const INCOMPLETE_BREAKDOWN_LABEL = "Total is exact; its breakdown is incomplete.";
+export const INCOMPLETE_BREAKDOWN_LABEL = "Exact total; incomplete breakdown.";
 
 /**
  * The three distinct outcomes of rendering a canonical effect's value.
