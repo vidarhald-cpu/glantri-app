@@ -85,7 +85,7 @@ function modifierReviewEffectId(
  *   `startRound` stamped here is `input.roundNumber`, the round the reconstruction is running in,
  *   not the round the row was originally stored in.
  * - Newly built generated rows. The `parry` and `offensive_parry` declaration modifiers are built
- *   during combat declaration by `combatActionModifiers.ts` and `combatFeint.ts` and passed through
+ *   during combat declaration by `combatActionModifiers.ts` and passed through
  *   `attachCanonicalLifecycleToModifierBucketRow`. They carry `durationRounds: 1`, no `sourcePhase`,
  *   and `sourceRoundNumber` set to the current round, so they reach the adapter's round-clock arm
  *   and are stamped with the current round. A parry declared in round 7 yields
