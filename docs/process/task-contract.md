@@ -72,7 +72,13 @@ Name symbols in the consumed-vocabulary set, not only the paths that hold them:
 its purpose is to expose coupling that no file-path reservation can see.
 Derive and independently review the set using the
 [consumed-vocabulary procedure](./integration-wave.md#deriving-and-reviewing-a-consumed-vocabulary-set);
-it lowers, but does not bound, the rate of omission. State
+it lowers, but does not bound, the rate of omission. Where the task introduces
+or materially alters a workflow-driving state — a phase, step, status, action
+or declaration kind, or lifecycle state that changes what operations are
+possible — also declare its
+[reachability path](./integration-wave.md#declaring-the-reachability-path-for-a-workflow-driving-state),
+which is required in addition to the consumed-vocabulary set rather than
+instead of it. State
 the floor invariant for this slice specifically; never inherit one by analogy
 from a sibling slice.
 

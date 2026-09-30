@@ -2,8 +2,9 @@
 
 This document records how accepted work reaches `dev`: the lifecycle, the
 relationship between control-plane acceptance and mechanical refresh, the
-procedure for deriving a consumed-vocabulary set, and the conditions under which
-QA evidence survives a coordinated wave composition. It amends no authority
+procedure for deriving a consumed-vocabulary set, the reachability-path
+declaration required alongside it, and the conditions under which QA evidence
+survives a coordinated wave composition. It amends no authority
 boundary; [AGENTS.md](../../AGENTS.md) remains canonical.
 
 ## Lifecycle
@@ -108,6 +109,52 @@ condition 4 shows that no declared dependency changed; it is not evidence that
 no undeclared one did. Do not cite it as a guarantee, and do not treat having
 followed the procedure as a substitute for continued suspicion when a lane
 touches shared vocabulary.
+
+## Declaring the reachability path for a workflow-driving state
+
+The consumed-vocabulary set is necessary and not sufficient. It exposes who
+reads a symbol whose meaning a lane could change; it does not ask whether the
+product can reach the state that symbol names. A change that introduces or
+materially alters a workflow-driving state — a phase, step, status, action or
+declaration kind, lifecycle state, or any other vocabulary that changes what
+operations are possible — therefore carries a second declaration alongside the
+consumed-vocabulary set. The second is required in addition to the first, not
+instead of it: a lane of this kind derives and reviews both.
+
+The contract states, and the review confirms:
+
+1. **How the product enters the state.** The production path that puts a record
+   into it, not a hand-built state that assumes it.
+2. **What operations are valid there.** The operations the state exists to
+   host, each reachable end to end rather than at one plane only.
+3. **What operations must remain invalid there.** The operations the state must
+   continue to refuse. This is the limb most easily omitted and is often the
+   whole point of the state: a step that opens one operation while holding
+   another closed has achieved nothing if the closure is left unstated and
+   unchecked.
+4. **How the product exits the state.** What discharges it, what happens when
+   several obligations are outstanding at once, and what the exit leaves
+   behind.
+5. **Which progression, authorization, API and projection surfaces
+   participate.** Name them. A state is reachable only where every plane that
+   gates it agrees the state exists.
+
+The independent check before dispatch or composition challenges this path. It
+is not discharged by intersecting consumed-vocabulary sets. It asks, surface by
+surface, whether the declared entry, the valid operations, the invalid
+operations and the exit hold at source.
+
+Wave 1's Combat lane (S5) is the case that established the rule. Its
+consumed-vocabulary set was reviewed for completeness before dispatch, amended
+twice, and did find every semantic consumer of `CombatRoundStep` — and the new
+`pre_declaration` step was still unreachable through the product. The
+progression projection's `boundaryForStep` had no case for it and fell through
+to `round_end`; authorization required `boundary: "declaration"` for the very
+operations the step exists to host, so both API routes returned 409 whatever
+the domain guard said; and a `roundNumber === 1` clause that had been fully
+redundant became load-bearing the instant the predicate widened, so no task was
+ever projected. None of that was a missing vocabulary item. All of it was
+ordinary code reading a symbol the declaration already covered.
 
 ## QA across wave composition
 
