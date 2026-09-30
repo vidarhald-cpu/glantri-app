@@ -137,7 +137,7 @@ on stderr. It also echoes its own argument, the literal string `<commit>:<path>`
 on stdout. A check shaped like `git rev-parse "$sha:$path" 2>/dev/null | cut -c1-12`
 captures stdout, discards stderr, loses the exit status through the pipe, and
 abbreviates the echoed string, so it reads the commit SHA prefix as if it were
-a blob hash: pure hex, indistinguishable from a real one. Two different commits
+a blob hash: when the argument carries a full 40-character object name, as it did here, the result is pure hex, indistinguishable from a real one. Two different commits
 always echo two different strings, so the failure is one-directional: it
 reports a spurious difference and never a spurious pass. This occurred during
 #387's integration. Honouring the exit status (or using
