@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import type { EncounterParticipant, EncounterSession } from "./session";
 import type { HitLocationTarget } from "./hitLocation";
@@ -135,9 +136,19 @@ import {
   skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
   undoLatestCombatRoundCommand,
+  combatRoundStepSchema,
+  completedCombatRoundSchema,
+  combatRoundParticipantStateSchema,
+  getCombatExperienceNextCheckRoundNumber,
+  getCombatRoundCombatExperienceDue,
+  getCombatRoundCombatExperienceDueParticipantIds,
+  getNextCombatRoundStep,
+  isCombatRoundCombatExperienceDue,
+  isCombatStartExperienceRollRequired,
+  markCombatRoundCombatExperienceResetDue,
   type CombatRoundEndDistanceRollResult,
 } from "./combatRoundManager";
-import { combatStepEventSchema } from "./combatStepEventSchema";
+import { combatStepEventSchema, combatStepEventStepSchema } from "./combatStepEventSchema";
 import { buildCombatDefenseSnapshotId, combatDefenseSnapshotSchema } from "./combatDefenseSnapshot";
 import {
   applyCombatActionGeneratedModifiers,
@@ -2290,6 +2301,7 @@ describe("combat round manager", () => {
   });
   it("defines the compact round timeline steps in order", () => {
     expect(COMBAT_ROUND_STEPS.map((step) => COMBAT_ROUND_STEP_ABBREVIATIONS[step])).toEqual([
+      "PD",
       "DE",
       "M1",
       "i1",
@@ -6266,7 +6278,8 @@ describe("combat round manager", () => {
     );
 
     expect(roundSummaryState.currentStep).toBe("round_summary");
-    expect(nextRoundState.currentStep).toBe("select_actions");
+    // Ruling 2 (#215): Start New Round enters the Combat Experience pre-declaration step.
+    expect(nextRoundState.currentStep).toBe("pre_declaration");
     expect(nextRoundState.roundNumber).toBe(4);
     expect(nextRoundState.selectedParticipantId).toBe("gladiator");
     expect(nextRoundState.participants[0]?.stepStatuses.select_actions).toBe("pending");
@@ -6315,7 +6328,7 @@ describe("combat round manager", () => {
     };
     const nextRoundState = advanceCombatRoundStep(completeCleanRoundEndReview(roundSummaryState));
 
-    expect(nextRoundState.currentStep).toBe("select_actions");
+    expect(nextRoundState.currentStep).toBe("pre_declaration");
     expect(nextRoundState.roundNumber).toBe(4);
     expect(nextRoundState.phaseResolutionCursor).toBeUndefined();
     expect(nextRoundState.phaseResolutionResults).toEqual([]);
@@ -6637,7 +6650,8 @@ describe("combat round manager", () => {
   });
 
   it("finds the previous combat round step", () => {
-    expect(getPreviousCombatRoundStep("select_actions")).toBeUndefined();
+    expect(getPreviousCombatRoundStep("pre_declaration")).toBeUndefined();
+    expect(getPreviousCombatRoundStep("select_actions")).toBe("pre_declaration");
     expect(getPreviousCombatRoundStep("review_action_modifiers")).toBe("select_actions");
     expect(getPreviousCombatRoundStep("initiative_phase_1")).toBe("review_action_modifiers");
   });
@@ -17120,14 +17134,14 @@ describe("combat round manager", () => {
       (round) => round.roundNumber === roundSummaryState.roundNumber,
     );
 
-    expect(completed.currentStep).toBe("select_actions");
+    expect(completed.currentStep).toBe("pre_declaration");
     expect(completed.roundNumber).toBe(roundSummaryState.roundNumber + 1);
     expect(completed.commands).toEqual([]);
     expect(completed.events).toEqual([]);
     expect(completed.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: roundSummaryState.roundNumber + 1,
-      step: "DE",
+      step: "PD",
     });
     expect(
       completed.participants.map((participant) => participant.stepStatuses.select_actions),
@@ -17173,7 +17187,7 @@ describe("combat round manager", () => {
     ]);
     expect(timelineRounds[0]?.currentStep).toBe("round_summary");
     expect(timelineRounds[0]?.participants[0]?.stepStatuses.round_summary).toBe("complete");
-    expect(timelineRounds[1]?.currentStep).toBe("select_actions");
+    expect(timelineRounds[1]?.currentStep).toBe("pre_declaration");
     expect(timelineRounds[1]?.commands).toEqual([]);
     expect(timelineRounds[1]?.participants[0]?.declaration).toBeUndefined();
   });
@@ -17252,10 +17266,10 @@ describe("combat round manager", () => {
         state: activeRound!,
       }),
     ).toBeUndefined();
-    expect(activeRound?.currentStep).toBe("select_actions");
+    expect(activeRound?.currentStep).toBe("pre_declaration");
     expect(activeRound?.currentCursor).toMatchObject({
       roundNumber: roundSummaryState.roundNumber + 1,
-      step: "DE",
+      step: "PD",
     });
   });
 
@@ -21764,6 +21778,349 @@ describe("canonical temporal vocabulary at Round End", () => {
       kind: "condition",
       owner: "source_process",
       resolved: false,
+    });
+  });
+});
+
+describe("#215 S5 — the Combat Experience pre-declaration step", () => {
+  /**
+   * The canonical round step vocabulary, written out in full and in order.
+   *
+   * The count is asserted from this list rather than as a bare number. A bare `toHaveLength(13)`
+   * would pass just as happily if the wrong member were added, or if one member were added and
+   * another removed — the failure mode #215 comment 10892 warns about: a green test encoding a
+   * false premise. Measured at the wave baseline `4db21c68`, this enum had **12** members;
+   * `pre_declaration` makes it 13.
+   */
+  const CANONICAL_STEPS = [
+    "pre_declaration",
+    "select_actions",
+    "review_action_modifiers",
+    "initiative_phase_1",
+    "phase_1_actions",
+    "review_phase_2_actions",
+    "phase_1_damage",
+    "review_phase_2_modifiers",
+    "initiative_phase_2",
+    "phase_2_actions",
+    "review_phase_2_damage",
+    "phase_2_damage",
+    "round_summary",
+  ] as const;
+
+  /** The 12 members that existed before S5, in their baseline order. */
+  const PRE_S5_STEPS = CANONICAL_STEPS.filter((step) => step !== "pre_declaration");
+
+  it("defines exactly thirteen canonical round steps, in order, opening at the pre-declaration step", () => {
+    expect(COMBAT_ROUND_STEPS).toEqual(CANONICAL_STEPS);
+    expect(COMBAT_ROUND_STEPS).toHaveLength(13);
+    expect(PRE_S5_STEPS).toHaveLength(12);
+    expect(COMBAT_ROUND_STEPS[0]).toBe("pre_declaration");
+    expect(COMBAT_ROUND_STEPS.indexOf("pre_declaration")).toBeLessThan(
+      COMBAT_ROUND_STEPS.indexOf("select_actions"),
+    );
+    // The pre-S5 members keep their relative order, so every `COMBAT_ROUND_STEPS.indexOf(...)`
+    // comparison in the engine continues to order them exactly as it did at the baseline.
+    expect(COMBAT_ROUND_STEPS.filter((step) => step !== "pre_declaration")).toEqual(PRE_S5_STEPS);
+  });
+
+  it("keeps the persisted step-event vocabulary identical to the canonical one", () => {
+    // `combatStepEventStepSchema` is a hand-maintained structural twin of `combatRoundStepSchema`
+    // and is persisted in the Combat event stream. Drift between the two is a silent data defect.
+    expect(combatStepEventStepSchema.options).toEqual(combatRoundStepSchema.options);
+  });
+
+  it("gives the new step a cursor abbreviation and wraps the round through it", () => {
+    expect(COMBAT_ROUND_STEP_ABBREVIATIONS.pre_declaration).toBe("PD");
+    expect(getNextCombatRoundStep("pre_declaration")).toBe("select_actions");
+    expect(getNextCombatRoundStep("round_summary")).toBe("pre_declaration");
+  });
+
+  describe("floor invariant limb 1 — a state persisted before S5, read by S5 code", () => {
+    /** An active Combat state exactly as it was written before `pre_declaration` existed. */
+    const preS5ActiveState = {
+      currentStep: "phase_1_actions",
+      encounterId: "encounter-1",
+      participants: [
+        {
+          label: "Gladiator",
+          participantId: "gladiator",
+          stepStatuses: Object.fromEntries(PRE_S5_STEPS.map((step) => [step, "complete"])),
+        },
+      ],
+      roundNumber: 4,
+      selectedStep: "phase_1_actions",
+    };
+
+    it("parses and retains every stored step status, with no pre-S5 key altered or dropped", () => {
+      const parsed = combatRoundStateSchema.parse(preS5ActiveState);
+      const statuses = parsed.participants[0]!.stepStatuses;
+
+      expect(parsed.currentStep).toBe("phase_1_actions");
+      expect(parsed.selectedStep).toBe("phase_1_actions");
+      for (const step of PRE_S5_STEPS) {
+        expect(statuses[step]).toBe("complete");
+      }
+      // The record is partial, so the absent new key stays absent — it is not silently invented
+      // as "complete" and so cannot be mistaken for work the GM actually did.
+      expect(statuses.pre_declaration).toBeUndefined();
+      expect(Object.keys(statuses).sort()).toEqual([...PRE_S5_STEPS].sort());
+    });
+
+    it("carries no Combat Experience due state into a record written before due state existed", () => {
+      const parsed = combatRoundStateSchema.parse(preS5ActiveState);
+
+      expect(parsed.participants[0]!.combatExperienceDue).toBeUndefined();
+      expect(isCombatRoundCombatExperienceDue({ participantId: "gladiator", state: parsed })).toBe(
+        false,
+      );
+      expect(getCombatRoundCombatExperienceDueParticipantIds(parsed)).toEqual([]);
+      // Round 4 with no due marker: the pre-S5 rule — a combat_start roll is required in round 1
+      // only — is exactly preserved.
+      expect(
+        isCombatStartExperienceRollRequired({ participantId: "gladiator", state: parsed }),
+      ).toBe(false);
+    });
+
+    it("preserves a stored participant record verbatim through a schema round trip", () => {
+      const stored = {
+        label: "Gladiator",
+        participantId: "gladiator",
+        stepStatuses: { phase_1_actions: "complete", select_actions: "submitted" },
+      };
+
+      expect(combatRoundParticipantStateSchema.parse(stored)).toEqual({
+        attackResults: {},
+        initiatives: {},
+        label: "Gladiator",
+        participantId: "gladiator",
+        stepStatuses: { phase_1_actions: "complete", select_actions: "submitted" },
+      });
+    });
+
+    it("leaves both currentStep defaults exactly where they were", () => {
+      // A record that OMITS currentStep acquires one from `.default()`, and the two schemas
+      // default it differently. Widening the enum must not move either default: an archived round
+      // still reads as `round_summary`, an active state still reads as `select_actions` — never
+      // as the new first member of the enum.
+      expect(
+        combatRoundStateSchema.parse({ encounterId: "encounter-1", roundNumber: 2 }).currentStep,
+      ).toBe("select_actions");
+      expect(
+        completedCombatRoundSchema.parse({
+          participants: [],
+          phaseResolutionStatuses: {},
+          roundNumber: 1,
+        }).currentStep,
+      ).toBe("round_summary");
+    });
+  });
+
+  describe("floor invariant limb 2 — a state written by S5, read by downlevel code", () => {
+    /**
+     * A faithful reconstruction of the pre-S5 reader: the 12-member step enum, the partial
+     * `z.record` keyed by it, and a participant object that never knew about `combatExperienceDue`.
+     * Reading a new record through this is the backward direction of the floor invariant.
+     */
+    const downlevelStepSchema = z.enum(PRE_S5_STEPS as unknown as [string, string, ...string[]]);
+    const downlevelParticipantSchema = z.object({
+      label: z.string().min(1),
+      participantId: z.string().min(1),
+      stepStatuses: z
+        .record(downlevelStepSchema, z.enum(["pending", "complete", "submitted"]))
+        .default({}),
+    });
+
+    const s5Participant = {
+      combatExperienceDue: {
+        dueFromRoundNumber: 8,
+        markedAtRoundNumber: 7,
+        reason: "critical" as const,
+      },
+      label: "Gladiator",
+      participantId: "gladiator",
+      stepStatuses: {
+        phase_1_actions: "complete" as const,
+        pre_declaration: "complete" as const,
+        select_actions: "submitted" as const,
+      },
+    };
+
+    it("REJECTS a new stepStatuses record outright — it never silently mis-reads it", () => {
+      // MEASURED, and it corrects the mitigating fact recorded in the #215 contract. "`z.record` is
+      // partial" holds only FORWARD: a pre-S5 record missing the new key parses fine under S5.
+      // BACKWARD it does not hold. A zod record keyed by an enum validates its KEYS, so a pre-S5
+      // reader meeting `pre_declaration` raises `invalid_enum_value` and rejects the whole record.
+      //
+      // This is a fail-closed outcome, and it is the safe one: the downlevel reader never returns a
+      // record whose meaning has quietly changed. It is recorded here as behaviour rather than
+      // assumed away, because low practical risk is not the test.
+      const failure = downlevelParticipantSchema.safeParse(s5Participant);
+
+      expect(failure.success).toBe(false);
+      expect(failure.success === false && failure.error.issues[0]).toMatchObject({
+        code: "invalid_enum_value",
+        received: "pre_declaration",
+      });
+    });
+
+    it("reads a new record whose steps are all pre-S5 exactly as it did before S5", () => {
+      // The new due marker is an unknown OBJECT key, not a record key, so it is stripped rather
+      // than rejected, and everything the downlevel reader understands keeps its stored meaning.
+      const downlevel = downlevelParticipantSchema.parse({
+        ...s5Participant,
+        stepStatuses: {
+          phase_1_actions: "complete" as const,
+          select_actions: "submitted" as const,
+        },
+      }) as Record<string, unknown>;
+
+      expect(downlevel.label).toBe("Gladiator");
+      expect(downlevel.participantId).toBe("gladiator");
+      expect(downlevel.stepStatuses).toEqual({
+        phase_1_actions: "complete",
+        select_actions: "submitted",
+      });
+      expect(downlevel.combatExperienceDue).toBeUndefined();
+    });
+
+    it("leaves a downlevel reader's omitted-currentStep default untouched", () => {
+      const downlevelActiveSchema = z.object({
+        currentStep: downlevelStepSchema.default("select_actions"),
+      });
+      const downlevelCompletedSchema = z.object({
+        currentStep: downlevelStepSchema.default("round_summary"),
+      });
+
+      expect(downlevelActiveSchema.parse({}).currentStep).toBe("select_actions");
+      expect(downlevelCompletedSchema.parse({}).currentStep).toBe("round_summary");
+    });
+  });
+
+  describe("Combat Experience due state and Critical-triggered reset", () => {
+    const dueState = (input: {
+      combatExperienceDue?: {
+        dueFromRoundNumber: number;
+        markedAtRoundNumber: number;
+        reason: "scheduled" | "critical";
+      };
+      currentStep: (typeof CANONICAL_STEPS)[number];
+      roundNumber: number;
+    }) =>
+      combatRoundStateSchema.parse({
+        currentStep: input.currentStep,
+        encounterId: "encounter-1",
+        participants: [
+          {
+            combatExperienceDue: input.combatExperienceDue,
+            label: "Gladiator",
+            participantId: "gladiator",
+          },
+        ],
+        roundNumber: input.roundNumber,
+      });
+
+    const scheduled = {
+      dueFromRoundNumber: 8,
+      markedAtRoundNumber: 7,
+      reason: "scheduled" as const,
+    };
+
+    it("schedules the next check from the result's duration, and never for a maximum result", () => {
+      // Acceptance example 4: a round-7 result of 16-20 (durationRounds 1) makes the next check
+      // due as round 8 opens.
+      expect(getCombatExperienceNextCheckRoundNumber({ durationRounds: 1, roundNumber: 7 })).toBe(
+        8,
+      );
+      expect(getCombatExperienceNextCheckRoundNumber({ durationRounds: 4, roundNumber: 7 })).toBe(
+        11,
+      );
+      // A 21+ result has no next-check schedule at all.
+      expect(
+        getCombatExperienceNextCheckRoundNumber({ durationRounds: 0, roundNumber: 7 }),
+      ).toBeUndefined();
+    });
+
+    it("treats a check as due only once its round has arrived", () => {
+      expect(
+        isCombatRoundCombatExperienceDue({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "round_summary",
+            roundNumber: 7,
+          }),
+        }),
+      ).toBe(false);
+      expect(
+        isCombatRoundCombatExperienceDue({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "pre_declaration",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(true);
+    });
+
+    it("requires the due roll in the pre-declaration step, and nowhere else", () => {
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "pre_declaration",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(true);
+      // Round End does not roll, and the check is not resurrected mid-round after declaration.
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "round_summary",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(false);
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "phase_1_actions",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(false);
+    });
+
+    it("marks a Critical-triggered reset for the next round, not for the current one", () => {
+      // Acceptance example 5: a Critical marks CE reset due. Declarations already made in the
+      // current round keep the state they were made against; the fresh roll comes next round.
+      const marked = markCombatRoundCombatExperienceResetDue({
+        participantId: "gladiator",
+        state: dueState({ currentStep: "phase_1_damage", roundNumber: 5 }),
+      });
+
+      expect(
+        getCombatRoundCombatExperienceDue({ participantId: "gladiator", state: marked }),
+      ).toEqual({ dueFromRoundNumber: 6, markedAtRoundNumber: 5, reason: "critical" });
+      expect(isCombatRoundCombatExperienceDue({ participantId: "gladiator", state: marked })).toBe(
+        false,
+      );
+    });
+
+    it("leaves the first round's opening check exactly as it was before S5", () => {
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({ currentStep: "select_actions", roundNumber: 1 }),
+        }),
+      ).toBe(true);
     });
   });
 });

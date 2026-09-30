@@ -304,6 +304,7 @@ export const COMBAT_ROUND_STEP_ABBREVIATIONS = {
   phase_1_damage: "D1",
   phase_2_actions: "A2",
   phase_2_damage: "D2",
+  pre_declaration: "PD",
   review_action_modifiers: "M1",
   review_phase_2_actions: "P1",
   review_phase_2_damage: "P2",
@@ -319,6 +320,7 @@ export const COMBAT_ROUND_STEP_LABELS = {
   phase_1_damage: "D1 Damage/effects review",
   phase_2_actions: "A2 Attack/action roll",
   phase_2_damage: "D2 Damage/effects review",
+  pre_declaration: "Pre-declaration Combat Experience check",
   review_action_modifiers: "Review phase 1 modifiers",
   review_phase_2_actions: "P1 Parry/defense resolution",
   review_phase_2_damage: "P2 Parry/defense resolution",
@@ -328,6 +330,7 @@ export const COMBAT_ROUND_STEP_LABELS = {
 } satisfies Record<CombatRoundStep, string>;
 
 export const combatRoundCursorStepSchema = z.enum([
+  "PD",
   "DE",
   "M1",
   "i1",
@@ -1019,6 +1022,28 @@ export const combatRoundCombatExperienceResultSchema = combatExperienceEvaluatio
 export type CombatRoundCombatExperienceResult = z.infer<
   typeof combatRoundCombatExperienceResultSchema
 >;
+
+/**
+ * Why a Combat Experience check has become due.
+ *
+ * - `scheduled` — the prior result's next-check schedule has elapsed. A `21+` (maximum) result has
+ *   no next-check schedule and therefore never becomes due this way.
+ * - `critical` — Ruling 2 (#215): a Critical forces the character to start over with a fresh roll.
+ */
+export const combatExperienceDueReasonSchema = z.enum(["scheduled", "critical"]);
+export type CombatExperienceDueReason = z.infer<typeof combatExperienceDueReasonSchema>;
+
+/**
+ * Ruling 2 (#215) due state. Becoming due is **not** expiry: the participant keeps its prior Combat
+ * Experience state, and that state is replaced only by the fresh roll taken in the `pre_declaration`
+ * step of round `dueFromRoundNumber` or later. Round End advances this schedule; it never rolls.
+ */
+export const combatRoundCombatExperienceDueSchema = z.object({
+  dueFromRoundNumber: z.number().int().positive(),
+  markedAtRoundNumber: z.number().int().positive(),
+  reason: combatExperienceDueReasonSchema,
+});
+export type CombatRoundCombatExperienceDue = z.infer<typeof combatRoundCombatExperienceDueSchema>;
 
 export const combatRoundPhaseInitiativeChoiceKindSchema = z.enum([
   "roll_ce_result",
@@ -2650,6 +2675,7 @@ export const combatRoundParticipantStateSchema = z.object({
   attackResultsByOpportunity: z.record(idSchema, combatRoundAttackRollResultSchema).optional(),
   characterId: idSchema.optional(),
   combatExperience: combatRoundCombatExperienceResultSchema.optional(),
+  combatExperienceDue: combatRoundCombatExperienceDueSchema.optional(),
   declaration: combatRoundDeclarationSchema.optional(),
   initiatives: combatRoundInitiativesSchema.default({}),
   label: z.string().min(1),
@@ -4201,6 +4227,7 @@ export function getCombatRoundStepForCursorStep(step: CombatRoundCursorStep): Co
 
 export function isGlobalCombatRoundCursorStep(step: CombatRoundCursorStep): boolean {
   return (
+    step === "PD" ||
     step === "DE" ||
     step === "M1" ||
     step === "i1" ||
@@ -4212,6 +4239,7 @@ export function isGlobalCombatRoundCursorStep(step: CombatRoundCursorStep): bool
 
 function isGlobalCombatRoundStep(step: CombatRoundStep): boolean {
   return (
+    step === "pre_declaration" ||
     step === "select_actions" ||
     step === "review_action_modifiers" ||
     step === "initiative_phase_1" ||
@@ -4616,16 +4644,139 @@ export function recordCombatRoundGlobalParticipantCommand(input: {
   };
 }
 
+/**
+ * The round at which the next Combat Experience check becomes due, given a result rolled in
+ * `roundNumber`. A `21+` (maximum) result has `durationRounds: 0` and no next-check schedule, so it
+ * never becomes scheduled-due.
+ */
+export function getCombatExperienceNextCheckRoundNumber(input: {
+  durationRounds: number;
+  roundNumber: number;
+}): number | undefined {
+  return input.durationRounds > 0 ? input.roundNumber + input.durationRounds : undefined;
+}
+
+export function getCombatRoundCombatExperienceDue(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundCombatExperienceDue | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return normalized.participants.find((entry) => entry.participantId === input.participantId)
+    ?.combatExperienceDue;
+}
+
+/**
+ * True when the participant's Combat Experience check is due at, or before, the active round.
+ * Being due does not expire, remove, or alter the prior Combat Experience state.
+ */
+export function isCombatRoundCombatExperienceDue(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): boolean {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const due = getCombatRoundCombatExperienceDue({
+    participantId: input.participantId,
+    state: normalized,
+  });
+
+  return due !== undefined && due.dueFromRoundNumber <= normalized.roundNumber;
+}
+
+export function getCombatRoundCombatExperienceDueParticipantIds(state: CombatRoundState): string[] {
+  const normalized = combatRoundStateSchema.parse(state);
+
+  return normalized.participants
+    .filter((participant) =>
+      isCombatRoundCombatExperienceDue({
+        participantId: participant.participantId,
+        state: normalized,
+      }),
+    )
+    .map((participant) => participant.participantId);
+}
+
+function withCombatRoundCombatExperienceDue(input: {
+  due: CombatRoundCombatExperienceDue | undefined;
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+
+  return combatRoundStateSchema.parse({
+    ...normalized,
+    participants: normalized.participants.map((participant) =>
+      participant.participantId === input.participantId
+        ? { ...participant, combatExperienceDue: input.due }
+        : participant,
+    ),
+  });
+}
+
+/**
+ * Ruling 2 (#215): a Critical makes the character start over with a fresh Combat Experience roll.
+ * The reset is *marked* here and *resolved* in the next round's `pre_declaration` step — never
+ * mid-round, and never during Round End. Declarations already made against the prior state are not
+ * invalidated, and the prior state stays active until the fresh roll replaces it.
+ */
+export function markCombatRoundCombatExperienceResetDue(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const participant = normalized.participants.find(
+    (entry) => entry.participantId === input.participantId,
+  );
+
+  if (!participant) {
+    return normalized;
+  }
+
+  return withCombatRoundCombatExperienceDue({
+    due: combatRoundCombatExperienceDueSchema.parse({
+      dueFromRoundNumber: normalized.roundNumber + 1,
+      markedAtRoundNumber: normalized.roundNumber,
+      reason: "critical",
+    }),
+    participantId: input.participantId,
+    state: normalized,
+  });
+}
+
+/**
+ * Records the schedule a freshly rolled Combat Experience result implies. A Critical-triggered reset
+ * that is already pending is never weakened by a later scheduled marker.
+ */
+function applyCombatExperienceScheduleAfterRoll(input: {
+  participantId: string;
+  result: CombatRoundCombatExperienceResult;
+  state: CombatRoundState;
+}): CombatRoundState {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const dueFromRoundNumber = getCombatExperienceNextCheckRoundNumber({
+    durationRounds: input.result.durationRounds,
+    roundNumber: input.result.roundNumber,
+  });
+
+  return withCombatRoundCombatExperienceDue({
+    due:
+      dueFromRoundNumber === undefined
+        ? undefined
+        : combatRoundCombatExperienceDueSchema.parse({
+            dueFromRoundNumber,
+            markedAtRoundNumber: input.result.roundNumber,
+            reason: "scheduled",
+          }),
+    participantId: input.participantId,
+    state: normalized,
+  });
+}
+
 export function isCombatStartExperienceRollRequired(input: {
   participantId: string;
   state: CombatRoundState;
 }): boolean {
   const normalized = combatRoundStateSchema.parse(input.state);
-
-  if (normalized.roundNumber !== 1) {
-    return false;
-  }
-
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -4634,9 +4785,29 @@ export function isCombatStartExperienceRollRequired(input: {
     return false;
   }
 
-  return !(
+  const alreadyRolledThisRound =
     participant.combatExperience?.trigger === "combat_start" &&
-    participant.combatExperience.roundNumber === normalized.roundNumber
+    participant.combatExperience.roundNumber === normalized.roundNumber;
+
+  if (alreadyRolledThisRound) {
+    return false;
+  }
+
+  // Every combat begins with a Combat Experience check, before declaration.
+  if (normalized.roundNumber === 1) {
+    return true;
+  }
+
+  // Ruling 2 (#215): after the first round a check is required only once it has become due, and it
+  // is resolved in the pre-declaration step. Round End never rolls, and a mid-round roll would
+  // mutate state that declarations were already made against. States written before the
+  // pre-declaration step existed carry no due marker, so this branch cannot fire for them.
+  return (
+    normalized.currentStep === "pre_declaration" &&
+    isCombatRoundCombatExperienceDue({
+      participantId: input.participantId,
+      state: normalized,
+    })
   );
 }
 
@@ -4852,7 +5023,7 @@ function getCombatRoundPhaseInitiativeCursorStepForPhase(
 function getCombatRoundCombatExperienceTriggerForStep(
   step: CombatRoundStep,
 ): CombatExperienceTrigger | undefined {
-  if (step === "select_actions") {
+  if (step === "pre_declaration" || step === "select_actions") {
     return "combat_start";
   }
 
@@ -5781,8 +5952,14 @@ export function rollCombatRoundCombatExperience(input: {
     throw new RangeError("Combat Experience participant is not in the active round.");
   }
 
-  if (trigger === "combat_start" && normalized.currentStep !== "select_actions") {
-    throw new RangeError("Combat Experience can only be rolled during declaration.");
+  if (
+    trigger === "combat_start" &&
+    normalized.currentStep !== "pre_declaration" &&
+    normalized.currentStep !== "select_actions"
+  ) {
+    throw new RangeError(
+      "Combat Experience can only be rolled during the pre-declaration step or declaration.",
+    );
   }
 
   if (trigger === "combat_start" && !isCombatRoundCombatExperienceWindowOpen(normalized)) {
@@ -6049,16 +6226,28 @@ export function rollCombatRoundCombatExperience(input: {
         })
       : currentCombatEffects;
 
+  const stateWithCommand = combatRoundStateSchema.parse({
+    ...stateAfterResult,
+    commands: [...normalized.commands, command],
+    combatExperienceDifficulty: difficulty,
+  });
+
   return {
     combatContext: phaseCombatModifier.combatContext,
     combatEffects: nextCombatEffects,
     command,
     result,
-    state: combatRoundStateSchema.parse({
-      ...stateAfterResult,
-      commands: [...normalized.commands, command],
-      combatExperienceDifficulty: difficulty,
-    }),
+    // A fresh combat_start roll replaces the prior Combat Experience state and therefore discharges
+    // any pending due marker, installing the next-check schedule the new result implies. Phase
+    // triggers are situational re-rolls and do not reschedule the round-level check.
+    state:
+      trigger === "combat_start"
+        ? applyCombatExperienceScheduleAfterRoll({
+            participantId: input.participantId,
+            result,
+            state: stateWithCommand,
+          })
+        : stateWithCommand,
   };
 }
 
@@ -12685,6 +12874,14 @@ export function recordCombatRoundCriticalRoll(input: {
     state: normalized,
   });
 
+  // Ruling 2 (#215): a Critical forces the struck character to start over with a fresh Combat
+  // Experience roll. Only the reset is recorded here — it is resolved in the next round's
+  // pre-declaration step, so the current round's declarations keep the state they were made against.
+  const withCombatExperienceReset = markCombatRoundCombatExperienceResetDue({
+    participantId: input.attackResult.defenderParticipantId,
+    state: withCriticalRoll,
+  });
+
   return input.command
     ? recordCombatRoundCriticalRollCommand({
         attackResult: input.attackResult,
@@ -12692,9 +12889,9 @@ export function recordCombatRoundCriticalRoll(input: {
         criticalRoll,
         secondaryCritical:
           damageResultWithCriticalProposal.review?.criticalEffectProposal?.secondary,
-        state: withCriticalRoll,
+        state: withCombatExperienceReset,
       })
-    : withCriticalRoll;
+    : withCombatExperienceReset;
 }
 
 type CombatRoundDamageCommitIdInput = {
@@ -18712,6 +18909,9 @@ function resetCombatRoundParticipantToRoundStart(
     attackResults: {},
     attackResultsByOpportunity: {},
     combatExperience: undefined,
+    // The due marker is a schedule, not a per-round result: Round End advances it and must not
+    // clear it. It is discharged by the fresh roll taken in the next pre-declaration step.
+    combatExperienceDue: participant.combatExperienceDue,
     declaration: undefined,
     initiatives: {},
     stepStatuses: buildDefaultStepStatuses(),
@@ -19447,7 +19647,9 @@ export function initializeCombatRoundState(input: {
 export function getNextCombatRoundStep(step: CombatRoundStep): CombatRoundStep {
   const currentIndex = COMBAT_ROUND_STEPS.indexOf(step);
 
-  return COMBAT_ROUND_STEPS[currentIndex + 1] ?? "select_actions";
+  // The round wraps to the pre-declaration step, which is where a due Combat Experience check is
+  // resolved before the next round's declarations.
+  return COMBAT_ROUND_STEPS[currentIndex + 1] ?? "pre_declaration";
 }
 
 export function getPreviousCombatRoundStep(step: CombatRoundStep): CombatRoundStep | undefined {
@@ -19744,9 +19946,12 @@ export function advanceCombatRoundStep(
       currentCursor: getDefaultCombatRoundCursor({
         participantId: nextParticipantId,
         roundNumber: nextRoundNumber,
-        step: "select_actions",
+        step: "pre_declaration",
       }),
-      currentStep: "select_actions",
+      // Ruling 2 (#215): Start New Round enters the Combat Experience pre-declaration step. Any
+      // check that became due at the completed Round End is resolved here, and only then may
+      // declaration begin.
+      currentStep: "pre_declaration",
       defenseSnapshots: [],
       distanceState: completedRoundState.distanceState,
       engagements: completedRoundState.engagements,
@@ -19778,7 +19983,7 @@ export function advanceCombatRoundStep(
         completedRound,
       ].sort((left, right) => left.roundNumber - right.roundNumber),
       selectedParticipantId: nextParticipantId,
-      selectedStep: "select_actions",
+      selectedStep: "pre_declaration",
       stepSnapshots: [],
       unbalancedConditions: completedRoundState.unbalancedConditions,
     });
@@ -27774,7 +27979,13 @@ export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): C
   }
 
   const previousStep = getPreviousCombatRoundStep(normalized.currentStep);
-  const nextStep = previousStep ?? normalized.currentStep;
+  // Declaration remains the rewind floor. The pre-declaration step opens a round to resolve a due
+  // Combat Experience check; clearing a declaration must not bounce the GM back into it, and a
+  // state persisted before that step existed must keep exactly the rewind behaviour it had.
+  const nextStep =
+    previousStep === undefined || previousStep === "pre_declaration"
+      ? normalized.currentStep
+      : previousStep;
 
   return {
     ...clearedState,
