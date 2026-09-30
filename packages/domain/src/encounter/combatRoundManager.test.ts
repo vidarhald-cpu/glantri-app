@@ -22124,3 +22124,151 @@ describe("#215 S5 — the Combat Experience pre-declaration step", () => {
     });
   });
 });
+
+describe("the pre-declaration Combat Experience check is reachable on a real engine state", () => {
+  /**
+   * Every earlier test in this area builds its state by hand and then asks a pure predicate. That
+   * is how the step shipped able to host nothing: no test ever called a production entry point on a
+   * state the engine itself produced. These tests do. They start from `initializeCombatRoundState`,
+   * walk rounds forward with `advanceCombatRoundStep` until the engine's own schedule makes a check
+   * due, and then perform the real roll.
+   */
+  function combatWithADueCheck(): {
+    dueParticipantId: string;
+    state: ReturnType<typeof initializeCombatRoundState>;
+  } {
+    let state = initializeCombatRoundState({
+      encounter: encounter({ currentRound: 1 }),
+    });
+
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (state.currentStep === "round_summary") {
+        state = completeCleanRoundEndReview(state);
+      }
+      state = advanceCombatRoundStep(state);
+
+      if (state.currentStep !== "pre_declaration") {
+        continue;
+      }
+
+      const dueParticipant = state.participants.find((participant) =>
+        isCombatStartExperienceRollRequired({
+          participantId: participant.participantId,
+          state,
+        }),
+      );
+
+      if (dueParticipant) {
+        return { dueParticipantId: dueParticipant.participantId, state };
+      }
+    }
+
+    throw new Error("The engine never made a Combat Experience check due at pre-declaration.");
+  }
+
+  it("reaches a due check at pre-declaration by advancing rounds, not by hand-building a state", () => {
+    const { dueParticipantId, state } = combatWithADueCheck();
+
+    expect(state.currentStep).toBe("pre_declaration");
+    expect(state.roundNumber).toBeGreaterThan(1);
+    expect(isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state })).toBe(true);
+    // Start New Round clears the difficulty, so the window is closed on arrival. The step is only
+    // useful if the GM can reopen it here.
+    expect(isCombatRoundCombatExperienceWindowOpen(state)).toBe(false);
+  });
+
+  it("opens the Combat Experience window in the pre-declaration step", () => {
+    const { state } = combatWithADueCheck();
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    expect(isCombatRoundCombatExperienceWindowOpen(opened)).toBe(true);
+    expect(opened.currentStep).toBe("pre_declaration");
+  });
+
+  it("rolls the due check in the pre-declaration step and reschedules the next one", () => {
+    const { dueParticipantId, state } = combatWithADueCheck();
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+      participantId: dueParticipantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state: opened,
+    });
+
+    expect(rolled.result.trigger).toBe("combat_start");
+    expect(rolled.result.roundNumber).toBe(opened.roundNumber);
+    // The check the step exists to host is now resolved, and the fresh result schedules the next.
+    expect(
+      isCombatStartExperienceRollRequired({
+        participantId: dueParticipantId,
+        state: rolled.state,
+      }),
+    ).toBe(false);
+    expect(
+      isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: rolled.state }),
+    ).toBe(false);
+    expect(
+      getCombatRoundCombatExperienceDue({
+        participantId: dueParticipantId,
+        state: rolled.state,
+      })?.markedAtRoundNumber,
+    ).toBe(rolled.state.roundNumber);
+  });
+
+  it("keeps an unresolved due check recorded when the GM advances to declaration", () => {
+    const { dueParticipantId, state } = combatWithADueCheck();
+    const atDeclaration = advanceCombatRoundStep(state);
+
+    expect(atDeclaration.currentStep).toBe("select_actions");
+    // Due is not expiry. Advancing past the pre-declaration step without rolling must not discard
+    // the marker: the check is still outstanding and is still resolvable at declaration.
+    expect(
+      getCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: atDeclaration }),
+    ).toEqual(getCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state }));
+    expect(
+      isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: atDeclaration }),
+    ).toBe(true);
+
+    const opened = setCombatRoundCombatExperienceDifficulty({
+      difficulty: 26,
+      state: atDeclaration,
+    });
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      participantId: dueParticipantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state: opened,
+      trigger: "combat_start",
+    });
+
+    expect(rolled.result.roundNumber).toBe(atDeclaration.roundNumber);
+    expect(
+      isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: rolled.state }),
+    ).toBe(false);
+  });
+
+  it("still refuses to open the Combat Experience window outside the two declaration steps", () => {
+    const { state } = combatWithADueCheck();
+    const laterInTheRound = advanceCombatRoundStep(advanceCombatRoundStep(state));
+
+    expect(laterInTheRound.currentStep).not.toBe("pre_declaration");
+    expect(laterInTheRound.currentStep).not.toBe("select_actions");
+    expect(() =>
+      setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state: laterInTheRound }),
+    ).toThrow(/pre-declaration step or declaration/);
+  });
+});

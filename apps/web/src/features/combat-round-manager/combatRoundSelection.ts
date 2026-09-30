@@ -4,7 +4,11 @@ import type {
   CombatRoundState,
   CombatRoundStep,
 } from "@glantri/domain";
-import { getCombatRoundStepForCursorStep, isGlobalCombatRoundCursorStep } from "@glantri/domain";
+import {
+  getCombatRoundStepForCursorStep,
+  isGlobalCombatRoundCursorStep,
+  isGlobalCombatRoundStep,
+} from "@glantri/domain";
 
 export interface CombatRoundSelectionTarget {
   participantId?: string;
@@ -137,15 +141,14 @@ export function isSelectedCombatRoundStepCurrentForGm(input: {
   return isSelectedCombatRoundStepExecutable(input);
 }
 
+/**
+ * Derived from the domain predicate rather than restated here. The hand-maintained list this
+ * replaced was a silent twin of `isGlobalCombatRoundStep`: when the step vocabulary gained
+ * `pre_declaration` the domain predicate learned it and this one did not, so the GM panel
+ * classified the new step as non-global. Delegating removes the class of defect, not one instance.
+ */
 export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boolean {
-  return (
-    step === "select_actions" ||
-    step === "review_action_modifiers" ||
-    step === "initiative_phase_1" ||
-    step === "review_phase_2_modifiers" ||
-    step === "initiative_phase_2" ||
-    step === "round_summary"
-  );
+  return isGlobalCombatRoundStep(step);
 }
 
 export function getCombatRoundManagerDisplayParticipantIds(

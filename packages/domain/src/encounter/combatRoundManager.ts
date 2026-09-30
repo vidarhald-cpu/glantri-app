@@ -4237,7 +4237,12 @@ export function isGlobalCombatRoundCursorStep(step: CombatRoundCursorStep): bool
   );
 }
 
-function isGlobalCombatRoundStep(step: CombatRoundStep): boolean {
+/**
+ * The canonical "one shared task for the whole round" step set. It is exported so consumers derive
+ * the classification from here instead of hand-maintaining their own copy of the list; a copy is a
+ * silent twin that stops agreeing the moment the step vocabulary is widened.
+ */
+export function isGlobalCombatRoundStep(step: CombatRoundStep): boolean {
   return (
     step === "pre_declaration" ||
     step === "select_actions" ||
@@ -4844,8 +4849,14 @@ export function setCombatRoundCombatExperienceDifficulty(input: {
     throw new RangeError("Combat Experience difficulty must be a positive integer.");
   }
 
-  if (normalized.currentStep !== "select_actions") {
-    throw new RangeError("Combat Experience difficulty can only be changed during declaration.");
+  // Ruling 2 (#215): a due check is resolved in the pre-declaration step, so the window must be
+  // openable there as well as at declaration. `rollCombatRoundCombatExperience` already admits both
+  // steps; without this the pre-declaration roll can never be opened and the step hosts nothing.
+  // Round 1 and declaration-time behaviour are unchanged — this only adds the earlier step.
+  if (normalized.currentStep !== "pre_declaration" && normalized.currentStep !== "select_actions") {
+    throw new RangeError(
+      "Combat Experience difficulty can only be changed during the pre-declaration step or declaration.",
+    );
   }
 
   if (hasCombatRoundCombatExperienceRoll(normalized)) {
