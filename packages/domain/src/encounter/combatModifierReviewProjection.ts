@@ -65,15 +65,49 @@ function modifierReviewEffectId(
     : entry.id;
 }
 
+/**
+ * The single producer of modifier-review durations.
+ *
+ * `origin: "authored"` is a duration the GM is entering now — a new `add` row, or an `edit` that
+ * changes the duration. Such a row carries no `phase` applicability, so it is round-clock scoped
+ * and must use the canonical round vocabulary: the remainder of the creation round plus
+ * `remaining` full subsequent rounds. That is the same semantics the damage and Combat Experience
+ * producers emit, so "-10%, 2 rounds" entered in round 7 covers rounds 7-9 whichever path it
+ * arrives through.
+ *
+ * `origin: "legacy_adaptation"` feeds the compatibility adapter's `explicitDuration` and emits the
+ * same `creationRoundCounts: true` encoding that the adapter's own round-clock arm emits
+ * (`combatModifierLifecycleCompatibility.ts`, `durationForBucketRow`). That encoding is NOT reached
+ * only by reconstruction of already-persisted rows. Two distinct classes of row land on it:
+ *
+ * - Reconstruction of a stored modifier-bucket row that carries no canonical lifecycle. Only the
+ *   lifetime arithmetic is preserved — the row's own round is counted against `remaining`. The
+ *   `startRound` stamped here is `input.roundNumber`, the round the reconstruction is running in,
+ *   not the round the row was originally stored in.
+ * - Newly built generated rows. The `parry` and `offensive_parry` declaration modifiers are built
+ *   during combat declaration by `combatActionModifiers.ts` and passed through
+ *   `attachCanonicalLifecycleToModifierBucketRow`. They carry `durationRounds: 1`, no `sourcePhase`,
+ *   and `sourceRoundNumber` set to the current round, so they reach the adapter's round-clock arm
+ *   and are stamped with the current round. A parry declared in round 7 yields
+ *   `{ startRound: 7, creationRoundCounts: true, remaining: 1 }` and expires at round 7's own
+ *   Round End.
+ *
+ * So `creationRoundCounts: true` states only how the lifetime is counted; it does not mean the
+ * stamped `startRound` is historical. Whether the generated declaration rows should keep this
+ * encoding or move to S4's `remainder_of_round` is an open scoping question held by the control
+ * plane (#459). Changing `creationRoundCounts` to `false` for them would add a full round to their
+ * lifetime; `combatModifierLifecycleCompatibility.test.ts` pins the current behaviour.
+ */
 function modifierReviewDuration(input: {
   canonicalCutoff: number;
   durationRounds?: number;
+  origin: "authored" | "legacy_adaptation";
   phase: "M1" | "M2";
   roundNumber: number;
 }) {
   return input.durationRounds
     ? {
-        creationRoundCounts: true as const,
+        creationRoundCounts: input.origin === "legacy_adaptation",
         kind: "rounds" as const,
         remaining: input.durationRounds,
         startPhase: input.phase === "M1" ? ("phase1" as const) : ("phase2" as const),
@@ -127,6 +161,7 @@ function buildManualModifierReviewEffect(input: {
       duration: modifierReviewDuration({
         canonicalCutoff: input.canonicalCutoff,
         durationRounds: input.entry.durationRounds,
+        origin: "authored",
         phase: input.phase,
         roundNumber: input.roundNumber,
       }),
@@ -203,6 +238,7 @@ export function projectCanonicalCombatModifierReviewInput(
                 : modifierReviewDuration({
                     canonicalCutoff: input.canonicalCutoff,
                     durationRounds: entry.durationRounds,
+                    origin: "legacy_adaptation",
                     phase: input.phase,
                     roundNumber: input.roundNumber,
                   }),
@@ -309,6 +345,7 @@ export function projectCanonicalCombatModifierReviewInput(
           ? modifierReviewDuration({
               canonicalCutoff: input.canonicalCutoff,
               durationRounds: draft.entry.durationRounds,
+              origin: "authored",
               phase: input.phase,
               roundNumber: input.roundNumber,
             })
