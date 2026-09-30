@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { scenarioCombatModifierEntrySchema } from "../campaign/scenario";
+import {
+  scenarioCombatModifierEntrySchema,
+  scenarioParticipantCombatContextSchema,
+} from "../campaign/scenario";
+import { applyCombatActionGeneratedModifiers } from "./combatActionModifiers";
 import { resolveCombatAttackPhaseDefensivePenalty } from "./combatAttackPhasePenalty";
 import { combatEffectEventSchema, combatEffectSchema } from "./combatEffects";
+import {
+  canonicalCombatModifierEffectSchema,
+  evaluateCanonicalCombatModifierDurationAtRoundEnd,
+  type CanonicalCombatModifierDuration,
+} from "./combatModifierLifecycle";
 import {
   adaptAttackPenaltyToCanonicalModifierLifecycle,
   adaptCombatEffectToCanonicalModifierLifecycle,
@@ -382,6 +391,110 @@ describe("canonical modifier lifecycle compatibility adapters", () => {
       },
       sourceFamily: "unbalanced",
       sourceReferences: { processId: "contact-1" },
+    });
+  });
+});
+
+/**
+ * Pins the compatibility adapter's round-clock arm (`durationForBucketRow`, the
+ * `creationRoundCounts: true` branch). That branch is reached not only by reconstruction of stored
+ * rows but by the `parry` / `offensive_parry` declaration modifiers, which are built fresh during
+ * combat declaration and stamped with the CURRENT round. Flipping the branch to `false` would give
+ * every such declaration a full extra round of DB/Parry, so the current behaviour is pinned
+ * through the real shared transition engine rather than by asserting a flag literal.
+ */
+describe("generated declaration modifiers adapted through the compatibility round-clock arm", () => {
+  const DECLARATION_ROUND = 7;
+
+  const declarationContext: CanonicalCombatModifierCompatibilityContext & {
+    ownerParticipantId: string;
+  } = {
+    createdAt: "2026-09-30T08:00:00.000Z",
+    createdRevision: "revision-459",
+    createdSequence: 5,
+    encounterId: "encounter-459",
+    ownerParticipantId: "participant-459",
+    visibility: { audience: "public", sourceIdentity: "public" },
+  };
+
+  function emptyCombatContext() {
+    return scenarioParticipantCombatContextSchema.parse({
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    });
+  }
+
+  function declaredDbParryDuration(
+    input: Pick<
+      Parameters<typeof applyCombatActionGeneratedModifiers>[0],
+      "actionId" | "parryModifier"
+    >,
+  ): CanonicalCombatModifierDuration {
+    const applied = applyCombatActionGeneratedModifiers({
+      ...input,
+      combatContext: emptyCombatContext(),
+      lifecycleContext: declarationContext,
+      sourceRoundNumber: DECLARATION_ROUND,
+    });
+    const generated = applied.modifierBuckets.situationDb.find((entry) => entry.generated);
+    const lifecycle = canonicalCombatModifierEffectSchema.safeParse(generated?.canonicalLifecycle);
+    if (!lifecycle.success) {
+      throw new Error("Expected a generated declaration modifier with a canonical lifecycle.");
+    }
+    return lifecycle.data.lifecycle.duration;
+  }
+
+  function expiresAtRoundEnd(duration: CanonicalCombatModifierDuration): number {
+    let current = duration;
+    for (let round = DECLARATION_ROUND; round < DECLARATION_ROUND + 25; round += 1) {
+      const outcome = evaluateCanonicalCombatModifierDurationAtRoundEnd({
+        duration: current,
+        roundNumber: round,
+      });
+      if (outcome.kind === "expire") return round;
+      if (outcome.kind === "decrement") current = outcome.nextDuration;
+      else if (outcome.kind !== "hold") {
+        throw new Error(`Unexpected round-boundary outcome ${outcome.kind}.`);
+      }
+    }
+    throw new Error("The duration never expired.");
+  }
+
+  it("expires a parry declaration modifier at the declaring round's own Round End", () => {
+    const duration = declaredDbParryDuration({
+      actionId: "parry",
+      parryModifier: { dodgeSkillValue: 50, percentageModifier: 10 },
+    });
+
+    expect(expiresAtRoundEnd(duration)).toBe(DECLARATION_ROUND);
+    expect(
+      evaluateCanonicalCombatModifierDurationAtRoundEnd({
+        duration,
+        roundNumber: DECLARATION_ROUND,
+      }),
+    ).toMatchObject({ kind: "expire" });
+    expect(duration).toMatchObject({
+      creationRoundCounts: true,
+      kind: "rounds",
+      remaining: 1,
+      startRound: DECLARATION_ROUND,
+      transitionBoundary: "round_boundary",
+    });
+  });
+
+  it("expires an offensive-parry declaration modifier at the declaring round's own Round End", () => {
+    const duration = declaredDbParryDuration({ actionId: "offensive_parry" });
+
+    expect(expiresAtRoundEnd(duration)).toBe(DECLARATION_ROUND);
+    expect(duration).toMatchObject({
+      creationRoundCounts: true,
+      kind: "rounds",
+      remaining: 1,
+      startRound: DECLARATION_ROUND,
     });
   });
 });
