@@ -69,7 +69,10 @@ Reserved hotspots is the subset of the edit set that appears in the hotspot
 register, plus any hotspot this task must coordinate without editing; it
 narrows and annotates the edit set rather than duplicating or replacing it.
 Name symbols in the consumed-vocabulary set, not only the paths that hold them:
-its purpose is to expose coupling that no file-path reservation can see. State
+its purpose is to expose coupling that no file-path reservation can see.
+Derive and independently review the set using the
+[consumed-vocabulary procedure](./integration-wave.md#deriving-and-reviewing-a-consumed-vocabulary-set);
+it lowers, but does not bound, the rate of omission. State
 the floor invariant for this slice specifically; never inherit one by analogy
 from a sibling slice.
 
