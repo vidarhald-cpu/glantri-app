@@ -152,9 +152,9 @@ progression projection's `boundaryForStep` had no case for it and fell through
 to `round_end`; authorization required `boundary: "declaration"` for the very
 operations the step exists to host, so both API routes returned 409 whatever
 the domain guard said; and a `roundNumber === 1` clause that had been fully
-redundant became load-bearing the instant the predicate widened, so no task was
-ever projected. None of that was a missing vocabulary item. All of it was
-ordinary code reading a symbol the declaration already covered.
+redundant became load-bearing the instant the predicate widened, so the process
+could never become executable. None of that was a missing vocabulary item.
+All of it was ordinary code reading a symbol the declaration already covered.
 
 ## QA across wave composition
 
