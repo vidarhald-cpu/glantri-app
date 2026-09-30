@@ -8,6 +8,12 @@ boundary; [AGENTS.md](../../AGENTS.md) remains canonical.
 
 ## Lifecycle
 
+The block below lists process stages. Some correspond to Forgejo lifecycle
+statuses and some do not; in particular, `Ready for Integration` is a stage of
+this process, not an entry in the lifecycle status set. Do not infer a status
+register entry from it, and do not set a status that the control plane has not
+defined.
+
 ```text
 Builder
   -> independent QA
@@ -20,11 +26,13 @@ Builder
 ```
 
 Ordinary QA PASS or ACCEPT WITH FINDINGS does not itself authorize integration.
-Only explicitly pre-authorized exceptions, named in the task contract, may
-integrate without an explicit control-plane acceptance. The rule applies to all
-implementation lanes from the ruling forward; earlier integrations are not
-reopened, and the outcome of an integration that preceded its acceptance packet
-is not reverted solely for that reason.
+Only explicitly pre-authorized exceptions may integrate without an explicit
+control-plane acceptance. The rule applies to all implementation lanes from the
+ruling forward. The ruling ratified specific earlier integrations that preceded
+their acceptance packets: those are not reopened, and their outcome is not
+reverted solely for that reason. That ratification is limited to those earlier
+integrations and is not a standing rule; an acceptance-boundary violation after
+the ruling is not excused by it.
 
 ### Acceptance and mechanical refresh are different questions
 
@@ -77,9 +85,12 @@ read. A stated procedure makes that tractable.
 
 ### Distinguish genuine consumers from suffixed-identifier matches
 
-A search for a symbol name overstates the surface. In Wave 1, three files
-matched `CombatRoundStep` only through `CombatRoundStepSnapshot`,
-`CombatRoundStepOnServer` and `CombatRoundStepForCursorStep`. One of them,
+A search for a symbol name overstates the surface. In Wave 1, three non-test
+source files matched `CombatRoundStep` only through `CombatRoundStepSnapshot`,
+`CombatRoundStepOnServer` and `CombatRoundStepForCursorStep`. (A naive search
+that includes tests finds eight such files, with four further suffixes:
+`CombatRoundStepCurrentForGm`, `CombatRoundStepExecutable`,
+`CombatRoundStepLegacy` and `CombatRoundStepAndRewind`.) One of them,
 `combatHistoryProjection.ts`, had been recorded as a live blocker overlap
 between two issues on exactly that false basis. A naive match can manufacture a
 dependency that does not exist. Match whole identifiers (for example with word
@@ -119,12 +130,20 @@ Integration verification of a composed wave confirms all of the following:
 
 ### Blob checks use a restricted tree-level diff
 
-Do not compare reviewed blobs path by path with `git rev-parse <commit>:<path>`.
-For a path that is absent at that commit, including any deleted file, that
-command returns the commit's own object ID rather than failing, so two different
-commit SHAs read as two different blobs and a per-path check reports a spurious
-difference, or silently passes a path it cannot actually compare. This occurred
-during #387's integration. Use a tree-level diff restricted to the reviewed
+Do not compare reviewed blobs path by path with `git rev-parse <commit>:<path>`
+and trust its output. For a path that is absent at that commit, including any
+deleted file, the command fails: it exits with status 128 and prints `fatal:`
+on stderr. It also echoes its own argument, the literal string `<commit>:<path>`,
+on stdout. A check shaped like `git rev-parse "$sha:$path" 2>/dev/null | cut -c1-12`
+captures stdout, discards stderr, loses the exit status through the pipe, and
+abbreviates the echoed string, so it reads the commit SHA prefix as if it were
+a blob hash: pure hex, indistinguishable from a real one. Two different commits
+always echo two different strings, so the failure is one-directional: it
+reports a spurious difference and never a spurious pass. This occurred during
+#387's integration. Honouring the exit status (or using
+`git rev-parse -q --verify`, which exits 1 and prints nothing) catches the
+fault. The remedy below is preferred because it also compares deletions
+directly. Use a tree-level diff restricted to the reviewed
 paths instead, for example
 `git diff --exit-code <reviewed-commit> <composed-commit> -- <reviewed paths>`
 or `git diff --name-status`, and treat an empty result as identity. Deletions
