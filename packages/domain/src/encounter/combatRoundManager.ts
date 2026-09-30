@@ -6657,6 +6657,12 @@ function participantStateFromEncounterParticipant(input: {
     attackResultsByOpportunity,
     characterId: input.participant.characterId,
     combatExperience: input.existing?.combatExperience,
+    // Ruling 2 (#215): the due marker is persisted participant state and is discharged only by a
+    // fresh roll in the pre-declaration step. Every API request rehydrates the round through this
+    // function, so omitting it here silently destroyed the marker on read: the check became due at
+    // Round End, was written to the database, and had evaporated by the time the next request
+    // projected the round. Start New Round already preserves it deliberately — so must this.
+    combatExperienceDue: input.existing?.combatExperienceDue,
     declaration: input.existing?.declaration,
     initiatives: input.existing?.initiatives ?? {},
     label: input.participant.label,
@@ -8316,16 +8322,37 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
   const phase = getCombatExperiencePhaseForTrigger(input.result.trigger);
 
   if (!phase) {
+    // Ruling 1 (#465): when several participants have a Combat Experience obligation due at the
+    // beginning of a round, the round stays in `pre_declaration` until *every* currently due
+    // obligation is discharged. Discharging one must not move the whole round to declaration while
+    // another due participant is still unresolved — that participant's requirement would silently
+    // evaporate (`isCombatStartExperienceRollRequired` only fires at `pre_declaration`) and it would
+    // then declare against a stale result carrying an undischarged due marker. Only the final
+    // discharge advances the round. This mirrors the phase branch below, which already hands the
+    // step to the next required participant rather than leaving the step.
+    //
+    // Round 1 opens at `select_actions`, not `pre_declaration`, so this leaves the round-1 opening
+    // check exactly as it was: the guard below is false and the round-1 result still lands on
+    // `select_actions` with the cursor on the participant that just rolled.
+    const nextRequiredParticipantId =
+      withParticipantResult.currentStep === "pre_declaration"
+        ? getFirstCombatStartExperienceRequiredParticipantId(withParticipantResult)
+        : undefined;
+    const nextStep: CombatRoundStep = nextRequiredParticipantId
+      ? "pre_declaration"
+      : "select_actions";
+    const cursorParticipantId = nextRequiredParticipantId ?? input.participantId;
+
     return combatRoundStateSchema.parse({
       ...withParticipantResult,
       currentCursor: getDefaultCombatRoundCursor({
-        participantId: input.participantId,
+        participantId: cursorParticipantId,
         roundNumber: withParticipantResult.roundNumber,
-        step: "select_actions",
+        step: nextStep,
       }),
-      currentStep: "select_actions",
-      selectedParticipantId: input.participantId,
-      selectedStep: "select_actions",
+      currentStep: nextStep,
+      selectedParticipantId: cursorParticipantId,
+      selectedStep: nextStep,
     });
   }
 

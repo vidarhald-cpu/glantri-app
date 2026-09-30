@@ -46,9 +46,19 @@ export function buildDeclarationProcesses(
   const declarationTasks: TaskSpec[] = [];
   let pendingDeclarationCount = 0;
   const experienceWindowOpen = context.state.combatExperienceDifficulty !== undefined;
+  // Ruling 2 (#215): `pre_declaration` and `select_actions` share this one boundary, but they are
+  // not the same step. While the round is in `pre_declaration` only the Combat Experience work is
+  // projected; ordinary action declaration stays unavailable until `select_actions`.
+  const preDeclaration = context.state.currentStep === "pre_declaration";
 
   if (
-    context.state.roundNumber === 1 &&
+    // The round-1 opening check, plus the later-round check that becomes due and is resolved in the
+    // pre-declaration step. This clause was redundant at baseline — the predicate below returned
+    // false for every round but 1 — and became load-bearing when the predicate learned about later
+    // rounds. It is widened by exactly the one step the ruling requires and no further: at any other
+    // step of a later round the predicate is still false for every participant, so no difficulty
+    // task is projected outside declaration.
+    (context.state.roundNumber === 1 || preDeclaration) &&
     context.state.participants.some((participant) =>
       isCombatStartExperienceRollRequired({
         participantId: participant.participantId,
@@ -89,6 +99,14 @@ export function buildDeclarationProcesses(
         trackerOwner: owner,
         trackerStep: "DE",
       });
+    }
+
+    if (preDeclaration) {
+      // No `submit_declaration` task exists at this step, for a player or for the GM, so
+      // `authorizeCombatProgressionTask` refuses `declare_action` with `task_not_found`. The GM-edit
+      // branch below carries no step guard of its own, so suppressing it here is what keeps the
+      // coarse `declaration` boundary from authorizing declaration behaviour before its time.
+      continue;
     }
 
     const playerMaySubmit = canPlayerSubmitCombatDeclaration({
@@ -169,7 +187,13 @@ export function buildDeclarationProcesses(
                     requiredCompletedProcessIds: [
                       getCombatProgressionProcessId(context, "declaration"),
                     ],
-                    targetBoundary: getCombatProgressionBoundaryTarget(context.boundaryKind)!,
+                    // Advancing out of `pre_declaration` re-opens the same boundary at
+                    // `select_actions`. `transitionWithoutCommand` delegates a `declaration`
+                    // advance to `advanceCombatRoundStep`, so this self-transition is the ordinary
+                    // step hop and not a skip past declaration.
+                    targetBoundary: preDeclaration
+                      ? "declaration"
+                      : getCombatProgressionBoundaryTarget(context.boundaryKind)!,
                   },
                 },
               ]

@@ -22272,3 +22272,206 @@ describe("the pre-declaration Combat Experience check is reachable on a real eng
     ).toThrow(/pre-declaration step or declaration/);
   });
 });
+
+describe("#465 — ruling 1: the round holds pre-declaration until every due check is discharged", () => {
+  /**
+   * Reaches a later round in which the engine's own schedule has made a Combat Experience check due
+   * for **two** participants at once. Nothing here is hand-built: the due markers are produced by
+   * real round-1 rolls and carried forward by `advanceCombatRoundStep`.
+   */
+  function combatWithTwoDueChecks(): {
+    dueParticipantIds: string[];
+    state: ReturnType<typeof initializeCombatRoundState>;
+  } {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (state.currentStep === "round_summary") state = completeCleanRoundEndReview(state);
+      state = advanceCombatRoundStep(state);
+      if (state.currentStep !== "pre_declaration") continue;
+
+      const due = state.participants
+        .filter((participant) =>
+          isCombatStartExperienceRollRequired({
+            participantId: participant.participantId,
+            state,
+          }),
+        )
+        .map((participant) => participant.participantId);
+      if (due.length >= 2) return { dueParticipantIds: due, state };
+    }
+
+    throw new Error("The engine never made two Combat Experience checks due at pre-declaration.");
+  }
+
+  function rollFor(
+    participantId: string,
+    state: ReturnType<typeof initializeCombatRoundState>,
+  ): ReturnType<typeof initializeCombatRoundState> {
+    return rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+      participantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state,
+    }).state;
+  }
+
+  it("keeps the round in pre-declaration while another due participant is unresolved", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first, second] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    const afterFirst = rollFor(first!, opened);
+
+    // The defect this pins: the no-phase branch used to set `select_actions` unconditionally, so
+    // resolving one participant ejected the whole round to declaration and
+    // `isCombatStartExperienceRollRequired` then went quiet for everyone still due.
+    expect(afterFirst.currentStep).toBe("pre_declaration");
+    expect(isCombatStartExperienceRollRequired({ participantId: first!, state: afterFirst })).toBe(
+      false,
+    );
+    expect(isCombatStartExperienceRollRequired({ participantId: second!, state: afterFirst })).toBe(
+      true,
+    );
+    expect(afterFirst.currentCursor?.participantId).toBe(second);
+
+    const afterSecond = rollFor(second!, afterFirst);
+
+    expect(afterSecond.currentStep).toBe("select_actions");
+    for (const participantId of dueParticipantIds) {
+      expect(isCombatStartExperienceRollRequired({ participantId, state: afterSecond })).toBe(
+        false,
+      );
+    }
+  });
+
+  it("leaves the round-1 opening check on declaration exactly as before", () => {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    expect(state.currentStep).toBe("select_actions");
+
+    const [first, second] = state.participants;
+    const afterFirst = rollFor(first!.participantId, state);
+
+    // Round 1 opens at declaration, not at the pre-declaration step, so the guard never fires and
+    // the round-1 behaviour is untouched — including the cursor staying on the roller.
+    expect(afterFirst.currentStep).toBe("select_actions");
+    expect(afterFirst.currentCursor?.participantId).toBe(first!.participantId);
+    expect(
+      isCombatStartExperienceRollRequired({
+        participantId: second!.participantId,
+        state: afterFirst,
+      }),
+    ).toBe(true);
+  });
+
+  it("projects the Combat Experience work at pre-declaration and no declaration task", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const projection = buildCombatProgressionProjection(
+      setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state }),
+    );
+    const tasks = projection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks);
+
+    // Ruling 2 (#215) reuses the coarse `declaration` authorization family rather than adding a
+    // persisted boundary vocabulary member. What keeps the two steps distinct is which tasks the
+    // boundary projects, so that is what is pinned here.
+    expect(projection.boundary.kind).toBe("declaration");
+    expect(
+      tasks
+        .filter((task) => task.expectedCommand === "roll_combat_experience")
+        .map((task) => (task.owner?.kind === "combatant" ? task.owner.participantId : undefined)),
+    ).toEqual(dueParticipantIds);
+    expect(tasks.some((task) => task.expectedCommand === "declare_action")).toBe(false);
+    // The GM cannot advance out either while an obligation is open.
+    expect(tasks.some((task) => task.expectedCommand === "advance_combat_boundary")).toBe(false);
+  });
+
+  it("preserves the persisted due marker across a rehydration of the round state", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const rehydrated = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: state,
+        currentRound: state.roundNumber,
+      }),
+    });
+
+    // Every API request rebuilds the round through `initializeCombatRoundState`. The marker is
+    // persisted participant state, so dropping it here made the check evaporate between the Round
+    // End that scheduled it and the next request that should have surfaced it.
+    for (const participantId of dueParticipantIds) {
+      expect(getCombatRoundCombatExperienceDue({ participantId, state: rehydrated })).toEqual(
+        getCombatRoundCombatExperienceDue({ participantId, state }),
+      );
+      expect(isCombatStartExperienceRollRequired({ participantId, state: rehydrated })).toBe(true);
+    }
+  });
+});
+
+describe("#465 — leaving the pre-declaration step when nothing is due", () => {
+  it("offers the GM a boundary advance that re-opens declaration at select_actions", () => {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+    for (let guard = 0; guard < 200 && state.currentStep !== "pre_declaration"; guard += 1) {
+      if (state.currentStep === "round_summary") state = completeCleanRoundEndReview(state);
+      state = advanceCombatRoundStep(state);
+    }
+
+    expect(state.currentStep).toBe("pre_declaration");
+    expect(
+      state.participants.some((participant) =>
+        isCombatStartExperienceRollRequired({
+          participantId: participant.participantId,
+          state,
+        }),
+      ),
+    ).toBe(false);
+
+    const task = buildCombatProgressionProjection(state)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .find((candidate) => candidate.expectedCommand === "advance_combat_boundary");
+
+    // With no obligation outstanding the GM must still be able to leave the step, and the advance
+    // is a self-transition within the coarse `declaration` boundary rather than a skip past it.
+    expect(task).toBeDefined();
+    expect(task!.transition?.targetBoundary).toBe("declaration");
+
+    const advanced = advanceCombatProgressionBoundary({
+      command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: "gm-1" },
+      expectedBoundary: "declaration",
+      expectedCommandType: "advance_combat_boundary",
+      expectedExecutionGroupId: task!.executionGroupId,
+      expectedTaskId: task!.id,
+      state,
+      targetBoundary: "declaration",
+    });
+
+    expect(advanced.currentStep).toBe("select_actions");
+    expect(buildCombatProgressionProjection(advanced).boundary.kind).toBe("declaration");
+  });
+});
