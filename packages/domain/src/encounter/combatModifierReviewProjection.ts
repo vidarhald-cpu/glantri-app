@@ -65,15 +65,31 @@ function modifierReviewEffectId(
     : entry.id;
 }
 
+/**
+ * The single producer of modifier-review durations.
+ *
+ * `origin: "authored"` is a duration the GM is entering now — a new `add` row, or an `edit` that
+ * changes the duration. Such a row carries no `phase` applicability, so it is round-clock scoped
+ * and must use the canonical round vocabulary: the remainder of the creation round plus
+ * `remaining` full subsequent rounds. That is the same semantics the damage and Combat Experience
+ * producers emit, so "-10%, 2 rounds" entered in round 7 covers rounds 7-9 whichever path it
+ * arrives through.
+ *
+ * `origin: "legacy_adaptation"` reconstructs a pre-existing modifier-bucket row that carries no
+ * canonical lifecycle. That row's stored meaning already counted its own round, so the
+ * reconstruction preserves it. Changing it would reinterpret already-persisted state rather than
+ * correct newly authored state.
+ */
 function modifierReviewDuration(input: {
   canonicalCutoff: number;
   durationRounds?: number;
+  origin: "authored" | "legacy_adaptation";
   phase: "M1" | "M2";
   roundNumber: number;
 }) {
   return input.durationRounds
     ? {
-        creationRoundCounts: true as const,
+        creationRoundCounts: input.origin === "legacy_adaptation",
         kind: "rounds" as const,
         remaining: input.durationRounds,
         startPhase: input.phase === "M1" ? ("phase1" as const) : ("phase2" as const),
@@ -127,6 +143,7 @@ function buildManualModifierReviewEffect(input: {
       duration: modifierReviewDuration({
         canonicalCutoff: input.canonicalCutoff,
         durationRounds: input.entry.durationRounds,
+        origin: "authored",
         phase: input.phase,
         roundNumber: input.roundNumber,
       }),
@@ -203,6 +220,7 @@ export function projectCanonicalCombatModifierReviewInput(
                 : modifierReviewDuration({
                     canonicalCutoff: input.canonicalCutoff,
                     durationRounds: entry.durationRounds,
+                    origin: "legacy_adaptation",
                     phase: input.phase,
                     roundNumber: input.roundNumber,
                   }),
@@ -309,6 +327,7 @@ export function projectCanonicalCombatModifierReviewInput(
           ? modifierReviewDuration({
               canonicalCutoff: input.canonicalCutoff,
               durationRounds: draft.entry.durationRounds,
+              origin: "authored",
               phase: input.phase,
               roundNumber: input.roundNumber,
             })
