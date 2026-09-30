@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalCombatModifierDurationSchema,
   canonicalCombatModifierEffectSchema,
+  type CanonicalCombatModifierDuration,
   type CanonicalCombatModifierEffect,
 } from "@glantri/domain";
 
 import {
   buildCombatSituationAwarenessModel,
   collectCanonicalCombatSituationEffects,
+  formatDuration,
 } from "./combatSituationAwareness";
 
 function numericEffect(input: {
@@ -395,5 +398,144 @@ describe("buildCombatSituationAwarenessModel", () => {
       ],
     });
     expect(collected.map((effect) => effect.id)).toEqual(["unbalanced"]);
+  });
+});
+
+type CanonicalDurationKind = CanonicalCombatModifierDuration["kind"];
+
+/**
+ * One fixture per duration kind. The `Record` key type is derived from the schema
+ * union, so a new duration kind fails to compile here until a fixture exists, and
+ * the schema/fixture parity test below fails at runtime for the same reason.
+ */
+const DURATION_FIXTURES: Record<CanonicalDurationKind, CanonicalCombatModifierDuration> = {
+  attack_opportunity_count: {
+    consumeOn: "resolution",
+    kind: "attack_opportunity_count",
+    opportunityIds: ["opportunity-1"],
+    remaining: 1,
+    startRound: 3,
+    startSequence: 12,
+  },
+  indefinite: { kind: "indefinite", startRound: 3, startSequence: 12 },
+  legacy_untyped: { kind: "legacy_untyped", reason: "missing_duration" },
+  manual: { kind: "manual", removableBy: "gm", startRound: 3, startSequence: 12 },
+  phase: {
+    expiresAt: "phase_boundary",
+    kind: "phase",
+    phase: "phase2",
+    startPhase: "phase2",
+    startRound: 3,
+    startSequence: 12,
+  },
+  relationship: {
+    endsWhen: "relationship_ends",
+    kind: "relationship",
+    relationshipId: "observe:scyrian:gladiator",
+    startRound: 3,
+    startSequence: 12,
+  },
+  rounds: {
+    creationRoundCounts: true,
+    kind: "rounds",
+    remaining: 2,
+    startRound: 3,
+    startSequence: 12,
+    transitionBoundary: "round_boundary",
+  },
+  until_check: {
+    check: { checkId: "check-1", checkKind: "health" },
+    kind: "until_check",
+    resolvesOn: "success",
+    startRound: 3,
+    startSequence: 12,
+  },
+  until_condition: {
+    conditionId: "condition-1",
+    conditionKind: "effect_cleared",
+    kind: "until_condition",
+    startRound: 3,
+    startSequence: 12,
+  },
+};
+
+/**
+ * Kinds that intentionally render no duration chip. This set is the deliberate
+ * half of the exhaustiveness contract: every other kind must render something.
+ */
+const DELIBERATE_BLANK_KINDS: readonly CanonicalDurationKind[] = [
+  "indefinite",
+  "legacy_untyped",
+  "manual",
+  "relationship",
+];
+
+function effectWithDuration(
+  duration: CanonicalCombatModifierDuration,
+): CanonicalCombatModifierEffect {
+  return canonicalCombatModifierEffectSchema.parse({
+    applicability: { combatWide: true, rollPurposes: [], roundNumber: 3 },
+    createdAt: "2026-08-01T10:00:00.000Z",
+    createdRevision: "revision-3",
+    createdSequence: 12,
+    id: `duration-${duration.kind}`,
+    lifecycle: { duration, state: "active" },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: "scyrian",
+    payload: {
+      category: "skill_ob",
+      contributionScope: "calculation",
+      kind: "numeric",
+      unit: "percentage",
+      value: -10,
+    },
+    provenanceCompleteness: "complete",
+    publicLabel: "Duration probe",
+    schemaVersion: 1,
+    sourceFamily: "feint",
+    sourceReferences: {},
+    version: 1,
+    visibility: { audience: "involved", sourceIdentity: "public" },
+  });
+}
+
+describe("formatDuration exhaustiveness", () => {
+  it("exercises every duration kind the schema declares, enumerated from the schema", () => {
+    const schemaKinds = canonicalCombatModifierDurationSchema.options
+      .map((option) => option.shape.kind.value)
+      .sort();
+    expect(Object.keys(DURATION_FIXTURES).sort()).toEqual(schemaKinds);
+  });
+
+  it("renders a non-empty label for every kind that is not a deliberate blank", () => {
+    const rendered = Object.values(DURATION_FIXTURES)
+      .filter((duration) => !DELIBERATE_BLANK_KINDS.includes(duration.kind))
+      .map((duration) => [duration.kind, formatDuration(effectWithDuration(duration))] as const);
+
+    for (const [kind, label] of rendered) {
+      expect(label, `duration kind ${kind} rendered no label`).toBeTypeOf("string");
+      expect(label, `duration kind ${kind} rendered an empty label`).not.toBe("");
+    }
+  });
+
+  it("preserves the deliberate blanks rather than fabricating a duration for them", () => {
+    for (const kind of DELIBERATE_BLANK_KINDS) {
+      expect(formatDuration(effectWithDuration(DURATION_FIXTURES[kind])), kind).toBeUndefined();
+    }
+  });
+
+  it("keeps the rendered strings for the handled kinds byte-identical", () => {
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.phase))).toBe("Phase 2");
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.rounds))).toBe("2 rounds");
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.attack_opportunity_count))).toBe(
+      "1 attack",
+    );
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.until_check))).toBe(
+      "Check required",
+    );
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.until_condition))).toBe(
+      "Until cleared",
+    );
   });
 });
