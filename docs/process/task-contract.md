@@ -59,6 +59,19 @@ Explain impact and why this task has priority.
 - Cross-area integration owner:
 - Other affected areas:
 - Reserved hotspots:
+- Edit set (the exact files this task may write):
+- Consumed-vocabulary set (schemas, unions, exhaustive switches, enums and interfaces this task reads whose meaning another task could change):
+- Floor invariant (floor-class tasks only; the invariant in reviewable terms that caused the floor classification):
+
+These three declarations are defined in
+[what a lane declares](../architecture/ownership.md#what-a-lane-declares).
+Reserved hotspots is the subset of the edit set that appears in the hotspot
+register, plus any hotspot this task must coordinate without editing; it
+narrows and annotates the edit set rather than duplicating or replacing it.
+Name symbols in the consumed-vocabulary set, not only the paths that hold them:
+its purpose is to expose coupling that no file-path reservation can see. State
+the floor invariant for this slice specifically; never inherit one by analogy
+from a sibling slice.
 
 ### Baseline and Git authority
 
