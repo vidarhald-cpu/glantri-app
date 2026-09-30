@@ -58,6 +58,7 @@ import {
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   buildCombatSituationAwarenessModel,
+  INCOMPLETE_BREAKDOWN_LABEL,
   type CombatSituationContext,
   type CombatSituationDisplayRow,
   type CombatSituationLifecycleEffect,
@@ -1028,6 +1029,17 @@ function CombatSituationSummary(input: {
                   <CombatSituationRow key={row.id} row={row} />
                 ))}
               </div>
+              {/*
+                Rendered only when a contribution could not be displayed, so a group with
+                no unrenderable row produces exactly the markup it did before. The total
+                above is left untouched: this line says the number stands and the rows
+                below it do not add up to it, which is the pair of facts a player needs.
+              */}
+              {group.breakdownIncomplete ? (
+                <span style={{ color: "#5e5a50", fontSize: "0.78rem" }}>
+                  {INCOMPLETE_BREAKDOWN_LABEL}
+                </span>
+              ) : null}
             </div>
           ))}
         </div>
