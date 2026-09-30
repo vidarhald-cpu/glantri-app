@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalCombatModifierDurationSchema,
   canonicalCombatModifierEffectSchema,
+  canonicalCombatModifierUnitSchema,
+  type CanonicalCombatModifierDuration,
   type CanonicalCombatModifierEffect,
+  type CanonicalCombatModifierUnit,
 } from "@glantri/domain";
 
 import {
   buildCombatSituationAwarenessModel,
   collectCanonicalCombatSituationEffects,
+  formatDuration,
+  formatEffectValue,
 } from "./combatSituationAwareness";
 
 function numericEffect(input: {
@@ -395,5 +401,355 @@ describe("buildCombatSituationAwarenessModel", () => {
       ],
     });
     expect(collected.map((effect) => effect.id)).toEqual(["unbalanced"]);
+  });
+});
+
+type CanonicalDurationKind = CanonicalCombatModifierDuration["kind"];
+
+/**
+ * One fixture per duration kind. The `Record` key type is derived from the schema
+ * union, so a new duration kind fails to compile here until a fixture exists, and
+ * the schema/fixture parity test below fails at runtime for the same reason.
+ */
+const DURATION_FIXTURES: Record<CanonicalDurationKind, CanonicalCombatModifierDuration> = {
+  attack_opportunity_count: {
+    consumeOn: "resolution",
+    kind: "attack_opportunity_count",
+    opportunityIds: ["opportunity-1"],
+    remaining: 1,
+    startRound: 3,
+    startSequence: 12,
+  },
+  indefinite: { kind: "indefinite", startRound: 3, startSequence: 12 },
+  legacy_untyped: { kind: "legacy_untyped", reason: "missing_duration" },
+  manual: { kind: "manual", removableBy: "gm", startRound: 3, startSequence: 12 },
+  phase: {
+    expiresAt: "phase_boundary",
+    kind: "phase",
+    phase: "phase2",
+    startPhase: "phase2",
+    startRound: 3,
+    startSequence: 12,
+  },
+  relationship: {
+    endsWhen: "relationship_ends",
+    kind: "relationship",
+    relationshipId: "observe:scyrian:gladiator",
+    startRound: 3,
+    startSequence: 12,
+  },
+  rounds: {
+    creationRoundCounts: true,
+    kind: "rounds",
+    remaining: 2,
+    startRound: 3,
+    startSequence: 12,
+    transitionBoundary: "round_boundary",
+  },
+  until_check: {
+    check: { checkId: "check-1", checkKind: "health" },
+    kind: "until_check",
+    resolvesOn: "success",
+    startRound: 3,
+    startSequence: 12,
+  },
+  until_condition: {
+    conditionId: "condition-1",
+    conditionKind: "effect_cleared",
+    kind: "until_condition",
+    startRound: 3,
+    startSequence: 12,
+  },
+};
+
+/**
+ * Kinds that intentionally render no duration chip. This set is the deliberate
+ * half of the exhaustiveness contract: every other kind must render something.
+ */
+const DELIBERATE_BLANK_KINDS: readonly CanonicalDurationKind[] = [
+  "indefinite",
+  "legacy_untyped",
+  "manual",
+  "relationship",
+];
+
+function effectWithDuration(
+  duration: CanonicalCombatModifierDuration,
+): CanonicalCombatModifierEffect {
+  return canonicalCombatModifierEffectSchema.parse({
+    applicability: { combatWide: true, rollPurposes: [], roundNumber: 3 },
+    createdAt: "2026-08-01T10:00:00.000Z",
+    createdRevision: "revision-3",
+    createdSequence: 12,
+    id: `duration-${duration.kind}`,
+    lifecycle: { duration, state: "active" },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: "scyrian",
+    payload: {
+      category: "skill_ob",
+      contributionScope: "calculation",
+      kind: "numeric",
+      unit: "percentage",
+      value: -10,
+    },
+    provenanceCompleteness: "complete",
+    publicLabel: "Duration probe",
+    schemaVersion: 1,
+    sourceFamily: "feint",
+    sourceReferences: {},
+    version: 1,
+    visibility: { audience: "involved", sourceIdentity: "public" },
+  });
+}
+
+describe("formatDuration exhaustiveness", () => {
+  it("exercises every duration kind the schema declares, enumerated from the schema", () => {
+    const schemaKinds = canonicalCombatModifierDurationSchema.options
+      .map((option) => option.shape.kind.value)
+      .sort();
+    expect(Object.keys(DURATION_FIXTURES).sort()).toEqual(schemaKinds);
+  });
+
+  it("renders a non-empty label for every kind that is not a deliberate blank", () => {
+    const rendered = Object.values(DURATION_FIXTURES)
+      .filter((duration) => !DELIBERATE_BLANK_KINDS.includes(duration.kind))
+      .map((duration) => [duration.kind, formatDuration(effectWithDuration(duration))] as const);
+
+    for (const [kind, label] of rendered) {
+      expect(label, `duration kind ${kind} rendered no label`).toBeTypeOf("string");
+      expect(label, `duration kind ${kind} rendered an empty label`).not.toBe("");
+    }
+  });
+
+  it("preserves the deliberate blanks rather than fabricating a duration for them", () => {
+    for (const kind of DELIBERATE_BLANK_KINDS) {
+      expect(formatDuration(effectWithDuration(DURATION_FIXTURES[kind])), kind).toBeUndefined();
+    }
+  });
+
+  it("keeps the rendered strings for the handled kinds byte-identical", () => {
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.phase))).toBe("Phase 2");
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.rounds))).toBe("2 rounds");
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.attack_opportunity_count))).toBe(
+      "1 attack",
+    );
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.until_check))).toBe(
+      "Check required",
+    );
+    expect(formatDuration(effectWithDuration(DURATION_FIXTURES.until_condition))).toBe(
+      "Until cleared",
+    );
+  });
+});
+
+/**
+ * The exact player-facing string each payload unit renders. The `Record` key type is
+ * derived from the schema enum, so a new unit fails to compile here until an expected
+ * string exists, and the schema/fixture parity test below fails at runtime for the same
+ * reason.
+ */
+const UNIT_VALUE_LABELS: Record<CanonicalCombatModifierUnit, string> = {
+  bleed_rate: "2/10 HP per round",
+  damage: "2 HP",
+  flat_db: "+2",
+  initiative_value: "+2",
+  integer_count: "2",
+  percentage: "+2%",
+};
+
+/**
+ * The player-facing indication that the data carried a value this surface does not
+ * recognize. Kept as a literal here rather than imported, so a change to the module's
+ * constant is a visible test failure rather than a silently agreeing rename.
+ */
+const UNRENDERABLE_VALUE_LABEL = "Unknown value";
+
+/**
+ * The absence glyph this surface already uses for "no value" — `hasDisplayValue` in
+ * `playerCombatPhaseModel.ts` returns `false` for it. The unknown-value indication
+ * must never collapse back onto it.
+ */
+const ABSENCE_GLYPH = "—";
+
+function effectWithUnit(input: {
+  id?: string;
+  unit: CanonicalCombatModifierUnit;
+  value?: number;
+}): CanonicalCombatModifierEffect {
+  const category =
+    input.unit === "bleed_rate"
+      ? "bleed_rate"
+      : input.unit === "damage"
+        ? "damage"
+        : input.unit === "integer_count"
+          ? "integer_count"
+          : input.unit === "initiative_value"
+            ? "initiative"
+            : "skill_ob";
+  return canonicalCombatModifierEffectSchema.parse({
+    applicability: { combatWide: true, rollPurposes: [], roundNumber: 3 },
+    createdAt: "2026-08-01T10:00:00.000Z",
+    createdRevision: "revision-3",
+    createdSequence: 12,
+    id: input.id ?? `unit-${input.unit}`,
+    lifecycle: {
+      duration: { kind: "indefinite", startRound: 3, startSequence: 12 },
+      state: "active",
+    },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: "scyrian",
+    payload: {
+      category,
+      contributionScope: category === "bleed_rate" ? "state" : "calculation",
+      kind: "numeric",
+      unit: input.unit,
+      value: input.value ?? 2,
+    },
+    provenanceCompleteness: "complete",
+    publicLabel: "Unit probe",
+    schemaVersion: 1,
+    sourceFamily: category === "bleed_rate" ? "bleed" : "feint",
+    sourceReferences: {},
+    version: 1,
+    visibility: { audience: "involved", sourceIdentity: "public" },
+  });
+}
+
+/**
+ * An effect carrying a unit the schema does not declare, cast past the type boundary.
+ * This is the shape of malformed, downlevel or hand-edited persisted data: the
+ * compile-time `never` guard is erased at runtime and cannot stop it reaching the
+ * formatter.
+ */
+function effectWithUnrecognisedUnit(): CanonicalCombatModifierEffect {
+  const base = effectWithUnit({ id: "unit-unrecognised", unit: "percentage", value: -2 });
+  return {
+    ...base,
+    payload: { ...base.payload, unit: "arcane_flux" },
+  } as unknown as CanonicalCombatModifierEffect;
+}
+
+function restrictionOnlyEffect(): CanonicalCombatModifierEffect {
+  return restrictionEffect({ id: "restriction-no-value", kind: "stunned", label: "Stunned" });
+}
+
+describe("formatEffectValue exhaustiveness", () => {
+  it("covers every payload unit the schema declares, enumerated from the schema", () => {
+    expect(Object.keys(UNIT_VALUE_LABELS).sort()).toEqual(
+      [...canonicalCombatModifierUnitSchema.options].sort(),
+    );
+  });
+
+  it("keeps the rendered string for every handled unit byte-identical", () => {
+    for (const [unit, expected] of Object.entries(UNIT_VALUE_LABELS) as Array<
+      [CanonicalCombatModifierUnit, string]
+    >) {
+      expect(formatEffectValue(effectWithUnit({ unit })), unit).toBe(expected);
+    }
+  });
+
+  it("returns no effect value for a non-numeric payload, which is expected and not an error", () => {
+    expect(formatEffectValue(restrictionOnlyEffect())).toBeUndefined();
+  });
+
+  it("renders an explicit unknown-value indication for an unrecognized unit at runtime", () => {
+    const rendered = formatEffectValue(effectWithUnrecognisedUnit());
+    expect(rendered).toBe(UNRENDERABLE_VALUE_LABEL);
+    expect(rendered).not.toBeUndefined();
+  });
+
+  it("distinguishes an unrecognised unit from a non-numeric payload", () => {
+    expect(formatEffectValue(effectWithUnrecognisedUnit())).not.toBe(
+      formatEffectValue(restrictionOnlyEffect()),
+    );
+  });
+
+  it("renders an unrecognised unit visibly distinct from the absence glyph and from nothing", () => {
+    const rendered = formatEffectValue(effectWithUnrecognisedUnit());
+    // The glyph already means "no value" on this surface, so an error must not reuse it.
+    expect(rendered).not.toBe(ABSENCE_GLYPH);
+    expect(rendered).not.toBe("");
+    expect(rendered).not.toBeUndefined();
+    // Nor may it read as a number a player could mistake for a real value.
+    expect(Number.isNaN(Number(rendered))).toBe(true);
+  });
+});
+
+describe("formatEntryValue does not substitute another semantic value", () => {
+  it("does not fall back to entry.value when the effect unit is unrecognised", () => {
+    const effect = effectWithUnrecognisedUnit();
+    const model = buildCombatSituationAwarenessModel({
+      context: { phase: "phase2", roundNumber: 3 },
+      rows: [
+        {
+          bucketKey: "situation_ob_skill",
+          derivedEntries: [
+            {
+              application: "percentage",
+              canonicalLifecycle: effect,
+              id: effect.id,
+              value: -7,
+            },
+          ],
+          entries: [],
+          label: "Skill/OB",
+          total: -7,
+        },
+      ],
+    });
+
+    const row = model.calculationGroups[0]?.rows[0];
+    expect(row?.valueLabel).toBe(UNRENDERABLE_VALUE_LABEL);
+    expect(row?.valueLabel).not.toBe(ABSENCE_GLYPH);
+    // The entry.value fallback, with its suffix guessed from entry.application, is the
+    // plausible wrong number this issue exists to prevent.
+    expect(row?.valueLabel).not.toBe("-7%");
+    expect(row?.valueLabel).not.toBe("-7");
+    // The effect's own value must not leak in either — it is not what this unit means.
+    expect(row?.valueLabel).not.toBe("-2%");
+  });
+
+  it("still uses the ordinary entry rendering when the effect carries no numeric payload", () => {
+    const effect = restrictionOnlyEffect();
+    const model = buildCombatSituationAwarenessModel({
+      context: { roundNumber: 3 },
+      rows: [
+        {
+          bucketKey: "situation_ob_skill",
+          derivedEntries: [
+            {
+              application: "percentage",
+              canonicalLifecycle: effect,
+              id: effect.id,
+              value: -7,
+            },
+          ],
+          entries: [],
+          label: "Skill/OB",
+          total: -7,
+        },
+      ],
+    });
+
+    expect(model.calculationGroups[0]?.rows[0]?.valueLabel).toBe("-7%");
+  });
+
+  it("keeps the ordinary entry rendering for an entry with no canonical effect", () => {
+    const model = buildCombatSituationAwarenessModel({
+      context: { roundNumber: 3 },
+      rows: [
+        {
+          bucketKey: "situation_db",
+          derivedEntries: [{ application: "flat_db", id: "plain-entry", value: -3 }],
+          entries: [],
+          label: "DB/Parry",
+          total: -3,
+        },
+      ],
+    });
+
+    expect(model.calculationGroups[0]?.rows[0]?.valueLabel).toBe("-3");
   });
 });
