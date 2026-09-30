@@ -65,6 +65,9 @@ Explain impact and why this task has priority.
 
 These three declarations are defined in
 [what a lane declares](../architecture/ownership.md#what-a-lane-declares).
+Reserved hotspots is the subset of the edit set that appears in the hotspot
+register, plus any hotspot this task must coordinate without editing; it
+narrows and annotates the edit set rather than duplicating or replacing it.
 Name symbols in the consumed-vocabulary set, not only the paths that hold them:
 its purpose is to expose coupling that no file-path reservation can see. State
 the floor invariant for this slice specifically; never inherit one by analogy
