@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { characterBuildSchema } from "@glantri/domain";
 
 import { createPrismaCharacterRepository } from "../repositories/characterRepository";
+import { createPrismaScenarioRepository } from "../repositories/scenarioRepository";
 import { getTestPrismaClient, resetTestDatabase } from "../testing/testDatabase";
 import { createTestCampaign, createTestCharacter, createTestUser } from "../testing/factories";
+import { CampaignService } from "./campaignService";
 import { CharacterService } from "./characterService";
+import { ScenarioService } from "./scenarioService";
 
 const prisma = getTestPrismaClient();
 
@@ -333,6 +336,407 @@ if (!process.env.DATABASE_URL_TEST) {
         characterId: null,
         snapshotJson: snapshot,
         stateJson: { health: { currentHp: 8 } },
+      });
+    });
+    describe("current authorized control read access", () => {
+      let controlFixtureSequence = 0;
+
+      async function createControlFixture(overrides?: {
+        isActive?: boolean;
+        participantRole?: "player_character" | "npc";
+        scenarioStatus?: "draft" | "live" | "paused" | "completed" | "archived";
+      }) {
+        const fixtureId = `${Date.now()}-${(controlFixtureSequence += 1)}`;
+        const gm = await createTestUser(prisma!, {
+          email: `control-gm-${fixtureId}@example.test`,
+        });
+        const player = await createTestUser(prisma!, {
+          email: `control-player-${fixtureId}@example.test`,
+        });
+        const campaign = await createTestCampaign(prisma!, gm.id);
+        const character = await createTestCharacter(prisma!, gm.id, { name: "GM Pregen" });
+        const scenario = await prisma!.scenario.create({
+          data: {
+            campaignId: campaign.id,
+            description: "Control fixture",
+            kind: "combat",
+            name: "Control fixture",
+            status: overrides?.scenarioStatus ?? "live",
+          },
+        });
+        await prisma!.scenarioParticipant.create({
+          data: {
+            characterId: character.id,
+            controlledByUserId: player.id,
+            isActive: overrides?.isActive ?? true,
+            joinSource: "gm_added",
+            role: overrides?.participantRole ?? "player_character",
+            scenarioId: scenario.id,
+            snapshotJson: { displayName: "GM Pregen" },
+            sourceType: "character",
+            stateJson: { combat: {}, equipment: {}, health: {}, resources: {} },
+          },
+        });
+
+        return { campaign, character, gm, player, scenario };
+      }
+
+      it("reads a controlled Character whose ownerId is null", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture();
+        await prisma!.character.update({
+          data: { ownerId: null },
+          where: { id: fixture.character.id },
+        });
+
+        const result = await service.getCharacterUnderPlayerControl(
+          fixture.player.id,
+          fixture.character.id,
+        );
+
+        expect(result?.id).toBe(fixture.character.id);
+        expect(result?.ownerId).toBeNull();
+        expect(await service.getOwnedCharacter(fixture.player.id, fixture.character.id)).toBeNull();
+      });
+
+      it("reads a controlled Character owned by another user", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture();
+
+        const result = await service.getCharacterUnderPlayerControl(
+          fixture.player.id,
+          fixture.character.id,
+        );
+
+        expect(result?.id).toBe(fixture.character.id);
+        expect(result?.ownerId).toBe(fixture.gm.id);
+      });
+
+      it("refuses an inactive participant row", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture({ isActive: false });
+
+        await expect(
+          service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+        ).resolves.toBeNull();
+      });
+
+      it("refuses control recorded on a Scenario that never opened for play", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture({ scenarioStatus: "draft" });
+
+        await expect(
+          service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+        ).resolves.toBeNull();
+      });
+
+      it("refuses a participant row that is not a player Character", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture({ participantRole: "npc" });
+
+        await expect(
+          service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+        ).resolves.toBeNull();
+      });
+
+      it("refuses control that was withdrawn from the participant row", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture();
+        await prisma!.scenarioParticipant.updateMany({
+          data: { controlledByUserId: null },
+          where: { characterId: fixture.character.id },
+        });
+
+        await expect(
+          service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+        ).resolves.toBeNull();
+      });
+
+      it("does not reach an unrelated Character in the same Scenario", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture();
+        const otherPlayer = await createTestUser(prisma!, {
+          email: `control-other-${Date.now()}-${(controlFixtureSequence += 1)}@example.test`,
+        });
+        const otherCharacter = await createTestCharacter(prisma!, otherPlayer.id, {
+          name: "Someone Else",
+        });
+        await prisma!.scenarioParticipant.create({
+          data: {
+            characterId: otherCharacter.id,
+            controlledByUserId: otherPlayer.id,
+            isActive: true,
+            joinSource: "gm_added",
+            role: "player_character",
+            scenarioId: fixture.scenario.id,
+            snapshotJson: {},
+            sourceType: "character",
+            stateJson: {},
+          },
+        });
+
+        await expect(
+          service.getCharacterUnderPlayerControl(fixture.player.id, otherCharacter.id),
+        ).resolves.toBeNull();
+      });
+
+      it("keeps a Scenario the player still reads readable after it completes", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture({ scenarioStatus: "completed" });
+
+        await expect(
+          service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+        ).resolves.not.toBeNull();
+      });
+
+      it("grants in every readable Scenario status and refuses only draft", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+
+        for (const scenarioStatus of ["live", "paused", "completed", "archived"] as const) {
+          const fixture = await createControlFixture({ scenarioStatus });
+
+          expect(
+            await service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+          ).not.toBeNull();
+        }
+
+        const draftFixture = await createControlFixture({ scenarioStatus: "draft" });
+
+        expect(
+          await service.getCharacterUnderPlayerControl(
+            draftFixture.player.id,
+            draftFixture.character.id,
+          ),
+        ).toBeNull();
+      });
+
+      /**
+       * Forgejo #439 floor-QA finding F3. A participant may carry a `characterId` while being
+       * sourced from a reusable entity — nothing in the schema forbids it — and such a row is
+       * **not** an authorized Character-control assignment. The `sourceType: "character"`
+       * conjunct in `findUnderPlayerControl` is what denies it, and this case exists so that
+       * conjunct cannot be deleted without a failing test.
+       */
+      it("refuses an entity-sourced participant that carries a characterId", async () => {
+        const service = new CharacterService(createPrismaCharacterRepository(prisma!));
+        const fixture = await createControlFixture();
+        await prisma!.scenarioParticipant.updateMany({
+          data: { sourceType: "entity" },
+          where: { characterId: fixture.character.id },
+        });
+
+        const participant = await prisma!.scenarioParticipant.findFirstOrThrow({
+          where: { characterId: fixture.character.id },
+        });
+
+        expect(participant.sourceType).toBe("entity");
+        expect(participant.characterId).toBe(fixture.character.id);
+        expect(participant.controlledByUserId).toBe(fixture.player.id);
+        expect(participant.isActive).toBe(true);
+        expect(participant.role).toBe("player_character");
+
+        expect(
+          await service.getCharacterUnderPlayerControl(fixture.player.id, fixture.character.id),
+        ).toBeNull();
+      });
+
+      describe("revocation reachability", () => {
+        for (const scenarioStatus of ["completed", "archived"] as const) {
+          it(`revokes control through the dedicated path in a ${scenarioStatus} Scenario`, async () => {
+            const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+            const scenarioRepository = createPrismaScenarioRepository(prisma!);
+            const scenarioService = new ScenarioService(scenarioRepository);
+            const fixture = await createControlFixture({ scenarioStatus });
+            const participant = await prisma!.scenarioParticipant.findFirstOrThrow({
+              where: { characterId: fixture.character.id },
+            });
+
+            expect(
+              await characterService.getCharacterUnderPlayerControl(
+                fixture.player.id,
+                fixture.character.id,
+              ),
+            ).not.toBeNull();
+
+            await scenarioService.revokeScenarioParticipantControl({
+              participantId: participant.id,
+              scenarioId: fixture.scenario.id,
+            });
+
+            expect(
+              await characterService.getCharacterUnderPlayerControl(
+                fixture.player.id,
+                fixture.character.id,
+              ),
+            ).toBeNull();
+
+            const afterRevocation = await prisma!.scenarioParticipant.findFirstOrThrow({
+              where: { id: participant.id },
+            });
+
+            expect(afterRevocation.controlledByUserId).toBeNull();
+            expect(afterRevocation.characterId).toBe(fixture.character.id);
+            expect(afterRevocation.isActive).toBe(true);
+            expect(afterRevocation.role).toBe(participant.role);
+            expect(afterRevocation.sourceType).toBe(participant.sourceType);
+          });
+
+          it(`leaves everything else in a ${scenarioStatus} Scenario immutable`, async () => {
+            const scenarioRepository = createPrismaScenarioRepository(prisma!);
+            const scenarioService = new ScenarioService(scenarioRepository);
+            const fixture = await createControlFixture({ scenarioStatus });
+            const participant = await prisma!.scenarioParticipant.findFirstOrThrow({
+              where: { characterId: fixture.character.id },
+            });
+
+            await expect(
+              scenarioService.updateScenarioParticipantMetadata({
+                isActive: false,
+                participantId: participant.id,
+                scenarioId: fixture.scenario.id,
+              }),
+            ).rejects.toThrow("Scenario is not editable in its current status.");
+
+            await expect(
+              scenarioService.updateScenarioParticipantMetadata({
+                participantId: participant.id,
+                roleTag: "changed",
+                scenarioId: fixture.scenario.id,
+              }),
+            ).rejects.toThrow("Scenario is not editable in its current status.");
+
+            const unchanged = await prisma!.scenarioParticipant.findFirstOrThrow({
+              where: { id: participant.id },
+            });
+
+            expect(unchanged.isActive).toBe(true);
+            expect(unchanged.roleTag).toBeNull();
+            expect(unchanged.controlledByUserId).toBe(fixture.player.id);
+          });
+        }
+
+        it("ends the grant when the Character's Campaign roster membership ends", async () => {
+          const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+          const scenarioRepository = createPrismaScenarioRepository(prisma!);
+          const campaignService = new CampaignService(
+            scenarioRepository,
+            new CharacterService(createPrismaCharacterRepository(prisma!)),
+          );
+          const fixture = await createControlFixture({ scenarioStatus: "completed" });
+          const participant = await prisma!.scenarioParticipant.findFirstOrThrow({
+            where: { characterId: fixture.character.id },
+          });
+          const rosterEntry = await campaignService.addCampaignRosterEntry({
+            campaignId: fixture.campaign.id,
+            category: "pc",
+            sourceId: fixture.character.id,
+            sourceType: "character",
+          });
+
+          expect(
+            await characterService.getCharacterUnderPlayerControl(
+              fixture.player.id,
+              fixture.character.id,
+            ),
+          ).not.toBeNull();
+
+          await campaignService.removeCampaignRosterEntry({
+            campaignId: fixture.campaign.id,
+            rosterEntryId: rosterEntry.id,
+          });
+
+          expect(
+            await characterService.getCharacterUnderPlayerControl(
+              fixture.player.id,
+              fixture.character.id,
+            ),
+          ).toBeNull();
+
+          const afterRemoval = await prisma!.scenarioParticipant.findFirst({
+            where: { id: participant.id },
+          });
+
+          expect(afterRemoval).not.toBeNull();
+          expect(afterRemoval?.controlledByUserId).toBeNull();
+          expect(afterRemoval?.characterId).toBe(fixture.character.id);
+          expect(afterRemoval?.isActive).toBe(true);
+          expect(afterRemoval?.role).toBe(participant.role);
+
+          const remainingRosterEntry = await prisma!.campaignRosterEntry.findFirstOrThrow({
+            where: { id: rosterEntry.id },
+          });
+
+          expect(remainingRosterEntry.membershipState).toBe("former");
+        });
+
+        it("ends the grant when the player leaves the Campaign with their own Character", async () => {
+          const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+          const scenarioRepository = createPrismaScenarioRepository(prisma!);
+          const campaignService = new CampaignService(
+            scenarioRepository,
+            new CharacterService(createPrismaCharacterRepository(prisma!)),
+          );
+          const fixture = await createControlFixture({ scenarioStatus: "archived" });
+          const participant = await prisma!.scenarioParticipant.findFirstOrThrow({
+            where: { characterId: fixture.character.id },
+          });
+          await campaignService.addCampaignRosterEntry({
+            campaignId: fixture.campaign.id,
+            category: "pc",
+            sourceId: fixture.character.id,
+            sourceType: "character",
+          });
+
+          await campaignService.leaveCampaign({
+            campaignId: fixture.campaign.id,
+            characterId: fixture.character.id,
+            ownerUserId: fixture.gm.id,
+          });
+
+          expect(
+            await characterService.getCharacterUnderPlayerControl(
+              fixture.player.id,
+              fixture.character.id,
+            ),
+          ).toBeNull();
+
+          const afterRemoval = await prisma!.scenarioParticipant.findFirst({
+            where: { id: participant.id },
+          });
+
+          expect(afterRemoval).not.toBeNull();
+          expect(afterRemoval?.controlledByUserId).toBeNull();
+          expect(afterRemoval?.isActive).toBe(true);
+        });
+
+        it("does not disturb participants of another Campaign when a roster membership ends", async () => {
+          const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+          const scenarioRepository = createPrismaScenarioRepository(prisma!);
+          const campaignService = new CampaignService(
+            scenarioRepository,
+            new CharacterService(createPrismaCharacterRepository(prisma!)),
+          );
+          const removed = await createControlFixture({ scenarioStatus: "completed" });
+          const untouched = await createControlFixture({ scenarioStatus: "completed" });
+          const rosterEntry = await campaignService.addCampaignRosterEntry({
+            campaignId: removed.campaign.id,
+            category: "pc",
+            sourceId: removed.character.id,
+            sourceType: "character",
+          });
+
+          await campaignService.removeCampaignRosterEntry({
+            campaignId: removed.campaign.id,
+            rosterEntryId: rosterEntry.id,
+          });
+
+          expect(
+            await characterService.getCharacterUnderPlayerControl(
+              untouched.player.id,
+              untouched.character.id,
+            ),
+          ).not.toBeNull();
+        });
       });
     });
   });

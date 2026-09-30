@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   quantity: vi.fn(),
   removeItem: vi.fn(),
   requireAccess: vi.fn(),
+  requireRead: vi.fn(),
   requireUser: vi.fn(),
 }));
 
@@ -42,6 +43,7 @@ vi.mock("../../lib/sessionAuth", () => ({
 
 vi.mock("./access", () => ({
   requireAccessibleCharacter: mocks.requireAccess,
+  requireReadableCharacter: mocks.requireRead,
 }));
 
 import { equipmentItemRoutes } from "./itemRoutes";
@@ -171,7 +173,7 @@ describe("Character Equipment item route authority", () => {
 
   it("serializes only holder-safe Item facts for a global GM without Campaign authority", async () => {
     mocks.requireUser.mockResolvedValue({ id: "global-gm-owner", roles: ["game_master"] });
-    mocks.requireAccess.mockResolvedValue({ characterId, kind: "holder" });
+    mocks.requireRead.mockResolvedValue({ characterId, kind: "holder" });
     mocks.getState.mockImplementation(async (_requestedCharacterId, viewer) => ({
       ...emptyState,
       itemsById: {
@@ -212,10 +214,11 @@ describe("Character Equipment item route authority", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.requireAccess).toHaveBeenCalledWith(
+    expect(mocks.requireRead).toHaveBeenCalledWith(
       { id: "global-gm-owner", roles: ["game_master"] },
       characterId,
     );
+    expect(mocks.requireAccess).not.toHaveBeenCalled();
     expect(mocks.getState).toHaveBeenCalledWith(characterId, {
       characterId,
       kind: "holder",
@@ -240,7 +243,7 @@ describe("Character Equipment item route authority", () => {
 
   it("serializes GM-private Item facts for the managing Campaign GM", async () => {
     mocks.requireUser.mockResolvedValue({ id: "campaign-gm", roles: ["game_master"] });
-    mocks.requireAccess.mockResolvedValue({ kind: "gm" });
+    mocks.requireRead.mockResolvedValue({ kind: "gm" });
     mocks.getState.mockResolvedValue({
       ...emptyState,
       itemsById: {
@@ -275,5 +278,62 @@ describe("Character Equipment item route authority", () => {
     expect(response.body).toContain("gm-history");
     expect(response.body).toContain("former owner");
     expect(response.body).toContain("gm_only");
+  });
+
+  it("serves Character-owned equipment to a controller at holder-only visibility", async () => {
+    mocks.requireUser.mockResolvedValue({ id: "controlling-player", roles: ["player"] });
+    mocks.requireRead.mockResolvedValue({ characterId, kind: "holder" });
+    mocks.getState.mockResolvedValue({
+      ...emptyState,
+      itemsById: {
+        "item-1": {
+          id: "item-1",
+          itemFacts: {
+            activeMechanics: [],
+            descriptiveTraits: [],
+            templateOverrides: [],
+            unsupportedCapabilities: [],
+            version: 1,
+          },
+        },
+      },
+    });
+    const app = await buildApp();
+
+    const response = await app.inject({
+      method: "GET",
+      url: `/characters/${characterId}/equipment`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.getState).toHaveBeenCalledWith(characterId, { characterId, kind: "holder" });
+    expect(response.json().state.managementCampaigns).toEqual([]);
+  });
+
+  it("keeps every equipment write route on the unwidened access gate", async () => {
+    mocks.requireUser.mockResolvedValue({ id: "controlling-player", roles: ["player"] });
+    mocks.requireAccess.mockRejectedValue(new NotFoundError());
+    mocks.requireRead.mockResolvedValue({ characterId, kind: "holder" });
+    const app = await buildApp();
+
+    const writes = [
+      { payload: { expectedRevision: 0, itemId: "item-1", toLocationId: "loc-1" }, url: "move" },
+      { payload: { expectedRevision: 0, templateId: "template-1" }, url: "items" },
+      { payload: { expectedRevision: 0, itemId: "item-1" }, url: "items/remove" },
+      { payload: { expectedRevision: 0, itemId: "item-1", quantity: 2 }, url: "items/quantity" },
+      { payload: { expectedRevision: 0, itemId: "item-1", notes: "x" }, url: "items/metadata" },
+    ];
+
+    for (const write of writes) {
+      const response = await app.inject({
+        method: "POST",
+        payload: write.payload,
+        url: `/characters/${characterId}/equipment/${write.url}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+    }
+
+    expect(mocks.requireAccess).toHaveBeenCalledTimes(writes.length);
   });
 });

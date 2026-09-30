@@ -16,6 +16,11 @@ import {
 
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
 import { loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
+import {
+  loadReadableCharacterInApi,
+  projectCharacterForReadGrant,
+  READ_GRANT_PROVENANCE_PERSPECTIVE,
+} from "../lib/characterReadAccess";
 import { BadRequestError, NotFoundError, handleRouteError } from "../lib/errors";
 
 const characterService = new CharacterService();
@@ -94,18 +99,21 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
         throw new BadRequestError("Character id is required.");
       }
 
-      const character = await loadAccessibleCharacterInApi({
+      const readableCharacter = await loadReadableCharacterInApi({
         characterId,
         characterService,
         user,
       });
 
-      if (!character) {
+      if (!readableCharacter) {
         throw new NotFoundError("Character not found.");
       }
 
       return {
-        character,
+        character: projectCharacterForReadGrant(
+          readableCharacter.character,
+          readableCharacter.grant,
+        ),
       };
     } catch (error) {
       return handleRouteError(error, reply);
@@ -118,13 +126,13 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       if (!user) return;
       const characterId = (request.params as { id?: string }).id;
       if (!characterId) throw new BadRequestError("Character id is required.");
-      const character = await loadAccessibleCharacterInApi({ characterId, characterService, user });
-      if (!character) throw new NotFoundError("Character not found.");
-      const perspective = user.roles.includes("admin")
-        ? "admin"
-        : character.ownerId === user.id
-          ? "owner"
-          : "current_campaign_gm";
+      const readableCharacter = await loadReadableCharacterInApi({
+        characterId,
+        characterService,
+        user,
+      });
+      if (!readableCharacter) throw new NotFoundError("Character not found.");
+      const perspective = READ_GRANT_PROVENANCE_PERSPECTIVE[readableCharacter.grant];
       const retainedCharacter = await retainedCharacterService.getCurrentProjection({
         characterId,
         perspective,

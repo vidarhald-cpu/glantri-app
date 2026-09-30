@@ -164,4 +164,35 @@ describe("characterEditAccess", () => {
     expect(getCharacterByIdInGmCampaigns).not.toHaveBeenCalled();
     expect(getOwnedCharacter).not.toHaveBeenCalled();
   });
+
+  it("keeps write/edit access closed to a controller who does not own the Character", async () => {
+    const getCharacterById = vi.fn();
+    const getCharacterByIdInGmCampaigns = vi.fn();
+    const getCharacterUnderPlayerControl = vi.fn().mockResolvedValue({ id: "pregen-1" });
+    const getOwnedCharacter = vi.fn().mockResolvedValue(null);
+
+    // The write/edit gate does not declare a control accessor at all, so a control-aware
+    // service is passed through a variable rather than an object literal.
+    const controlAwareService = {
+      getCharacterById,
+      getCharacterByIdInGmCampaigns,
+      getCharacterUnderPlayerControl,
+      getOwnedCharacter,
+    };
+
+    await expect(
+      loadAccessibleCharacterInApi({
+        characterId: "pregen-1",
+        characterService: controlAwareService,
+        user: {
+          id: "controlling-player",
+          roles: ["player"],
+        },
+      }),
+    ).resolves.toBeNull();
+
+    expect(getCharacterUnderPlayerControl).not.toHaveBeenCalled();
+    expect(getCharacterById).not.toHaveBeenCalled();
+    expect(getCharacterByIdInGmCampaigns).not.toHaveBeenCalled();
+  });
 });

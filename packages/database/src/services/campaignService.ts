@@ -254,6 +254,28 @@ export class CampaignService {
     }
   }
 
+  /**
+   * End every control-derived grant a Character's Campaign membership was carrying.
+   *
+   * A Character whose roster membership has become `former` is no longer in the Campaign, so
+   * the Scenario participant rows that membership produced must stop expressing *current*
+   * authorized control. Under the Product Owner ruling on Forgejo #439 that control also
+   * grants the player read access to the Character sheet in `completed` and `archived`
+   * Scenarios, so leaving the assignment in place would leave an indefinite grant behind
+   * after the GM has removed the Character from the Campaign.
+   *
+   * Only `controlledByUserId` is cleared. **No `ScenarioParticipant` row is deleted and no
+   * other column is touched** — the Character, role, activity, snapshot and state all
+   * survive, so the historical record that this Character took part in those Scenarios is
+   * preserved. Ownership and PC/NPC role are untouched.
+   */
+  private async endCampaignCharacterControlGrants(input: {
+    campaignId: string;
+    characterId: string;
+  }): Promise<number> {
+    return this.repository.revokeCampaignCharacterParticipantControl(input);
+  }
+
   async removeCampaignRosterEntry(input: {
     campaignId: string;
     rosterEntryId: string;
@@ -273,6 +295,10 @@ export class CampaignService {
         await this.repository.updateCampaignRosterMembershipState({
           entryId: entry.id,
           membershipState: "former",
+        });
+        await this.endCampaignCharacterControlGrants({
+          campaignId: entry.campaignId,
+          characterId: entry.sourceId,
         });
       }
       return;
@@ -302,6 +328,10 @@ export class CampaignService {
       await this.repository.updateCampaignRosterMembershipState({
         entryId: entry.id,
         membershipState: "former",
+      });
+      await this.endCampaignCharacterControlGrants({
+        campaignId: entry.campaignId,
+        characterId: entry.sourceId,
       });
       return { removed: true };
     }

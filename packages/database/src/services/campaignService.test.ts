@@ -674,6 +674,77 @@ describe("CampaignService campaign roster", () => {
     await expect(service.listCampaignRosterEntries("campaign-1")).resolves.toEqual([]);
   });
 
+  /**
+   * Forgejo #439 floor-QA finding F2. A Character whose Campaign roster membership ends must
+   * not leave a control-derived Character read grant behind — under the ruling that grant
+   * survives into `completed` and `archived` Scenarios, so an untouched participant row would
+   * keep granting indefinitely. The row itself is preserved: only `controlledByUserId` is
+   * cleared, so the historical participation record survives the revocation.
+   */
+  it.each([
+    ["removeCampaignRosterEntry", "byId"],
+    ["removeCampaignRosterEntryBySource", "bySource"],
+    ["leaveCampaign", "byOwner"],
+  ] as const)("ends control grants when roster membership ends via %s", async (_label, shape) => {
+    const { participants, repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "completed";
+    const character = createCharacterRecord({ id: "character-1", name: "Ari", ownerId: "user-1" });
+    const characterService = {
+      getCharacterById: async (characterId: string) =>
+        characterId === character.id ? character : null,
+      getOwnedCharacter: async (ownerId: string, characterId: string) =>
+        ownerId === "user-1" && characterId === character.id ? character : null,
+    } as never;
+    const service = new CampaignService(repository, characterService);
+
+    const entry = await service.addCampaignRosterEntry({
+      campaignId: "campaign-1",
+      category: "pc",
+      sourceId: character.id,
+      sourceType: "character",
+    });
+    participants.push({
+      characterId: character.id,
+      controlledByUserId: "controller-1",
+      createdAt: "2026-04-21T00:00:00.000Z",
+      id: "participant-1",
+      isActive: true,
+      joinSource: "gm_added",
+      role: "player_character",
+      scenarioId: scenario.id,
+      snapshot: { displayName: "Ari", kind: "character" },
+      sourceType: "character",
+      state: {},
+      updatedAt: "2026-04-21T00:00:00.000Z",
+    } as never);
+
+    if (shape === "byId") {
+      await service.removeCampaignRosterEntry({
+        campaignId: "campaign-1",
+        rosterEntryId: entry.id,
+      });
+    } else if (shape === "bySource") {
+      await service.removeCampaignRosterEntryBySource({
+        campaignId: "campaign-1",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+    } else {
+      await service.leaveCampaign({
+        campaignId: "campaign-1",
+        characterId: character.id,
+        ownerUserId: "user-1",
+      });
+    }
+
+    expect(participants).toHaveLength(1);
+    expect(participants[0]?.controlledByUserId).toBeUndefined();
+    expect(participants[0]?.characterId).toBe(character.id);
+    expect(participants[0]?.isActive).toBe(true);
+    expect(participants[0]?.role).toBe("player_character");
+    expect(rosterEntries[0]?.membershipState).toBe("former");
+  });
+
   it("treats already-removed roster entry ids as an idempotent no-op", async () => {
     const { repository, rosterEntries } = createScenarioRepositoryStub();
     const service = new CampaignService(repository);

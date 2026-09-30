@@ -182,7 +182,9 @@ const mocks = vi.hoisted(() => {
     resolveEquipmentStatuses: vi.fn().mockResolvedValue({}),
     resolveScenarioAvailableObjects: vi.fn(),
     refreshCharacterParticipantEquipmentSnapshot: vi.fn(),
+    revokeScenarioParticipantControl: vi.fn(),
     updateScenario: vi.fn(),
+    updateScenarioParticipantMetadata: vi.fn(),
     updateScenarioSessionState: vi.fn(),
     userHasPlayerScenarioAccess: vi.fn(),
   };
@@ -6000,6 +6002,173 @@ describe("scenarios route contract", () => {
       { participantId: "participant-1", scenarioId: "scenario-1" },
     );
   });
+
+  /**
+   * Forgejo #439. Control-derived Character read access stays valid in `completed` and
+   * `archived` Scenarios "unless the control relationship is explicitly revoked", so the
+   * revocation surface must remain reachable in exactly those read-only statuses. The
+   * liveness gate on the metadata route below exists to stop *gameplay* edits to a finished
+   * Scenario, and withdrawing an authorization is not a gameplay edit.
+   */
+  it.each(["live", "paused", "completed", "archived"])(
+    "lets the scenario GM revoke participant control in a %s Scenario",
+    async (status) => {
+      const participant = {
+        characterId: "character-1",
+        controlledByUserId: null,
+        id: "participant-1",
+        isActive: true,
+        role: "player_character",
+      };
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        status,
+      });
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+      });
+      mocks.scenarioService.revokeScenarioParticipantControl.mockResolvedValue(participant);
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "POST",
+        url: "/scenarios/scenario-1/participants/participant-1/revoke-control",
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ participant });
+      expect(mocks.scenarioService.revokeScenarioParticipantControl).toHaveBeenCalledWith({
+        participantId: "participant-1",
+        scenarioId: "scenario-1",
+      });
+    },
+  );
+
+  /**
+   * The revocation route must not become a general back door into a finished Scenario. It
+   * takes no body at all, so nothing a caller submits can reach any other column.
+   */
+  it("ignores any body submitted to the revocation route", async () => {
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "archived",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    mocks.scenarioService.revokeScenarioParticipantControl.mockResolvedValue({
+      id: "participant-1",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        controlledByUserId: "player-2",
+        isActive: false,
+        role: "npc",
+        roleTag: "smuggled",
+      },
+      url: "/scenarios/scenario-1/participants/participant-1/revoke-control",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.scenarioService.revokeScenarioParticipantControl).toHaveBeenCalledWith({
+      participantId: "participant-1",
+      scenarioId: "scenario-1",
+    });
+    expect(mocks.scenarioService.updateScenarioParticipantMetadata).not.toHaveBeenCalled();
+  });
+
+  it("refuses participant revocation from a user who is not the campaign GM", async () => {
+    mocks.requireAdminUser.mockResolvedValue({
+      email: "other-gm@example.test",
+      id: "gm-2",
+      roles: ["game_master"],
+    });
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "completed",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/scenarios/scenario-1/participants/participant-1/revoke-control",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toEqual({ error: "Scenario not found." });
+    expect(mocks.scenarioService.revokeScenarioParticipantControl).not.toHaveBeenCalled();
+  });
+
+  it("refuses participant revocation from a player with scenario workspace access", async () => {
+    mocks.requireAdminUser.mockResolvedValue(mocks.playerUser);
+    mocks.scenarioService.getScenarioById.mockResolvedValue({
+      campaignId: "campaign-1",
+      id: "scenario-1",
+      status: "completed",
+    });
+    mocks.campaignService.getCampaignById.mockResolvedValue({
+      gmUserId: "gm-1",
+      id: "campaign-1",
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/scenarios/scenario-1/participants/participant-1/revoke-control",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(404);
+    expect(mocks.scenarioService.revokeScenarioParticipantControl).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Nothing *else* became mutable. The metadata route is the general participant-write
+   * surface and it still refuses a read-only Scenario at its own liveness gate.
+   */
+  it.each(["completed", "archived"])(
+    "still refuses general participant metadata updates in a %s Scenario",
+    async (status) => {
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        status,
+      });
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+      });
+      const app = await buildScenarioTestApp();
+
+      const response = await app.inject({
+        method: "PUT",
+        payload: { isActive: false },
+        url: "/scenarios/scenario-1/participants/participant-1/metadata",
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        error: "Scenario is not currently open for live updates.",
+      });
+      expect(mocks.scenarioService.updateScenarioParticipantMetadata).not.toHaveBeenCalled();
+    },
+  );
 
   it("lists encounters for a player with scenario workspace access", async () => {
     const scenario = {

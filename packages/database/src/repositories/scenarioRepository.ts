@@ -441,6 +441,24 @@ export interface ScenarioRepository {
     roleTag?: string | null;
     tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant>;
+  /**
+   * Withdraw a single participant's control assignment.
+   *
+   * Writes `controlledByUserId = null` and **nothing else**. The participation record itself
+   * — the row, its Character, role, activity, snapshot and state — is left intact, so the
+   * historical fact that this Character took part in this Scenario survives the revocation.
+   */
+  revokeScenarioParticipantControl(participantId: string): Promise<ScenarioParticipant>;
+  /**
+   * Withdraw every control assignment derived from one Character's membership of one Campaign.
+   *
+   * Writes `controlledByUserId = null` on the matching rows and nothing else. Returns the
+   * number of rows actually changed. No row is ever deleted.
+   */
+  revokeCampaignCharacterParticipantControl(input: {
+    campaignId: string;
+    characterId: string;
+  }): Promise<number>;
   createCampaignAsset(input: {
     campaignId: string;
     createdByUserId: string;
@@ -1303,6 +1321,31 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
 
       return mapScenarioParticipant(record);
+    },
+    async revokeScenarioParticipantControl(participantId) {
+      const record = await prisma.scenarioParticipant.update({
+        data: {
+          controlledByUserId: null,
+        },
+        where: { id: participantId },
+      });
+
+      return mapScenarioParticipant(record);
+    },
+    async revokeCampaignCharacterParticipantControl(input) {
+      const result = await prisma.scenarioParticipant.updateMany({
+        data: {
+          controlledByUserId: null,
+        },
+        where: {
+          characterId: input.characterId,
+          controlledByUserId: { not: null },
+          scenario: { campaignId: input.campaignId },
+          sourceType: "character",
+        },
+      });
+
+      return result.count;
     },
     async createCampaignAsset(input) {
       const record = await prisma.campaignAsset.create({

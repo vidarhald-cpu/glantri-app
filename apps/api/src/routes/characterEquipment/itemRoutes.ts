@@ -7,7 +7,7 @@ import {
 } from "@glantri/database";
 import { requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { ConflictError, handleRouteError } from "../../lib/errors";
-import { requireAccessibleCharacter } from "./access";
+import { requireAccessibleCharacter, requireReadableCharacter } from "./access";
 import { toEquipmentFeatureState } from "./helpers";
 import {
   parseAddItemBody,
@@ -29,7 +29,7 @@ export const equipmentItemRoutes: FastifyPluginAsync = async (app) => {
     const id = parseCharacterId(request.params);
 
     try {
-      const viewer = await requireAccessibleCharacter(user, id);
+      const viewer = await requireReadableCharacter(user, id);
       await equipmentWriteService.ensureCharacterEquipmentInitialized(id);
 
       const managementCampaigns =
