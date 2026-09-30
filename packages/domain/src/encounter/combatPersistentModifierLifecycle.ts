@@ -101,8 +101,11 @@ export function buildCombatExperiencePersistentLifecycle(input: {
       roundNumber: input.phase ? input.context.roundNumber : undefined,
     },
     context: input.context,
+    // Canonical temporal rule: a Combat Experience result created during round N covers the
+    // remainder of round N plus `durationRounds` full subsequent rounds. The creation round's own
+    // Round End must not consume one of them.
     duration: {
-      creationRoundCounts: true,
+      creationRoundCounts: false,
       kind: "rounds",
       remaining: input.durationRounds,
       startRound: input.context.roundNumber,
@@ -211,9 +214,12 @@ export function buildDamagePersistentLifecycle(input: {
     status: input.status,
   };
   const applicability = activationApplicability(input);
+  // Canonical temporal rule: a bounded effect created during round N covers the remainder of
+  // round N plus `durationRounds` full subsequent rounds, so the creation round's own Round End
+  // must not decrement it.
   const duration: CanonicalCombatModifierDuration = input.durationRounds
     ? {
-        creationRoundCounts: true,
+        creationRoundCounts: false,
         kind: "rounds",
         remaining: input.durationRounds,
         startRound: input.context.roundNumber,

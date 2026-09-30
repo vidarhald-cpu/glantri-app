@@ -162,7 +162,7 @@ describe("critical effect proposal generation", () => {
     ).toBe(1);
   });
 
-  it("stores next-round no-action effects with one extra SU countdown tick", () => {
+  it("stores a next-round no-action effect as exactly its written source duration", () => {
     const proposal = buildCriticalEffectProposalFromDamageResult({
       existingCommittedDamageAmount: 2,
       finalCriticalRoll: 6,
@@ -171,16 +171,18 @@ describe("critical effect proposal generation", () => {
     });
 
     expect(proposal.criticalResult?.critKey).toBe("sharp|chest|06");
+    // One next round is stored as 1. The creation round is the remainder of a round, not one of
+    // the counted rounds, so no compatibility tick is added on top of the source duration.
     expect(proposal.proposedEffects).toContainEqual(
       expect.objectContaining({
-        durationRounds: 2,
+        durationRounds: 1,
         rowCategory: "no_combat_action",
         sourceEffectKey: "sharp|chest|06|02",
       }),
     );
   });
 
-  it("stores next-round rolled durations with one extra SU countdown tick", () => {
+  it("stores a next-round rolled duration as exactly the rolled number of rounds", () => {
     const effect: CriticalEffectTemplate = {
       critKey: "test|head|01",
       durationMode: "roll",
@@ -207,7 +209,7 @@ describe("critical effect proposal generation", () => {
           total: 3,
         },
       ]),
-    ).toBe(4);
+    ).toBe(3);
   });
 
   it("stores physical minimum damage floors on the proposal instead of duplicate effect rows", () => {
