@@ -51,6 +51,16 @@ export interface CombatSituationDisplayRow {
 }
 
 export interface CombatSituationCalculationGroup {
+  /**
+   * At least one row in this group carries a value this surface could not render, so the
+   * rows beneath the total do not visibly account for all of it. The total itself is
+   * still the authoritative figure the engine applies and is never adjusted for this.
+   *
+   * This is structured state deliberately. Encoding the condition into `totalLabel`'s
+   * string would corrupt the authoritative number and would leave the condition
+   * detectable only by parsing copy back out again.
+   */
+  breakdownIncomplete: boolean;
   id: string;
   label: string;
   rows: CombatSituationDisplayRow[];
@@ -98,6 +108,28 @@ function formatSigned(value: number): string {
  * `features/roleplay`): a word, never a number, and never mistakable for a real value.
  */
 const UNRENDERABLE_VALUE_LABEL = "Unknown value";
+
+/**
+ * The player-facing indication that a calculation group's total is still the figure the
+ * engine actually applies, while the rows beneath it do not visibly account for all of
+ * it because at least one contribution could not be rendered.
+ *
+ * It states **both** facts the ruling on this condition requires: the number is exact,
+ * and its decomposition is not complete. A shorter marker would state only the second.
+ *
+ * It is deliberately **not** `UNRENDERABLE_VALUE_LABEL`. That is a row-level statement
+ * about one value; this is a group-level statement about the relationship between the
+ * total and the rows. Reusing one string for both would collapse two different claims
+ * into one. It is also not `"—"` (absence on this surface) and not `"Unavailable"`
+ * (legitimately missing or withheld data elsewhere in this codebase) — the total is
+ * neither absent nor withheld.
+ *
+ * `"incomplete"` is the codebase's existing word for partially-known presentation
+ * (`"Incomplete history"` in `combat-history/view-models/buildCombatEventResultModel`,
+ * `"Combat state incomplete"` in `currentActionPresentation`), so this joins a family
+ * rather than inventing a vocabulary.
+ */
+export const INCOMPLETE_BREAKDOWN_LABEL = "Total is exact; its breakdown is incomplete.";
 
 /**
  * The three distinct outcomes of rendering a canonical effect's value.
@@ -181,6 +213,20 @@ export function formatEffectValue(effect: CombatSituationLifecycleEffect): strin
       return exhaustive;
     }
   }
+}
+
+/**
+ * Whether this entry's value could not be rendered.
+ *
+ * Detection reads the canonical `unrenderable` outcome from `renderEffectValue`. It must
+ * never be derived by comparing a rendered label against `UNRENDERABLE_VALUE_LABEL`: that
+ * copy has already changed twice, and a string comparison would have silently stopped
+ * detecting on each change while continuing to pass a label-shaped test.
+ */
+function hasUnrenderableValue(entry: CombatSituationModifierRowInput): boolean {
+  const effect = entry.canonicalLifecycle;
+  if (!effect) return false;
+  return renderEffectValue(effect).kind === "unrenderable";
 }
 
 function formatEntryValue(entry: CombatSituationModifierRowInput): string {
@@ -434,9 +480,12 @@ export function buildCombatSituationAwarenessModel(input: {
     if (unique.length === 0) return [];
     return [
       {
+        breakdownIncomplete: unique.some(hasUnrenderableValue),
         id: bucket.bucketKey,
         label: bucket.label,
         rows: unique.map((entry) => calculationEntry({ context, entry })),
+        // Unchanged by `breakdownIncomplete`: the total stays exactly the authoritative
+        // figure supplied by the engine, rendered exactly as before.
         totalLabel: totalLabel({ entries: unique, total: bucket.total }),
       },
     ];

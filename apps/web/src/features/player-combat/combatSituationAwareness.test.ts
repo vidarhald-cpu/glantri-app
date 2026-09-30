@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -14,6 +17,7 @@ import {
   collectCanonicalCombatSituationEffects,
   formatDuration,
   formatEffectValue,
+  INCOMPLETE_BREAKDOWN_LABEL,
 } from "./combatSituationAwareness";
 
 function numericEffect(input: {
@@ -751,5 +755,213 @@ describe("formatEntryValue does not substitute another semantic value", () => {
     });
 
     expect(model.calculationGroups[0]?.rows[0]?.valueLabel).toBe("-3");
+  });
+});
+
+/**
+ * The group-level indication that the total stands while its rows do not account for all
+ * of it. Kept as a literal here rather than imported, so a change to the module's
+ * constant is a visible test failure rather than a silently agreeing rename.
+ */
+const INCOMPLETE_BREAKDOWN_COPY = "Total is exact; its breakdown is incomplete.";
+
+function situationModelWith(input: {
+  entries: readonly {
+    application?: "percentage" | "flat_db";
+    canonicalLifecycle?: CanonicalCombatModifierEffect;
+    id: string;
+    sourceLabel?: string;
+    value: number;
+  }[];
+  total: number;
+}) {
+  return buildCombatSituationAwarenessModel({
+    context: { phase: "phase2", roundNumber: 3 },
+    rows: [
+      {
+        bucketKey: "situation_ob_skill",
+        derivedEntries: input.entries,
+        entries: [],
+        label: "Skill/OB",
+        total: input.total,
+      },
+    ],
+  });
+}
+
+describe("an unrenderable contribution marks the group breakdown incomplete", () => {
+  it("flags the group while preserving the authoritative total and the unknown row", () => {
+    const unrenderable = effectWithUnrecognisedUnit();
+    const group = situationModelWith({
+      entries: [
+        {
+          application: "percentage",
+          canonicalLifecycle: unrenderable,
+          id: unrenderable.id,
+          value: -2,
+        },
+        { application: "percentage", id: "plain", sourceLabel: "Feint", value: -5 },
+      ],
+      total: -7,
+    }).calculationGroups[0];
+
+    expect(group?.breakdownIncomplete).toBe(true);
+    // The authoritative total is untouched: not recomputed, not reduced by the
+    // unrenderable contribution, not replaced by an indication.
+    expect(group?.totalLabel).toBe("-7");
+    // The unknown contribution is still shown rather than suppressed.
+    expect(group?.rows.map((row) => row.valueLabel)).toContain(UNRENDERABLE_VALUE_LABEL);
+    expect(group?.rows).toHaveLength(2);
+  });
+
+  /**
+   * The total is `formatSigned(bucket.total)` and nothing else. The flag must not reduce
+   * it, replace it, or append anything to it, whatever value the engine supplies.
+   *
+   * The `%` suffix is deliberately absent from these expectations. `allPercentage` is
+   * already false when an unrecognised unit is present, so the suffix is already dropped
+   * at `dev` — that is `totalLabel` declining to assert a unit it cannot confirm, which
+   * independent QA confirmed is correct and which this change must not disturb.
+   */
+  it("renders the engine's total verbatim in a flagged group", () => {
+    for (const total of [-7, 13, -1]) {
+      const unrenderable = effectWithUnrecognisedUnit();
+      const group = situationModelWith({
+        entries: [
+          {
+            application: "percentage",
+            canonicalLifecycle: unrenderable,
+            id: unrenderable.id,
+            value: -2,
+          },
+        ],
+        total,
+      }).calculationGroups[0];
+
+      expect(group?.breakdownIncomplete, String(total)).toBe(true);
+      expect(group?.totalLabel, String(total)).toBe(`${total >= 0 ? "+" : ""}${total}`);
+    }
+  });
+
+  it("keeps the percentage suffix on an all-percentage group that is not flagged", () => {
+    const group = situationModelWith({
+      entries: [
+        { application: "percentage", id: "other", sourceLabel: "Distance", value: -2 },
+        { application: "percentage", id: "plain", sourceLabel: "Feint", value: -5 },
+      ],
+      total: -7,
+    }).calculationGroups[0];
+
+    expect(group?.breakdownIncomplete).toBe(false);
+    expect(group?.totalLabel).toBe("-7%");
+  });
+
+  it("leaves a group with no unrenderable row unflagged for every handled unit", () => {
+    for (const unit of canonicalCombatModifierUnitSchema.options) {
+      const effect = effectWithUnit({ unit });
+      const group = situationModelWith({
+        entries: [{ canonicalLifecycle: effect, id: effect.id, value: 2 }],
+        total: 2,
+      }).calculationGroups[0];
+      expect(group?.breakdownIncomplete, unit).toBe(false);
+    }
+  });
+
+  it("leaves a group with no canonical effects at all unflagged", () => {
+    const group = situationModelWith({
+      entries: [{ application: "flat_db", id: "plain-entry", sourceLabel: "Parry", value: -3 }],
+      total: -3,
+    }).calculationGroups[0];
+
+    expect(group?.breakdownIncomplete).toBe(false);
+  });
+
+  it("leaves a restriction-only effect, which legitimately has no value, unflagged", () => {
+    const effect = restrictionOnlyEffect();
+    const group = situationModelWith({
+      entries: [
+        { application: "percentage", canonicalLifecycle: effect, id: effect.id, value: -7 },
+      ],
+      total: -7,
+    }).calculationGroups[0];
+
+    expect(group?.breakdownIncomplete).toBe(false);
+    expect(group?.rows[0]?.valueLabel).toBe("-7%");
+  });
+});
+
+describe("breakdown-incomplete detection is pinned to the canonical outcome, not to copy", () => {
+  /**
+   * The failure mode this pins: detection implemented as a comparison against the
+   * rendered label. That would keep passing the flag test above while silently ceasing
+   * to detect anything the moment the copy changes — which it already has twice
+   * (`"—"` -> `"Unrecognised value"` -> `"Unknown value"`).
+   *
+   * A row whose text *is* the unknown-value copy, but whose value renders perfectly
+   * well, must not flag the group. Only a label comparison could get this wrong.
+   */
+  it("does not flag a group because a row's text happens to read like the unknown indication", () => {
+    const effect = effectWithUnit({ id: "decoy", unit: "flat_db", value: 2 });
+    const decoy = {
+      ...effect,
+      publicLabel: UNRENDERABLE_VALUE_LABEL,
+    } as CanonicalCombatModifierEffect;
+    const group = situationModelWith({
+      entries: [{ canonicalLifecycle: decoy, id: decoy.id, value: 2 }],
+      total: 2,
+    }).calculationGroups[0];
+
+    expect(group?.rows[0]?.label).toBe(UNRENDERABLE_VALUE_LABEL);
+    expect(group?.rows[0]?.valueLabel).toBe("+2");
+    expect(group?.breakdownIncomplete).toBe(false);
+  });
+
+  /**
+   * At today's copy a label comparison and the canonical outcome are extensionally
+   * identical — `formatEntryValue` returns `UNRENDERABLE_VALUE_LABEL` exactly when the
+   * outcome is `unrenderable`, so no fixture can separate them. That is precisely why the
+   * label comparison is dangerous: it passes every behavioural test today and stops
+   * detecting the moment the copy changes, which it has already done twice.
+   *
+   * The requirement is therefore pinned at the source, following the existing
+   * `expect(source)` precedent in `CombatRoundManagerPanel.test.ts`.
+   */
+  it("derives detection from the canonical unrenderable outcome and never from a label", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "combatSituationAwareness.ts"),
+      "utf8",
+    );
+    const detection = /function hasUnrenderableValue\([\s\S]*?\n}/.exec(source)?.[0];
+    expect(detection, "hasUnrenderableValue must exist as the single detection site").toBeDefined();
+
+    // It reads the canonical outcome.
+    expect(detection).toContain("renderEffectValue(");
+    expect(detection).toContain('kind === "unrenderable"');
+
+    // It never reaches for rendered copy, by constant or by literal.
+    expect(detection).not.toContain("UNRENDERABLE_VALUE_LABEL");
+    expect(detection).not.toContain("Unknown value");
+    expect(detection).not.toContain("formatEntryValue");
+    expect(detection).not.toContain("formatEffectValue");
+    expect(detection).not.toContain("valueLabel");
+
+    // And the group flag is computed from that function rather than re-derived elsewhere.
+    expect(source).toContain("breakdownIncomplete: unique.some(hasUnrenderableValue)");
+  });
+
+  /**
+   * The detection must not be reachable by reading either label constant, so the two
+   * strings are free to change independently. This asserts they are in fact distinct:
+   * the row says *this value is unknown*, the group says *the total is right but its
+   * breakdown is incomplete*, and one string for both would collapse that distinction.
+   */
+  it("keeps the group indication distinguishable from the row indication", () => {
+    expect(INCOMPLETE_BREAKDOWN_LABEL).toBe(INCOMPLETE_BREAKDOWN_COPY);
+    expect(INCOMPLETE_BREAKDOWN_LABEL).not.toBe(UNRENDERABLE_VALUE_LABEL);
+    expect(INCOMPLETE_BREAKDOWN_LABEL).not.toBe(ABSENCE_GLYPH);
+    expect(INCOMPLETE_BREAKDOWN_LABEL).not.toContain(UNRENDERABLE_VALUE_LABEL);
+    // "Unavailable" is this codebase's word for legitimately missing or withheld data.
+    // The total is neither.
+    expect(INCOMPLETE_BREAKDOWN_LABEL).not.toContain("Unavailable");
   });
 });

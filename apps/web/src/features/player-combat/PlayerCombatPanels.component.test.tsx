@@ -2,6 +2,9 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { canonicalCombatModifierEffectSchema } from "@glantri/domain";
+
+import type { CombatSituationLifecycleEffect } from "./combatSituationAwareness";
 import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionSelectorPanel,
@@ -1103,5 +1106,126 @@ describe("PlayerCombatActionButtonPanel", () => {
 
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByText("Declare action")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * An effect carrying a unit the schema does not declare, cast past the type boundary —
+ * the shape of malformed, downlevel or hand-edited persisted data. It is supplied through
+ * `derivedEntries`, which passes a canonical effect straight through: an entry parsed from
+ * the wire could not carry it, because the schema would reject the unit.
+ */
+function unrenderableDerivedEffect(): CombatSituationLifecycleEffect {
+  const base = canonicalCombatModifierEffectSchema.parse({
+    applicability: { combatWide: true, rollPurposes: [], roundNumber: 3 },
+    createdAt: "2026-08-01T10:00:00.000Z",
+    createdRevision: "revision-3",
+    createdSequence: 12,
+    id: "panel-unit-unrecognised",
+    lifecycle: {
+      duration: { kind: "indefinite", startRound: 3, startSequence: 12 },
+      state: "active",
+    },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: "scyrian",
+    payload: {
+      category: "skill_ob",
+      contributionScope: "calculation",
+      kind: "numeric",
+      unit: "percentage",
+      value: -2,
+    },
+    provenanceCompleteness: "complete",
+    publicLabel: "Strange effect",
+    schemaVersion: 1,
+    sourceFamily: "feint",
+    sourceReferences: {},
+    version: 1,
+    visibility: { audience: "involved", sourceIdentity: "public" },
+  });
+  return {
+    ...base,
+    payload: { ...base.payload, unit: "arcane_flux" },
+  } as unknown as CombatSituationLifecycleEffect;
+}
+
+describe("a calculation group whose breakdown is incomplete", () => {
+  const INCOMPLETE_BREAKDOWN_COPY = "Total is exact; its breakdown is incomplete.";
+
+  it("states both that the total is exact and that the breakdown is incomplete", () => {
+    render(
+      <PlayerCombatModifierPanel
+        context={{ phase: "phase2", roundNumber: 3 }}
+        readOnly
+        rows={[
+          {
+            bucketKey: "situation_ob_skill",
+            derivedEntries: [
+              {
+                application: "percentage",
+                canonicalLifecycle: unrenderableDerivedEffect(),
+                id: "panel-unit-unrecognised",
+                scopeLabel: "",
+                sourceLabel: "Strange effect",
+                value: -2,
+              },
+            ],
+            entries: [],
+            label: "Skill/OB",
+            total: -7,
+          },
+        ]}
+      />,
+    );
+
+    // The authoritative total is still shown, unadjusted.
+    expect(screen.getByText("Total -7")).toBeInTheDocument();
+    // The contribution is not suppressed: its row is still present and still says so.
+    expect(screen.getByText("Strange effect")).toBeInTheDocument();
+    expect(screen.getByText("Unknown value")).toBeInTheDocument();
+    // And the group says the decomposition below the total is not complete.
+    expect(screen.getByText(INCOMPLETE_BREAKDOWN_COPY)).toBeInTheDocument();
+  });
+
+  /**
+   * The regression that would reach every player, not just the unreachable data path:
+   * an ordinary group must render exactly what it rendered before — no extra element.
+   */
+  it("adds nothing at all to an ordinary group", () => {
+    render(
+      <PlayerCombatModifierPanel
+        context={{ phase: "phase1" }}
+        readOnly
+        rows={[
+          {
+            bucketKey: "situation_ob_skill",
+            entries: [
+              {
+                generated: true,
+                id: "generated:distance:phase1:ob-skill",
+                notes: "distance: Skill/OB -2",
+                scope: "until",
+                sourcePhase: "phase1",
+                sourceRule: "distance-ob-skill-phase1",
+                value: -2,
+              },
+            ],
+            label: "Skill/OB",
+            total: -2,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Total -2%")).toBeInTheDocument();
+    expect(screen.queryByText(INCOMPLETE_BREAKDOWN_COPY)).not.toBeInTheDocument();
+    expect(screen.queryByText(/breakdown/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Unknown value")).not.toBeInTheDocument();
+    // Structural, not just textual: the group element still has exactly its two children
+    // — the header and the rows container — so no element was added and nothing shifted.
+    const group = screen.getByText("Total -2%").closest("div")?.parentElement;
+    expect(group).not.toBeNull();
+    expect(group?.children).toHaveLength(2);
   });
 });
