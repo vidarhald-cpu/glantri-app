@@ -18,6 +18,7 @@ const COMPLETION_EVENT_TYPES_BY_STEP = {
   phase_1_damage: ["damage_committed", "effect_review"],
   phase_2_actions: ["action_skipped", "attack"],
   phase_2_damage: ["damage_committed", "effect_review"],
+  pre_declaration: ["combat_experience"],
   review_action_modifiers: ["modifier_review"],
   review_phase_2_actions: ["parry", "offensive_parry_brawling"],
   review_phase_2_damage: ["parry", "offensive_parry_brawling"],

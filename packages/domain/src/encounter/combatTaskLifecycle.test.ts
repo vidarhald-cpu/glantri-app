@@ -400,7 +400,8 @@ describe("Perform Task across a real round rollover (#344)", () => {
     const atRoundSummary = stepUntil(source, "round_summary");
     const nextRound = advanceCombatRoundStep(completeRoundEndReview(atRoundSummary));
     expect(nextRound.roundNumber).toBe(source.roundNumber + 1);
-    expect(nextRound.currentStep).toBe("select_actions");
+    // Ruling 2 (#215): a round now opens in the Combat Experience pre-declaration step.
+    expect(nextRound.currentStep).toBe("pre_declaration");
     return stepUntil(nextRound, "phase_1_actions");
   }
 

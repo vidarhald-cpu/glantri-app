@@ -716,6 +716,8 @@ function createModifierEntryDraft(): ScenarioCombatModifierEntry {
 
 export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
   switch (step) {
+    case "pre_declaration":
+      return "Resolve Combat Experience";
     case "select_actions":
       return "Declare action";
     case "review_action_modifiers":
@@ -745,6 +747,8 @@ export function getGmCombatStepActionLabel(step: CombatRoundStep): string {
 
 export function getPlayerCombatStepLabel(step: CombatRoundStep): string {
   switch (step) {
+    case "pre_declaration":
+      return "Combat Experience check";
     case "select_actions":
       return "Declare action";
     case "review_action_modifiers":
