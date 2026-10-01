@@ -213,15 +213,65 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
 
   it("returns terminal Scenarios as read-only history before rendering live management", () => {
     const source = readScenarioDetailSource();
-    const terminalStart = source.indexOf('scenario.status === "completed"');
+    const terminalStart = source.indexOf("if (isScenarioReadOnly(scenario.status))");
     const liveStart = source.indexOf("const selectedTemplateSource", terminalStart);
     const terminalSource = source.slice(terminalStart, liveStart);
 
+    expect(terminalStart).toBeGreaterThan(-1);
     expect(terminalSource).toContain("Read-only Scenario history");
     expect(terminalSource).toContain("<ScenarioSessionPanel");
-    expect(terminalSource).not.toContain("<ScenarioSessionManagement");
-    expect(terminalSource).not.toContain("<ScenarioEncountersSection");
-    expect(terminalSource).not.toContain("<ScenarioEncounterAssignmentSection");
+
+    // The lifecycle control is the ONLY mutation affordance the terminal branch
+    // renders, and it is the section that carries `completed -> archived`.
+    expect(terminalSource).toContain("<ScenarioSummarySection");
+
+    // Every live-session affordance must stay outside this branch. These are the
+    // refusals that a loosening of the terminal guard would silently convert into
+    // offered operations.
+    for (const liveOnlySection of [
+      "<ScenarioSessionManagement",
+      "<ScenarioEncountersSection",
+      "<ScenarioEncounterAssignmentSection",
+      "<ScenarioCampaignRosterPickerSection",
+      "<ScenarioTemplateSourcesSection",
+      "<ScenarioEventLogSection",
+    ]) {
+      expect(terminalSource).not.toContain(liveOnlySection);
+    }
+
+    for (const liveOnlyHandler of [
+      "handleCreateEncounter",
+      "handleUpdateEncounterStatus",
+      "handleEncounterParticipantToggle",
+      "handleRosterParticipantToggle",
+      "handleParticipantActiveToggle",
+      "handleRefreshParticipantEquipment",
+      "handleCreateTemporaryActorFromTemplate",
+      "handleSaveScenarioSession",
+    ]) {
+      expect(terminalSource).not.toContain(liveOnlyHandler);
+    }
+
+    // The branch renders no bare control of its own: the archive affordance lives
+    // inside `ScenarioSummarySection`, which derives it from the domain vocabulary.
     expect(terminalSource).not.toContain("<button");
+    expect(terminalSource).not.toContain("<select");
+  });
+
+  it("derives terminal, read-only and lifecycle judgements from the domain vocabulary", () => {
+    const source = readScenarioDetailSource();
+    const summarySource = readComponentSource("ScenarioSummarySection.tsx");
+
+    // The hand-maintained twins of the domain lifecycle helpers are gone from both
+    // files, so a change to the domain vocabulary now reaches them via the compiler.
+    expect(source).toContain("isScenarioReadOnly");
+    expect(source).not.toContain(
+      'scenario.status === "completed" || scenario.status === "archived"',
+    );
+
+    expect(summarySource).toContain("isScenarioReadOnly(scenarioStatus)");
+    expect(summarySource).toContain("scenarioLifecycleTransitions[scenarioStatus]");
+    expect(summarySource).not.toContain('scenarioStatus === "draft"');
+    expect(summarySource).not.toContain('scenarioStatus === "paused"');
   });
 });
