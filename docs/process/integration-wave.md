@@ -108,7 +108,8 @@ some twins name it in the same file, and one may sit in the file that
 re-exports it, while others name it nowhere. A twin is a place that enumerates
 the members by hand; some are compiler-caught, and the dangerous ones are those
 with nothing obliging them to stay complete, so derivation tracing does not
-reach them however reachable they may be by identifier search. The procedure must therefore look for such places directly:
+reach them however reachable they may be by identifier search. The procedure
+must therefore look for such places directly:
 
 - array literals enumerating vocabulary members;
 - `switch` cases over vocabulary values;
@@ -145,9 +146,9 @@ abbreviations, so the new member does not type-error against it. The adjacent
 compiler-forced directly, which drew attention into the vicinity without
 forcing the enum itself; the missing member surfaced only at runtime, when the
 cursor mapping was reached. The other two were caught by nothing. One is the
-`||` equality chain in `isGlobalCombatRoundStep`, with its byte-identical
-hand-maintained web counterpart `isGlobalCombatRoundParticipantStep`, and the
-other is the pair of `CombatRoundStep[]` array literals that
+`||` equality chain in `isGlobalCombatRoundStep`, with its hand-maintained web
+counterpart `isGlobalCombatRoundParticipantStep` whose body is byte-identical,
+and the other is the pair of `CombatRoundStep[]` array literals that
 `apps/web/src/lib/campaigns/liveCombatModifiers.ts` hand-maintains. The new
 member appeared in neither array, so it fell through silently and was treated
 like `round_summary` — while a nested ternary chain in
