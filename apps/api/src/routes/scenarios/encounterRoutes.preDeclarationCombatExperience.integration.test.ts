@@ -291,6 +291,27 @@ async function openWorld(initialState: CombatRoundState): Promise<RouteWorld> {
       return { encounter: saved, participant };
     },
   );
+  // The clear-current-step route commits the encounter and every affected participant together when
+  // it removes a command that wrote participant state — a Combat Experience roll is one. Without this
+  // seam the route's save silently went nowhere and the test read back the pre-clear state.
+  mocks.encounterService.commitCombatParticipantStateMutations.mockImplementation(
+    async (update: {
+      participants: { participant: { id: string }; state: unknown }[];
+      session: Record<string, unknown>;
+    }) => {
+      const saved = await mocks.encounterService.updateEncounter({ session: update.session });
+      const changed: unknown[] = [];
+      for (const entry of update.participants) {
+        changed.push(
+          await mocks.encounterService.updateScenarioParticipantState({
+            participantId: entry.participant.id,
+            state: entry.state,
+          }),
+        );
+      }
+      return { encounter: saved, participants: changed };
+    },
+  );
   mocks.scenarioService.listScenarioParticipants.mockImplementation(async () => participants);
   mocks.scenarioService.getScenarioById.mockResolvedValue({
     campaignId: "campaign-1",
@@ -486,6 +507,111 @@ describe("#465 — a round with several due Combat Experience checks, driven thr
       // Declaration is now reachable, which is what makes clause 6 a real restriction rather than a
       // route that never works.
       expect(findProjectedTask(world.roundState(), "declare_action", participantB)).toBeDefined();
+    } finally {
+      randomSpy.mockRestore();
+      await world.app.close();
+    }
+  });
+
+  it("restores the obligation when the GM clears the pre-declaration step through the real route", async () => {
+    // The GM correction control: `POST …/combat-round/clear-current-step` →
+    // `clearCurrentCombatRoundStepAndRewind` → `undoLatestCombatRoundCommand`. Undo restored the
+    // Combat Experience result but not the due marker the roll had rescheduled, and put the round on
+    // `select_actions`, so the obligation evaporated and declaration opened against a removed result.
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [participantA, participantB] = dueParticipantIds;
+    const world = await openWorld(state);
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      const difficultyTask = requireProjectedTask(
+        world.roundState(),
+        "set_combat_experience_difficulty",
+      );
+      const openedWindow = await world.app.inject({
+        method: "POST",
+        payload: {
+          difficulty: 26,
+          executionGroupId: difficultyTask.executionGroupId,
+          expectedRevision: world.revision(),
+          taskId: difficultyTask.id,
+        },
+        url: "/encounters/encounter-1/combat-round/combat-experience-difficulty",
+      });
+      expect(openedWindow.statusCode).toBe(200);
+
+      const dueBefore = world
+        .roundState()
+        .participants.find(
+          (participant) => participant.participantId === participantA,
+        )?.combatExperienceDue;
+      const experienceBefore = world
+        .roundState()
+        .participants.find(
+          (participant) => participant.participantId === participantA,
+        )?.combatExperience;
+
+      const rollTask = requireProjectedTask(
+        world.roundState(),
+        "roll_combat_experience",
+        participantA,
+      );
+      const rolled = await world.app.inject({
+        method: "POST",
+        payload: {
+          executionGroupId: rollTask.executionGroupId,
+          expectedRevision: world.revision(),
+          scenarioParticipantId: `scenario-${participantA}`,
+          taskId: rollTask.id,
+        },
+        url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+      });
+      expect(rolled.statusCode).toBe(200);
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: participantA,
+          state: world.roundState(),
+        }),
+      ).toBe(false);
+
+      const cleared = await world.app.inject({
+        method: "POST",
+        payload: {},
+        url: "/encounters/encounter-1/combat-round/clear-current-step",
+      });
+      expect(cleared.statusCode).toBe(200);
+
+      const afterClear = world.roundState();
+      const restored = afterClear.participants.find(
+        (participant) => participant.participantId === participantA,
+      );
+
+      // The marker is the one that stood before the roll, not a recomputed future-round schedule.
+      expect(restored?.combatExperienceDue).toEqual(dueBefore);
+      expect(restored?.combatExperience).toEqual(experienceBefore);
+      expect(afterClear.currentStep).toBe("pre_declaration");
+      expect(
+        isCombatStartExperienceRollRequired({ participantId: participantA, state: afterClear }),
+      ).toBe(true);
+      // The other due participant is untouched: undo must not advance the round for anyone.
+      expect(
+        isCombatStartExperienceRollRequired({ participantId: participantB, state: afterClear }),
+      ).toBe(true);
+      // And ordinary declaration is unavailable again, through the real route.
+      expect(findProjectedTask(afterClear, "declare_action")).toBeUndefined();
+      const declarationAfterClear = await world.app.inject({
+        method: "POST",
+        payload: {
+          actionId: "pass",
+          executionGroupId: rollTask.executionGroupId,
+          expectedParticipantRevision: "2026-07-30T08:00:00.000Z",
+          expectedRevision: world.revision(),
+          scenarioParticipantId: `scenario-${participantB}`,
+          taskId: rollTask.id,
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      expect(declarationAfterClear.statusCode).toBe(409);
     } finally {
       randomSpy.mockRestore();
       await world.app.close();

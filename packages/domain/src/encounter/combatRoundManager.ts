@@ -6144,6 +6144,13 @@ export function rollCombatRoundCombatExperience(input: {
           }
         : {}),
       previousCombatExperience: participant.combatExperience,
+      // Ruling 2 (#215): a `combat_start` roll discharges the due marker and installs the schedule
+      // the fresh result implies, so the marker it replaced must be recorded alongside the result it
+      // replaced. Undo restores both from here rather than deriving a schedule: the command is the
+      // authority for the state that existed before it. `undefined` is recorded as an absent key and
+      // means "no marker was pending", which is also what every record written before this step
+      // existed means.
+      previousCombatExperienceDue: participant.combatExperienceDue,
       ...(previousPhaseActionStepStatus
         ? {
             previousPhaseActionStepStatus,
@@ -25375,6 +25382,17 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
   const previousCombatExperience = combatRoundCombatExperienceResultSchema.safeParse(
     command.facts.previousCombatExperience,
   );
+  // Ruling 2 (#215) / #465: only a `combat_start` roll touches the round-level due marker — it
+  // discharges the pending one and installs the schedule its own result implies. A phase trigger is a
+  // situational re-roll that never reschedules, so undoing one must leave the marker exactly as it
+  // stands. For a `combat_start` roll the marker is restored from the command's own recorded facts,
+  // the same authority the result itself is restored from; no schedule is recomputed here. A command
+  // recorded before this fact existed carries no marker, which is correct for it: the field did not
+  // persist before S5, so no such record can have replaced one.
+  const restoresCombatExperienceDue = command.facts.trigger === "combat_start";
+  const previousCombatExperienceDue = combatRoundCombatExperienceDueSchema.safeParse(
+    command.facts.previousCombatExperienceDue,
+  );
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
   const phase = command.phase;
   const previousPhaseResolutionStatus = combatRoundPhaseResolutionParticipantStatusSchema.safeParse(
@@ -25395,39 +25413,83 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
           },
         }
       : normalized.phaseResolutionStatuses;
+  const participantsAfterUndo = normalized.participants.map((participant) =>
+    participant.participantId === command.participantId
+      ? {
+          ...participant,
+          combatExperience: previousCombatExperience.success
+            ? previousCombatExperience.data
+            : undefined,
+          ...(restoresCombatExperienceDue
+            ? {
+                combatExperienceDue: previousCombatExperienceDue.success
+                  ? previousCombatExperienceDue.data
+                  : undefined,
+              }
+            : {}),
+          stepStatuses:
+            command.facts.phaseAttackCancelled === true && phase
+              ? {
+                  ...participant.stepStatuses,
+                  [getCombatRoundPhaseActionStepForPhase(phase)]:
+                    previousPhaseActionStepStatus.success
+                      ? previousPhaseActionStepStatus.data
+                      : "pending",
+                }
+              : participant.stepStatuses,
+        }
+      : participant,
+  );
+  // Ruling 1 (#465) read backwards. Undoing a pre-declaration `combat_start` roll re-opens the
+  // obligation that roll discharged, so the round must go back to the step at which that obligation
+  // is resolvable instead of landing on `select_actions` — `command.beforeCursor.step` is `DE` for
+  // every `combat_start` roll, and leaving the round there would both hide the obligation from
+  // `isCombatStartExperienceRollRequired`, which only fires at `pre_declaration`, and open ordinary
+  // declaration against a result that no longer exists. The decision is taken by the canonical
+  // requirement predicate evaluated against the restored participants at `pre_declaration`, which is
+  // the same helper `moveCombatRoundAfterCombatExperienceResult` uses in the forward direction; no
+  // schedule is derived here.
+  //
+  // Round 1 is excluded deliberately. It opens at `select_actions`, its opening check is required
+  // unconditionally and without any due marker, and the predicate would therefore report every
+  // participant as outstanding there. Undo at round 1 keeps exactly the step it restored before this
+  // step existed.
+  const outstandingCombatExperienceParticipantId =
+    restoresCombatExperienceDue && normalized.roundNumber > 1
+      ? getFirstCombatStartExperienceRequiredParticipantId(
+          combatRoundStateSchema.parse({
+            ...normalized,
+            currentStep: "pre_declaration",
+            participants: participantsAfterUndo,
+          }),
+        )
+      : undefined;
+  const restoredStep: CombatRoundStep = outstandingCombatExperienceParticipantId
+    ? "pre_declaration"
+    : selectedStep;
 
   return combatRoundStateSchema.parse({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
-    currentCursor: command.beforeCursor,
-    currentStep: selectedStep,
+    currentCursor: outstandingCombatExperienceParticipantId
+      ? getDefaultCombatRoundCursor({
+          participantId: outstandingCombatExperienceParticipantId,
+          roundNumber: normalized.roundNumber,
+          step: restoredStep,
+        })
+      : command.beforeCursor,
+    currentStep: restoredStep,
     phaseResolutionCursor:
       command.beforeCursor.step === "A1" || command.beforeCursor.step === "A2"
         ? undefined
         : normalized.phaseResolutionCursor,
     phaseResolutionStatuses: phaseResolutionStatusesAfterUndo,
-    participants: normalized.participants.map((participant) =>
-      participant.participantId === command.participantId
-        ? {
-            ...participant,
-            combatExperience: previousCombatExperience.success
-              ? previousCombatExperience.data
-              : undefined,
-            stepStatuses:
-              command.facts.phaseAttackCancelled === true && phase
-                ? {
-                    ...participant.stepStatuses,
-                    [getCombatRoundPhaseActionStepForPhase(phase)]:
-                      previousPhaseActionStepStatus.success
-                        ? previousPhaseActionStepStatus.data
-                        : "pending",
-                  }
-                : participant.stepStatuses,
-          }
-        : participant,
-    ),
-    selectedParticipantId: command.beforeCursor.participantId ?? command.participantId,
-    selectedStep,
+    participants: participantsAfterUndo,
+    selectedParticipantId:
+      outstandingCombatExperienceParticipantId ??
+      command.beforeCursor.participantId ??
+      command.participantId,
+    selectedStep: restoredStep,
   });
 }
 
