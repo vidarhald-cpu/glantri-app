@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
@@ -22725,5 +22727,389 @@ describe("#465 — clearing a pre-declaration Combat Experience roll restores th
         state: cleared,
       }),
     ).toBe(true);
+  });
+});
+
+describe("#465 — every production writer of combatExperienceDue has a reversible undo", () => {
+  /**
+   * The invariant this block establishes, over the complete writer set rather than over one
+   * reproduction: **every production writer of `combatExperienceDue` must have an undo path that
+   * restores the exact prior `combatExperienceDue` state.**
+   *
+   * At this head the field has exactly two production writers, both reaching it through the single
+   * private mutator `withCombatRoundCombatExperienceDue`:
+   *
+   *     applyCombatExperienceScheduleAfterRoll   <- rollCombatRoundCombatExperience
+   *     markCombatRoundCombatExperienceResetDue  <- recordCombatRoundCriticalRoll
+   *
+   * Every other site naming the field is a passthrough — round rehydration, Start New Round
+   * preservation, and the undo restores themselves. Both writers are pinned here in both
+   * directions. Every assertion is on the participant's observable `combatExperienceDue`; none
+   * checks merely that a snapshot fact exists, because a recorded fact that undo never reads would
+   * satisfy that and still destroy the marker.
+   */
+  const CREATED_BY = "gm-1";
+
+  type RoundState = ReturnType<typeof initializeCombatRoundState>;
+
+  function dueFor(participantId: string, state: RoundState) {
+    return getCombatRoundCombatExperienceDue({ participantId, state });
+  }
+
+  /** The difficulty can only be set before the first roll, so every fixture opens with this. */
+  function openForCombatExperience(state: RoundState): RoundState {
+    return setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+  }
+
+  function rollCombatStartExperience(input: {
+    participantId: string;
+    state: RoundState;
+  }): RoundState {
+    return rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: CREATED_BY },
+      participantId: input.participantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state: input.state,
+    }).state;
+  }
+
+  /**
+   * Drives the real engine from `state` through declaration, initiative, attack, a failed parry,
+   * hit location and damage, stopping with the Critical roll pending against `guard`. Nothing is
+   * hand-built: the state the Critical writer mutates is the state the engine produced.
+   */
+  function pendingCriticalAgainstGuard(state: RoundState): {
+    attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+    state: RoundState;
+  } {
+    const phase = "phase1" as const;
+    const atResolution = initializeCombatRoundPhaseResolutionCursor({
+      phase,
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [6],
+          rollTotal: 6,
+          total: 6,
+        },
+        participantId: "gladiator",
+        phase,
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state,
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase,
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: { createdAt: attackResult.rolledAt, createdByUserId: CREATED_BY },
+      participantId: "gladiator",
+      result: attackResult,
+      state: atResolution,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult,
+      command: { createdAt: "2026-01-01T00:04:00.000Z", createdByUserId: CREATED_BY },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: { createdAt: "2026-01-01T00:04:30.000Z", createdByUserId: CREATED_BY },
+      state: afterParry,
+    });
+
+    return {
+      attackResult,
+      state: recordCombatRoundDamageResult({
+        attackResult,
+        command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: CREATED_BY },
+        defenderDm: 0,
+        dmb: 8,
+        state: afterLocation,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    };
+  }
+
+  function rollCritical(input: {
+    attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+    createdAt: string;
+    state: RoundState;
+  }): RoundState {
+    return recordCombatRoundCriticalRoll({
+      attackResult: input.attackResult,
+      command: { createdAt: input.createdAt, createdByUserId: CREATED_BY },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: input.state,
+      submittedBy: "gm",
+      updatedAt: input.createdAt,
+    });
+  }
+
+  function undoLatest(state: RoundState): RoundState {
+    const undone = undoLatestCombatRoundCommand({ state });
+
+    if (!undone) throw new Error("Expected the latest command to be undoable.");
+
+    return undone;
+  }
+
+  function rollEveryParticipantAtRoundOne(state: RoundState): RoundState {
+    let next = openForCombatExperience(state);
+
+    for (const participant of next.participants) {
+      next = rollCombatStartExperience({ participantId: participant.participantId, state: next });
+    }
+
+    return next;
+  }
+
+  /** Runs the real engine forward until its own schedule makes a check due in `pre_declaration`. */
+  function advanceUntilDueAtPreDeclaration(state: RoundState): RoundState {
+    let next = state;
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (next.currentStep === "round_summary") next = completeCleanRoundEndReview(next);
+      next = advanceCombatRoundStep(next);
+
+      if (
+        next.currentStep === "pre_declaration" &&
+        getCombatRoundCombatExperienceDueParticipantIds(next).length > 0
+      ) {
+        return next;
+      }
+    }
+
+    throw new Error("The engine never made a Combat Experience check due at pre-declaration.");
+  }
+
+  describe("writer 1 — applyCombatExperienceScheduleAfterRoll, via rollCombatRoundCombatExperience", () => {
+    it("writes the schedule its own result implies, and undo restores the exact prior marker", () => {
+      // The prior state under test is a real engine-written marker, not absence: a round-1 roll
+      // installs a schedule, the engine carries it forward until its round arrives, and the roll
+      // measured here is the one that replaces it in `pre_declaration`.
+      const state = advanceUntilDueAtPreDeclaration(
+        rollEveryParticipantAtRoundOne(
+          initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+        ),
+      );
+      const [first] = getCombatRoundCombatExperienceDueParticipantIds(state);
+
+      expect(first).toBeDefined();
+
+      const opened = openForCombatExperience(state);
+      const dueBefore = dueFor(first!, opened);
+
+      expect(dueBefore).toBeDefined();
+      expect(dueBefore?.reason).toBe("scheduled");
+
+      // Forward: a fresh combat_start roll replaces the marker with the one its own result implies.
+      const afterRoll = rollCombatStartExperience({ participantId: first!, state: opened });
+      const dueAfter = dueFor(first!, afterRoll);
+
+      expect(dueAfter).toBeDefined();
+      expect(dueAfter).not.toEqual(dueBefore);
+      expect(dueAfter?.markedAtRoundNumber).toBe(afterRoll.roundNumber);
+
+      // Inverse: the exact prior marker, restored from the command's own facts.
+      expect(dueFor(first!, undoLatest(afterRoll))).toEqual(dueBefore);
+    });
+
+    it("restores absence when the roll it undoes replaced no marker", () => {
+      let state = openForCombatExperience(
+        initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      );
+
+      expect(dueFor("gladiator", state)).toBeUndefined();
+
+      state = rollCombatStartExperience({ participantId: "gladiator", state });
+
+      expect(dueFor("gladiator", state)).toBeDefined();
+      expect(dueFor("gladiator", undoLatest(state))).toBeUndefined();
+    });
+  });
+
+  describe("writer 2 — markCombatRoundCombatExperienceResetDue, via recordCombatRoundCriticalRoll", () => {
+    it("creates the ruled reset marker from absence, and undo restores absence", () => {
+      const prepared = pendingCriticalAgainstGuard(
+        initializeCombatRoundState({ encounter: encounter() }),
+      );
+
+      expect(dueFor("guard", prepared.state)).toBeUndefined();
+
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      // Forward: ruling 2's Critical-triggered reset, due from the next round.
+      expect(dueFor("guard", afterCritical)).toEqual({
+        dueFromRoundNumber: afterCritical.roundNumber + 1,
+        markedAtRoundNumber: afterCritical.roundNumber,
+        reason: "critical",
+      });
+
+      // Inverse: absence, not a manufactured marker and not the Critical's own.
+      expect(dueFor("guard", undoLatest(afterCritical))).toBeUndefined();
+    });
+
+    it("restores the exact prior schedule the Critical overwrote, rather than clearing or recomputing it", () => {
+      // This is the reported Critical reproduction, reduced to the writer it belongs to: the
+      // defender carries an engine-written scheduled marker when the Critical lands.
+      let state = openForCombatExperience(initializeCombatRoundState({ encounter: encounter() }));
+      state = rollCombatStartExperience({ participantId: "guard", state });
+
+      const prepared = pendingCriticalAgainstGuard(state);
+      const dueBefore = dueFor("guard", prepared.state);
+
+      expect(dueBefore).toBeDefined();
+      expect(dueBefore?.reason).toBe("scheduled");
+
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      // Forward: the Critical genuinely overwrites the scheduled marker, so the prior value is
+      // destroyed unless the command recorded it.
+      expect(dueFor("guard", afterCritical)?.reason).toBe("critical");
+      expect(dueFor("guard", afterCritical)).not.toEqual(dueBefore);
+
+      const undone = undoLatest(afterCritical);
+
+      // Inverse: structural equality against the value measured before the Critical. Clearing the
+      // field, or recomputing a schedule from the current round, both fail here.
+      expect(dueFor("guard", undone)).toEqual(dueBefore);
+      expect(dueFor("guard", undone)?.reason).toBe("scheduled");
+    });
+
+    it("undoes stacked Critical transitions back through each correct prior value", () => {
+      let state = openForCombatExperience(initializeCombatRoundState({ encounter: encounter() }));
+      state = rollCombatStartExperience({ participantId: "guard", state });
+
+      const prepared = pendingCriticalAgainstGuard(state);
+      const scheduled = dueFor("guard", prepared.state);
+
+      expect(scheduled?.reason).toBe("scheduled");
+
+      // Roll the Critical, correct it away, roll it again, correct it away again. Undo restores the
+      // criticalRoll to pending, so this is the real repeated GM-correction sequence.
+      const first = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      expect(dueFor("guard", first)?.reason).toBe("critical");
+
+      const backToScheduled = undoLatest(first);
+
+      expect(dueFor("guard", backToScheduled)).toEqual(scheduled);
+
+      const second = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:06:30.000Z",
+        state: backToScheduled,
+      });
+
+      expect(dueFor("guard", second)?.reason).toBe("critical");
+      // The second Critical recorded the marker *it* replaced — the restored scheduled one — so the
+      // sequence must land back on the same value rather than on the Critical's own.
+      expect(dueFor("guard", undoLatest(second))).toEqual(scheduled);
+    });
+
+    it("leaves participants the Critical never mentioned untouched through forward and undo", () => {
+      let state = openForCombatExperience(initializeCombatRoundState({ encounter: encounter() }));
+      state = rollCombatStartExperience({ participantId: "guard", state });
+      state = rollCombatStartExperience({ participantId: "gladiator", state });
+
+      const prepared = pendingCriticalAgainstGuard(state);
+      const attackerDue = dueFor("gladiator", prepared.state);
+
+      expect(attackerDue).toBeDefined();
+
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      expect(dueFor("gladiator", afterCritical)).toEqual(attackerDue);
+      expect(dueFor("gladiator", undoLatest(afterCritical))).toEqual(attackerDue);
+    });
+
+    it("preserves every unrelated effect of the Critical undo", () => {
+      const prepared = pendingCriticalAgainstGuard(
+        initializeCombatRoundState({ encounter: encounter() }),
+      );
+      const attackResultId = prepared.state.phaseResolutionResults[0]?.attackResultId;
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+      const undone = undoLatest(afterCritical);
+      const resolution = undone.phaseResolutionResults.find(
+        (result) => result.attackResultId === attackResultId,
+      );
+
+      // The Critical is genuinely removed and re-offerable, the round is back where it was, and the
+      // field restoration has not displaced any of that.
+      expect(undone.commands.some((command) => command.type === "roll_critical")).toBe(false);
+      expect(resolution?.criticalRoll.status).toBe("pending");
+      expect(undone.currentStep).toBe(prepared.state.currentStep);
+      expect(undone.roundNumber).toBe(prepared.state.roundNumber);
+    });
+  });
+
+  it("closes the writer set: the only mutator of the field has exactly these two callers", () => {
+    // A third writer would mean this block no longer establishes the invariant over the class, and
+    // a writer added without an undo is precisely the defect that stays green through every
+    // behavioural suite. The guard is therefore on the source, like the sibling undo-conformance
+    // tests in this package.
+    const source = readFileSync(new URL("./combatRoundManager.ts", import.meta.url), "utf8");
+    const mutatorCallSites = source
+      .split("\n")
+      .filter((line) => line.includes("withCombatRoundCombatExperienceDue({")).length;
+
+    // One declaration plus exactly two call sites. Both callers are pinned above.
+    expect(source.match(/withCombatRoundCombatExperienceDue/g)).toHaveLength(3);
+    expect(mutatorCallSites).toBe(2);
+    expect(source).toContain("function markCombatRoundCombatExperienceResetDue(input: {");
+    expect(source).toContain("function applyCombatExperienceScheduleAfterRoll(input: {");
   });
 });

@@ -12709,6 +12709,13 @@ function recordCombatRoundCriticalRollCommand(input: {
     createdByUserId?: string;
   };
   criticalRoll: CombatRoundCriticalRollResult;
+  /**
+   * Ruling 2 (#215) / #465: the defender's `combatExperienceDue` marker exactly as it stood
+   * *before* `markCombatRoundCombatExperienceResetDue` overwrote it with the Critical-triggered
+   * reset. It is read by the caller from the pre-mark state and threaded here because the state
+   * this function receives has already been mutated.
+   */
+  previousCombatExperienceDue: CombatRoundCombatExperienceDue | undefined;
   /** The resolved Secondary Critical, when the attack produced one (rule decision 0006). */
   secondaryCritical?: CombatRoundSecondaryCriticalResult;
   state: CombatRoundState;
@@ -12736,6 +12743,14 @@ function recordCombatRoundCriticalRollCommand(input: {
       criticalTypeModifier: input.criticalRoll.criticalTypeModifier,
       defenderParticipantId: input.attackResult.defenderParticipantId,
       finalCriticalRoll: input.criticalRoll.finalCriticalRoll,
+      // Ruling 2 (#215) / #465: this command's forward effect includes overwriting the defender's
+      // due marker with the Critical-triggered reset, so the marker it replaced is recorded here
+      // alongside the roll it replaced. Undo restores it from this fact rather than deriving a
+      // schedule: the command is the authority for the state that existed before it. `undefined` is
+      // recorded as an absent key and means "no marker was pending", which is also what every
+      // `roll_critical` command written before this step existed means — the field did not persist
+      // before S5, so no such command can have replaced a marker.
+      previousCombatExperienceDue: input.previousCombatExperienceDue,
       rolledByParticipantId: input.criticalRoll.rolledByParticipantId,
       rollPrivilege: "attacker",
       ...(input.secondaryCritical
@@ -12922,6 +12937,15 @@ export function recordCombatRoundCriticalRoll(input: {
   // Ruling 2 (#215): a Critical forces the struck character to start over with a fresh Combat
   // Experience roll. Only the reset is recorded here — it is resolved in the next round's
   // pre-declaration step, so the current round's declarations keep the state they were made against.
+  //
+  // #465: the mark is a *write* to persisted participant state, so it is read before it is
+  // overwritten. Every production writer of `combatExperienceDue` must have a reversible undo that
+  // restores the exact prior value from recorded command facts, and this is the only point at which
+  // the prior value is still observable.
+  const previousCombatExperienceDue = getCombatRoundCombatExperienceDue({
+    participantId: input.attackResult.defenderParticipantId,
+    state: withCriticalRoll,
+  });
   const withCombatExperienceReset = markCombatRoundCombatExperienceResetDue({
     participantId: input.attackResult.defenderParticipantId,
     state: withCriticalRoll,
@@ -12932,6 +12956,7 @@ export function recordCombatRoundCriticalRoll(input: {
         attackResult: input.attackResult,
         command: input.command,
         criticalRoll,
+        previousCombatExperienceDue,
         secondaryCritical:
           damageResultWithCriticalProposal.review?.criticalEffectProposal?.secondary,
         state: withCombatExperienceReset,
@@ -26534,6 +26559,20 @@ function undoCombatRoundCriticalRollCommandAtIndex(input: {
   const participantId = command.beforeCursor.participantId ?? command.participantId;
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
   const damageStep = getCombatRoundDamageReviewStepForPhase(phase);
+  // Ruling 2 (#215) / #465: recording the Critical overwrote the defender's due marker with the
+  // Critical-triggered reset, so removing the Critical must put back exactly the marker that reset
+  // replaced — read from this command's own facts, never recomputed from current round state and
+  // never replaced by a manufactured marker. A failed parse means no marker was recorded, which is
+  // the correct restored value both for a command that replaced nothing and for a `roll_critical`
+  // command persisted before S5, when the field did not exist at all.
+  //
+  // Only the field is restored. The reset the Critical installed is always due from
+  // `roundNumber + 1`, so it can carry no obligation in the round being corrected, and a restored
+  // prior marker is a schedule the next round's `pre_declaration` step will present. The step,
+  // cursor and every other effect of this undo are therefore left exactly as they were.
+  const previousCombatExperienceDue = combatRoundCombatExperienceDueSchema.safeParse(
+    command.facts.previousCombatExperienceDue,
+  );
 
   return {
     ...normalized,
@@ -26568,6 +26607,9 @@ function undoCombatRoundCriticalRollCommandAtIndex(input: {
       participant.participantId === attackResult.defenderParticipantId
         ? {
             ...participant,
+            combatExperienceDue: previousCombatExperienceDue.success
+              ? previousCombatExperienceDue.data
+              : undefined,
             stepStatuses: {
               ...participant.stepStatuses,
               [damageStep]: "ready",
