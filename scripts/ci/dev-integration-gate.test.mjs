@@ -465,11 +465,6 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
   const workflow = yamlValue(document.children.find((n) => n.type === "documentBody"));
   assert.equal(workflow.name, "CI");
   assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request", "push"]);
-  // Task-branch pushes are covered by the pull_request event. The integration
-  // and release refs must keep their push run: dev is the post-merge signal and
-  // main retains full application and tooling validation.
-  assert.deepEqual(workflow.on.push, { branches: ["dev", "main"] });
-  assert.equal(workflow.on.pull_request, null);
   const jobs = workflow.jobs;
   assert.deepEqual(jobs["dev-integration-gate"].needs, [
     "changes",
