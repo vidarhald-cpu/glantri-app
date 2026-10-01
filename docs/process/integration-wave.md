@@ -3,8 +3,9 @@
 This document records how accepted work reaches `dev`: the lifecycle, the
 relationship between control-plane acceptance and mechanical refresh, the
 procedure for deriving a consumed-vocabulary set, the reachability-path
-declaration required alongside it, and the conditions under which QA evidence
-survives a coordinated wave composition. It amends no authority
+declaration required alongside it, the conditions under which QA evidence
+survives a coordinated wave composition, and the provenance a measurement or an
+inherited claim must have before it becomes policy text. It amends no authority
 boundary; [AGENTS.md](../../AGENTS.md) remains canonical.
 
 ## Lifecycle
@@ -258,3 +259,35 @@ paths instead, for example
 `git diff --exit-code <reviewed-commit> <composed-commit> -- <reviewed paths>`
 or `git diff --name-status`, and treat an empty result as identity. Deletions
 then appear as deletions and are compared as such.
+
+## Evidence provenance
+
+Durable policy text inherits whatever confidence its sources carried, and says
+nothing about where that confidence came from unless it is made to. Two rules
+keep the inheritance honest:
+
+- **A quantitative or factual measurement used as durable evidence must be
+  reproducible from a committed state, or else explicitly labelled transient.**
+  Record which committed state exhibits the condition the measurement
+  describes. Where none does, say so and mark the figure transient rather than
+  recording it as a finding.
+- **A statement inherited from an issue body or a dispatch packet is a
+  hypothesis or a claim until it has been independently established.** Attribute
+  it as inherited, or establish it from source, before it becomes policy text.
+
+Wave 1 produced four instances of an unverified claim reaching committed policy
+text, two of which caused a QA FAIL. Two of them show why each rule exists:
+
+- A `git rev-parse` failure mechanism was written confidently into an issue and
+  from there into policy, and was wrong in the direction that ruled out the
+  actual fix. The command does fail, with exit status 128; what it does besides
+  failing is echo its own argument rather than return an object ID. The
+  corrected account is in
+  [blob checks](#blob-checks-use-a-restricted-tree-level-diff).
+- A figure of eleven `tsc` error sites, carried forward from an issue body, was
+  put at 23 by independent measurement. That it was wrong is the lesser fault.
+  It was unverifiable in principle: the lane's own first commit already
+  contained the change, so no committed state exhibited the condition the figure
+  described, and nobody could have reproduced it. That is the sharper case, and
+  it is why the first rule above is stated as reproducibility rather than as
+  accuracy.
