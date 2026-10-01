@@ -98,13 +98,17 @@ dependency that does not exist. Match whole identifiers (for example with word
 boundaries), then confirm each remaining hit consumes the symbol's type or value
 rather than merely containing its name.
 
-### Look for semantic twins that share no identifier with the vocabulary
+### Look for semantic twins that nothing forces to stay complete
 
 The caution above is one half of the problem: naive matching overstates the
 surface. It also understates it. A semantic twin — a second, hand-maintained
-enumeration of the same members — need not be derived from the vocabulary,
-need not import it, and need not mention its name anywhere. Derivation tracing
-does not reach such a twin, so the procedure must look for it directly:
+enumeration of the same members — need not be derived from the vocabulary and
+need not import it. Whether it mentions the vocabulary's name is incidental:
+some twins name it in the same file, and one may sit in the file that defines
+it, while others name it nowhere. What makes a place a twin is that it
+enumerates the members by hand with nothing obliging it to stay complete, so
+derivation tracing does not reach it however reachable it may be by identifier
+search. The procedure must therefore look for such places directly:
 
 - array literals enumerating vocabulary members;
 - `switch` cases over vocabulary values;
@@ -124,24 +128,32 @@ gives nothing — an array literal that omits a member is still well-typed, and
 an if/else chain carries no exhaustiveness obligation. The first class
 announces itself; the second class is where the search effort belongs.
 
-Wave 1's Combat lane added one member to `CombatRoundStep`, and four separate
-twins of that vocabulary were found one at a time across four discovery
-rounds. Only one was reliably compiler-caught: the hand-maintained `z.enum` in
-`combatStepEventSchema.ts`, whose divergence produced real `tsc` errors at
-eleven sites. A second, `combatRoundCursorStepSchema`, failed only at runtime:
-it is a `z.enum` of step abbreviations, so the new member does not type-error
-against it. The adjacent `COMBAT_ROUND_STEP_ABBREVIATIONS` object is indexed
-with the full union and so is compiler-forced, which drew attention into the
-vicinity without forcing the enum itself; the missing member surfaced only when
-`Start New Round` threw. The other two were caught by nothing. One is the
-`||` equality chain in `isGlobalCombatRoundStep`, with its hand-maintained web
-counterpart `isGlobalCombatRoundParticipantStep`, and the other is the pair of
-`CombatRoundStep[]` array literals that
-`apps/web/src/lib/campaigns/liveCombatModifiers.ts` hand-maintains beside an
-if-chain. The new member appeared in neither array, so it fell through silently
-and was treated like `round_summary` — while another file mapped the same
-member to `phase1`, leaving the two in disagreement with nothing to force either
-into line.
+Wave 1's Combat lane added one member to `CombatRoundStep` and found four twins
+of that vocabulary one at a time across four discovery rounds. Four is what one
+lane discovered, not a census: further hand-maintained enumerations of this
+vocabulary exist in non-test source, and the lane's own first commit had to
+repair compiler-caught ones beyond the single one recorded here. Read the four
+as illustrations of the classes above, not as the surface.
+
+Only one of the four was reliably compiler-caught: the hand-maintained `z.enum`
+in `combatStepEventSchema.ts`, whose divergence fails the typecheck at many
+assignment sites across several files. A second,
+`combatRoundCursorStepSchema`, failed only at runtime: it is a `z.enum` of step
+abbreviations, so the new member does not type-error against it. The adjacent
+`COMBAT_ROUND_STEP_ABBREVIATIONS` object carries a
+`satisfies Record<CombatRoundStep, string>` clause and is therefore
+compiler-forced directly, which drew attention into the vicinity without
+forcing the enum itself; the missing member surfaced only at runtime, when the
+cursor mapping was reached. The other two were caught by nothing. One is the
+`||` equality chain in `isGlobalCombatRoundStep`, with its byte-identical
+hand-maintained web counterpart `isGlobalCombatRoundParticipantStep`, and the
+other is the pair of `CombatRoundStep[]` array literals that
+`apps/web/src/lib/campaigns/liveCombatModifiers.ts` hand-maintains. The new
+member appeared in neither array, so it fell through silently and was treated
+like `round_summary` — while a nested ternary chain in
+`apps/web/src/features/combat-history/view-models/buildRecordedCombatModifierRows.ts`
+mapped the same member to `phase1`, leaving the two in disagreement with nothing
+to force either into line.
 
 The lesson to carry forward is that a workflow vocabulary can have behavioural
 twins that are invisible both to derivation tracing and to compiler
