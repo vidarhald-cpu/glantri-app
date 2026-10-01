@@ -98,6 +98,50 @@ dependency that does not exist. Match whole identifiers (for example with word
 boundaries), then confirm each remaining hit consumes the symbol's type or value
 rather than merely containing its name.
 
+### Look for semantic twins that share no identifier with the vocabulary
+
+The caution above is one half of the problem: naive matching overstates the
+surface. It also understates it. A semantic twin — a second, hand-maintained
+enumeration of the same members — need not be derived from the vocabulary,
+need not import it, and need not mention its name anywhere. Derivation tracing
+does not reach such a twin, so the procedure must look for it directly:
+
+- array literals enumerating vocabulary members;
+- `switch` cases over vocabulary values;
+- if/else chains testing vocabulary values;
+- object-key maps or `Set`s keyed by vocabulary values;
+- the schema, `.default()` and fallback sites steps 1 and 2 already cover.
+
+This is not an instruction to grep harder. It is an instruction to ask, of each
+place that handles the value, whether that place enumerates the vocabulary —
+and then to ask the question that decides how much suspicion it deserves.
+
+**The shape of the twin determines whether anything will catch it.** An
+exhaustive `Record<Vocabulary, …>`, a `switch` closed by a `never` guard, or a
+type inferred from the vocabulary gives a compiler net: diverge it and the
+build fails. An array literal, a `Set`, an object-key map or an if/else chain
+gives nothing — an array literal that omits a member is still well-typed, and
+an if/else chain carries no exhaustiveness obligation. The first class
+announces itself; the second class is where the search effort belongs.
+
+Wave 1's Combat lane added one member to `CombatRoundStep`, and five separate
+twins of that vocabulary were found one at a time across four discovery
+rounds. Three were compiler-catchable: the hand-maintained `z.enum` in
+`combatStepEventSchema.ts`, `combatRoundCursorStepSchema`, and an exhaustive
+`Record<CombatRoundStep, …>`. Diverging those produced real `tsc` errors at
+eleven sites, so the build would not pass. The other two were the two
+`CombatRoundStep[]` array literals that
+`apps/web/src/lib/campaigns/liveCombatModifiers.ts` hand-maintains beside an
+if-chain. The new member appeared in neither, so it fell through silently and
+was treated like `round_summary` — while another file mapped the same member to
+`phase1`, leaving the two in disagreement with nothing to force either into
+line.
+
+The lesson to carry forward is that a workflow vocabulary can have behavioural
+twins that are invisible both to derivation tracing and to compiler
+exhaustiveness. Neither a complete derivation trace nor a green build will
+surface them.
+
 ### What the procedure does not guarantee
 
 The procedure does not prove completeness. Composition condition 4 below is a
