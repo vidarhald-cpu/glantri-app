@@ -124,18 +124,24 @@ gives nothing — an array literal that omits a member is still well-typed, and
 an if/else chain carries no exhaustiveness obligation. The first class
 announces itself; the second class is where the search effort belongs.
 
-Wave 1's Combat lane added one member to `CombatRoundStep`, and five separate
+Wave 1's Combat lane added one member to `CombatRoundStep`, and four separate
 twins of that vocabulary were found one at a time across four discovery
-rounds. Three were compiler-catchable: the hand-maintained `z.enum` in
-`combatStepEventSchema.ts`, `combatRoundCursorStepSchema`, and an exhaustive
-`Record<CombatRoundStep, …>`. Diverging those produced real `tsc` errors at
-eleven sites, so the build would not pass. The other two were the two
+rounds. Only one was reliably compiler-caught: the hand-maintained `z.enum` in
+`combatStepEventSchema.ts`, whose divergence produced real `tsc` errors at
+eleven sites. A second, `combatRoundCursorStepSchema`, failed only at runtime:
+it is a `z.enum` of step abbreviations, so the new member does not type-error
+against it. The adjacent `COMBAT_ROUND_STEP_ABBREVIATIONS` object is indexed
+with the full union and so is compiler-forced, which drew attention into the
+vicinity without forcing the enum itself; the missing member surfaced only when
+`Start New Round` threw. The other two were caught by nothing. One is the
+`||` equality chain in `isGlobalCombatRoundStep`, with its hand-maintained web
+counterpart `isGlobalCombatRoundParticipantStep`, and the other is the pair of
 `CombatRoundStep[]` array literals that
 `apps/web/src/lib/campaigns/liveCombatModifiers.ts` hand-maintains beside an
-if-chain. The new member appeared in neither, so it fell through silently and
-was treated like `round_summary` — while another file mapped the same member to
-`phase1`, leaving the two in disagreement with nothing to force either into
-line.
+if-chain. The new member appeared in neither array, so it fell through silently
+and was treated like `round_summary` — while another file mapped the same
+member to `phase1`, leaving the two in disagreement with nothing to force either
+into line.
 
 The lesson to carry forward is that a workflow vocabulary can have behavioural
 twins that are invisible both to derivation tracing and to compiler
