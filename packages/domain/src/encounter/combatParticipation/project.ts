@@ -106,7 +106,13 @@ function isHeldForExplicitGmBacktrack(context: ProjectionContext, input: AddFact
     return false;
   }
 
-  if (hold.step === "select_actions") {
+  // Ruling 2 (#215): `pre_declaration` and `select_actions` are two steps of the one `declaration`
+  // boundary, and that boundary projects a single `declaration_boundary` deterministic transition. A
+  // GM backtrack hold recorded at either step is therefore honoured at that same fact. A hold at
+  // `pre_declaration` became reachable once undo learned to return the round to that step (#465); it
+  // would otherwise have fallen through to the `round_summary` comparison at the end and gone
+  // unhonoured.
+  if (hold.step === "pre_declaration" || hold.step === "select_actions") {
     return input.processFamily === "boundary" && input.step === "declaration_boundary";
   }
   if (hold.step === "initiative_phase_1") {

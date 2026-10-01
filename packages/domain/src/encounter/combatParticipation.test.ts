@@ -1500,3 +1500,68 @@ describe("combat progression participation consumption", () => {
     });
   });
 });
+
+describe("#465 — a GM backtrack hold at the pre-declaration step", () => {
+  /**
+   * `pre_declaration` and `select_actions` are two steps of the one `declaration` boundary, which
+   * projects a single `declaration_boundary` deterministic transition. The hold branch recognised
+   * only `select_actions`, so a hold recorded at `pre_declaration` fell through to the trailing
+   * `round_summary` comparison and was silently not honoured. The clear-current-step route records a
+   * hold at the step undo restored, so this became reachable as soon as undo learned to return the
+   * round to `pre_declaration`.
+   */
+  function stateAtPreDeclaration(hold: boolean) {
+    return activeState({
+      currentStep: "pre_declaration",
+      overrides: {
+        currentCursor: { participantId: "hero", roundNumber: 2, step: "PD" },
+        ...(hold
+          ? { gmBacktrackHold: { participantId: "hero", roundNumber: 2, step: "pre_declaration" } }
+          : {}),
+      },
+      participants: [
+        participant("hero", declaration("move_only"), {
+          stepStatuses: { select_actions: "submitted" },
+        }),
+        participant("guard", declaration("move_only"), {
+          stepStatuses: { select_actions: "submitted" },
+        }),
+      ],
+    });
+  }
+
+  it("is honoured at the shared declaration boundary fact", () => {
+    const unheld = fact(project(stateAtPreDeclaration(false)), {
+      family: "boundary",
+      step: "declaration_boundary",
+    });
+    const held = fact(project(stateAtPreDeclaration(true)), {
+      family: "boundary",
+      step: "declaration_boundary",
+    });
+
+    expect(unheld).toMatchObject({
+      reason: "deterministic_boundary",
+      status: "required",
+      workClass: "deterministic_transition",
+    });
+    expect(held).toMatchObject({
+      reason: "unresolved_choice",
+      status: "required",
+      workClass: "human_decision",
+    });
+  });
+
+  it("still leaves an unheld pre-declaration boundary automatic", () => {
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...stateAtPreDeclaration(true), rounds: [] }),
+      { participation: project(stateAtPreDeclaration(true)) },
+    );
+    const tasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) => stage.tasks),
+    );
+
+    expect(progression.boundary.kind).toBe("declaration");
+    expect(tasks.some((task) => task.kind === "gm_advance_boundary")).toBe(true);
+  });
+});

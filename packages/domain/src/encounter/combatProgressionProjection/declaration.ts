@@ -49,6 +49,15 @@ export function buildDeclarationProcesses(
   // Ruling 2 (#215): `pre_declaration` and `select_actions` share this one boundary, but they are
   // not the same step. While the round is in `pre_declaration` only the Combat Experience work is
   // projected; ordinary action declaration stays unavailable until `select_actions`.
+  //
+  // Every task below carries `trackerStep: "DE"`, including the Combat Experience tasks projected
+  // while the round is in `pre_declaration`. That is deliberate and is the tracker face of the shared
+  // boundary: the GM tracker has one Declaration column for the whole `declaration` boundary, and the
+  // pre-declaration step is part of it. The consequence, stated so no reader has to rediscover it,
+  // is that the tracker reads **DE** while `currentStep` is `pre_declaration`, even though that
+  // step's own cursor abbreviation is **PD** (`COMBAT_ROUND_STEP_ABBREVIATIONS`). `trackerStep` names
+  // the boundary column, not the round step; the two agree for every other step and diverge only
+  // here.
   const preDeclaration = context.state.currentStep === "pre_declaration";
 
   if (
