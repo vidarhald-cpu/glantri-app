@@ -1,8 +1,13 @@
 name: CI
 
 on:
+  # Task-branch pushes are already covered by the pull_request event, which
+  # carries the authoritative base. Running both duplicated every candidate and
+  # produced the only path that could reach an all-zeros previous ref. Keep the
+  # integration and release refs on push: dev pushes are the post-merge signal,
+  # and main retains full validation in dev-integration-gate.mjs.
   push:
-    branches: ["**"]
+    branches: ["dev", "main"]
   pull_request:
 
 env:

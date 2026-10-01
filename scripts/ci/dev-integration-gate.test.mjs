@@ -321,6 +321,60 @@ test("missing, zero, unavailable, empty and stale SHA evidence fails closed", (t
   assert.throws(() => f.plan("schedule", "dev"), /event/);
 });
 
+test("a ref-creating push carries no base and resolves the exact first parent", (t) => {
+  const f = fixture(t);
+  f.write("apps/web/src/app.ts");
+  const head = f.commit();
+  const explicit = collectPlan({ cwd: f.cwd, base: f.base, head, event: "push", target: "dev" });
+  // Forgejo reports an absent previous ref as all zeros; an unset env var arrives
+  // as the empty string. Both must produce the identical plan, not a red gate.
+  for (const base of [undefined, "", "0".repeat(40)]) {
+    const derived = collectPlan({ cwd: f.cwd, base, head, event: "push", target: "dev" });
+    assert.equal(derived.base, f.base);
+    assert.deepEqual(derived, explicit);
+  }
+  // Only a genuinely absent push base is derived. Corrupt evidence and every
+  // pull_request base still fail closed exactly as before.
+  for (const base of ["dev", "f".repeat(40), "0".repeat(39), "0".repeat(41)])
+    assert.throws(() => collectPlan({ cwd: f.cwd, base, head, event: "push", target: "dev" }));
+  for (const base of [undefined, "", "0".repeat(40)])
+    assert.throws(
+      () => collectPlan({ cwd: f.cwd, base, head, event: "pull_request", target: "dev" }),
+      /Exact nonzero base\/head SHA required/,
+    );
+});
+
+test("a ref-creating push of a root commit still fails closed", (t) => {
+  const cwd = mkdtempSync(path.join(tmpdir(), "glantri-gate-root-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = (...args) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Gate test",
+        "-c",
+        "user.email=gate@example.invalid",
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "core.hooksPath=/dev/null",
+        ...args,
+      ],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    ).trim();
+  git("init", "-q");
+  writeFileSync(path.join(cwd, "README.md"), "# Root\n");
+  git("add", ".");
+  git("commit", "-qm", "root");
+  const head = git("rev-parse", "HEAD");
+  for (const base of [undefined, "", "0".repeat(40)])
+    assert.throws(
+      () => collectPlan({ cwd, base, head, event: "push", target: "main" }),
+      /Exact nonzero base\/head SHA required/,
+    );
+});
+
 test("malformed path evidence and control-character filenames fail closed", (t) => {
   for (const raw of [
     "",
@@ -465,6 +519,11 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
   const workflow = yamlValue(document.children.find((n) => n.type === "documentBody"));
   assert.equal(workflow.name, "CI");
   assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request", "push"]);
+  // Task-branch pushes are covered by the pull_request event. The integration
+  // and release refs must keep their push run: dev is the post-merge signal and
+  // main retains full application and tooling validation.
+  assert.deepEqual(workflow.on.push, { branches: ["dev", "main"] });
+  assert.equal(workflow.on.pull_request, null);
   const jobs = workflow.jobs;
   assert.deepEqual(jobs["dev-integration-gate"].needs, [
     "changes",

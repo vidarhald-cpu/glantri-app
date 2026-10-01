@@ -73,23 +73,57 @@ export function classify(changes, event, target) {
   return { docs, tooling, runtime, required, reasons };
 }
 
+function requireExactCommit(cwd, value) {
+  if (!shaPattern.test(value ?? "") || /^0+$/.test(value))
+    throw new Error("Exact nonzero base/head SHA required");
+  if (git(cwd, ["rev-parse", "--verify", `${value}^{commit}`]).trim() !== value)
+    throw new Error("Commit identity mismatch");
+  return value;
+}
+
+// A push that creates a ref reports an all-zeros previous ref, so the event
+// carries no base at all. That is the only state the gate could not evaluate,
+// and it remains reachable on the retained push refs: `main` does not yet exist
+// on the integration server, so its first push would create it. Derive the
+// exact first parent of the pushed head instead, which on dev and main is the
+// previous ref value. Any other unusable base, and every pull_request base,
+// still fails closed.
+function firstParent(cwd, head) {
+  const parents = git(cwd, ["rev-list", "--parents", "--no-walk", head])
+    .trim()
+    .split(/\s+/)
+    .slice(1);
+  if (parents.length === 0) throw new Error("Exact nonzero base/head SHA required");
+  return parents[0];
+}
+
 export function collectPlan({ cwd = process.cwd(), base, head, event, target }) {
-  for (const value of [base, head]) {
-    if (!shaPattern.test(value ?? "") || /^0+$/.test(value))
-      throw new Error("Exact nonzero base/head SHA required");
-    if (git(cwd, ["rev-parse", "--verify", `${value}^{commit}`]).trim() !== value)
-      throw new Error("Commit identity mismatch");
-  }
+  requireExactCommit(cwd, head);
+  // Exactly the two shapes an absent previous ref can take: an unset variable,
+  // and Forgejo's full-width all-zeros ref. Anything else is corrupt evidence.
+  const eventSuppliedNoBase = !base || /^0{40}$/.test(base);
+  const resolvedBase = requireExactCommit(
+    cwd,
+    event === "push" && eventSuppliedNoBase ? firstParent(cwd, head) : base,
+  );
   if (git(cwd, ["rev-parse", "HEAD"]).trim() !== head)
     throw new Error("Checkout does not match event head");
-  const mergeBases = git(cwd, ["merge-base", "--all", base, head]).trim().split("\n");
+  const mergeBases = git(cwd, ["merge-base", "--all", resolvedBase, head]).trim().split("\n");
   if (mergeBases.length !== 1 || !shaPattern.test(mergeBases[0]))
     throw new Error("Unique merge base required");
   const mergeBase = mergeBases[0];
   const changes = parseChanges(
     git(cwd, ["diff", "--raw", "--no-abbrev", "--no-renames", "-z", mergeBase, head, "--"]),
   );
-  return { base, head, mergeBase, event, target, changes, ...classify(changes, event, target) };
+  return {
+    base: resolvedBase,
+    head,
+    mergeBase,
+    event,
+    target,
+    changes,
+    ...classify(changes, event, target),
+  };
 }
 
 export function aggregate(plan, needs) {
