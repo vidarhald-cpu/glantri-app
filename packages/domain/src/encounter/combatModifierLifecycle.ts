@@ -176,6 +176,39 @@ export type CanonicalCombatModifierRolledDuration = z.infer<
   typeof canonicalCombatModifierRolledDurationSchema
 >;
 
+/**
+ * The canonical persisted vocabulary of condition/event terminations. An `until_condition`
+ * duration ends only when its named condition/event transition occurs; no round boundary may
+ * invent a recovery roll for one.
+ *
+ * This is the single canonical home for the meaning of each member. Other layers — including the
+ * unpersisted Critical operational-effect carrier in `criticalInjuryDomain.ts` and the Critical
+ * runtime duration in `combatCriticalRuntime.ts` — reference this vocabulary rather than
+ * maintaining a second encoding of the same distinctions.
+ *
+ * - `effect_cleared` — ends when the referenced effect is cleared.
+ * - `contact_ended` — ends when the referenced contact/process relationship ends.
+ * - `participant_state` — ends when the referenced participant state changes.
+ * - `source_process_completed` — ends when the originating process completes.
+ * - `treated` — ends when treatment of the originating injury is declared. The accepted Critical
+ *   source names this event explicitly (`end_trigger: treated`); it carries no DC and no app-side
+ *   check, so the declaration remains GM-owned and no recovery roll is manufactured for it.
+ *
+ * Added members are additive: a persisted row written before a widening still parses, and still
+ * carries exactly the member it was written with. No reader branches on `conditionKind`, so a
+ * widening does not reinterpret any pre-existing row.
+ */
+export const canonicalCombatModifierConditionKindSchema = z.enum([
+  "effect_cleared",
+  "contact_ended",
+  "participant_state",
+  "source_process_completed",
+  "treated",
+]);
+export type CanonicalCombatModifierConditionKind = z.infer<
+  typeof canonicalCombatModifierConditionKindSchema
+>;
+
 export const canonicalCombatModifierDurationSchema = z.discriminatedUnion("kind", [
   durationStartSchema.extend({
     expiresAt: z.literal("phase_boundary"),
@@ -220,12 +253,7 @@ export const canonicalCombatModifierDurationSchema = z.discriminatedUnion("kind"
   }),
   durationStartSchema.extend({
     conditionId: idSchema,
-    conditionKind: z.enum([
-      "effect_cleared",
-      "contact_ended",
-      "participant_state",
-      "source_process_completed",
-    ]),
+    conditionKind: canonicalCombatModifierConditionKindSchema,
     kind: z.literal("until_condition"),
   }),
   durationStartSchema.extend({

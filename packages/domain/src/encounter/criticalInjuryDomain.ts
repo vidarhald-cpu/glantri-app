@@ -1,4 +1,7 @@
-import type { CanonicalCombatModifierPayload } from "./combatModifierLifecycle";
+import type {
+  CanonicalCombatModifierConditionKind,
+  CanonicalCombatModifierPayload,
+} from "./combatModifierLifecycle";
 import type {
   CriticalEffectGroup,
   CriticalEffectTemplate,
@@ -101,9 +104,19 @@ export type CriticalOperationalProjection =
     };
 
 export interface CriticalOperationalEffect extends CriticalInjuryChildIdentity {
+  /**
+   * `condition` is the authored source identifier. `conditionKind` binds it to the canonical
+   * persisted condition/event vocabulary in `combatModifierLifecycle.ts`; it is a reference to that
+   * vocabulary, never a second encoding of it. It is omitted where the accepted source names no
+   * transition this vocabulary can express, which leaves the effect GM-manual.
+   */
   duration:
     | { kind: "rounds"; rounds: number }
-    | { condition: string; kind: "until_condition" }
+    | {
+        condition: string;
+        conditionKind?: CanonicalCombatModifierConditionKind;
+        kind: "until_condition";
+      }
     | { kind: "persistent" };
   initialState: "active" | "pending";
   kind: "operational_effect";

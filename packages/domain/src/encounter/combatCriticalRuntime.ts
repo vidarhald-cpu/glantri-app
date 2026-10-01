@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { CanonicalCombatModifierConditionKind } from "./combatModifierLifecycle";
+
 export const combatCriticalExactRationalSchema = z
   .object({
     denominator: z.number().int().positive(),
@@ -8,7 +10,73 @@ export const combatCriticalExactRationalSchema = z
   .readonly();
 export type CombatCriticalExactRational = z.infer<typeof combatCriticalExactRationalSchema>;
 
+/**
+ * The authored termination events carried by `until_event` Critical durations. Each member names
+ * exactly one of the free-text phrases the accepted Critical source authors, so the binding adds
+ * structure without adding a rule: nothing here invents a check, a DC, a duration or a clock.
+ *
+ * - `appropriate_care` — "until appropriate care".
+ * - `controlled_removal_and_care` — "until controlled removal and care".
+ * - `extinguishing_flames` — "while rolling to extinguish flames".
+ * - `flames_extinguished` — "until flames extinguished".
+ * - `mapped_staunch_event` — "until the mapped staunch event".
+ * - `separately_resolved` — "until separately resolved".
+ * - `staunched` — "until staunched".
+ */
+export const combatCriticalEndEventSchema = z.enum([
+  "appropriate_care",
+  "controlled_removal_and_care",
+  "extinguishing_flames",
+  "flames_extinguished",
+  "mapped_staunch_event",
+  "separately_resolved",
+  "staunched",
+]);
+export type CombatCriticalEndEvent = z.infer<typeof combatCriticalEndEventSchema>;
+
+/**
+ * Maps an authored Critical termination event onto the canonical persisted condition/event
+ * vocabulary in `combatModifierLifecycle.ts`. This is the only place the correspondence is stated,
+ * which is what keeps `treated` a single canonical meaning rather than a second encoding.
+ *
+ * `null` means the accepted source names no canonical class for that event, so it stays GM-manual.
+ * `separately_resolved` is the only such member today: the source tracks those function changes as
+ * their own separately adjudicated records and states no transition this vocabulary can express.
+ * Returning `null` is deliberate — guessing a class here would fabricate a rule.
+ *
+ * The `default` arm binds `event` to `never`, so adding a member to `combatCriticalEndEventSchema`
+ * without deciding its canonical class fails the typecheck. Do not weaken or delete that guard.
+ */
+export function getCombatCriticalEndEventConditionKind(
+  event: CombatCriticalEndEvent,
+): CanonicalCombatModifierConditionKind | null {
+  switch (event) {
+    case "appropriate_care":
+    case "controlled_removal_and_care":
+    case "mapped_staunch_event":
+    case "staunched":
+      return "treated";
+    case "extinguishing_flames":
+    case "flames_extinguished":
+      return "source_process_completed";
+    case "separately_resolved":
+      return null;
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
+
+/**
+ * `text` is the pre-S6 carrier and stays required (`z.string().min(1)`). `endEvent` is an additive
+ * optional structured binding for `until_event` durations: a stored fact written before the
+ * binding existed omits it and still parses, which is what keeps historical `previousEffect` undo
+ * facts readable through `combatEffectSchema.safeParse`. Do not make `endEvent` required and do not
+ * relax `text`.
+ */
 export const combatCriticalDurationSchema = z.object({
+  endEvent: combatCriticalEndEventSchema.optional(),
   formula: z.enum(["d3", "d4"]).optional(),
   kind: z.enum(["fixed_rounds", "roll_once", "until_event", "gm_managed"]),
   rounds: z.number().int().positive().optional(),

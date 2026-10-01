@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canonicalCombatModifierConditionKindSchema,
+  type CanonicalCombatModifierConditionKind,
+} from "./combatModifierLifecycle";
+import {
   appendCriticalInjuryTransition,
   createCriticalInjuryCase,
   getCriticalInjuryChildState,
@@ -337,5 +341,61 @@ describe("inert Critical injury domain contract", () => {
         toState: "expired",
       }),
     ).toThrow("invalid superseding lineage");
+  });
+});
+
+describe("[#215 S6] the five source identifiers bind to one canonical vocabulary", () => {
+  type UntilConditionDuration = {
+    condition: string;
+    conditionKind?: CanonicalCombatModifierConditionKind;
+    kind: "until_condition";
+  };
+
+  function untilConditionDurations(): readonly UntilConditionDuration[] {
+    return REPRESENTATIVE_CRITICAL_INJURY_FIXTURES.flatMap((fixture) =>
+      fixture.operationalEffects
+        .map((effect) => effect.duration)
+        .filter(
+          (duration): duration is UntilConditionDuration => duration.kind === "until_condition",
+        ),
+    );
+  }
+
+  it("binds `treated` only where the accepted source names that event", () => {
+    const bindings = Object.fromEntries(
+      untilConditionDurations().map((duration) => [duration.condition, duration.conditionKind]),
+    );
+
+    expect(bindings).toEqual({
+      // Source `end_trigger: treated`.
+      explicit_treatment_rule: "treated",
+      // Source `end_trigger: treated_then_permanent`; only the `treated` stage is bound.
+      hand_function_changes: "treated",
+      // Source `end_trigger: special` — a positive statement that no mechanical rule exists.
+      leg_function_changes: undefined,
+      // Source gives a rolled D4-hour duration, not a condition. Representing it needs a unit on
+      // the canonical rolled shape, which is a further persisted widening and not bound here.
+      authored_waking_condition: undefined,
+      // Source's terminal transition is death, which requires a newly accepted rule.
+      catastrophic_process_resolved: undefined,
+    });
+  });
+
+  it("uses the canonical persisted vocabulary rather than a parallel encoding", () => {
+    const canonical = new Set(canonicalCombatModifierConditionKindSchema.options);
+
+    for (const duration of untilConditionDurations()) {
+      if (duration.conditionKind === undefined) continue;
+      expect(canonical.has(duration.conditionKind)).toBe(true);
+    }
+  });
+
+  it("keeps the authored source identifier alongside the canonical binding", () => {
+    // The identifier is provenance; the binding is meaning. Dropping either would make the
+    // fixture unverifiable against its source range.
+    for (const duration of untilConditionDurations()) {
+      expect(duration.condition.length).toBeGreaterThan(0);
+    }
+    expect(untilConditionDurations()).toHaveLength(5);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   CANONICAL_COMBAT_MODIFIER_LIFECYCLE_SCHEMA_VERSION,
+  canonicalCombatModifierConditionKindSchema,
   canonicalCombatModifierDurationSchema,
   canonicalCombatModifierEffectSchema,
   canonicalCombatModifierHistoricalSnapshotSchema,
@@ -490,5 +491,79 @@ describe("canonical temporal vocabulary", () => {
         }),
       ).toEqual({ kind: "not_time_driven" });
     }
+  });
+});
+
+describe("[#215 S6] the canonical condition/event vocabulary", () => {
+  // The exact membership before S6, written out by hand rather than derived from the schema, so
+  // this block fails if a later change removes or renames a pre-S6 member.
+  const PRE_S6_CONDITION_KINDS = [
+    "effect_cleared",
+    "contact_ended",
+    "participant_state",
+    "source_process_completed",
+  ] as const;
+
+  const start = { startRound: 4, startSequence: 2 } as const;
+
+  function untilCondition(conditionKind: string): unknown {
+    return { conditionId: "condition-1", conditionKind, kind: "until_condition", ...start };
+  }
+
+  it("widens the vocabulary additively: every pre-S6 member still parses to itself", () => {
+    for (const conditionKind of PRE_S6_CONDITION_KINDS) {
+      const parsed = canonicalCombatModifierDurationSchema.parse(untilCondition(conditionKind));
+      expect(parsed).toEqual({
+        conditionId: "condition-1",
+        conditionKind,
+        kind: "until_condition",
+        ...start,
+      });
+    }
+    expect(canonicalCombatModifierConditionKindSchema.options).toEqual([
+      ...PRE_S6_CONDITION_KINDS,
+      "treated",
+    ]);
+  });
+
+  it("binds `treated` canonically and keeps every pre-S6 interpretation unchanged", () => {
+    for (const conditionKind of [...PRE_S6_CONDITION_KINDS, "treated"] as const) {
+      const duration = canonicalCombatModifierDurationSchema.parse(untilCondition(conditionKind));
+
+      // Interpretation is a property of the `until_condition` shape, not of the member. Pre-S6
+      // rows therefore keep exactly the classification and boundary outcome they had, and the new
+      // member acquires the same one rather than a new behaviour of its own.
+      expect(classifyCanonicalCombatModifierDuration(duration)).toBe("condition_event");
+      expect(
+        evaluateCanonicalCombatModifierDurationAtRoundEnd({ duration, roundNumber: 9 }),
+      ).toEqual({ kind: "requires_resolution", requirement: "condition" });
+    }
+  });
+
+  it("rejects an unknown condition member rather than coercing or defaulting it", () => {
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse(untilCondition("treated_then_permanent"))
+        .success,
+    ).toBe(false);
+    expect(canonicalCombatModifierDurationSchema.safeParse(untilCondition("time")).success).toBe(
+      false,
+    );
+  });
+
+  it("keeps `conditionId` and `conditionKind` required, so no row acquires a member on read", () => {
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse({
+        conditionId: "condition-1",
+        kind: "until_condition",
+        ...start,
+      }).success,
+    ).toBe(false);
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse({
+        conditionKind: "treated",
+        kind: "until_condition",
+        ...start,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import {
+  combatCriticalEndEventSchema,
+  getCombatCriticalEndEventConditionKind,
+} from "@glantri/domain";
+
+import {
   accrueRepresentativeBleed,
   buildRepresentativeCriticalRuntimeDefinition,
   getC1FiveKeyCanonicalReview,
@@ -21,7 +26,7 @@ describe("#377 representative C1 Critical fixtures", () => {
     expect(REPRESENTATIVE_CRITICAL_FIXTURES).toHaveLength(34);
     expect(
       createHash("sha256").update(JSON.stringify(REPRESENTATIVE_CRITICAL_FIXTURES)).digest("hex"),
-    ).toBe("c25f320da6f7f02bacad8ebfd63e46455f2729fee9ed96391ddc3d2fd1e00020");
+    ).toBe("d3e7d0d7f74a0d7f6c1d094d3373307fa04f573c4ad32efbbd927a117c3cdc53");
   });
 
   it("retains unique stable identities, exact workbook provenance, and current source rows", () => {
@@ -374,5 +379,80 @@ describe("#377 representative C1 Critical fixtures", () => {
       expect.objectContaining({ code: "function_unusable", target: "arm" }),
     );
     expect(targetOnly.conditions.some((candidate) => candidate.code === "collapse")).toBe(false);
+  });
+});
+
+describe("[#215 S6] structured termination-event bindings on the representative fixtures", () => {
+  // Measured at the frozen Wave 2 baseline: 33 production `until_event` durations carrying 7
+  // distinct authored phrases. #215 §2.5 named two test lines, understating this by roughly 17x.
+  const EXPECTED_PHRASE_COUNTS = {
+    "until appropriate care": 11,
+    "until staunched": 6,
+    "until separately resolved": 6,
+    "until controlled removal and care": 4,
+    "until the mapped staunch event": 3,
+    "until flames extinguished": 2,
+    "while rolling to extinguish flames": 1,
+  } as const;
+
+  const PRE_S6_GOLDEN = "c25f320da6f7f02bacad8ebfd63e46455f2729fee9ed96391ddc3d2fd1e00020";
+
+  function untilEventDurations(): readonly { endEvent?: string; text: string }[] {
+    return REPRESENTATIVE_CRITICAL_FIXTURES.flatMap((fixture) =>
+      [...fixture.conditions.map((condition) => condition.duration), fixture.stun?.duration].filter(
+        (duration): duration is NonNullable<typeof duration> =>
+          duration !== undefined && duration.kind === "until_event",
+      ),
+    );
+  }
+
+  it("has migrated every free-text residue site to a structured binding", () => {
+    const durations = untilEventDurations();
+
+    expect(durations).toHaveLength(33);
+    expect(durations.every((duration) => duration.endEvent !== undefined)).toBe(true);
+    for (const duration of durations) {
+      expect(combatCriticalEndEventSchema.safeParse(duration.endEvent).success).toBe(true);
+    }
+  });
+
+  it("preserves every authored phrase and its measured residue count exactly", () => {
+    const counts = new Map<string, number>();
+    for (const duration of untilEventDurations()) {
+      counts.set(duration.text, (counts.get(duration.text) ?? 0) + 1);
+    }
+
+    expect(Object.fromEntries([...counts].sort())).toEqual(
+      Object.fromEntries(Object.entries(EXPECTED_PHRASE_COUNTS).sort()),
+    );
+    expect([...counts.values()].reduce((total, count) => total + count, 0)).toBe(33);
+  });
+
+  it("changed the content set by exactly the additive binding and nothing else", () => {
+    // Stripping `endEvent` back out reproduces the pre-S6 golden byte for byte. That is the
+    // evidence that the migration added a structured field and altered no authored content.
+    const stripped = JSON.stringify(REPRESENTATIVE_CRITICAL_FIXTURES, (key, value) =>
+      key === "endEvent" ? undefined : value,
+    );
+
+    expect(createHash("sha256").update(stripped).digest("hex")).toBe(PRE_S6_GOLDEN);
+  });
+
+  it("resolves each bound event through the one canonical mapping", () => {
+    const resolved = new Map<string, string | null>();
+    for (const duration of untilEventDurations()) {
+      const endEvent = combatCriticalEndEventSchema.parse(duration.endEvent);
+      resolved.set(endEvent, getCombatCriticalEndEventConditionKind(endEvent));
+    }
+
+    expect(Object.fromEntries([...resolved].sort())).toEqual({
+      appropriate_care: "treated",
+      controlled_removal_and_care: "treated",
+      extinguishing_flames: "source_process_completed",
+      flames_extinguished: "source_process_completed",
+      mapped_staunch_event: "treated",
+      separately_resolved: null,
+      staunched: "treated",
+    });
   });
 });

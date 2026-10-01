@@ -6,6 +6,7 @@ import {
   getCriticalResultWithEffects,
   type CombatCriticalDuration,
   type CombatCriticalAdjudication,
+  type CombatCriticalEndEvent,
   type CombatCriticalCanonicalReview,
   type CombatCriticalExactRational,
   type CombatCriticalRuntimeDefinition,
@@ -37,7 +38,12 @@ export type RepresentativeCriticalTreatmentSkill = "first_aid" | "medicine" | "s
 
 export type ExactRational = CombatCriticalExactRational;
 
+/**
+ * Hand-maintained structural twin of the persisted `CombatCriticalDuration`. `endEvent` mirrors the
+ * canonical optional binding; `text` stays required and keeps exactly the authored source phrase.
+ */
 export interface RepresentativeCriticalDuration {
+  readonly endEvent?: CombatCriticalEndEvent;
   readonly formula?: "d3" | "d4";
   readonly kind: "fixed_rounds" | "roll_once" | "until_event" | "gm_managed";
   readonly rounds?: number;
@@ -169,9 +175,25 @@ const rollRounds = (formula: "d3" | "d4", text: string): RepresentativeCriticalD
   text,
   unit: "round",
 });
-const until = (text: string): RepresentativeCriticalDuration => ({
+/**
+ * The authored phrase for each termination event, exactly as the accepted source words it. The
+ * `satisfies Record<CombatCriticalEndEvent, string>` clause is compiler-forced: a new event member
+ * with no authored phrase fails the typecheck rather than silently losing its text.
+ */
+const UNTIL_EVENT_TEXT = {
+  appropriate_care: "until appropriate care",
+  controlled_removal_and_care: "until controlled removal and care",
+  extinguishing_flames: "while rolling to extinguish flames",
+  flames_extinguished: "until flames extinguished",
+  mapped_staunch_event: "until the mapped staunch event",
+  separately_resolved: "until separately resolved",
+  staunched: "until staunched",
+} satisfies Record<CombatCriticalEndEvent, string>;
+
+const until = (endEvent: CombatCriticalEndEvent): RepresentativeCriticalDuration => ({
+  endEvent,
   kind: "until_event",
-  text,
+  text: UNTIL_EVENT_TEXT[endEvent],
 });
 
 const fixedBleed = (
@@ -499,7 +521,7 @@ const seeds: readonly FixtureSeed[] = [
     authority: "canonical_with_gm_adjudication",
     bleed: [fixedBleed("sharp|chest|09|03", "internal", 1, 2, "1 HP / 2 rounds")],
     canonicalName: "Chest cavity wound.",
-    conditions: [condition("unconscious", "consciousness", until("until appropriate care"))],
+    conditions: [condition("unconscious", "consciousness", until("appropriate_care"))],
     criticalKey: "sharp|chest|09",
     damageFloor: 5,
     description:
@@ -508,7 +530,7 @@ const seeds: readonly FixtureSeed[] = [
     information: [],
     operations: [],
     resultRange: "AppFacing_Crits!A42:X42",
-    stun: stun("sharp|chest|09|02", 5, null, until("until appropriate care")),
+    stun: stun("sharp|chest|09|02", 5, null, until("appropriate_care")),
     treatment: care("Generic treatment is not enough to identify a Skill check.", "until treated"),
   },
   {
@@ -517,7 +539,7 @@ const seeds: readonly FixtureSeed[] = [
     canonicalName: "Lower leg devastated.",
     conditions: [
       condition("collapse", "whole_body", immediate("collapse; end is GM-managed")),
-      condition("function_unusable", "lower_leg", until("until separately resolved")),
+      condition("function_unusable", "lower_leg", until("separately_resolved")),
     ],
     criticalKey: "sharp|lower_leg|12",
     damageFloor: 4,
@@ -546,7 +568,7 @@ const seeds: readonly FixtureSeed[] = [
       condition(
         "function_unusable",
         "hand",
-        until("until separately resolved"),
+        until("separately_resolved"),
         "immediate",
         true,
         "blunt|arm|12|04",
@@ -642,7 +664,7 @@ const seeds: readonly FixtureSeed[] = [
     authority: "canonical_with_gm_adjudication",
     bleed: [fixedBleed("blunt|chest|09|03", "internal", 1, 2, "1 HP / 2 rounds")],
     canonicalName: "Crushing chest injury.",
-    conditions: [condition("unconscious", "consciousness", until("until appropriate care"))],
+    conditions: [condition("unconscious", "consciousness", until("appropriate_care"))],
     criticalKey: "blunt|chest|09",
     damageFloor: 4,
     description:
@@ -651,7 +673,7 @@ const seeds: readonly FixtureSeed[] = [
     information: [],
     operations: [],
     resultRange: "AppFacing_Crits!A138:X138",
-    stun: stun("blunt|chest|09|02", 5, null, until("until appropriate care")),
+    stun: stun("blunt|chest|09|02", 5, null, until("appropriate_care")),
     treatment: care("Generic treatment remains GM-managed.", "until treated"),
   },
   {
@@ -660,7 +682,7 @@ const seeds: readonly FixtureSeed[] = [
     canonicalName: "Shattered femur with hidden blood loss.",
     conditions: [
       condition("collapse", "whole_body", immediate("collapse; rapidly weakening")),
-      condition("function_unusable", "leg", until("until separately resolved")),
+      condition("function_unusable", "leg", until("separately_resolved")),
     ],
     criticalKey: "blunt|upper_leg|12",
     damageFloor: 5,
@@ -687,7 +709,7 @@ const seeds: readonly FixtureSeed[] = [
     canonicalName: "Ankle and lower tibia crushed.",
     conditions: [
       condition("collapse", "whole_body", immediate("collapse; crawl only")),
-      condition("function_unusable", "ankle", until("until separately resolved")),
+      condition("function_unusable", "ankle", until("separately_resolved")),
     ],
     criticalKey: "blunt|lower_leg|12",
     damageFloor: 4,
@@ -748,7 +770,7 @@ const seeds: readonly FixtureSeed[] = [
     canonicalName: "Ankle blown apart.",
     conditions: [
       condition("collapse", "whole_body", immediate("collapse; crawl only")),
-      condition("function_unusable", "ankle", until("until separately resolved")),
+      condition("function_unusable", "ankle", until("separately_resolved")),
     ],
     criticalKey: "firearms|lower_leg|12",
     damageFloor: 4,
@@ -845,8 +867,8 @@ const seeds: readonly FixtureSeed[] = [
     bleed: [],
     canonicalName: "Clothing ablaze.",
     conditions: [
-      condition("restricted", "general_action", until("until flames extinguished")),
-      condition("prone", "stance", until("while rolling to extinguish flames")),
+      condition("restricted", "general_action", until("flames_extinguished")),
+      condition("prone", "stance", until("extinguishing_flames")),
     ],
     criticalKey: "fire_energy|whole_body|06",
     damageFloor: 4,
@@ -859,7 +881,7 @@ const seeds: readonly FixtureSeed[] = [
     ],
     operations: [],
     resultRange: "AppFacing_Crits!A503:X503",
-    stun: stun("fire_energy|whole_body|06|03", 5, null, until("until flames extinguished")),
+    stun: stun("fire_energy|whole_body|06|03", 5, null, until("flames_extinguished")),
     treatment: care(
       "Extinguishing the flames is an explicit field event, not a manufactured Skill check.",
       "extinguish flames immediately",
@@ -967,7 +989,7 @@ const seeds: readonly FixtureSeed[] = [
     authority: "canonical_with_gm_adjudication",
     bleed: [fixedBleed("pointed_weapons|arm|09|03", "external", 1, 3, "1 HP / 3 rounds")],
     canonicalName: "Joint puncture; arm locked.",
-    conditions: [condition("function_unusable", "arm", until("until appropriate care"))],
+    conditions: [condition("function_unusable", "arm", until("appropriate_care"))],
     criticalKey: "pointed_weapons|arm|09",
     damageFloor: 3,
     description:
@@ -976,7 +998,7 @@ const seeds: readonly FixtureSeed[] = [
     information: [],
     operations: [],
     resultRange: "AppFacing_Crits!A522:X522",
-    stun: stun("pointed_weapons|arm|09|02", 2, -2, until("until appropriate care")),
+    stun: stun("pointed_weapons|arm|09|02", 2, -2, until("appropriate_care")),
     treatment: care(
       "The generic treatment string remains GM-managed and creates no Skill check.",
       "until treated",
@@ -987,8 +1009,8 @@ const seeds: readonly FixtureSeed[] = [
     bleed: [fixedBleed("pointed_weapons|arm|10|03", "external", 3, 4, "1 HP / round")],
     canonicalName: "Deep upper-arm puncture.",
     conditions: [
-      condition("impaired", "general_action", until("until the mapped staunch event")),
-      condition("function_unusable", "arm", until("until the mapped staunch event")),
+      condition("impaired", "general_action", until("mapped_staunch_event")),
+      condition("function_unusable", "arm", until("mapped_staunch_event")),
     ],
     criticalKey: "pointed_weapons|arm|10",
     damageFloor: 5,
@@ -1003,7 +1025,7 @@ const seeds: readonly FixtureSeed[] = [
     ],
     operations: [],
     resultRange: "AppFacing_Crits!A523:X523",
-    stun: stun("pointed_weapons|arm|10|02", 3, -4, until("until the mapped staunch event")),
+    stun: stun("pointed_weapons|arm|10|02", 3, -4, until("mapped_staunch_event")),
     treatment: care("First Aid field control is the candidate staunch event.", "staunch quickly", [
       FIRST_AID,
     ]),
@@ -1012,9 +1034,7 @@ const seeds: readonly FixtureSeed[] = [
     authority: "canonical_with_gm_adjudication",
     bleed: [fixedBleed("pointed_weapons|arm|11|03", "external", 1, 3, "1 HP / 3 rounds")],
     canonicalName: "Hand transfixed.",
-    conditions: [
-      condition("function_unusable", "hand", until("until controlled removal and care")),
-    ],
+    conditions: [condition("function_unusable", "hand", until("controlled_removal_and_care"))],
     criticalKey: "pointed_weapons|arm|11",
     damageFloor: 3,
     description:
@@ -1028,7 +1048,7 @@ const seeds: readonly FixtureSeed[] = [
     ],
     operations: ["drop_held_item"],
     resultRange: "AppFacing_Crits!A524:X524",
-    stun: stun("pointed_weapons|arm|11|02", 3, -4, until("until controlled removal and care")),
+    stun: stun("pointed_weapons|arm|11|02", 3, -4, until("controlled_removal_and_care")),
     treatment: care(
       "Weapon removal plus generic treatment remains GM-managed.",
       "weapon removal + treatment",
@@ -1041,8 +1061,8 @@ const seeds: readonly FixtureSeed[] = [
     bleed: [fixedBleed("pointed_weapons|head|08|04", "external", 1, 2, "1D4 HP / round")],
     canonicalName: "Neck puncture with severe blood loss.",
     conditions: [
-      condition("impaired", "general_action", until("until staunched")),
-      condition("impaired", "stance", until("until staunched")),
+      condition("impaired", "general_action", until("staunched")),
+      condition("impaired", "stance", until("staunched")),
     ],
     criticalKey: "pointed_weapons|head|08",
     damageFloor: 4,
@@ -1052,7 +1072,7 @@ const seeds: readonly FixtureSeed[] = [
     information: [],
     operations: [],
     resultRange: "AppFacing_Crits!A537:X537",
-    stun: stun("pointed_weapons|head|08|03", 4, -8, until("until staunched")),
+    stun: stun("pointed_weapons|head|08|03", 4, -8, until("staunched")),
     treatment: care(
       "First Aid immediate field control is explicitly justified.",
       "staunch immediately",
@@ -1064,8 +1084,8 @@ const seeds: readonly FixtureSeed[] = [
     bleed: [fixedBleed("pointed_weapons|head|10|03", "internal", 2, 3, "1 HP / round")],
     canonicalName: "Temple or facial penetration.",
     conditions: [
-      condition("unconscious", "consciousness", until("until appropriate care")),
-      condition("no_action", "general_action", until("until appropriate care")),
+      condition("unconscious", "consciousness", until("appropriate_care")),
+      condition("no_action", "general_action", until("appropriate_care")),
     ],
     criticalKey: "pointed_weapons|head|10",
     damageFloor: 4,
@@ -1075,7 +1095,7 @@ const seeds: readonly FixtureSeed[] = [
     information: [],
     operations: [],
     resultRange: "AppFacing_Crits!A539:X539",
-    stun: stun("pointed_weapons|head|10|02", 5, null, until("until appropriate care")),
+    stun: stun("pointed_weapons|head|10|02", 5, null, until("appropriate_care")),
     treatment: care(
       "The source says immediate care but does not safely identify a Skill.",
       "immediate",
@@ -1089,7 +1109,7 @@ const seeds: readonly FixtureSeed[] = [
       condition(
         "impaired",
         "breathing_and_general_action",
-        until("until appropriate care"),
+        until("appropriate_care"),
         "immediate",
         true,
         "pointed_weapons|chest|07|04",
@@ -1108,7 +1128,7 @@ const seeds: readonly FixtureSeed[] = [
     ],
     operations: [],
     resultRange: "AppFacing_Crits!A552:X552",
-    stun: stun("pointed_weapons|chest|07|02", 3, -4, until("until appropriate care")),
+    stun: stun("pointed_weapons|chest|07|02", 3, -4, until("appropriate_care")),
     treatment: care(
       "Generic immediate treatment does not identify a Skill.",
       "immediate treatment",
@@ -1150,9 +1170,7 @@ const seeds: readonly FixtureSeed[] = [
     authority: "canonical_with_gm_adjudication",
     bleed: [fixedBleed("pointed_weapons|abdomen|08|03", "internal", 1, 2, "1 HP / round")],
     canonicalName: "Weapon lodged in the abdomen.",
-    conditions: [
-      condition("impaired", "general_action", until("until controlled removal and care")),
-    ],
+    conditions: [condition("impaired", "general_action", until("controlled_removal_and_care"))],
     criticalKey: "pointed_weapons|abdomen|08",
     damageFloor: 4,
     description:
@@ -1163,7 +1181,7 @@ const seeds: readonly FixtureSeed[] = [
     ],
     operations: [],
     resultRange: "AppFacing_Crits!A569:X569",
-    stun: stun("pointed_weapons|abdomen|08|02", 3, -4, until("until controlled removal and care")),
+    stun: stun("pointed_weapons|abdomen|08|02", 3, -4, until("controlled_removal_and_care")),
     treatment: care(
       "Controlled removal is required; no Skill identity is manufactured.",
       "leave in place until controlled removal",
@@ -1212,9 +1230,9 @@ const seeds: readonly FixtureSeed[] = [
     bleed: [fixedBleed("pointed_weapons|lower_leg|16|04", "external", 2, 3, "1 HP / round")],
     canonicalName: "Near-severing lower-leg puncture.",
     conditions: [
-      condition("no_action", "general_action", until("until staunched")),
-      condition("function_unusable", "leg", until("until separately resolved")),
-      condition("recovery_restricted", "stance", until("until staunched")),
+      condition("no_action", "general_action", until("staunched")),
+      condition("function_unusable", "leg", until("separately_resolved")),
+      condition("recovery_restricted", "stance", until("staunched")),
     ],
     criticalKey: "pointed_weapons|lower_leg|16",
     damageFloor: 4,
@@ -1227,7 +1245,7 @@ const seeds: readonly FixtureSeed[] = [
     ],
     operations: [],
     resultRange: "AppFacing_Crits!A609:X609",
-    stun: stun("pointed_weapons|lower_leg|16|03", 5, null, until("until staunched")),
+    stun: stun("pointed_weapons|lower_leg|16|03", 5, null, until("staunched")),
     treatment: care(
       "First Aid immediate field control is explicitly justified.",
       "staunch immediately",

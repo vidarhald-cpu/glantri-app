@@ -263,6 +263,8 @@ export const criticalInjuryFixtureB: CriticalInjuryCase = createCriticalInjuryCa
     },
     {
       criticalOutcomeId: "critical-b",
+      // Source `end_trigger: special` is a positive statement that no mechanical rule exists, so
+      // no canonical condition class is bound and resolution stays GM-manual.
       duration: { condition: "leg_function_changes", kind: "until_condition" },
       id: "critical-b:effect:leg",
       initialState: "active",
@@ -394,7 +396,13 @@ export const criticalInjuryFixtureC: CriticalInjuryCase = createCriticalInjuryCa
   operationalEffects: [
     {
       criticalOutcomeId: "critical-c",
-      duration: { condition: "explicit_treatment_rule", kind: "until_condition" },
+      // Source names the event: `duration_mode: until_treated`, `end_trigger: treated`. The row
+      // carries no DC, so the treatment declaration stays GM-owned and no check is manufactured.
+      duration: {
+        condition: "explicit_treatment_rule",
+        conditionKind: "treated",
+        kind: "until_condition",
+      },
       id: "critical-c:effect:impaired",
       initialState: "active",
       kind: "operational_effect",
@@ -496,6 +504,10 @@ export const criticalInjuryFixtureD: CriticalInjuryCase = createCriticalInjuryCa
   operationalEffects: [
     {
       criticalOutcomeId: "critical-d",
+      // Source gives no condition at all: `duration_mode: roll`, `d4`, unit `hour`,
+      // `end_trigger: time`. Representing that faithfully needs a unit on the canonical rolled
+      // duration shape, which has none. That is a further persisted widening and a contract
+      // decision, so this identifier is left unbound rather than reclassified here.
       duration: { condition: "authored_waking_condition", kind: "until_condition" },
       id: "critical-d:effect:unconscious",
       initialState: "active",
@@ -593,7 +605,14 @@ export const criticalInjuryFixtureE: CriticalInjuryCase = createCriticalInjuryCa
     },
     {
       criticalOutcomeId: "critical-e",
-      duration: { condition: "hand_function_changes", kind: "until_condition" },
+      // Source names a two-stage transition (`treated_then_permanent`). Only the `treated` stage is
+      // bound; the permanence stage has no canonical shape and remains GM-manual. No stage is
+      // improvised here.
+      duration: {
+        condition: "hand_function_changes",
+        conditionKind: "treated",
+        kind: "until_condition",
+      },
       id: "critical-e:effect:hand",
       initialState: "active",
       kind: "operational_effect",
@@ -709,6 +728,9 @@ export const criticalInjuryFixtureF: CriticalInjuryCase = createCriticalInjuryCa
   operationalEffects: [
     {
       criticalOutcomeId: "critical-f",
+      // Source gives a D4-round timer whose terminal transition is death. Death and terminal-state
+      // semantics require a newly accepted rule, so no canonical condition class is bound and no
+      // terminal transition is implemented.
       duration: { condition: "catastrophic_process_resolved", kind: "until_condition" },
       id: "critical-f:effect:collapse",
       initialState: "active",
