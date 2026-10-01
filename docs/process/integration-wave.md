@@ -104,11 +104,11 @@ The caution above is one half of the problem: naive matching overstates the
 surface. It also understates it. A semantic twin — a second, hand-maintained
 enumeration of the same members — need not be derived from the vocabulary and
 need not import it. Whether it mentions the vocabulary's name is incidental:
-some twins name it in the same file, and one may sit in the file that defines
-it, while others name it nowhere. What makes a place a twin is that it
-enumerates the members by hand with nothing obliging it to stay complete, so
-derivation tracing does not reach it however reachable it may be by identifier
-search. The procedure must therefore look for such places directly:
+some twins name it in the same file, and one may sit in the file that
+re-exports it, while others name it nowhere. A twin is a place that enumerates
+the members by hand; some are compiler-caught, and the dangerous ones are those
+with nothing obliging them to stay complete, so derivation tracing does not
+reach them however reachable they may be by identifier search. The procedure must therefore look for such places directly:
 
 - array literals enumerating vocabulary members;
 - `switch` cases over vocabulary values;
