@@ -195,7 +195,9 @@ Use for a mechanically refreshed candidate with prior durable PASS, rather than
 inventing a prior FAIL to use REPAIR. Supply the INITIAL tuple plus the prior
 reviewed head/PASS link, new exact baseline/head, refresh operation, declared
 delta, and selected equivalence evidence. Independently verify topology, scope,
-relevant blob/tree comparisons, and applicability of carried-forward gates.
+relevant blob/tree comparisons (see
+[blob checks](integration-wave.md#blob-checks-use-a-restricted-tree-level-diff)),
+and applicability of carried-forward gates.
 Return an exact-head preservation verdict with that durable evidence. A product
 change instead needs fresh substantive QA. The same separate-task, immutable
 entry, lease, and anti-loop rules apply.
