@@ -188,7 +188,15 @@ export const combatStepEventSourceSchema = z.object({
 });
 export type CombatStepEventSource = z.infer<typeof combatStepEventSourceSchema>;
 
+/**
+ * The step vocabulary carried by persisted Combat step events. This is a structural twin of
+ * `combatRoundStepSchema` (`./combatRoundStep`) and must stay member-for-member identical to it;
+ * `combatRoundManager.test.ts` — "keeps the persisted step-event vocabulary identical to the
+ * canonical one" — is the sole test pinning that agreement. It is declared separately only because this
+ * module must not depend on `combatRoundManager`.
+ */
 export const combatStepEventStepSchema = z.enum([
+  "pre_declaration",
   "select_actions",
   "review_action_modifiers",
   "initiative_phase_1",

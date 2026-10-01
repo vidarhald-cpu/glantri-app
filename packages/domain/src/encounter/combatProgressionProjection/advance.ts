@@ -31,6 +31,11 @@ const TARGET_STEP_BY_BOUNDARY: Partial<Record<CombatProgressionBoundaryKind, Com
 };
 
 const DIRECT_TRANSITIONS = new Set([
+  // Ruling 2 (#215): the `declaration` boundary spans `pre_declaration` and `select_actions`, so
+  // advancing out of the pre-declaration step re-opens the same boundary. The handler below already
+  // delegates every `declaration` advance to `advanceCombatRoundStep`, which performs exactly that
+  // one step hop.
+  "declaration:declaration",
   "declaration:phase1_modifier_review",
   "phase1_modifier_review:phase1_initiative",
   "phase1_resolution:phase2_modifier_review",

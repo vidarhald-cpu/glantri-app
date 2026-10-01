@@ -317,7 +317,9 @@ export function boundaryForCursorStep(
   step: CombatRoundCursorStep,
   hasParticipant: boolean,
 ): CombatProgressionBoundaryKind {
-  if (step === "DE") return "declaration";
+  // Ruling 2 (#215): `pre_declaration` (`PD`) and `select_actions` (`DE`) share the one
+  // `declaration` authorization boundary. See `boundaryForStep` for why that reuse is safe.
+  if (step === "PD" || step === "DE") return "declaration";
   if (step === "M1") return "phase1_modifier_review";
   if (step === "i1") return "phase1_initiative";
   if (step === "A1" || step === "P1" || step === "D1") return "phase1_resolution";
@@ -327,11 +329,30 @@ export function boundaryForCursorStep(
   return hasParticipant ? "round_end" : "round_boundary";
 }
 
+/**
+ * Ruling 2 (#215): the `declaration` boundary is a deliberately coarse authorization *family*, not a
+ * synonym for one round step. It spans `pre_declaration` and `select_actions`, and the two steps stay
+ * semantically distinct because every command authorized at this boundary carries its own step guard
+ * or its own projected precondition:
+ *
+ * - `roll_combat_experience` and `set_combat_experience_difficulty` admit exactly
+ *   `pre_declaration` and `select_actions` (`combatRoundManager.ts`), so the pre-declaration Combat
+ *   Experience check is reachable.
+ * - `declare_action` is *not* projected at all while the round is in `pre_declaration`
+ *   (`buildDeclarationProcesses`), and its player path additionally requires
+ *   `currentStep === "select_actions"` through `canPlayerSubmitCombatDeclaration`. Ordinary action
+ *   declaration therefore stays unavailable until `select_actions`.
+ *
+ * Advancing the boundary is likewise step-wise rather than boundary-wise: `transitionWithoutCommand`
+ * delegates a `declaration` advance to `advanceCombatRoundStep`, so the GM advance offered in
+ * `pre_declaration` moves the round to `select_actions` and re-opens the same boundary. No new
+ * persisted boundary vocabulary member is introduced.
+ */
 export function boundaryForStep(
   step: CombatRoundStep,
   state: CombatRoundState,
 ): CombatProgressionBoundaryKind {
-  if (step === "select_actions") return "declaration";
+  if (step === "pre_declaration" || step === "select_actions") return "declaration";
   if (step === "review_action_modifiers") return "phase1_modifier_review";
   if (step === "initiative_phase_1") return "phase1_initiative";
   if (

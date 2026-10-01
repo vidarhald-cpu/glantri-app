@@ -33,6 +33,23 @@ describe("combat round timeline navigation", () => {
     ).toEqual({
       participantId: "gladiator",
       roundNumber: 2,
+      // A round opens in the Combat Experience pre-declaration step (#215 ruling 2).
+      step: "pre_declaration",
+    });
+  });
+
+  it("moves next step from the pre-declaration step into declaration", () => {
+    expect(
+      getAdjacentCombatRoundTimelineStepSelection({
+        participantId: "gladiator",
+        roundNumbers: [1, 2],
+        selectedRoundNumber: 2,
+        step: "pre_declaration",
+        stepOffset: 1,
+      }),
+    ).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
       step: "select_actions",
     });
   });
@@ -43,13 +60,29 @@ describe("combat round timeline navigation", () => {
         participantId: "gladiator",
         roundNumbers: [1, 2],
         selectedRoundNumber: 2,
-        step: "select_actions",
+        step: "pre_declaration",
         stepOffset: -1,
       }),
     ).toEqual({
       participantId: "gladiator",
       roundNumber: 1,
       step: "round_summary",
+    });
+  });
+
+  it("moves previous step from declaration into the pre-declaration step", () => {
+    expect(
+      getAdjacentCombatRoundTimelineStepSelection({
+        participantId: "gladiator",
+        roundNumbers: [1, 2],
+        selectedRoundNumber: 2,
+        step: "select_actions",
+        stepOffset: -1,
+      }),
+    ).toEqual({
+      participantId: "gladiator",
+      roundNumber: 2,
+      step: "pre_declaration",
     });
   });
 

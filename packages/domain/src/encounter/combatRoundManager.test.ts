@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import type { EncounterParticipant, EncounterSession } from "./session";
 import type { HitLocationTarget } from "./hitLocation";
@@ -135,9 +138,19 @@ import {
   skipCombatRoundCurrentPhaseAction,
   sortCombatRoundParticipantsByInitiative,
   undoLatestCombatRoundCommand,
+  combatRoundStepSchema,
+  completedCombatRoundSchema,
+  combatRoundParticipantStateSchema,
+  getCombatExperienceNextCheckRoundNumber,
+  getCombatRoundCombatExperienceDue,
+  getCombatRoundCombatExperienceDueParticipantIds,
+  getNextCombatRoundStep,
+  isCombatRoundCombatExperienceDue,
+  isCombatStartExperienceRollRequired,
+  markCombatRoundCombatExperienceResetDue,
   type CombatRoundEndDistanceRollResult,
 } from "./combatRoundManager";
-import { combatStepEventSchema } from "./combatStepEventSchema";
+import { combatStepEventSchema, combatStepEventStepSchema } from "./combatStepEventSchema";
 import { buildCombatDefenseSnapshotId, combatDefenseSnapshotSchema } from "./combatDefenseSnapshot";
 import {
   applyCombatActionGeneratedModifiers,
@@ -2290,6 +2303,7 @@ describe("combat round manager", () => {
   });
   it("defines the compact round timeline steps in order", () => {
     expect(COMBAT_ROUND_STEPS.map((step) => COMBAT_ROUND_STEP_ABBREVIATIONS[step])).toEqual([
+      "PD",
       "DE",
       "M1",
       "i1",
@@ -6266,7 +6280,8 @@ describe("combat round manager", () => {
     );
 
     expect(roundSummaryState.currentStep).toBe("round_summary");
-    expect(nextRoundState.currentStep).toBe("select_actions");
+    // Ruling 2 (#215): Start New Round enters the Combat Experience pre-declaration step.
+    expect(nextRoundState.currentStep).toBe("pre_declaration");
     expect(nextRoundState.roundNumber).toBe(4);
     expect(nextRoundState.selectedParticipantId).toBe("gladiator");
     expect(nextRoundState.participants[0]?.stepStatuses.select_actions).toBe("pending");
@@ -6315,7 +6330,7 @@ describe("combat round manager", () => {
     };
     const nextRoundState = advanceCombatRoundStep(completeCleanRoundEndReview(roundSummaryState));
 
-    expect(nextRoundState.currentStep).toBe("select_actions");
+    expect(nextRoundState.currentStep).toBe("pre_declaration");
     expect(nextRoundState.roundNumber).toBe(4);
     expect(nextRoundState.phaseResolutionCursor).toBeUndefined();
     expect(nextRoundState.phaseResolutionResults).toEqual([]);
@@ -6637,7 +6652,8 @@ describe("combat round manager", () => {
   });
 
   it("finds the previous combat round step", () => {
-    expect(getPreviousCombatRoundStep("select_actions")).toBeUndefined();
+    expect(getPreviousCombatRoundStep("pre_declaration")).toBeUndefined();
+    expect(getPreviousCombatRoundStep("select_actions")).toBe("pre_declaration");
     expect(getPreviousCombatRoundStep("review_action_modifiers")).toBe("select_actions");
     expect(getPreviousCombatRoundStep("initiative_phase_1")).toBe("review_action_modifiers");
   });
@@ -17120,14 +17136,14 @@ describe("combat round manager", () => {
       (round) => round.roundNumber === roundSummaryState.roundNumber,
     );
 
-    expect(completed.currentStep).toBe("select_actions");
+    expect(completed.currentStep).toBe("pre_declaration");
     expect(completed.roundNumber).toBe(roundSummaryState.roundNumber + 1);
     expect(completed.commands).toEqual([]);
     expect(completed.events).toEqual([]);
     expect(completed.currentCursor).toEqual({
       participantId: "gladiator",
       roundNumber: roundSummaryState.roundNumber + 1,
-      step: "DE",
+      step: "PD",
     });
     expect(
       completed.participants.map((participant) => participant.stepStatuses.select_actions),
@@ -17173,7 +17189,7 @@ describe("combat round manager", () => {
     ]);
     expect(timelineRounds[0]?.currentStep).toBe("round_summary");
     expect(timelineRounds[0]?.participants[0]?.stepStatuses.round_summary).toBe("complete");
-    expect(timelineRounds[1]?.currentStep).toBe("select_actions");
+    expect(timelineRounds[1]?.currentStep).toBe("pre_declaration");
     expect(timelineRounds[1]?.commands).toEqual([]);
     expect(timelineRounds[1]?.participants[0]?.declaration).toBeUndefined();
   });
@@ -17252,10 +17268,10 @@ describe("combat round manager", () => {
         state: activeRound!,
       }),
     ).toBeUndefined();
-    expect(activeRound?.currentStep).toBe("select_actions");
+    expect(activeRound?.currentStep).toBe("pre_declaration");
     expect(activeRound?.currentCursor).toMatchObject({
       roundNumber: roundSummaryState.roundNumber + 1,
-      step: "DE",
+      step: "PD",
     });
   });
 
@@ -21765,5 +21781,1335 @@ describe("canonical temporal vocabulary at Round End", () => {
       owner: "source_process",
       resolved: false,
     });
+  });
+});
+
+describe("#215 S5 — the Combat Experience pre-declaration step", () => {
+  /**
+   * The canonical round step vocabulary, written out in full and in order.
+   *
+   * The count is asserted from this list rather than as a bare number. A bare `toHaveLength(13)`
+   * would pass just as happily if the wrong member were added, or if one member were added and
+   * another removed — the failure mode #215 comment 10892 warns about: a green test encoding a
+   * false premise. Measured at the wave baseline `4db21c68`, this enum had **12** members;
+   * `pre_declaration` makes it 13.
+   */
+  const CANONICAL_STEPS = [
+    "pre_declaration",
+    "select_actions",
+    "review_action_modifiers",
+    "initiative_phase_1",
+    "phase_1_actions",
+    "review_phase_2_actions",
+    "phase_1_damage",
+    "review_phase_2_modifiers",
+    "initiative_phase_2",
+    "phase_2_actions",
+    "review_phase_2_damage",
+    "phase_2_damage",
+    "round_summary",
+  ] as const;
+
+  /** The 12 members that existed before S5, in their baseline order. */
+  const PRE_S5_STEPS = CANONICAL_STEPS.filter((step) => step !== "pre_declaration");
+
+  it("defines exactly thirteen canonical round steps, in order, opening at the pre-declaration step", () => {
+    expect(COMBAT_ROUND_STEPS).toEqual(CANONICAL_STEPS);
+    expect(COMBAT_ROUND_STEPS).toHaveLength(13);
+    expect(PRE_S5_STEPS).toHaveLength(12);
+    expect(COMBAT_ROUND_STEPS[0]).toBe("pre_declaration");
+    expect(COMBAT_ROUND_STEPS.indexOf("pre_declaration")).toBeLessThan(
+      COMBAT_ROUND_STEPS.indexOf("select_actions"),
+    );
+    // The pre-S5 members keep their relative order, so every `COMBAT_ROUND_STEPS.indexOf(...)`
+    // comparison in the engine continues to order them exactly as it did at the baseline.
+    expect(COMBAT_ROUND_STEPS.filter((step) => step !== "pre_declaration")).toEqual(PRE_S5_STEPS);
+  });
+
+  it("keeps the persisted step-event vocabulary identical to the canonical one", () => {
+    // `combatStepEventStepSchema` is a hand-maintained structural twin of `combatRoundStepSchema`
+    // and is persisted in the Combat event stream. Drift between the two is a silent data defect.
+    expect(combatStepEventStepSchema.options).toEqual(combatRoundStepSchema.options);
+  });
+
+  it("gives the new step a cursor abbreviation and wraps the round through it", () => {
+    expect(COMBAT_ROUND_STEP_ABBREVIATIONS.pre_declaration).toBe("PD");
+    expect(getNextCombatRoundStep("pre_declaration")).toBe("select_actions");
+    expect(getNextCombatRoundStep("round_summary")).toBe("pre_declaration");
+  });
+
+  describe("floor invariant limb 1 — a state persisted before S5, read by S5 code", () => {
+    /** An active Combat state exactly as it was written before `pre_declaration` existed. */
+    const preS5ActiveState = {
+      currentStep: "phase_1_actions",
+      encounterId: "encounter-1",
+      participants: [
+        {
+          label: "Gladiator",
+          participantId: "gladiator",
+          stepStatuses: Object.fromEntries(PRE_S5_STEPS.map((step) => [step, "complete"])),
+        },
+      ],
+      roundNumber: 4,
+      selectedStep: "phase_1_actions",
+    };
+
+    it("parses and retains every stored step status, with no pre-S5 key altered or dropped", () => {
+      const parsed = combatRoundStateSchema.parse(preS5ActiveState);
+      const statuses = parsed.participants[0]!.stepStatuses;
+
+      expect(parsed.currentStep).toBe("phase_1_actions");
+      expect(parsed.selectedStep).toBe("phase_1_actions");
+      for (const step of PRE_S5_STEPS) {
+        expect(statuses[step]).toBe("complete");
+      }
+      // The record is partial, so the absent new key stays absent — it is not silently invented
+      // as "complete" and so cannot be mistaken for work the GM actually did.
+      expect(statuses.pre_declaration).toBeUndefined();
+      expect(Object.keys(statuses).sort()).toEqual([...PRE_S5_STEPS].sort());
+    });
+
+    it("carries no Combat Experience due state into a record written before due state existed", () => {
+      const parsed = combatRoundStateSchema.parse(preS5ActiveState);
+
+      expect(parsed.participants[0]!.combatExperienceDue).toBeUndefined();
+      expect(isCombatRoundCombatExperienceDue({ participantId: "gladiator", state: parsed })).toBe(
+        false,
+      );
+      expect(getCombatRoundCombatExperienceDueParticipantIds(parsed)).toEqual([]);
+      // Round 4 with no due marker: the pre-S5 rule — a combat_start roll is required in round 1
+      // only — is exactly preserved.
+      expect(
+        isCombatStartExperienceRollRequired({ participantId: "gladiator", state: parsed }),
+      ).toBe(false);
+    });
+
+    it("preserves a stored participant record verbatim through a schema round trip", () => {
+      const stored = {
+        label: "Gladiator",
+        participantId: "gladiator",
+        stepStatuses: { phase_1_actions: "complete", select_actions: "submitted" },
+      };
+
+      expect(combatRoundParticipantStateSchema.parse(stored)).toEqual({
+        attackResults: {},
+        initiatives: {},
+        label: "Gladiator",
+        participantId: "gladiator",
+        stepStatuses: { phase_1_actions: "complete", select_actions: "submitted" },
+      });
+    });
+
+    it("leaves both currentStep defaults exactly where they were", () => {
+      // A record that OMITS currentStep acquires one from `.default()`, and the two schemas
+      // default it differently. Widening the enum must not move either default: an archived round
+      // still reads as `round_summary`, an active state still reads as `select_actions` — never
+      // as the new first member of the enum.
+      expect(
+        combatRoundStateSchema.parse({ encounterId: "encounter-1", roundNumber: 2 }).currentStep,
+      ).toBe("select_actions");
+      expect(
+        completedCombatRoundSchema.parse({
+          participants: [],
+          phaseResolutionStatuses: {},
+          roundNumber: 1,
+        }).currentStep,
+      ).toBe("round_summary");
+    });
+  });
+
+  describe("floor invariant limb 2 — a state written by S5, read by downlevel code", () => {
+    /**
+     * A faithful reconstruction of the pre-S5 reader: the 12-member step enum, the partial
+     * `z.record` keyed by it, and a participant object that never knew about `combatExperienceDue`.
+     * Reading a new record through this is the backward direction of the floor invariant.
+     */
+    const downlevelStepSchema = z.enum(PRE_S5_STEPS as unknown as [string, string, ...string[]]);
+    const downlevelParticipantSchema = z.object({
+      label: z.string().min(1),
+      participantId: z.string().min(1),
+      stepStatuses: z
+        .record(downlevelStepSchema, z.enum(["pending", "complete", "submitted"]))
+        .default({}),
+    });
+
+    const s5Participant = {
+      combatExperienceDue: {
+        dueFromRoundNumber: 8,
+        markedAtRoundNumber: 7,
+        reason: "critical" as const,
+      },
+      label: "Gladiator",
+      participantId: "gladiator",
+      stepStatuses: {
+        phase_1_actions: "complete" as const,
+        pre_declaration: "complete" as const,
+        select_actions: "submitted" as const,
+      },
+    };
+
+    it("REJECTS a new stepStatuses record outright — it never silently mis-reads it", () => {
+      // MEASURED, and it corrects the mitigating fact recorded in the #215 contract. "`z.record` is
+      // partial" holds only FORWARD: a pre-S5 record missing the new key parses fine under S5.
+      // BACKWARD it does not hold. A zod record keyed by an enum validates its KEYS, so a pre-S5
+      // reader meeting `pre_declaration` raises `invalid_enum_value` and rejects the whole record.
+      //
+      // This is a fail-closed outcome, and it is the safe one: the downlevel reader never returns a
+      // record whose meaning has quietly changed. It is recorded here as behaviour rather than
+      // assumed away, because low practical risk is not the test.
+      const failure = downlevelParticipantSchema.safeParse(s5Participant);
+
+      expect(failure.success).toBe(false);
+      expect(failure.success === false && failure.error.issues[0]).toMatchObject({
+        code: "invalid_enum_value",
+        received: "pre_declaration",
+      });
+    });
+
+    it("reads a new record whose steps are all pre-S5 exactly as it did before S5", () => {
+      // The new due marker is an unknown OBJECT key, not a record key, so it is stripped rather
+      // than rejected, and everything the downlevel reader understands keeps its stored meaning.
+      const downlevel = downlevelParticipantSchema.parse({
+        ...s5Participant,
+        stepStatuses: {
+          phase_1_actions: "complete" as const,
+          select_actions: "submitted" as const,
+        },
+      }) as Record<string, unknown>;
+
+      expect(downlevel.label).toBe("Gladiator");
+      expect(downlevel.participantId).toBe("gladiator");
+      expect(downlevel.stepStatuses).toEqual({
+        phase_1_actions: "complete",
+        select_actions: "submitted",
+      });
+      expect(downlevel.combatExperienceDue).toBeUndefined();
+    });
+
+    it("leaves a downlevel reader's omitted-currentStep default untouched", () => {
+      const downlevelActiveSchema = z.object({
+        currentStep: downlevelStepSchema.default("select_actions"),
+      });
+      const downlevelCompletedSchema = z.object({
+        currentStep: downlevelStepSchema.default("round_summary"),
+      });
+
+      expect(downlevelActiveSchema.parse({}).currentStep).toBe("select_actions");
+      expect(downlevelCompletedSchema.parse({}).currentStep).toBe("round_summary");
+    });
+  });
+
+  describe("Combat Experience due state and Critical-triggered reset", () => {
+    const dueState = (input: {
+      combatExperienceDue?: {
+        dueFromRoundNumber: number;
+        markedAtRoundNumber: number;
+        reason: "scheduled" | "critical";
+      };
+      currentStep: (typeof CANONICAL_STEPS)[number];
+      roundNumber: number;
+    }) =>
+      combatRoundStateSchema.parse({
+        currentStep: input.currentStep,
+        encounterId: "encounter-1",
+        participants: [
+          {
+            combatExperienceDue: input.combatExperienceDue,
+            label: "Gladiator",
+            participantId: "gladiator",
+          },
+        ],
+        roundNumber: input.roundNumber,
+      });
+
+    const scheduled = {
+      dueFromRoundNumber: 8,
+      markedAtRoundNumber: 7,
+      reason: "scheduled" as const,
+    };
+
+    it("schedules the next check from the result's duration, and never for a maximum result", () => {
+      // Acceptance example 4: a round-7 result of 16-20 (durationRounds 1) makes the next check
+      // due as round 8 opens.
+      expect(getCombatExperienceNextCheckRoundNumber({ durationRounds: 1, roundNumber: 7 })).toBe(
+        8,
+      );
+      expect(getCombatExperienceNextCheckRoundNumber({ durationRounds: 4, roundNumber: 7 })).toBe(
+        11,
+      );
+      // A 21+ result has no next-check schedule at all.
+      expect(
+        getCombatExperienceNextCheckRoundNumber({ durationRounds: 0, roundNumber: 7 }),
+      ).toBeUndefined();
+    });
+
+    it("treats a check as due only once its round has arrived", () => {
+      expect(
+        isCombatRoundCombatExperienceDue({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "round_summary",
+            roundNumber: 7,
+          }),
+        }),
+      ).toBe(false);
+      expect(
+        isCombatRoundCombatExperienceDue({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "pre_declaration",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(true);
+    });
+
+    it("requires the due roll in the pre-declaration step, and nowhere else", () => {
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "pre_declaration",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(true);
+      // Round End does not roll, and the check is not resurrected mid-round after declaration.
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "round_summary",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(false);
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({
+            combatExperienceDue: scheduled,
+            currentStep: "phase_1_actions",
+            roundNumber: 8,
+          }),
+        }),
+      ).toBe(false);
+    });
+
+    it("marks a Critical-triggered reset for the next round, not for the current one", () => {
+      // Acceptance example 5: a Critical marks CE reset due. Declarations already made in the
+      // current round keep the state they were made against; the fresh roll comes next round.
+      const marked = markCombatRoundCombatExperienceResetDue({
+        participantId: "gladiator",
+        state: dueState({ currentStep: "phase_1_damage", roundNumber: 5 }),
+      });
+
+      expect(
+        getCombatRoundCombatExperienceDue({ participantId: "gladiator", state: marked }),
+      ).toEqual({ dueFromRoundNumber: 6, markedAtRoundNumber: 5, reason: "critical" });
+      expect(isCombatRoundCombatExperienceDue({ participantId: "gladiator", state: marked })).toBe(
+        false,
+      );
+    });
+
+    it("leaves the first round's opening check exactly as it was before S5", () => {
+      expect(
+        isCombatStartExperienceRollRequired({
+          participantId: "gladiator",
+          state: dueState({ currentStep: "select_actions", roundNumber: 1 }),
+        }),
+      ).toBe(true);
+    });
+  });
+});
+
+describe("the pre-declaration Combat Experience check is reachable on a real engine state", () => {
+  /**
+   * Every earlier test in this area builds its state by hand and then asks a pure predicate. That
+   * is how the step shipped able to host nothing: no test ever called a production entry point on a
+   * state the engine itself produced. These tests do. They start from `initializeCombatRoundState`,
+   * walk rounds forward with `advanceCombatRoundStep` until the engine's own schedule makes a check
+   * due, and then perform the real roll.
+   */
+  function combatWithADueCheck(): {
+    dueParticipantId: string;
+    state: ReturnType<typeof initializeCombatRoundState>;
+  } {
+    let state = initializeCombatRoundState({
+      encounter: encounter({ currentRound: 1 }),
+    });
+
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (state.currentStep === "round_summary") {
+        state = completeCleanRoundEndReview(state);
+      }
+      state = advanceCombatRoundStep(state);
+
+      if (state.currentStep !== "pre_declaration") {
+        continue;
+      }
+
+      const dueParticipant = state.participants.find((participant) =>
+        isCombatStartExperienceRollRequired({
+          participantId: participant.participantId,
+          state,
+        }),
+      );
+
+      if (dueParticipant) {
+        return { dueParticipantId: dueParticipant.participantId, state };
+      }
+    }
+
+    throw new Error("The engine never made a Combat Experience check due at pre-declaration.");
+  }
+
+  it("reaches a due check at pre-declaration by advancing rounds, not by hand-building a state", () => {
+    const { dueParticipantId, state } = combatWithADueCheck();
+
+    expect(state.currentStep).toBe("pre_declaration");
+    expect(state.roundNumber).toBeGreaterThan(1);
+    expect(isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state })).toBe(true);
+    // Start New Round clears the difficulty, so the window is closed on arrival. The step is only
+    // useful if the GM can reopen it here.
+    expect(isCombatRoundCombatExperienceWindowOpen(state)).toBe(false);
+  });
+
+  it("opens the Combat Experience window in the pre-declaration step", () => {
+    const { state } = combatWithADueCheck();
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    expect(isCombatRoundCombatExperienceWindowOpen(opened)).toBe(true);
+    expect(opened.currentStep).toBe("pre_declaration");
+  });
+
+  it("rolls the due check in the pre-declaration step and reschedules the next one", () => {
+    const { dueParticipantId, state } = combatWithADueCheck();
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+      participantId: dueParticipantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state: opened,
+    });
+
+    expect(rolled.result.trigger).toBe("combat_start");
+    expect(rolled.result.roundNumber).toBe(opened.roundNumber);
+    // The check the step exists to host is now resolved, and the fresh result schedules the next.
+    expect(
+      isCombatStartExperienceRollRequired({
+        participantId: dueParticipantId,
+        state: rolled.state,
+      }),
+    ).toBe(false);
+    expect(
+      isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: rolled.state }),
+    ).toBe(false);
+    expect(
+      getCombatRoundCombatExperienceDue({
+        participantId: dueParticipantId,
+        state: rolled.state,
+      })?.markedAtRoundNumber,
+    ).toBe(rolled.state.roundNumber);
+  });
+
+  it("keeps an unresolved due check recorded when the GM advances to declaration", () => {
+    const { dueParticipantId, state } = combatWithADueCheck();
+    const atDeclaration = advanceCombatRoundStep(state);
+
+    expect(atDeclaration.currentStep).toBe("select_actions");
+    // Due is not expiry. Advancing past the pre-declaration step without rolling must not discard
+    // the marker: the check is still outstanding and is still resolvable at declaration.
+    expect(
+      getCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: atDeclaration }),
+    ).toEqual(getCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state }));
+    expect(
+      isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: atDeclaration }),
+    ).toBe(true);
+
+    const opened = setCombatRoundCombatExperienceDifficulty({
+      difficulty: 26,
+      state: atDeclaration,
+    });
+    const rolled = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      participantId: dueParticipantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state: opened,
+      trigger: "combat_start",
+    });
+
+    expect(rolled.result.roundNumber).toBe(atDeclaration.roundNumber);
+    expect(
+      isCombatRoundCombatExperienceDue({ participantId: dueParticipantId, state: rolled.state }),
+    ).toBe(false);
+  });
+
+  it("still refuses to open the Combat Experience window outside the two declaration steps", () => {
+    const { state } = combatWithADueCheck();
+    const laterInTheRound = advanceCombatRoundStep(advanceCombatRoundStep(state));
+
+    expect(laterInTheRound.currentStep).not.toBe("pre_declaration");
+    expect(laterInTheRound.currentStep).not.toBe("select_actions");
+    expect(() =>
+      setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state: laterInTheRound }),
+    ).toThrow(/pre-declaration step or declaration/);
+  });
+});
+
+describe("#465 — ruling 1: the round holds pre-declaration until every due check is discharged", () => {
+  /**
+   * Reaches a later round in which the engine's own schedule has made a Combat Experience check due
+   * for **two** participants at once. Nothing here is hand-built: the due markers are produced by
+   * real round-1 rolls and carried forward by `advanceCombatRoundStep`.
+   */
+  function combatWithTwoDueChecks(): {
+    dueParticipantIds: string[];
+    state: ReturnType<typeof initializeCombatRoundState>;
+  } {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (state.currentStep === "round_summary") state = completeCleanRoundEndReview(state);
+      state = advanceCombatRoundStep(state);
+      if (state.currentStep !== "pre_declaration") continue;
+
+      const due = state.participants
+        .filter((participant) =>
+          isCombatStartExperienceRollRequired({
+            participantId: participant.participantId,
+            state,
+          }),
+        )
+        .map((participant) => participant.participantId);
+      if (due.length >= 2) return { dueParticipantIds: due, state };
+    }
+
+    throw new Error("The engine never made two Combat Experience checks due at pre-declaration.");
+  }
+
+  function rollFor(
+    participantId: string,
+    state: ReturnType<typeof initializeCombatRoundState>,
+  ): ReturnType<typeof initializeCombatRoundState> {
+    return rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+      participantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state,
+    }).state;
+  }
+
+  it("keeps the round in pre-declaration while another due participant is unresolved", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first, second] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    const afterFirst = rollFor(first!, opened);
+
+    // The defect this pins: the no-phase branch used to set `select_actions` unconditionally, so
+    // resolving one participant ejected the whole round to declaration and
+    // `isCombatStartExperienceRollRequired` then went quiet for everyone still due.
+    expect(afterFirst.currentStep).toBe("pre_declaration");
+    expect(isCombatStartExperienceRollRequired({ participantId: first!, state: afterFirst })).toBe(
+      false,
+    );
+    expect(isCombatStartExperienceRollRequired({ participantId: second!, state: afterFirst })).toBe(
+      true,
+    );
+    expect(afterFirst.currentCursor?.participantId).toBe(second);
+
+    const afterSecond = rollFor(second!, afterFirst);
+
+    expect(afterSecond.currentStep).toBe("select_actions");
+    for (const participantId of dueParticipantIds) {
+      expect(isCombatStartExperienceRollRequired({ participantId, state: afterSecond })).toBe(
+        false,
+      );
+    }
+  });
+
+  it("leaves the round-1 opening check on declaration exactly as before", () => {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    expect(state.currentStep).toBe("select_actions");
+
+    const [first, second] = state.participants;
+    const afterFirst = rollFor(first!.participantId, state);
+
+    // Round 1 opens at declaration, not at the pre-declaration step, so the guard never fires and
+    // the round-1 behaviour is untouched — including the cursor staying on the roller.
+    expect(afterFirst.currentStep).toBe("select_actions");
+    expect(afterFirst.currentCursor?.participantId).toBe(first!.participantId);
+    expect(
+      isCombatStartExperienceRollRequired({
+        participantId: second!.participantId,
+        state: afterFirst,
+      }),
+    ).toBe(true);
+  });
+
+  it("projects the Combat Experience work at pre-declaration and no declaration task", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const projection = buildCombatProgressionProjection(
+      setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state }),
+    );
+    const tasks = projection.boundary.processes
+      .flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks);
+
+    // Ruling 2 (#215) reuses the coarse `declaration` authorization family rather than adding a
+    // persisted boundary vocabulary member. What keeps the two steps distinct is which tasks the
+    // boundary projects, so that is what is pinned here.
+    expect(projection.boundary.kind).toBe("declaration");
+    expect(
+      tasks
+        .filter((task) => task.expectedCommand === "roll_combat_experience")
+        .map((task) => (task.owner?.kind === "combatant" ? task.owner.participantId : undefined)),
+    ).toEqual(dueParticipantIds);
+    expect(tasks.some((task) => task.expectedCommand === "declare_action")).toBe(false);
+    // The GM cannot advance out either while an obligation is open.
+    expect(tasks.some((task) => task.expectedCommand === "advance_combat_boundary")).toBe(false);
+  });
+
+  it("preserves the persisted due marker across a rehydration of the round state", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const rehydrated = initializeCombatRoundState({
+      encounter: encounter({
+        combatRoundState: state,
+        currentRound: state.roundNumber,
+      }),
+    });
+
+    // Every API request rebuilds the round through `initializeCombatRoundState`. The marker is
+    // persisted participant state, so dropping it here made the check evaporate between the Round
+    // End that scheduled it and the next request that should have surfaced it.
+    for (const participantId of dueParticipantIds) {
+      expect(getCombatRoundCombatExperienceDue({ participantId, state: rehydrated })).toEqual(
+        getCombatRoundCombatExperienceDue({ participantId, state }),
+      );
+      expect(isCombatStartExperienceRollRequired({ participantId, state: rehydrated })).toBe(true);
+    }
+  });
+});
+
+describe("#465 — leaving the pre-declaration step when nothing is due", () => {
+  it("offers the GM a boundary advance that re-opens declaration at select_actions", () => {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+    for (let guard = 0; guard < 200 && state.currentStep !== "pre_declaration"; guard += 1) {
+      if (state.currentStep === "round_summary") state = completeCleanRoundEndReview(state);
+      state = advanceCombatRoundStep(state);
+    }
+
+    expect(state.currentStep).toBe("pre_declaration");
+    expect(
+      state.participants.some((participant) =>
+        isCombatStartExperienceRollRequired({
+          participantId: participant.participantId,
+          state,
+        }),
+      ),
+    ).toBe(false);
+
+    const task = buildCombatProgressionProjection(state)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks)
+      .find((candidate) => candidate.expectedCommand === "advance_combat_boundary");
+
+    // With no obligation outstanding the GM must still be able to leave the step, and the advance
+    // is a self-transition within the coarse `declaration` boundary rather than a skip past it.
+    expect(task).toBeDefined();
+    expect(task!.transition?.targetBoundary).toBe("declaration");
+
+    const advanced = advanceCombatProgressionBoundary({
+      command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: "gm-1" },
+      expectedBoundary: "declaration",
+      expectedCommandType: "advance_combat_boundary",
+      expectedExecutionGroupId: task!.executionGroupId,
+      expectedTaskId: task!.id,
+      state,
+      targetBoundary: "declaration",
+    });
+
+    expect(advanced.currentStep).toBe("select_actions");
+    expect(buildCombatProgressionProjection(advanced).boundary.kind).toBe("declaration");
+  });
+});
+
+describe("#465 — clearing a pre-declaration Combat Experience roll restores the obligation it discharged", () => {
+  /**
+   * The GM correction control (`POST …/combat-round/clear-current-step` →
+   * `clearCurrentCombatRoundStepAndRewind` → `undoLatestCombatRoundCommand`) undid the Combat
+   * Experience *result* while leaving the due marker the roll had rescheduled, and then put the round
+   * on `select_actions`. The obligation evaporated: the participant carried a marker pointing at a
+   * future round derived from a roll that no longer existed, `isCombatStartExperienceRollRequired`
+   * went quiet because it only fires at `pre_declaration`, and ordinary declaration opened against a
+   * result that had been removed.
+   *
+   * Nothing here is hand-built. The due markers are produced by real round-1 rolls and carried
+   * forward by `advanceCombatRoundStep` until the engine's own schedule makes the checks due again.
+   */
+  function combatWithTwoDueChecks(): {
+    dueParticipantIds: string[];
+    state: ReturnType<typeof initializeCombatRoundState>;
+  } {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    for (const participant of state.participants) {
+      state = rollCombatRoundCombatExperience({
+        command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+        participantId: participant.participantId,
+        rng: () => 0.5,
+        skillTotal: 0,
+        state,
+      }).state;
+    }
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (state.currentStep === "round_summary") state = completeCleanRoundEndReview(state);
+      state = advanceCombatRoundStep(state);
+      if (state.currentStep !== "pre_declaration") continue;
+
+      const due = state.participants
+        .filter((participant) =>
+          isCombatStartExperienceRollRequired({
+            participantId: participant.participantId,
+            state,
+          }),
+        )
+        .map((participant) => participant.participantId);
+      if (due.length >= 2) return { dueParticipantIds: due, state };
+    }
+
+    throw new Error("The engine never made two Combat Experience checks due at pre-declaration.");
+  }
+
+  function rollFor(
+    participantId: string,
+    state: ReturnType<typeof initializeCombatRoundState>,
+  ): ReturnType<typeof initializeCombatRoundState> {
+    return rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+      participantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state,
+    }).state;
+  }
+
+  it("restores the due marker exactly as it stood and keeps the round in pre-declaration", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    const dueBefore = getCombatRoundCombatExperienceDue({ participantId: first!, state: opened });
+    const experienceBefore = opened.participants.find(
+      (participant) => participant.participantId === first!,
+    )?.combatExperience;
+
+    expect(opened.roundNumber).toBeGreaterThan(1);
+    expect(dueBefore?.dueFromRoundNumber).toBeLessThanOrEqual(opened.roundNumber);
+
+    const afterRoll = rollFor(first!, opened);
+
+    // The roll discharged the obligation and installed the schedule its own result implies.
+    expect(
+      getCombatRoundCombatExperienceDue({ participantId: first!, state: afterRoll })
+        ?.dueFromRoundNumber,
+    ).toBeGreaterThan(afterRoll.roundNumber);
+
+    expect(canClearCombatRoundStep({ state: afterRoll, step: afterRoll.currentStep })).toBe(true);
+    const cleared = clearCurrentCombatRoundStepAndRewind(afterRoll);
+
+    // The marker is restored from the command's recorded facts, so it is the *same* marker, not a
+    // recomputed one: structural equality against the value measured before the roll.
+    expect(getCombatRoundCombatExperienceDue({ participantId: first!, state: cleared })).toEqual(
+      dueBefore,
+    );
+    expect(
+      cleared.participants.find((participant) => participant.participantId === first!)
+        ?.combatExperience,
+    ).toEqual(experienceBefore);
+    // Marker and result are mutually consistent again, and the obligation is live.
+    expect(isCombatRoundCombatExperienceDue({ participantId: first!, state: cleared })).toBe(true);
+    expect(isCombatStartExperienceRollRequired({ participantId: first!, state: cleared })).toBe(
+      true,
+    );
+    expect(cleared.currentStep).toBe("pre_declaration");
+    expect(cleared.selectedStep).toBe("pre_declaration");
+    expect(cleared.currentCursor?.step).toBe("PD");
+    expect(cleared.currentCursor?.participantId).toBe(first);
+    expect(cleared.selectedParticipantId).toBe(first);
+  });
+
+  it("does not advance the round or disturb the other due participant", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first, second] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    const dueBeforeSecond = getCombatRoundCombatExperienceDue({
+      participantId: second!,
+      state: opened,
+    });
+    const cleared = clearCurrentCombatRoundStepAndRewind(rollFor(first!, opened));
+
+    expect(cleared.roundNumber).toBe(opened.roundNumber);
+    // Undoing one participant's roll must neither advance the whole round nor touch a participant
+    // the undone command never mentioned.
+    expect(getCombatRoundCombatExperienceDue({ participantId: second!, state: cleared })).toEqual(
+      dueBeforeSecond,
+    );
+    expect(isCombatStartExperienceRollRequired({ participantId: second!, state: cleared })).toBe(
+      true,
+    );
+    expect(getCombatRoundCombatExperienceDueParticipantIds(cleared)).toEqual(dueParticipantIds);
+  });
+
+  it("keeps ordinary declaration unavailable while the restored obligation is outstanding", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    const cleared = clearCurrentCombatRoundStepAndRewind(rollFor(first!, opened));
+    const tasks = buildCombatProgressionProjection(cleared)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks);
+
+    for (const participantId of dueParticipantIds) {
+      expect(canPlayerSubmitCombatDeclaration({ participantId, state: cleared })).toBe(false);
+    }
+    expect(tasks.some((task) => task.expectedCommand === "declare_action")).toBe(false);
+    expect(
+      tasks
+        .filter((task) => task.expectedCommand === "roll_combat_experience")
+        .map((task) => (task.owner?.kind === "combatant" ? task.owner.participantId : undefined)),
+    ).toEqual(dueParticipantIds);
+  });
+
+  it("pins the declaration self-transition: the GM cannot advance out while an obligation is due", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    const cleared = clearCurrentCombatRoundStepAndRewind(rollFor(first!, opened));
+    const tasks = buildCombatProgressionProjection(cleared)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.executionGroups)
+      .flatMap((group) => group.tasks);
+    const anyTask = tasks[0];
+
+    // `DIRECT_TRANSITIONS` carries `declaration:declaration` so that advancing out of
+    // `pre_declaration` re-opens the same boundary at `select_actions`. That transition must not
+    // double as an escape hatch: with an obligation restored, no advance task is projected and the
+    // command is refused, so the self-transition cannot be used to leave the step early.
+    expect(tasks.some((task) => task.expectedCommand === "advance_combat_boundary")).toBe(false);
+    expect(anyTask).toBeDefined();
+    expect(() =>
+      advanceCombatProgressionBoundary({
+        command: { createdAt: "2026-01-01T00:06:00.000Z", createdByUserId: "gm-1" },
+        expectedBoundary: "declaration",
+        expectedCommandType: "advance_combat_boundary",
+        expectedExecutionGroupId: anyTask!.executionGroupId,
+        expectedTaskId: anyTask!.id,
+        state: cleared,
+        targetBoundary: "declaration",
+      }),
+    ).toThrow();
+  });
+
+  it("lets the GM re-roll the cleared check and only then leaves pre-declaration", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first, second] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    const cleared = clearCurrentCombatRoundStepAndRewind(rollFor(first!, opened));
+    const reopened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state: cleared });
+    const afterFirst = rollFor(first!, reopened);
+
+    expect(afterFirst.currentStep).toBe("pre_declaration");
+
+    const afterSecond = rollFor(second!, afterFirst);
+
+    expect(afterSecond.currentStep).toBe("select_actions");
+    for (const participantId of dueParticipantIds) {
+      expect(isCombatStartExperienceRollRequired({ participantId, state: afterSecond })).toBe(
+        false,
+      );
+    }
+  });
+
+  it("honours a GM backtrack hold recorded at the restored pre-declaration step", () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    const [first, second] = dueParticipantIds;
+    const opened = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+    const bothRolled = rollFor(second!, rollFor(first!, opened));
+
+    expect(bothRolled.currentStep).toBe("select_actions");
+
+    // The clear-current-step route records a hold at `restoredRoundState.currentStep`, so once undo
+    // restores `pre_declaration` a hold can carry that step. `isHeldForExplicitGmBacktrack` had no
+    // branch for it and fell through to the `round_summary` comparison, leaving the hold unhonoured.
+    const cleared = clearCurrentCombatRoundStepAndRewind(bothRolled);
+
+    expect(cleared.currentStep).toBe("pre_declaration");
+
+    const held = holdCombatRoundForGmBacktrack({
+      participantId: second!,
+      state: cleared,
+      step: cleared.currentStep,
+    });
+
+    expect(held.gmBacktrackHold).toEqual({
+      participantId: second,
+      roundNumber: cleared.roundNumber,
+      step: "pre_declaration",
+    });
+  });
+
+  it("leaves the round-1 opening roll's undo exactly as it was before this step existed", () => {
+    let state = initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) });
+    state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+
+    expect(state.currentStep).toBe("select_actions");
+
+    const [first] = state.participants;
+    const afterRoll = rollFor(first!.participantId, state);
+    const cleared = clearCurrentCombatRoundStepAndRewind(afterRoll);
+
+    // Round 1 opens at declaration and its opening check is required unconditionally, without any
+    // due marker. The pre-declaration restoration must not fire here, or round-1 behaviour would
+    // change.
+    expect(cleared.currentStep).toBe("select_actions");
+    expect(
+      getCombatRoundCombatExperienceDue({ participantId: first!.participantId, state: cleared }),
+    ).toBeUndefined();
+    expect(
+      isCombatStartExperienceRollRequired({
+        participantId: first!.participantId,
+        state: cleared,
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("#465 — every production writer of combatExperienceDue has a reversible undo", () => {
+  /**
+   * The invariant this block establishes, over the complete writer set rather than over one
+   * reproduction: **every production writer of `combatExperienceDue` must have an undo path that
+   * restores the exact prior `combatExperienceDue` state.**
+   *
+   * At this head the field has exactly two production writers, both reaching it through the single
+   * private mutator `withCombatRoundCombatExperienceDue`:
+   *
+   *     applyCombatExperienceScheduleAfterRoll   <- rollCombatRoundCombatExperience
+   *     markCombatRoundCombatExperienceResetDue  <- recordCombatRoundCriticalRoll
+   *
+   * Every other site naming the field is a passthrough — round rehydration, Start New Round
+   * preservation, and the undo restores themselves. Both writers are pinned here in both
+   * directions. Every assertion is on the participant's observable `combatExperienceDue`; none
+   * checks merely that a snapshot fact exists, because a recorded fact that undo never reads would
+   * satisfy that and still destroy the marker.
+   */
+  const CREATED_BY = "gm-1";
+
+  type RoundState = ReturnType<typeof initializeCombatRoundState>;
+
+  function dueFor(participantId: string, state: RoundState) {
+    return getCombatRoundCombatExperienceDue({ participantId, state });
+  }
+
+  /** The difficulty can only be set before the first roll, so every fixture opens with this. */
+  function openForCombatExperience(state: RoundState): RoundState {
+    return setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+  }
+
+  function rollCombatStartExperience(input: {
+    participantId: string;
+    state: RoundState;
+  }): RoundState {
+    return rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: CREATED_BY },
+      participantId: input.participantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state: input.state,
+    }).state;
+  }
+
+  /**
+   * Drives the real engine from `state` through declaration, initiative, attack, a failed parry,
+   * hit location and damage, stopping with the Critical roll pending against `guard`. Nothing is
+   * hand-built: the state the Critical writer mutates is the state the engine produced.
+   */
+  function pendingCriticalAgainstGuard(state: RoundState): {
+    attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+    state: RoundState;
+  } {
+    const phase = "phase1" as const;
+    const atResolution = initializeCombatRoundPhaseResolutionCursor({
+      phase,
+      state: setCombatRoundParticipantInitiative({
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [6],
+          rollTotal: 6,
+          total: 6,
+        },
+        participantId: "gladiator",
+        phase,
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state,
+        }),
+      }),
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const attackResult = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase,
+      rollD20: 14,
+      rollTotal: 14,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+    const afterAttack = recordCombatRoundAttackResult({
+      command: { createdAt: attackResult.rolledAt, createdByUserId: CREATED_BY },
+      participantId: "gladiator",
+      result: attackResult,
+      state: atResolution,
+      submittedBy: "gm",
+    });
+    const afterParry = recordCombatRoundParryResult({
+      attackResult,
+      command: { createdAt: "2026-01-01T00:04:00.000Z", createdByUserId: CREATED_BY },
+      parryResolution: {
+        combinedParryScore: 9,
+        modifierAdjustment: 0,
+        openEndedD10s: [],
+        resultLabel: "Parry failed",
+        rollD20: 8,
+        rollTotal: 8,
+        status: "resolved",
+        success: false,
+        targetNumber: 21,
+        total: 17,
+      },
+      state: afterAttack,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:04:00.000Z",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult,
+      command: { createdAt: "2026-01-01T00:04:30.000Z", createdByUserId: CREATED_BY },
+      state: afterParry,
+    });
+
+    return {
+      attackResult,
+      state: recordCombatRoundDamageResult({
+        attackResult,
+        command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: CREATED_BY },
+        defenderDm: 0,
+        dmb: 8,
+        state: afterLocation,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:05:00.000Z",
+      }),
+    };
+  }
+
+  function rollCritical(input: {
+    attackResult: ReturnType<typeof buildCombatRoundAttackRollResult>;
+    createdAt: string;
+    state: RoundState;
+  }): RoundState {
+    return recordCombatRoundCriticalRoll({
+      attackResult: input.attackResult,
+      command: { createdAt: input.createdAt, createdByUserId: CREATED_BY },
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: input.state,
+      submittedBy: "gm",
+      updatedAt: input.createdAt,
+    });
+  }
+
+  function undoLatest(state: RoundState): RoundState {
+    const undone = undoLatestCombatRoundCommand({ state });
+
+    if (!undone) throw new Error("Expected the latest command to be undoable.");
+
+    return undone;
+  }
+
+  function rollEveryParticipantAtRoundOne(state: RoundState): RoundState {
+    let next = openForCombatExperience(state);
+
+    for (const participant of next.participants) {
+      next = rollCombatStartExperience({ participantId: participant.participantId, state: next });
+    }
+
+    return next;
+  }
+
+  /** Runs the real engine forward until its own schedule makes a check due in `pre_declaration`. */
+  function advanceUntilDueAtPreDeclaration(state: RoundState): RoundState {
+    let next = state;
+
+    for (let guard = 0; guard < 200; guard += 1) {
+      if (next.currentStep === "round_summary") next = completeCleanRoundEndReview(next);
+      next = advanceCombatRoundStep(next);
+
+      if (
+        next.currentStep === "pre_declaration" &&
+        getCombatRoundCombatExperienceDueParticipantIds(next).length > 0
+      ) {
+        return next;
+      }
+    }
+
+    throw new Error("The engine never made a Combat Experience check due at pre-declaration.");
+  }
+
+  describe("writer 1 — applyCombatExperienceScheduleAfterRoll, via rollCombatRoundCombatExperience", () => {
+    it("writes the schedule its own result implies, and undo restores the exact prior marker", () => {
+      // The prior state under test is a real engine-written marker, not absence: a round-1 roll
+      // installs a schedule, the engine carries it forward until its round arrives, and the roll
+      // measured here is the one that replaces it in `pre_declaration`.
+      const state = advanceUntilDueAtPreDeclaration(
+        rollEveryParticipantAtRoundOne(
+          initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+        ),
+      );
+      const [first] = getCombatRoundCombatExperienceDueParticipantIds(state);
+
+      expect(first).toBeDefined();
+
+      const opened = openForCombatExperience(state);
+      const dueBefore = dueFor(first!, opened);
+
+      expect(dueBefore).toBeDefined();
+      expect(dueBefore?.reason).toBe("scheduled");
+
+      // Forward: a fresh combat_start roll replaces the marker with the one its own result implies.
+      const afterRoll = rollCombatStartExperience({ participantId: first!, state: opened });
+      const dueAfter = dueFor(first!, afterRoll);
+
+      expect(dueAfter).toBeDefined();
+      expect(dueAfter).not.toEqual(dueBefore);
+      expect(dueAfter?.markedAtRoundNumber).toBe(afterRoll.roundNumber);
+
+      // Inverse: the exact prior marker, restored from the command's own facts.
+      expect(dueFor(first!, undoLatest(afterRoll))).toEqual(dueBefore);
+    });
+
+    it("restores absence when the roll it undoes replaced no marker", () => {
+      let state = openForCombatExperience(
+        initializeCombatRoundState({ encounter: encounter({ currentRound: 1 }) }),
+      );
+
+      expect(dueFor("gladiator", state)).toBeUndefined();
+
+      state = rollCombatStartExperience({ participantId: "gladiator", state });
+
+      expect(dueFor("gladiator", state)).toBeDefined();
+      expect(dueFor("gladiator", undoLatest(state))).toBeUndefined();
+    });
+  });
+
+  describe("writer 2 — markCombatRoundCombatExperienceResetDue, via recordCombatRoundCriticalRoll", () => {
+    it("creates the ruled reset marker from absence, and undo restores absence", () => {
+      const prepared = pendingCriticalAgainstGuard(
+        initializeCombatRoundState({ encounter: encounter() }),
+      );
+
+      expect(dueFor("guard", prepared.state)).toBeUndefined();
+
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      // Forward: ruling 2's Critical-triggered reset, due from the next round.
+      expect(dueFor("guard", afterCritical)).toEqual({
+        dueFromRoundNumber: afterCritical.roundNumber + 1,
+        markedAtRoundNumber: afterCritical.roundNumber,
+        reason: "critical",
+      });
+
+      // Inverse: absence, not a manufactured marker and not the Critical's own.
+      expect(dueFor("guard", undoLatest(afterCritical))).toBeUndefined();
+    });
+
+    it("restores the exact prior schedule the Critical overwrote, rather than clearing or recomputing it", () => {
+      // This is the reported Critical reproduction, reduced to the writer it belongs to: the
+      // defender carries an engine-written scheduled marker when the Critical lands.
+      let state = openForCombatExperience(initializeCombatRoundState({ encounter: encounter() }));
+      state = rollCombatStartExperience({ participantId: "guard", state });
+
+      const prepared = pendingCriticalAgainstGuard(state);
+      const dueBefore = dueFor("guard", prepared.state);
+
+      expect(dueBefore).toBeDefined();
+      expect(dueBefore?.reason).toBe("scheduled");
+
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      // Forward: the Critical genuinely overwrites the scheduled marker, so the prior value is
+      // destroyed unless the command recorded it.
+      expect(dueFor("guard", afterCritical)?.reason).toBe("critical");
+      expect(dueFor("guard", afterCritical)).not.toEqual(dueBefore);
+
+      const undone = undoLatest(afterCritical);
+
+      // Inverse: structural equality against the value measured before the Critical. Clearing the
+      // field, or recomputing a schedule from the current round, both fail here.
+      expect(dueFor("guard", undone)).toEqual(dueBefore);
+      expect(dueFor("guard", undone)?.reason).toBe("scheduled");
+    });
+
+    it("undoes stacked Critical transitions back through each correct prior value", () => {
+      let state = openForCombatExperience(initializeCombatRoundState({ encounter: encounter() }));
+      state = rollCombatStartExperience({ participantId: "guard", state });
+
+      const prepared = pendingCriticalAgainstGuard(state);
+      const scheduled = dueFor("guard", prepared.state);
+
+      expect(scheduled?.reason).toBe("scheduled");
+
+      // Roll the Critical, correct it away, roll it again, correct it away again. Undo restores the
+      // criticalRoll to pending, so this is the real repeated GM-correction sequence.
+      const first = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      expect(dueFor("guard", first)?.reason).toBe("critical");
+
+      const backToScheduled = undoLatest(first);
+
+      expect(dueFor("guard", backToScheduled)).toEqual(scheduled);
+
+      const second = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:06:30.000Z",
+        state: backToScheduled,
+      });
+
+      expect(dueFor("guard", second)?.reason).toBe("critical");
+      // The second Critical recorded the marker *it* replaced — the restored scheduled one — so the
+      // sequence must land back on the same value rather than on the Critical's own.
+      expect(dueFor("guard", undoLatest(second))).toEqual(scheduled);
+    });
+
+    it("leaves participants the Critical never mentioned untouched through forward and undo", () => {
+      let state = openForCombatExperience(initializeCombatRoundState({ encounter: encounter() }));
+      state = rollCombatStartExperience({ participantId: "guard", state });
+      state = rollCombatStartExperience({ participantId: "gladiator", state });
+
+      const prepared = pendingCriticalAgainstGuard(state);
+      const attackerDue = dueFor("gladiator", prepared.state);
+
+      expect(attackerDue).toBeDefined();
+
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+
+      expect(dueFor("gladiator", afterCritical)).toEqual(attackerDue);
+      expect(dueFor("gladiator", undoLatest(afterCritical))).toEqual(attackerDue);
+    });
+
+    it("preserves every unrelated effect of the Critical undo", () => {
+      const prepared = pendingCriticalAgainstGuard(
+        initializeCombatRoundState({ encounter: encounter() }),
+      );
+      const attackResultId = prepared.state.phaseResolutionResults[0]?.attackResultId;
+      const afterCritical = rollCritical({
+        attackResult: prepared.attackResult,
+        createdAt: "2026-01-01T00:05:30.000Z",
+        state: prepared.state,
+      });
+      const undone = undoLatest(afterCritical);
+      const resolution = undone.phaseResolutionResults.find(
+        (result) => result.attackResultId === attackResultId,
+      );
+
+      // The Critical is genuinely removed and re-offerable, the round is back where it was, and the
+      // field restoration has not displaced any of that.
+      expect(undone.commands.some((command) => command.type === "roll_critical")).toBe(false);
+      expect(resolution?.criticalRoll.status).toBe("pending");
+      expect(undone.currentStep).toBe(prepared.state.currentStep);
+      expect(undone.roundNumber).toBe(prepared.state.roundNumber);
+    });
+  });
+
+  it("closes the writer set: the only mutator of the field has exactly these two callers", () => {
+    // A third writer would mean this block no longer establishes the invariant over the class, and
+    // a writer added without an undo is precisely the defect that stays green through every
+    // behavioural suite. The guard is therefore on the source, like the sibling undo-conformance
+    // tests in this package.
+    const source = readFileSync(new URL("./combatRoundManager.ts", import.meta.url), "utf8");
+    const mutatorCallSites = source
+      .split("\n")
+      .filter((line) => line.includes("withCombatRoundCombatExperienceDue({")).length;
+
+    // One declaration plus exactly two call sites. Both callers are pinned above.
+    expect(source.match(/withCombatRoundCombatExperienceDue/g)).toHaveLength(3);
+    expect(mutatorCallSites).toBe(2);
+    expect(source).toContain("function markCombatRoundCombatExperienceResetDue(input: {");
+    expect(source).toContain("function applyCombatExperienceScheduleAfterRoll(input: {");
   });
 });

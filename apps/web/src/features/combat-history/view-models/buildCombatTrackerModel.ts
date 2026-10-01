@@ -213,6 +213,7 @@ function statusLabel(status: CombatRoundStepStatus): string {
 
 function stepNoun(step: CombatRoundStep): string {
   const nouns: Record<CombatRoundStep, string> = {
+    pre_declaration: "Combat Experience check",
     select_actions: "declaration",
     review_action_modifiers: "phase 1 modifiers",
     initiative_phase_1: "initiative",
