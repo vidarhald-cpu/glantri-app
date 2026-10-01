@@ -2,10 +2,30 @@
 
 ## Purpose and authority
 
-This is the compact startup procedure for a visible independent-QA worker and
-the single Development Orchestrator that routes its result. It preserves
-independent review of an immutable exact head while avoiding reconstruction of
-the complete Glantri operating model on every QA run.
+This is the compact startup procedure for an independent-QA worker in the
+visible QA lane, and for the single Development Orchestrator that routes its
+result. It preserves independent review of an immutable exact head while
+avoiding reconstruction of the complete Glantri operating model on every QA
+run.
+
+### What this document does not restrict
+
+The procedure below is written for the visible lane. It does not describe the
+only permitted substrate for independent QA, and it must not be read as
+withholding what canonical policy allows. [AGENTS.md](../../AGENTS.md) remains
+canonical: a fresh background or subagent context is an acceptable substrate
+for **normal independent QA** provided it shares no Builder conversational
+history. Independence comes from a fresh worker in a separate execution context
+from the Builder, a separate clean exact-head worktree, and review-only
+authority; a background context that meets those requirements supplies it as
+fully as a visible session does. Outside the mandatory QA floor, where this
+document says `visible`, read it as naming the lane it is written for, not as a
+universal requirement.
+
+The [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) is the standing
+exception and is unchanged. Its classes continue through the dedicated visible
+QA lane at the strongest reasonably capable model, and the Orchestrator may not
+downgrade class, model, or substrate for them.
 
 The Forgejo issue body is the current executable task contract once the task is
 authorized. Comments are evidence and history. Repository process documents
@@ -49,7 +69,9 @@ the QA worker's provenance, topology, scope, or delta verification.
 
 The Development Orchestrator then:
 
-1. creates exactly one fresh isolated visible QA task directly;
+1. creates exactly one fresh isolated QA task directly — in the visible lane for
+   every mandatory-floor class, and otherwise on any substrate `AGENTS.md`
+   permits for normal independent QA;
 2. records one ledger entry keyed by `issue + QA + mode + exact head`, including
    provisioning request, task ID when materialized, parent task, leased
    worktree, requested SHA, observed `HEAD`, liveness, and next action;
@@ -201,6 +223,40 @@ and applicability of carried-forward gates.
 Return an exact-head preservation verdict with that durable evidence. A product
 change instead needs fresh substantive QA. The same separate-task, immutable
 entry, lease, and anti-loop rules apply.
+
+#### Mechanical-refresh preservation conditions
+
+A refreshed candidate may integrate on preservation evidence alone — without
+returning to the control plane for a further acceptance — only when all seven
+of the following hold at the refreshed head:
+
+1. the accepted commit remains in history;
+2. the refresh was performed by merge, not by rewrite: no rebase, no squash, no
+   amend;
+3. every reviewed blob is byte-identical to the accepted head;
+4. no file was added or removed relative to the accepted head;
+5. no manual conflict resolution occurred;
+6. the target branch (`dev`) is an ancestor of the refreshed head; and
+7. CI is green at the refreshed head.
+
+Check condition 3 with a tree-level diff restricted to the reviewed paths. Do
+not compare the reviewed paths one at a time with `git rev-parse`; see
+[blob checks](integration-wave.md#blob-checks-use-a-restricted-tree-level-diff)
+for why that form fails and what to use instead.
+
+These conditions decide only whether an already-accepted subject survives a
+refresh. They never waive the initial acceptance boundary: the
+mechanical-refresh rule applies only after the subject has itself received
+control-plane acceptance, under
+[acceptance and mechanical refresh](integration-wave.md#acceptance-and-mechanical-refresh-are-different-questions).
+
+**Provenance of this list.** It is the set the control plane and the Development
+Orchestrator already use in practice, recorded durably here for the first time.
+It is not derived from any committed artefact, and no commit in this repository
+exhibits it. Read it as a record of operational practice, not as a
+reconstruction from evidence. The rule in
+[evidence provenance](integration-wave.md#evidence-provenance) applies to this
+paragraph as much as to any other.
 
 ## Independent worker entry check
 
