@@ -18,8 +18,9 @@ for **normal independent QA** provided it shares no Builder conversational
 history. Independence comes from a fresh worker in a separate execution context
 from the Builder, a separate clean exact-head worktree, and review-only
 authority; a background context that meets those requirements supplies it as
-fully as a visible session does. Where this document says `visible`, read it as
-naming the lane it is written for, not as a universal requirement.
+fully as a visible session does. Outside the mandatory QA floor, where this
+document says `visible`, read it as naming the lane it is written for, not as a
+universal requirement.
 
 The [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) is the standing
 exception and is unchanged. Its classes continue through the dedicated visible

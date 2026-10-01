@@ -275,8 +275,8 @@ keep the inheritance honest:
   hypothesis or a claim until it has been independently established.** Attribute
   it as inherited, or establish it from source, before it becomes policy text.
 
-Wave 1 produced four instances of an unverified claim reaching committed policy
-text, two of which caused a QA FAIL. Two of them show why each rule exists:
+Wave 1 produced several instances of an unverified claim reaching committed
+policy text. Two of them show why each rule exists:
 
 - A `git rev-parse` failure mechanism was written confidently into an issue and
   from there into policy, and was wrong in the direction that ruled out the
