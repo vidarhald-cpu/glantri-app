@@ -1,6 +1,6 @@
 # Combat Round End & Review V1
 
-Status: Product Owner approved architecture; documentation only, implementation not authorized
+Status: Product Owner approved architecture; implementation authorized for S7 via Forgejo issue #481
 
 Date: 2026-09-17
 
@@ -158,6 +158,51 @@ reviewable automatically.
 Every combatant must nevertheless remain manually selectable from the Round
 Manager so the GM can inspect or adjust them if necessary.
 
+### 9.1 Reviewable material is judged by consequence, not by blocking flags
+
+A participant carrying consequential content must never be treated as a no-work
+participant. Whether a requirement blocks the Review step is a separate question
+from whether it is reviewable. In particular, a due unresolved requirement — the
+death-timer case introduced after this document's original date is the known
+example — remains reviewable even where it is declared non-blocking
+(`blocksReview: false`). Non-blocking means the GM is not prevented from
+proceeding; it does not mean there is nothing for the GM to see.
+
+The inclusion list above remains the authority on what counts as reviewable.
+This subsection only forbids reading a non-blocking flag as an absence of
+consequence.
+
+### 9.2 GM authority over Review completion
+
+Glantri must not autonomously decide that Round End or Review is finished, and
+must not advance the Combat step on its own judgement. The GM explicitly makes
+that decision. This does not prohibit deterministic bookkeeping performed as a
+consequence of that explicit GM action.
+
+Accordingly:
+
+- Participants with no consequential or otherwise reviewable material may be
+  omitted from the default Review sequence, exactly as §9 already provides.
+- Every participant nevertheless remains manually selectable in the Combat
+  Inspector before the GM commits the step, and the GM may inspect any
+  participant and use the legitimate owning controls to adjust it.
+- When the GM explicitly commits or advances the Review step, existing
+  deterministic machinery may mark the omitted no-work participant reviews
+  `complete`. This is bookkeeping under GM authority, not autonomous
+  adjudication.
+- Persisted `complete` therefore means that no participant-level Review work
+  remains. It does not assert that the GM personally inspected that participant.
+- The system must never automatically commit or advance the overall Review step,
+  and must never automatically perform Start New Round. §12 continues to govern
+  the round boundary.
+
+Remaining manually selectable for inspection or adjustment does not require an
+empty or no-op `commit_round_end_participant_review` for an otherwise no-work
+participant. Adjustment happens through the legitimate controls that own the
+corrected state, as §11 describes for corrections. Where an adjustment creates
+consequential or otherwise reviewable state, the Review projection must reflect
+it, and the participant is no longer a no-work participant.
+
 ## 10. Chronological presentation
 
 For an affected character, show relevant events chronologically so the GM can
@@ -224,8 +269,12 @@ approved Round End workflow:
 
 ## 16. Scope and relationship to existing documentation
 
-This approval records architecture only. It does not authorize Round End
-implementation, runtime changes, or implementation dispatch.
+The architecture recorded here was approved by the Product Owner as architecture.
+That approval provenance is unchanged. What has since changed is the
+authorization status: the approved architecture is now authorized for
+implementation in S7 under Forgejo issue #481, which is the dispatch authority
+for Round End implementation and the associated runtime changes. Work outside
+the scope of that issue is still not authorized by this document.
 
 [Combat architecture overview](./combat-architecture-overview.md) remains the
 architecture entry point. [Combat declarations](../rules/combat-declarations.md)
