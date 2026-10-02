@@ -4,18 +4,19 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
-import type {
-  CampaignRosterEntry,
-  EncounterKind,
-  EncounterParticipant,
-  EncounterSession,
-  EncounterStatus,
-  ReusableEntity,
-  Scenario,
-  ScenarioEventLog,
-  ScenarioEncounterManagementProjection,
-  ScenarioParticipant,
-  ScenarioSessionView,
+import {
+  isScenarioReadOnly,
+  type CampaignRosterEntry,
+  type EncounterKind,
+  type EncounterParticipant,
+  type EncounterSession,
+  type EncounterStatus,
+  type ReusableEntity,
+  type Scenario,
+  type ScenarioEventLog,
+  type ScenarioEncounterManagementProjection,
+  type ScenarioParticipant,
+  type ScenarioSessionView,
 } from "@glantri/domain";
 import { createEncounterSession } from "@glantri/rules-engine";
 
@@ -644,9 +645,17 @@ export default function ScenarioDetailPageContent({
     try {
       setError(undefined);
       setFeedback(undefined);
+      /**
+       * A read-only Scenario accepts a status-only update and nothing else:
+       * `scenarioService.updateScenario` throws when a field mutation accompanies
+       * the status change. Omitting name and description for every read-only
+       * status - not just `completed` - is what lets `completed -> archived`
+       * through without offering any other mutation.
+       */
+      const isStatusOnlyUpdate = scenario ? isScenarioReadOnly(scenario.status) : false;
       const updatedScenario = await updateScenarioOnServer({
-        description: scenario?.status === "completed" ? undefined : scenarioDescription,
-        name: scenario?.status === "completed" ? undefined : scenarioName,
+        description: isStatusOnlyUpdate ? undefined : scenarioDescription,
+        name: isStatusOnlyUpdate ? undefined : scenarioName,
         scenarioId,
         status: scenarioStatus,
       });
@@ -965,7 +974,15 @@ export default function ScenarioDetailPageContent({
     return <section>{error ?? "Scenario not found."}</section>;
   }
 
-  if (scenario.status === "completed" || scenario.status === "archived") {
+  /**
+   * Terminal Scenarios keep their own read-only history view. This branch is the
+   * single refusal point for every live-session affordance - participant changes,
+   * Encounter lifecycle, session-state writes, rolls and Combat - and it must stay
+   * that way. The only mutation reachable from here is the lifecycle step the
+   * domain still permits, `completed -> archived`, which `ScenarioSummarySection`
+   * derives from `scenarioLifecycleTransitions`.
+   */
+  if (isScenarioReadOnly(scenario.status)) {
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
         <RememberedCampaignWorkspaceEffect
@@ -1001,22 +1018,16 @@ export default function ScenarioDetailPageContent({
         </section>
         {error ? <div role="alert">{error}</div> : null}
         {feedback ? <div role="status">{feedback}</div> : null}
-        <section
-          aria-label="Scenario summary"
-          style={{
-            border: "1px solid #d9ddd8",
-            borderRadius: 12,
-            display: "grid",
-            gap: "0.5rem",
-            padding: "1rem",
-          }}
-        >
-          <h2 style={{ margin: 0 }}>Summary</h2>
-          <div>
-            <strong>Status:</strong> {scenario.status === "archived" ? "Archived" : "Closed"}
-          </div>
-          <p style={{ margin: 0 }}>{scenario.description || "No description was recorded."}</p>
-        </section>
+        <ScenarioSummarySection
+          onDescriptionChange={setScenarioDescription}
+          onNameChange={setScenarioName}
+          onStatusChange={setScenarioStatus}
+          onUpdate={() => void handleUpdateScenarioMetadata()}
+          scenarioDescription={scenarioDescription}
+          scenarioName={scenarioName}
+          scenarioStatus={scenario.status}
+          selectedStatus={scenarioStatus}
+        />
         {scenarioSession ? (
           <ScenarioSessionPanel campaignId={campaignId} session={scenarioSession} />
         ) : null}
@@ -1080,7 +1091,8 @@ export default function ScenarioDetailPageContent({
         onUpdate={() => void handleUpdateScenarioMetadata()}
         scenarioDescription={scenarioDescription}
         scenarioName={scenarioName}
-        scenarioStatus={scenarioStatus}
+        scenarioStatus={scenario.status}
+        selectedStatus={scenarioStatus}
       />
 
       {scenarioSession ? (
