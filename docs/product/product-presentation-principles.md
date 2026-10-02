@@ -152,6 +152,21 @@ The app should infer or automate repetitive operations when the result is determ
 - Consequential choices must remain explicit, attributable, and reviewable before commit.
 - A primary action should say what it will do and, where needed, who it affects.
 
+#### 4.8.1 Glantri is a GM support system, not an autonomous referee or story engine
+
+Glantri helps the GM run the game. It does not referee the fiction by itself and it does not advance the story by itself. This decides how far the automation in §4.8 may reach.
+
+- Automate immediate, mechanically well-defined bookkeeping where doing so reduces interruption during play.
+- Do not automatically advance longer-horizon, ambiguous, narrative, or context-sensitive consequences merely because the engine can represent them.
+- The GM remains authoritative and must be able to edit or reverse automated effects and state changes.
+- Automated consequences should carry enough provenance and state to support exact reversal where practical. [Combat command undo facts](../architecture/combat-undo-facts.md) records the established shape of that provenance.
+- A due timer or stored duration may inform the GM without itself causing the next fictional event. This is the product-side counterpart of the temporal structures in [rule decision 0005](../decisions/rules/0005-critical-effect-semantics-and-timing.md#temporal-structures).
+
+The following examples illustrate the principle. Neither authorizes implementation.
+
+- A Critical might automatically remove a held weapon and place it in the Encounter context to save bookkeeping — but the GM must be able to reverse or alter that outcome if the fiction makes it inappropriate.
+- `D4` hours of unconsciousness is represented canonically and visibly, but Glantri does not create a real-time scheduler and does not automatically wake the Character. The duration is a fact the GM can see and act on; it is not an event the engine fires.
+
 ### 4.9 Make errors user-relevant and recoverable
 
 Errors should explain:
