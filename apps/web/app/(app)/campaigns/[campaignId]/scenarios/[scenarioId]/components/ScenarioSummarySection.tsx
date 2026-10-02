@@ -1,6 +1,6 @@
 "use client";
 
-import type { Scenario } from "@glantri/domain";
+import { isScenarioReadOnly, scenarioLifecycleTransitions, type Scenario } from "@glantri/domain";
 
 interface ScenarioSummarySectionProps {
   onDescriptionChange: (value: string) => void;
@@ -9,7 +9,15 @@ interface ScenarioSummarySectionProps {
   onUpdate: () => void;
   scenarioDescription: string;
   scenarioName: string;
+  /** The Scenario's persisted status. Authoritative for every lifecycle judgement. */
   scenarioStatus: Scenario["status"];
+  /**
+   * The status the GM currently has selected but has not yet saved. It is only the
+   * `select`'s value. Deriving editability or the offered transitions from it would
+   * mean the control disabled itself the moment a terminal step was chosen, which is
+   * exactly why the `completed -> archived` step was unreachable.
+   */
+  selectedStatus: Scenario["status"];
 }
 
 export function ScenarioSummarySection({
@@ -20,19 +28,24 @@ export function ScenarioSummarySection({
   scenarioDescription,
   scenarioName,
   scenarioStatus,
+  selectedStatus,
 }: ScenarioSummarySectionProps) {
   const isArchived = scenarioStatus === "archived";
-  const isMetadataReadOnly = scenarioStatus === "completed" || isArchived;
-  const allowedStatuses: Scenario["status"][] =
-    scenarioStatus === "draft"
-      ? ["draft", "live", "archived"]
-      : scenarioStatus === "live"
-        ? ["live", "paused"]
-        : scenarioStatus === "paused"
-          ? ["paused", "live", "completed"]
-          : scenarioStatus === "completed"
-            ? ["completed", "archived"]
-            : ["archived"];
+  /**
+   * Metadata editability and the offered lifecycle steps are both read from the
+   * domain vocabulary instead of being re-derived here. `scenarioLifecycleTransitions`
+   * is a `Record<ScenarioStatus, ScenarioStatus[]>`, so a new status or a changed
+   * transition set reaches this control through the compiler.
+   *
+   * The current status leads the list so the `select` can display it; the rest of
+   * the list is exactly the domain's permitted next steps, which is what makes
+   * `completed -> archived` reachable without widening anything else.
+   */
+  const isMetadataReadOnly = isScenarioReadOnly(scenarioStatus);
+  const allowedStatuses: Scenario["status"][] = [
+    scenarioStatus,
+    ...scenarioLifecycleTransitions[scenarioStatus],
+  ];
   const statusLabel = (status: Scenario["status"]) =>
     status === "live"
       ? "Active"
@@ -78,7 +91,7 @@ export function ScenarioSummarySection({
         ) : (
           <select
             onChange={(event) => onStatusChange(event.target.value as Scenario["status"])}
-            value={scenarioStatus}
+            value={selectedStatus}
           >
             {allowedStatuses.map((status) => (
               <option key={status} value={status}>

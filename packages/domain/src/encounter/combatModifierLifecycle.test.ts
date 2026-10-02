@@ -2,13 +2,18 @@ import { describe, expect, it } from "vitest";
 
 import {
   CANONICAL_COMBAT_MODIFIER_LIFECYCLE_SCHEMA_VERSION,
+  canonicalCombatModifierConditionKindSchema,
   canonicalCombatModifierDurationSchema,
+  canonicalCombatModifierDurationUnitSchema,
   canonicalCombatModifierEffectSchema,
   canonicalCombatModifierHistoricalSnapshotSchema,
   canonicalCombatModifierLifecycleStateSchema,
   canonicalCombatModifierPayloadSchema,
+  canonicalCombatModifierRolledDurationSchema,
+  canonicalCombatModifierRolledQuantitySchema,
   classifyCanonicalCombatModifierDuration,
   evaluateCanonicalCombatModifierDurationAtRoundEnd,
+  getCanonicalCombatModifierRolledDurationUnit,
   isCanonicalCombatModifierTransitionAllowed,
   projectPlayerSafeCanonicalCombatModifierEffect,
   restoreCanonicalCombatModifierEffectFromTransition,
@@ -490,5 +495,201 @@ describe("canonical temporal vocabulary", () => {
         }),
       ).toEqual({ kind: "not_time_driven" });
     }
+  });
+});
+
+describe("[#215 S6] the canonical condition/event vocabulary", () => {
+  // The exact membership before S6, written out by hand rather than derived from the schema, so
+  // this block fails if a later change removes or renames a pre-S6 member.
+  const PRE_S6_CONDITION_KINDS = [
+    "effect_cleared",
+    "contact_ended",
+    "participant_state",
+    "source_process_completed",
+  ] as const;
+
+  const start = { startRound: 4, startSequence: 2 } as const;
+
+  function untilCondition(conditionKind: string): unknown {
+    return { conditionId: "condition-1", conditionKind, kind: "until_condition", ...start };
+  }
+
+  it("widens the vocabulary additively: every pre-S6 member still parses to itself", () => {
+    for (const conditionKind of PRE_S6_CONDITION_KINDS) {
+      const parsed = canonicalCombatModifierDurationSchema.parse(untilCondition(conditionKind));
+      expect(parsed).toEqual({
+        conditionId: "condition-1",
+        conditionKind,
+        kind: "until_condition",
+        ...start,
+      });
+    }
+    expect(canonicalCombatModifierConditionKindSchema.options).toEqual([
+      ...PRE_S6_CONDITION_KINDS,
+      "treated",
+    ]);
+  });
+
+  it("binds `treated` canonically and keeps every pre-S6 interpretation unchanged", () => {
+    for (const conditionKind of [...PRE_S6_CONDITION_KINDS, "treated"] as const) {
+      const duration = canonicalCombatModifierDurationSchema.parse(untilCondition(conditionKind));
+
+      // Interpretation is a property of the `until_condition` shape, not of the member. Pre-S6
+      // rows therefore keep exactly the classification and boundary outcome they had, and the new
+      // member acquires the same one rather than a new behaviour of its own.
+      expect(classifyCanonicalCombatModifierDuration(duration)).toBe("condition_event");
+      expect(
+        evaluateCanonicalCombatModifierDurationAtRoundEnd({ duration, roundNumber: 9 }),
+      ).toEqual({ kind: "requires_resolution", requirement: "condition" });
+    }
+  });
+
+  it("rejects an unknown condition member rather than coercing or defaulting it", () => {
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse(untilCondition("treated_then_permanent"))
+        .success,
+    ).toBe(false);
+    expect(canonicalCombatModifierDurationSchema.safeParse(untilCondition("time")).success).toBe(
+      false,
+    );
+  });
+
+  it("keeps `conditionId` and `conditionKind` required, so no row acquires a member on read", () => {
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse({
+        conditionId: "condition-1",
+        kind: "until_condition",
+        ...start,
+      }).success,
+    ).toBe(false);
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse({
+        conditionKind: "treated",
+        kind: "until_condition",
+        ...start,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("[#215 S6] the canonical duration-unit widening of the rolled shape", () => {
+  const start = { startRound: 4, startSequence: 2 } as const;
+
+  // The exact pre-widening persisted rolled fact: no `unit` field at all.
+  const PRE_UNIT_ROLLED = { formula: "d4", rolledAtRound: 4, value: 3 } as const;
+
+  function roundsDuration(rolled: unknown): unknown {
+    return {
+      creationRoundCounts: false,
+      kind: "rounds",
+      remaining: 3,
+      rolled,
+      transitionBoundary: "round_end_review",
+      ...start,
+    };
+  }
+
+  it("names exactly two units and keeps them in one canonical home", () => {
+    expect(canonicalCombatModifierDurationUnitSchema.options).toEqual(["round", "hour"]);
+    expect(canonicalCombatModifierRolledQuantitySchema.shape.unit.unwrap().options).toEqual(
+      canonicalCombatModifierDurationUnitSchema.options,
+    );
+  });
+
+  it("INVARIANT 1 — a pre-widening rolled fact keeps exactly its previous meaning", () => {
+    const parsed = canonicalCombatModifierRolledDurationSchema.parse({ ...PRE_UNIT_ROLLED });
+
+    // No `.default()`: the field stays absent after parse, so a pre-widening fact remains
+    // distinguishable from one written after the widening and acquires nothing on read.
+    expect(parsed).toEqual(PRE_UNIT_ROLLED);
+    expect(Object.keys(parsed).includes("unit")).toBe(false);
+    // The absent-unit interpretation is rounds, stated in exactly one place.
+    expect(getCanonicalCombatModifierRolledDurationUnit(parsed)).toBe("round");
+  });
+
+  it("INVARIANT 6 — a pre-widening round-based duration is classified and advanced unchanged", () => {
+    const duration = canonicalCombatModifierDurationSchema.parse(roundsDuration(PRE_UNIT_ROLLED));
+
+    expect(duration).toEqual(roundsDuration(PRE_UNIT_ROLLED));
+    expect(classifyCanonicalCombatModifierDuration(duration)).toBe("bounded_uncertain");
+    expect(evaluateCanonicalCombatModifierDurationAtRoundEnd({ duration, roundNumber: 5 })).toEqual(
+      { kind: "decrement", nextDuration: { ...duration, remaining: 2 } },
+    );
+    // The creation round still does not consume a round of it.
+    expect(evaluateCanonicalCombatModifierDurationAtRoundEnd({ duration, roundNumber: 4 })).toEqual(
+      { kind: "hold", reason: "creation_round_excluded" },
+    );
+  });
+
+  it("INVARIANT 6 — the round clock cannot receive an hour-measured rolled quantity", () => {
+    // This is the structural reason the widening needs no clock automation. `remaining` on a
+    // `rounds` duration is consumed by the round boundary, so an hour value there would be silently
+    // counted as rounds. It is unrepresentable instead of merely discouraged.
+    expect(
+      canonicalCombatModifierDurationSchema.safeParse(
+        roundsDuration({ ...PRE_UNIT_ROLLED, unit: "hour" }),
+      ).success,
+    ).toBe(false);
+    // An explicit round unit is carried through and means what the absent field already meant.
+    const explicit = canonicalCombatModifierDurationSchema.parse(
+      roundsDuration({ ...PRE_UNIT_ROLLED, unit: "round" }),
+    );
+    expect(explicit.kind === "rounds" && explicit.rolled?.unit).toBe("round");
+    expect(classifyCanonicalCombatModifierDuration(explicit)).toBe("bounded_uncertain");
+    expect(
+      evaluateCanonicalCombatModifierDurationAtRoundEnd({ duration: explicit, roundNumber: 5 }),
+    ).toEqual({ kind: "decrement", nextDuration: { ...explicit, remaining: 2 } });
+  });
+
+  it("carries an hour-measured rolled quantity faithfully and adds no round-clock behaviour", () => {
+    const rolled = canonicalCombatModifierRolledQuantitySchema.parse({
+      formula: "d4",
+      unit: "hour",
+      value: 3,
+    });
+
+    expect(rolled).toEqual({ formula: "d4", unit: "hour", value: 3 });
+    expect(getCanonicalCombatModifierRolledDurationUnit(rolled)).toBe("hour");
+    // S6 adds no duration kind to the canonical union, so the boundary engine gained no arm and no
+    // new outcome: the hour fact is stored and displayed, and its expiry execution stays GM-manual.
+    expect(
+      canonicalCombatModifierDurationSchema.options.map(
+        (option) => (option.shape.kind as { value: string }).value,
+      ),
+    ).toEqual([
+      "phase",
+      "attack_opportunity_count",
+      "rounds",
+      "remainder_of_round",
+      "instantaneous",
+      "until_check",
+      "until_condition",
+      "relationship",
+      "manual",
+      "indefinite",
+      "legacy_untyped",
+    ]);
+  });
+
+  it("rejects an unknown unit rather than coercing it", () => {
+    for (const unit of ["hours", "minute", "round_end", ""]) {
+      expect(
+        canonicalCombatModifierRolledQuantitySchema.safeParse({ formula: "d4", unit, value: 3 })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("keeps every pre-widening required field of the rolled duration required", () => {
+    expect(
+      canonicalCombatModifierRolledDurationSchema.safeParse({ rolledAtRound: 4, value: 3 }).success,
+    ).toBe(false);
+    expect(
+      canonicalCombatModifierRolledDurationSchema.safeParse({ formula: "d4", value: 3 }).success,
+    ).toBe(false);
+    expect(
+      canonicalCombatModifierRolledDurationSchema.safeParse({ formula: "d4", rolledAtRound: 4 })
+        .success,
+    ).toBe(false);
   });
 });
