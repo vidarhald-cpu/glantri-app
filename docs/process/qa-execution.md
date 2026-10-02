@@ -234,7 +234,8 @@ of the following hold at the refreshed head:
 2. the refresh was performed by merge, not by rewrite: no rebase, no squash, no
    amend;
 3. every reviewed blob is byte-identical to the accepted head;
-4. no file was added or removed relative to the accepted head;
+4. no file was added or removed within the reviewed paths relative to the
+   accepted head;
 5. no manual conflict resolution occurred;
 6. the target branch (`dev`) is an ancestor of the refreshed head; and
 7. CI is green at the refreshed head.
