@@ -1,7 +1,13 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
+import { combatCriticalEndEventSchema } from "./combatCriticalRuntime";
 import {
   canonicalCombatModifierConditionKindSchema,
+  canonicalCombatModifierDurationUnitSchema,
+  canonicalCombatModifierRolledQuantitySchema,
+  getCanonicalCombatModifierRolledDurationUnit,
   type CanonicalCombatModifierConditionKind,
 } from "./combatModifierLifecycle";
 import {
@@ -373,12 +379,24 @@ describe("[#215 S6] the five source identifiers bind to one canonical vocabulary
       hand_function_changes: "treated",
       // Source `end_trigger: special` — a positive statement that no mechanical rule exists.
       leg_function_changes: undefined,
-      // Source gives a rolled D4-hour duration, not a condition. Representing it needs a unit on
-      // the canonical rolled shape, which is a further persisted widening and not bound here.
-      authored_waking_condition: undefined,
       // Source's terminal transition is death, which requires a newly accepted rule.
       catastrophic_process_resolved: undefined,
     });
+  });
+
+  it("INVARIANT 4 — no identifier stands in for a duration that is not a condition at all", () => {
+    // `authored_waking_condition` was a fake condition: the source states a rolled D4-hour duration
+    // with `end_trigger: time` and names no condition whatsoever. It is now encoded as the rolled
+    // quantity it is, so no condition identifier may reintroduce it.
+    const identifiers = untilConditionDurations().map((duration) => duration.condition);
+
+    expect(identifiers).not.toContain("authored_waking_condition");
+    expect(identifiers).toHaveLength(4);
+    expect(
+      JSON.stringify(REPRESENTATIVE_CRITICAL_INJURY_FIXTURES).includes("authored_waking_condition"),
+    ).toBe(false);
+    // Nor may it come back as a Critical runtime end-event member.
+    expect(combatCriticalEndEventSchema.safeParse("authored_waking_condition").success).toBe(false);
   });
 
   it("uses the canonical persisted vocabulary rather than a parallel encoding", () => {
@@ -396,6 +414,76 @@ describe("[#215 S6] the five source identifiers bind to one canonical vocabulary
     for (const duration of untilConditionDurations()) {
       expect(duration.condition.length).toBeGreaterThan(0);
     }
-    expect(untilConditionDurations()).toHaveLength(5);
+    expect(untilConditionDurations()).toHaveLength(4);
+  });
+});
+
+describe("[#215 S6] Critical-D carries its rolled D4-hour duration canonically", () => {
+  // Both constants were measured by running the identical strip against the fixtures as they stood
+  // immediately before this change, at `7048ef6496ee02264115f2328e4d3f6e416e5d36`.
+  const DURATION_STRIPPED_FIXTURE_GOLDEN =
+    "39e20427c704d34955b30b0ce373cfef2570d0c46fa1219d1051235570cdf291";
+  const ROUND_BASED_FIXTURE_DURATION_COUNT = 4;
+
+  const effect = criticalInjuryFixtureD.operationalEffects.find(
+    (candidate) => candidate.id === "critical-d:effect:unconscious",
+  );
+
+  it("encodes the authored rolled hour duration, not a condition and not GM discretion", () => {
+    expect(effect?.label).toBe("Unconscious");
+    expect(effect?.duration).toEqual({
+      kind: "rolled_time",
+      rolled: { formula: "d4", unit: "hour", value: 3 },
+    });
+    // The two readings the ruling forbids. `rolled_time` is neither.
+    expect(effect?.duration.kind).not.toBe("until_condition");
+    expect(effect?.duration.kind).not.toBe("persistent");
+  });
+
+  it("uses the canonical rolled quantity shape and the canonical unit vocabulary", () => {
+    const duration = effect?.duration;
+    if (duration?.kind !== "rolled_time") throw new Error("Expected a rolled_time duration.");
+
+    const parsed = canonicalCombatModifierRolledQuantitySchema.parse(duration.rolled);
+    expect(parsed).toEqual(duration.rolled);
+    expect(canonicalCombatModifierDurationUnitSchema.options).toContain(parsed.unit);
+    expect(getCanonicalCombatModifierRolledDurationUnit(parsed)).toBe("hour");
+  });
+
+  it("keeps the duration and its accepted creation-roll evidence from drifting apart", () => {
+    const duration = effect?.duration;
+    if (duration?.kind !== "rolled_time") throw new Error("Expected a rolled_time duration.");
+    const roll = criticalInjuryFixtureD.outcome.creationRolls.find(
+      (candidate) => candidate.purpose === "source unconscious duration",
+    );
+
+    expect(roll?.use).toBe("accepted_mechanic");
+    expect(roll?.formula).toBe(duration.rolled.formula);
+    expect(roll?.total).toBe(duration.rolled.value);
+  });
+
+  it("INVARIANT 6 — no other fixture duration was reinterpreted by the widening", () => {
+    const kinds = REPRESENTATIVE_CRITICAL_INJURY_FIXTURES.flatMap((fixture) =>
+      fixture.operationalEffects.map((candidate) => candidate.duration.kind),
+    );
+
+    expect(kinds.filter((kind) => kind === "rolled_time")).toHaveLength(1);
+    expect(kinds.filter((kind) => kind === "until_condition")).toHaveLength(4);
+    expect(kinds.filter((kind) => kind === "rounds")).toHaveLength(
+      ROUND_BASED_FIXTURE_DURATION_COUNT,
+    );
+  });
+
+  it("changed the fixture content by exactly this one duration and nothing else", () => {
+    // The equivalent of the pre-S6 strip golden: with every operational-effect duration removed, the
+    // fixture content hashes to the same value it did before this change. Anything else that moved —
+    // a label, a projection, a provenance range — would break this.
+    const stripped = JSON.stringify(REPRESENTATIVE_CRITICAL_INJURY_FIXTURES, (key, value) =>
+      key === "duration" ? undefined : value,
+    );
+
+    expect(createHash("sha256").update(stripped).digest("hex")).toBe(
+      DURATION_STRIPPED_FIXTURE_GOLDEN,
+    );
   });
 });

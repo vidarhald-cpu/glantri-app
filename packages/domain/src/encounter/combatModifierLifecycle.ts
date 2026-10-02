@@ -164,17 +164,65 @@ const durationStartSchema = z.object({
 });
 
 /**
+ * The canonical persisted vocabulary of duration units. This is the single canonical home for the
+ * meaning of each member; other layers — including the persisted Critical runtime duration in
+ * `combatCriticalRuntime.ts` and its hand-maintained fixture twin — reference this vocabulary
+ * rather than restating the members.
+ *
+ * - `round` — measured in Combat rounds. The round clock owns expiry, through
+ *   `evaluateCanonicalCombatModifierDurationAtRoundEnd`.
+ * - `hour` — measured in elapsed hours. The app has no hour clock and this vocabulary does not add
+ *   one: an hour-measured quantity is a faithfully stored and displayed fact whose expiry is
+ *   executed by the GM. A round boundary must never consume it, which is why the round-measured
+ *   `rounds` duration below narrows its rolled evidence to `round`.
+ */
+export const canonicalCombatModifierDurationUnitSchema = z.enum(["round", "hour"]);
+export type CanonicalCombatModifierDurationUnit = z.infer<
+  typeof canonicalCombatModifierDurationUnitSchema
+>;
+
+/**
+ * The rolled quantity itself: a formula, the value it produced, and the unit that value is measured
+ * in. It is separated from the round-anchored duration below so that layers which record a rolled
+ * quantity without a round anchor — the inert Critical case carrier in `criticalInjuryDomain.ts` —
+ * reference this shape instead of re-declaring `formula`/`value`/`unit`.
+ *
+ * `unit` is additive and deliberately carries no `.default()`. A fact written before the unit
+ * existed omits it, still parses, and still means exactly what it meant then: rounds. A
+ * `.default()` would materialise `"round"` on read, making a pre-widening fact indistinguishable
+ * from one written after it. `getCanonicalCombatModifierRolledDurationUnit` is the one place that
+ * absent-means-round interpretation is stated.
+ */
+export const canonicalCombatModifierRolledQuantitySchema = z.object({
+  formula: z.string().min(1),
+  unit: canonicalCombatModifierDurationUnitSchema.optional(),
+  value: z.number().int().positive(),
+});
+export type CanonicalCombatModifierRolledQuantity = z.infer<
+  typeof canonicalCombatModifierRolledQuantitySchema
+>;
+
+/**
  * A bounded uncertain duration is rolled once at creation and retained as reviewable evidence. It
  * then behaves exactly like a fixed duration of the rolled length: no later boundary rerolls it.
  */
-export const canonicalCombatModifierRolledDurationSchema = z.object({
-  formula: z.string().min(1),
-  rolledAtRound: z.number().int().positive(),
-  value: z.number().int().positive(),
-});
+export const canonicalCombatModifierRolledDurationSchema =
+  canonicalCombatModifierRolledQuantitySchema.extend({
+    rolledAtRound: z.number().int().positive(),
+  });
 export type CanonicalCombatModifierRolledDuration = z.infer<
   typeof canonicalCombatModifierRolledDurationSchema
 >;
+
+/**
+ * The unit a rolled quantity is measured in, for a fact that may predate the unit field. Absent is
+ * exactly the pre-widening meaning: rounds.
+ */
+export function getCanonicalCombatModifierRolledDurationUnit(
+  rolled: CanonicalCombatModifierRolledQuantity,
+): CanonicalCombatModifierDurationUnit {
+  return rolled.unit ?? "round";
+}
 
 /**
  * The canonical persisted vocabulary of condition/event terminations. An `until_condition`
@@ -228,7 +276,15 @@ export const canonicalCombatModifierDurationSchema = z.discriminatedUnion("kind"
     creationRoundCounts: z.boolean(),
     kind: z.literal("rounds"),
     remaining: z.number().int().positive(),
-    rolled: canonicalCombatModifierRolledDurationSchema.optional(),
+    // This duration is measured in rounds and `remaining` is consumed by the round boundary, so its
+    // rolled evidence is narrowed to the round-measured member of the canonical unit vocabulary.
+    // That is a narrowing of one vocabulary at one site, not a second vocabulary: an hour-measured
+    // quantity is simply unrepresentable here, so no boundary can consume hours as rounds and the
+    // widening needs no clock to stay correct. Pre-widening rows omit `unit` entirely and are
+    // unaffected.
+    rolled: canonicalCombatModifierRolledDurationSchema
+      .extend({ unit: z.literal("round").optional() })
+      .optional(),
     transitionBoundary: z.enum(["round_end_review", "round_boundary"]),
   }),
   // Remainder-only state runs from creation through that same round's Round End and is absent when

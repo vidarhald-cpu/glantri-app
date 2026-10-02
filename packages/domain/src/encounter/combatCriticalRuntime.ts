@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import type { CanonicalCombatModifierConditionKind } from "./combatModifierLifecycle";
+import {
+  canonicalCombatModifierDurationUnitSchema,
+  type CanonicalCombatModifierConditionKind,
+} from "./combatModifierLifecycle";
 
 export const combatCriticalExactRationalSchema = z
   .object({
@@ -74,6 +77,12 @@ export function getCombatCriticalEndEventConditionKind(
  * binding existed omits it and still parses, which is what keeps historical `previousEffect` undo
  * facts readable through `combatEffectSchema.safeParse`. Do not make `endEvent` required and do not
  * relax `text`.
+ *
+ * `unit` references `canonicalCombatModifierDurationUnitSchema` rather than restating its members,
+ * so this schema is a reference to the canonical vocabulary and not a parallel encoding of it. An
+ * hour-measured `roll_once` duration therefore stores its retained `storedRoll` and leaves `rounds`
+ * undefined: nothing here counts hours, and the Round End boundary never sees such a fact as a
+ * round count.
  */
 export const combatCriticalDurationSchema = z.object({
   endEvent: combatCriticalEndEventSchema.optional(),
@@ -82,7 +91,7 @@ export const combatCriticalDurationSchema = z.object({
   rounds: z.number().int().positive().optional(),
   storedRoll: z.number().int().positive().optional(),
   text: z.string().min(1),
-  unit: z.enum(["round", "hour"]).optional(),
+  unit: canonicalCombatModifierDurationUnitSchema.optional(),
 });
 export type CombatCriticalDuration = z.infer<typeof combatCriticalDurationSchema>;
 

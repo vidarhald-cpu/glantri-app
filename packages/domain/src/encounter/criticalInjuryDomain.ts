@@ -1,6 +1,7 @@
 import type {
   CanonicalCombatModifierConditionKind,
   CanonicalCombatModifierPayload,
+  CanonicalCombatModifierRolledQuantity,
 } from "./combatModifierLifecycle";
 import type {
   CriticalEffectGroup,
@@ -109,6 +110,15 @@ export interface CriticalOperationalEffect extends CriticalInjuryChildIdentity {
    * persisted condition/event vocabulary in `combatModifierLifecycle.ts`; it is a reference to that
    * vocabulary, never a second encoding of it. It is omitted where the accepted source names no
    * transition this vocabulary can express, which leaves the effect GM-manual.
+   *
+   * `rolled_time` is the authored `duration_mode: roll` with `end_trigger: time`: a quantity rolled
+   * once at acceptance, in a canonical unit, which ends when that much time has elapsed. It is
+   * deliberately NOT a condition and NOT GM discretion — a source that states a rolled duration and
+   * a time trigger must not be recorded as either. `rolled` references
+   * `canonicalCombatModifierRolledQuantitySchema`, so the formula, value and unit have one canonical
+   * home. Where the unit is not rounds, expiry *execution* stays GM-manual: this module is inert
+   * with respect to elapsed-time processing and adds no clock, while the fact itself is stored
+   * exactly as authored.
    */
   duration:
     | { kind: "rounds"; rounds: number }
@@ -117,6 +127,7 @@ export interface CriticalOperationalEffect extends CriticalInjuryChildIdentity {
         conditionKind?: CanonicalCombatModifierConditionKind;
         kind: "until_condition";
       }
+    | { kind: "rolled_time"; rolled: CanonicalCombatModifierRolledQuantity }
     | { kind: "persistent" };
   initialState: "active" | "pending";
   kind: "operational_effect";

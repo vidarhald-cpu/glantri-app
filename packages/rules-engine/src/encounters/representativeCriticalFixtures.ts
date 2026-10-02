@@ -10,6 +10,7 @@ import {
   type CombatCriticalCanonicalReview,
   type CombatCriticalExactRational,
   type CombatCriticalRuntimeDefinition,
+  type CanonicalCombatModifierDurationUnit,
   type CriticalBand,
 } from "@glantri/domain";
 
@@ -41,6 +42,9 @@ export type ExactRational = CombatCriticalExactRational;
 /**
  * Hand-maintained structural twin of the persisted `CombatCriticalDuration`. `endEvent` mirrors the
  * canonical optional binding; `text` stays required and keeps exactly the authored source phrase.
+ * `unit` references the canonical duration-unit vocabulary rather than restating its members, so
+ * this twin cannot drift from it: the compiler rejects a member the canonical vocabulary does not
+ * have.
  */
 export interface RepresentativeCriticalDuration {
   readonly endEvent?: CombatCriticalEndEvent;
@@ -48,7 +52,7 @@ export interface RepresentativeCriticalDuration {
   readonly kind: "fixed_rounds" | "roll_once" | "until_event" | "gm_managed";
   readonly rounds?: number;
   readonly text: string;
-  readonly unit?: "round" | "hour";
+  readonly unit?: CanonicalCombatModifierDurationUnit;
 }
 
 export interface RepresentativeCriticalStun {

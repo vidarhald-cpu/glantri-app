@@ -23240,3 +23240,158 @@ describe("[#215 S6] pre-S6 Critical duration facts survive the condition/event w
     expect(source).not.toContain("endEvent");
   });
 });
+
+describe("[#215 S6] the duration-unit widening survives the production undo-restore path", () => {
+  // The hazard this block exists for: the undo-restore path parses `previousEffect` with
+  // `safeParse` and discards a failed parse with NO error, leaving the effect unrestored. A schema
+  // test in isolation cannot see that, and a green suite proves nothing. Every case below therefore
+  // drives `removeCombatRoundEndParticipantReviewEffects` and asserts the effect actually came back.
+
+  // The exact shape of a stored rolled Critical duration before `unit` existed.
+  const PRE_UNIT_DURATION = {
+    formula: "d4",
+    kind: "roll_once",
+    rounds: 3,
+    storedRoll: 3,
+    text: "D4 rounds",
+  } as const;
+
+  // Critical-D's duration as the widening stores it: rolled d4, measured in hours, no round count.
+  const HOUR_DURATION = {
+    formula: "d4",
+    kind: "roll_once",
+    storedRoll: 3,
+    text: "D4 hours",
+    unit: "hour",
+  } as const;
+
+  // Built as raw data, deliberately NOT through `combatEffectSchema.parse`. A fact persisted under
+  // an older schema was never validated by today's one, so validating it here would hide exactly
+  // the failure mode being tested: the restore path's own `safeParse` rejecting a historical fact.
+  function rawCriticalConditionFact(id: string, duration: Record<string, unknown>): unknown {
+    return {
+      createdAt: "2026-09-06T10:00:00.000Z",
+      criticalRuntime: {
+        condition: {
+          code: "unconscious",
+          duration,
+          mechanicallyActive: true,
+          onset: "immediate",
+          target: "head",
+        },
+        criticalKey: "blunt|head|10",
+        fixtureVersion: "c1-2026-08-28",
+        kind: "condition",
+      },
+      damage: 0,
+      effectGroup: "special",
+      generalDamage: 0,
+      id,
+      sourceEventId: "s6-unit-event",
+      status: "active",
+      targetParticipantId: "scenario-guard",
+      type: "special",
+      updatedAt: "2026-09-06T10:00:00.000Z",
+    };
+  }
+
+  // The live effect the Round End commit mutated. It always parses under today's schema, so if the
+  // restore drops the historical fact the path returns THIS one with no error — which is precisely
+  // the silent loss the assertions below detect.
+  function mutatedEffect(id: string): CombatEffect {
+    return combatEffectSchema.parse({
+      ...(rawCriticalConditionFact(id, { ...HOUR_DURATION }) as Record<string, unknown>),
+      description: "mutated by the Round End commit",
+      updatedAt: "2026-09-06T10:05:00.000Z",
+    });
+  }
+
+  function restoreThroughProduction(id: string, previousEffect: unknown): CombatEffect | undefined {
+    const cursor = { participantId: "guard", roundNumber: 3, step: "SU" as const };
+
+    return removeCombatRoundEndParticipantReviewEffects({
+      combatEffects: combatEffectsStateSchema.parse({ effects: [mutatedEffect(id)] }),
+      command: {
+        afterCursor: cursor,
+        beforeCursor: cursor,
+        createdAt: "2026-09-06T10:05:00.000Z",
+        facts: { updatedEffects: [{ effectId: id, previousEffect }] },
+        id: `command-${id}`,
+        participantId: "guard",
+        roundNumber: 3,
+        type: "commit_round_end_participant_review",
+      },
+    }).effects[0];
+  }
+
+  function conditionDuration(effect: CombatEffect | undefined): Record<string, unknown> {
+    if (effect?.criticalRuntime?.kind !== "condition") {
+      throw new Error("The undo fact was dropped instead of restored.");
+    }
+    return effect.criticalRuntime.condition.duration as unknown as Record<string, unknown>;
+  }
+
+  it("INVARIANT 2 — a pre-widening undo fact is still readable and still reversible", () => {
+    const id = "s6-pre-unit-undo";
+    const previousEffect = rawCriticalConditionFact(id, { ...PRE_UNIT_DURATION });
+    const restored = restoreThroughProduction(id, previousEffect);
+
+    // Restored at all — not silently discarded. The mutation is gone and the historical duration is
+    // back exactly as written; a dropped fact would leave the mutated hour effect in place instead.
+    expect(restored?.description).toBeUndefined();
+    expect(restored).toEqual(previousEffect);
+    const duration = conditionDuration(restored);
+    expect(duration).toEqual(PRE_UNIT_DURATION);
+    // INVARIANT 1 at the production boundary: the field is still absent, not defaulted on read.
+    expect(Object.keys(duration).includes("unit")).toBe(false);
+    expect(duration.rounds).toBe(3);
+  });
+
+  it("INVARIANT 3 — a new hour-based rolled fact round-trips through persistence and undo", () => {
+    const id = "s6-hour-undo";
+    const previousEffect = rawCriticalConditionFact(id, { ...HOUR_DURATION });
+
+    // Persistence round trip first: the stored JSON keeps `unit` through parse and serialisation.
+    const persisted = combatEffectSchema.parse(JSON.parse(JSON.stringify(previousEffect)));
+    expect(conditionDuration(persisted)).toEqual(HOUR_DURATION);
+
+    const restored = restoreThroughProduction(id, previousEffect);
+
+    expect(restored?.description).toBeUndefined();
+    expect(restored).toEqual(previousEffect);
+    const duration = conditionDuration(restored);
+    expect(duration).toEqual(HOUR_DURATION);
+    expect(duration.unit).toBe("hour");
+    // The hour quantity never becomes a round count, so no boundary can consume it as one.
+    expect(duration.rounds).toBeUndefined();
+    expect(duration.storedRoll).toBe(3);
+  });
+
+  it("INVARIANT 3 — an unknown unit is rejected at the schema, not silently dropped on restore", () => {
+    // Proves the guard is a real parse failure rather than key-stripping: a bad unit must not be
+    // quietly discarded and the rest of the fact restored as if it had been valid.
+    expect(
+      combatEffectsStateSchema.safeParse({
+        effects: [rawCriticalConditionFact("s6-bad-unit", { ...HOUR_DURATION, unit: "hours" })],
+      }).success,
+    ).toBe(false);
+    // And the valid one does parse, so the rejection above is about the unit and nothing else.
+    expect(
+      combatEffectsStateSchema.safeParse({
+        effects: [rawCriticalConditionFact("s6-good-unit", { ...HOUR_DURATION })],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("confirms combatRoundManager.ts is still avoided by the unit widening", () => {
+    // The extreme hotspot stays free: the unit vocabulary is not named anywhere in it, and the
+    // generic requirement label is unchanged, so the health-automation population is untouched.
+    const source = readFileSync(new URL("./combatRoundManager.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("pending canonical resolution");
+    expect(source).not.toContain("endEvent");
+    expect(source).not.toContain("rolled_time");
+    expect(source).not.toContain("canonicalCombatModifierDurationUnit");
+    expect(source).not.toContain("canonicalCombatModifierRolledQuantity");
+  });
+});

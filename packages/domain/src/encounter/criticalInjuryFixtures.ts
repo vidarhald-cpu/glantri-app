@@ -505,10 +505,12 @@ export const criticalInjuryFixtureD: CriticalInjuryCase = createCriticalInjuryCa
     {
       criticalOutcomeId: "critical-d",
       // Source gives no condition at all: `duration_mode: roll`, `d4`, unit `hour`,
-      // `end_trigger: time`. Representing that faithfully needs a unit on the canonical rolled
-      // duration shape, which has none. That is a further persisted widening and a contract
-      // decision, so this identifier is left unbound rather than reclassified here.
-      duration: { condition: "authored_waking_condition", kind: "until_condition" },
+      // `end_trigger: time`. That is now encoded canonically, as the rolled hour quantity it is.
+      // `value` is the accepted creation roll recorded below (`use: "accepted_mechanic"`), so the
+      // duration and its evidence cannot drift apart. Waking is neither a condition nor GM
+      // discretion: the duration is determined. Only its expiry *execution* is GM-manual, because
+      // nothing in the app counts hours and S6 deliberately adds no clock.
+      duration: { kind: "rolled_time", rolled: { formula: "d4", unit: "hour", value: 3 } },
       id: "critical-d:effect:unconscious",
       initialState: "active",
       kind: "operational_effect",

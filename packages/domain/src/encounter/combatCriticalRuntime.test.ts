@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -8,7 +10,10 @@ import {
   getCombatCriticalEndEventConditionKind,
   transitionCombatCriticalBleedControl,
 } from "./combatCriticalRuntime";
-import { canonicalCombatModifierConditionKindSchema } from "./combatModifierLifecycle";
+import {
+  canonicalCombatModifierConditionKindSchema,
+  canonicalCombatModifierDurationUnitSchema,
+} from "./combatModifierLifecycle";
 
 const external = {
   allowedControlStates: ["active", "partial", "staunched_zero", "resolved"] as const,
@@ -157,5 +162,72 @@ describe("[#215 S6] structured Critical termination events", () => {
     // The source names no transition this vocabulary can express for separately tracked function
     // changes, so the mapping says so instead of guessing one.
     expect(getCombatCriticalEndEventConditionKind("separately_resolved")).toBeNull();
+  });
+});
+
+describe("[#215 S6] the Critical runtime duration references the canonical unit vocabulary", () => {
+  it("INVARIANT 5 — `unit` is the canonical schema itself, not a parallel list of members", () => {
+    // Identity, not equality of members: this schema IS the canonical one, so the two cannot drift.
+    expect(combatCriticalDurationSchema.shape.unit.unwrap()).toBe(
+      canonicalCombatModifierDurationUnitSchema,
+    );
+    expect(combatCriticalDurationSchema.shape.unit.unwrap().options).toEqual(["round", "hour"]);
+  });
+
+  it("INVARIANT 5 — the canonical unit members are declared in exactly one source file", () => {
+    // A hand-maintained second enumeration of the same members would be invisible to the compiler
+    // and to every behavioural assertion, so it is searched for directly rather than assumed away.
+    const sources = readdirSync(new URL(".", import.meta.url))
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .map((name) => ({
+        name,
+        text: readFileSync(new URL(`./${name}`, import.meta.url), "utf8"),
+      }));
+    const declarations = sources.filter((source) =>
+      /z\s*\.\s*enum\s*\(\s*\[\s*"round"\s*,\s*"hour"\s*\]/u.test(source.text),
+    );
+
+    expect(declarations.map((source) => source.name)).toEqual(["combatModifierLifecycle.ts"]);
+  });
+
+  it("INVARIANT 3 — an hour-measured rolled fact round-trips with `unit` intact", () => {
+    const hourFact = {
+      formula: "d4",
+      kind: "roll_once",
+      storedRoll: 3,
+      text: "D4 hours",
+      unit: "hour",
+    } as const;
+    const parsed = combatCriticalDurationSchema.parse({ ...hourFact });
+
+    expect(parsed).toEqual(hourFact);
+    expect(parsed.unit).toBe("hour");
+    // `rounds` stays absent: an hour quantity is never expressed as a round count, which is why no
+    // clock is needed to store it faithfully.
+    expect(parsed.rounds).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(parsed))).toEqual(hourFact);
+  });
+
+  it("INVARIANT 1 — a stored duration fact without `unit` is unchanged by the widening", () => {
+    const preUnit = {
+      formula: "d4",
+      kind: "roll_once",
+      rounds: 3,
+      storedRoll: 3,
+      text: "D4 rounds",
+    };
+    const parsed = combatCriticalDurationSchema.parse({ ...preUnit });
+
+    expect(parsed).toEqual(preUnit);
+    expect(Object.keys(parsed).includes("unit")).toBe(false);
+  });
+
+  it("rejects an unknown unit rather than coercing or defaulting it", () => {
+    for (const unit of ["hours", "minute", "rounds", ""]) {
+      expect(
+        combatCriticalDurationSchema.safeParse({ kind: "roll_once", text: "D4 hours", unit })
+          .success,
+      ).toBe(false);
+    }
   });
 });
