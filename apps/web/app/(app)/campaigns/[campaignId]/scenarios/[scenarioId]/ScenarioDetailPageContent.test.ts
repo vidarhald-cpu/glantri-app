@@ -274,4 +274,26 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(summarySource).not.toContain('scenarioStatus === "draft"');
     expect(summarySource).not.toContain('scenarioStatus === "paused"');
   });
+
+  it("offers the campaign roster picker only where the server admits the participant write", () => {
+    const source = readScenarioDetailSource();
+    const rosterSource = readComponentSource("ScenarioCampaignRosterPickerSection.tsx");
+
+    // The client affordance is derived from the SAME domain predicate the API gate
+    // uses (`participantRoutes.ts` -> `isScenarioLiveInteractive`), not from a
+    // hand-maintained twin that could drift away from it.
+    expect(source).toContain("isScenarioLiveInteractive");
+    expect(source).toContain("{isScenarioLiveInteractive(scenario.status) ? (");
+    expect(source).toContain("<ScenarioCampaignRosterNotLiveSection />");
+    expect(source).not.toContain('scenario.status === "live"');
+
+    // The reconciliation is local to the render site. The terminal guard is still
+    // `isScenarioReadOnly` alone, so the other refusals it carries are untouched.
+    expect(source).toContain("if (isScenarioReadOnly(scenario.status)) {");
+
+    // The picker itself stays purely presentational over its existing props: it gains
+    // no status argument, so no second, divergent gate can appear inside it.
+    expect(rosterSource).not.toContain("scenarioStatus");
+    expect(rosterSource).not.toContain("ScenarioStatus");
+  });
 });
