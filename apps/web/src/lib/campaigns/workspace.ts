@@ -1,4 +1,6 @@
 import {
+  isScenarioLiveInteractive,
+  isScenarioReadOnly,
   isUserEntitledToTerminalEncounterHistory,
   type EncounterSession,
   type EncounterSessionSummary,
@@ -314,12 +316,19 @@ function isSelectableWorkspaceEncounter(encounter: WorkspaceEncounterSummary): b
   return encounter.status !== "archived" && encounter.status !== "completed";
 }
 
+/**
+ * Both predicates below delegate to the domain lifecycle vocabulary rather than
+ * re-deriving it. They are the single place where the web layer turns a Scenario
+ * record into a lifecycle judgement, so a change to `isScenarioReadOnly` or
+ * `isScenarioLiveInteractive` in `@glantri/domain` now reaches this module
+ * through the compiler instead of through a hand-maintained copy.
+ */
 function isTerminalScenario(scenario: Scenario | PlayerAccessibleScenario): boolean {
-  return scenario.status === "completed" || scenario.status === "archived";
+  return isScenarioReadOnly(scenario.status);
 }
 
 export function isLiveCampaignScenario(scenario: Scenario | PlayerAccessibleScenario): boolean {
-  return scenario.status === "live";
+  return isScenarioLiveInteractive(scenario.status);
 }
 
 function isHistoricalWorkspaceTab(tab?: string | null): boolean {
