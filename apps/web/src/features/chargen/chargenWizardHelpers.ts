@@ -257,7 +257,7 @@ export function formatActionError(error: string | undefined): string | undefined
     return "Nothing to remove";
   }
 
-  if (error.includes("outside your normal") || error.includes("other skill")) {
+  if (error.includes("individual skill")) {
     return "Flexible only";
   }
 

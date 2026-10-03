@@ -22,7 +22,7 @@ Quick lookup:
 | Social class            | `Stat/profile rolls` and `Civilization, society, and social class` |
 | Choose profession       | `Profession packages and choices`                                  |
 | Skill allocation        | `Ordinary and flexible skill points` and `Skill purchases`         |
-| Other skills            | `Skill purchases` and `Profession packages and choices`            |
+| Individual skills       | `Skill purchases` and `Profession packages and choices`            |
 | Specializations         | `Derived XP and specializations`                                   |
 | Review summary          | `Review summary and finalization`                                  |
 | Finalize character      | `Review summary and finalization`                                  |
@@ -167,7 +167,7 @@ Society stage and social class band are separate ideas. Society stage is the civ
 
 ## 7. Mother tongue and languages
 
-App section: Chargen steps `Choose civilization`, `Skill allocation`, and `Other skills`.
+App section: Chargen steps `Choose civilization`, `Skill allocation`, and `Individual skills`.
 
 Mother tongue is granted automatically from the selected civilization.
 
@@ -203,7 +203,7 @@ The Chargen review summary shows `Education`, `Base education`, `Social class ed
 
 ## 9. Ordinary and flexible skill points
 
-App section: Chargen steps `Skill allocation`, `Other skills`, and `Review summary`.
+App section: Chargen steps `Skill allocation`, `Individual skills`, and `Review summary`.
 
 Ordinary points are used for normal chargen skill and skill-group purchases.
 
@@ -223,7 +223,7 @@ Normal-access purchases spend ordinary points first when enough ordinary points 
 
 ## 10. Skill purchases
 
-App section: Chargen steps `Skill allocation`, `Other skills`, and `Specializations`.
+App section: Chargen steps `Skill allocation`, `Individual skills`, and `Specializations`.
 
 Individual skill costs:
 
