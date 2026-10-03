@@ -14,6 +14,13 @@ export const combatGenericActionStatusSchema = z.enum([
   "cancelled",
 ]);
 export type CombatGenericActionStatus = z.infer<typeof combatGenericActionStatusSchema>;
+const combatGenericActionTerminalStatusValues = [
+  "completed",
+  "interrupted",
+  "cancelled",
+] as const satisfies readonly CombatGenericActionStatus[];
+export type CombatGenericActionTerminalStatus =
+  (typeof combatGenericActionTerminalStatusValues)[number];
 
 export const combatGenericActionDurationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("phase"), phase: z.enum(["phase1", "phase2"]) }),
@@ -166,7 +173,7 @@ export type CombatGenericAction = z.infer<typeof combatGenericActionSchema>;
  * statuses for Perform Task; they are shared here rather than restated per family.
  */
 export const COMBAT_GENERIC_ACTION_TERMINAL_STATUSES: ReadonlySet<CombatGenericActionStatus> =
-  new Set<CombatGenericActionStatus>(["completed", "interrupted", "cancelled"]);
+  new Set<CombatGenericActionStatus>(combatGenericActionTerminalStatusValues);
 
 /** True while a Combat generic action has not yet reached a terminal status. */
 export function isCombatGenericActionLive(action: CombatGenericAction): boolean {
@@ -275,8 +282,7 @@ export function isCombatGenericActionOpportunityOpen(input: {
   roundNumber: number;
 }): boolean {
   const action = input.action;
-  if (action.status === "completed" || action.status === "interrupted") return false;
-  if (action.status === "cancelled") return false;
+  if (!isCombatGenericActionLive(action)) return false;
   return action.progress.lastProgressedRoundNumber !== input.roundNumber;
 }
 
@@ -522,7 +528,7 @@ export function finishCombatGenericAction(input: {
   actionId: string;
   actions: readonly CombatGenericAction[];
   at: string;
-  status: "completed" | "interrupted" | "cancelled";
+  status: CombatGenericActionTerminalStatus;
   resolution?: CombatGenericActionResolution;
   roundNumber?: number;
   step?: CombatRoundStep;
@@ -533,7 +539,7 @@ export function finishCombatGenericAction(input: {
   timing?: "primary_action_opportunity";
 }): CombatGenericAction[] {
   const current = requireAction(input.actions, input.actionId);
-  if (["completed", "interrupted", "cancelled"].includes(current.status)) {
+  if (!isCombatGenericActionLive(current)) {
     return [...input.actions];
   }
   if (input.status !== "cancelled" && current.status !== "active") {
