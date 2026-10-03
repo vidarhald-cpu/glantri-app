@@ -562,7 +562,7 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     return {
       error: normalAccess
         ? `No ordinary or flexible points remain for this skill. Cost: ${cost}.`
-        : "No flexible points remain for this other skill.",
+        : "No flexible points remain for this individual skill.",
       progression,
       warnings,
     };
@@ -583,7 +583,7 @@ export function allocateChargenPoint(input: AllocateChargenPointInput): SpendPoi
     return {
       error: normalAccess
         ? `No ordinary or flexible points remain for this skill. Cost: ${cost}.`
-        : "No flexible points remain for this other skill.",
+        : "No flexible points remain for this individual skill.",
       progression: structuredClone(input.progression),
       warnings,
     };

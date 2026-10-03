@@ -253,7 +253,10 @@ interface ScenarioPlayerCombatPageContentProps {
   scenarioId: string;
   showParticipantSelector?: boolean;
   showWorkspaceHeader?: boolean;
-  workspaceTab?: Extract<CampaignWorkspaceTabId, "combat" | "player-combat" | "player-encounter">;
+  workspaceTab?: Extract<
+    CampaignWorkspaceTabId,
+    "combat" | "player-combat" | "player-encounter" | "player-skill-rolls"
+  >;
 }
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
@@ -5090,6 +5093,15 @@ export default function ScenarioPlayerCombatPageContent({
         <div style={panelStyle}>Scenario combat projection unavailable.</div>
       </section>
     );
+  }
+
+  if (
+    workspaceTab === "player-skill-rolls" &&
+    (encounterSession?.status !== "active" ||
+      encounterSession.kind !== "combat" ||
+      !playerCombatTrackerModel?.rounds.some((round) => round.currentStep !== undefined))
+  ) {
+    return null;
   }
 
   const hasMountedLoadout =

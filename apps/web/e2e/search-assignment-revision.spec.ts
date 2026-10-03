@@ -106,6 +106,8 @@ test.describe("Search assignment revision", () => {
       const playerPage = await playerContext.newPage();
       await playerPage.goto(`/campaigns/${campaign.id}?tab=player-skill-rolls${contextQuery}`);
       await expect(playerPage.getByText("Assigned roll 1", { exact: false })).toBeVisible();
+      await expect(playerPage.getByRole("heading", { name: "Skill roll grid" })).toBeVisible();
+      await expect(playerPage.getByText("Combat history", { exact: true })).toHaveCount(0);
       await expect(
         playerPage.getByRole("button", { name: "Roll 1d20", exact: true }),
       ).toBeVisible();
