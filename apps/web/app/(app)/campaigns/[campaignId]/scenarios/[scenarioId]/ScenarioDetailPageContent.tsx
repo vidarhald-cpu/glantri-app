@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { AuthUser } from "@glantri/auth";
 import {
+  isScenarioLiveInteractive,
   isScenarioReadOnly,
   type CampaignRosterEntry,
   type EncounterKind,
@@ -1193,29 +1194,48 @@ export default function ScenarioDetailPageContent({
         setSelectedAssignmentParticipantIds={setSelectedAssignmentParticipantIds}
       />
 
-      <ScenarioCampaignRosterPickerSection
-        filteredScenarioRosterCandidates={filteredScenarioRosterCandidates}
-        onRosterCivilizationFilterChange={setRosterCivilizationFilter}
-        onRosterControllerFilterChange={setRosterControllerFilter}
-        onRosterParticipantToggle={(candidate, member) =>
-          void handleRosterParticipantToggle(candidate, member)
-        }
-        onRosterProfessionFilterChange={setRosterProfessionFilter}
-        onRosterSearchChange={setRosterSearch}
-        onRosterSkillGroupFilterChange={setRosterSkillGroupFilter}
-        onRosterTypeFilterChange={setRosterTypeFilter}
-        participantCivilizationOptions={participantCivilizationOptions}
-        participantProfessionOptions={participantProfessionOptions}
-        participantSkillGroupOptions={participantSkillGroupOptions}
-        rosterCivilizationFilter={rosterCivilizationFilter}
-        rosterControllerFilter={rosterControllerFilter}
-        rosterProfessionFilter={rosterProfessionFilter}
-        rosterSearch={rosterSearch}
-        rosterSkillGroupFilter={rosterSkillGroupFilter}
-        rosterTypeFilter={rosterTypeFilter}
-        rosterTypeFilterOptions={rosterTypeFilterOptions}
-        scenarioRosterCandidates={scenarioRosterCandidates}
-      />
+      {/*
+       * The participant control is offered only where the server admits the write.
+       * `participantRoutes.ts` refuses a GM participant write unless
+       * `isScenarioLiveInteractive(scenario.status)` - `status === "live"` alone - while
+       * the branch this JSX sits in is reached by `draft`, `live` and `paused`, because
+       * the early return above refuses only `isScenarioReadOnly` (`completed || archived`).
+       * That mismatch is the defect: on a Draft or Paused Scenario the picker was offered
+       * and the write then failed.
+       *
+       * The reconciliation is deliberately LOCAL to this render site and uses the domain
+       * predicate the server already uses. `isScenarioReadOnly` is untouched, so the
+       * terminal-branch refusals - Encounter lifecycle, session-state writes, live-state
+       * writes, Combat Item interactions and every other `canMutateScenarioInStatus` gate
+       * - are unchanged, and no new mutation becomes reachable in `draft` or `paused`.
+       */}
+      {isScenarioLiveInteractive(scenario.status) ? (
+        <ScenarioCampaignRosterPickerSection
+          filteredScenarioRosterCandidates={filteredScenarioRosterCandidates}
+          onRosterCivilizationFilterChange={setRosterCivilizationFilter}
+          onRosterControllerFilterChange={setRosterControllerFilter}
+          onRosterParticipantToggle={(candidate, member) =>
+            void handleRosterParticipantToggle(candidate, member)
+          }
+          onRosterProfessionFilterChange={setRosterProfessionFilter}
+          onRosterSearchChange={setRosterSearch}
+          onRosterSkillGroupFilterChange={setRosterSkillGroupFilter}
+          onRosterTypeFilterChange={setRosterTypeFilter}
+          participantCivilizationOptions={participantCivilizationOptions}
+          participantProfessionOptions={participantProfessionOptions}
+          participantSkillGroupOptions={participantSkillGroupOptions}
+          rosterCivilizationFilter={rosterCivilizationFilter}
+          rosterControllerFilter={rosterControllerFilter}
+          rosterProfessionFilter={rosterProfessionFilter}
+          rosterSearch={rosterSearch}
+          rosterSkillGroupFilter={rosterSkillGroupFilter}
+          rosterTypeFilter={rosterTypeFilter}
+          rosterTypeFilterOptions={rosterTypeFilterOptions}
+          scenarioRosterCandidates={scenarioRosterCandidates}
+        />
+      ) : (
+        <ScenarioCampaignRosterNotLiveSection />
+      )}
 
       <ScenarioTemplateSourcesSection
         onCreateTemporaryActor={() => void handleCreateTemporaryActorFromTemplate()}
@@ -1231,6 +1251,39 @@ export default function ScenarioDetailPageContent({
       />
 
       <ScenarioEventLogSection eventLogs={eventLogs} />
+    </section>
+  );
+}
+
+/**
+ * The not-offered form of the campaign roster picker.
+ *
+ * Adding a campaign roster member is a live-Scenario operation: the API refuses a GM
+ * participant write unless the Scenario is live-interactive (`participantRoutes.ts`
+ * -> `isScenarioLiveInteractive`, which is `status === "live"` alone). In `draft` and
+ * `paused` the picker must therefore not be offered at all.
+ *
+ * This section exists so the affordance does not simply vanish: the GM still finds the
+ * place where the cast is assembled, and is told what makes it usable. It renders no
+ * control, reads no Scenario status, and `draft -> live` and `paused -> live` are both
+ * permitted lifecycle steps, so the same copy is correct for either status.
+ */
+function ScenarioCampaignRosterNotLiveSection() {
+  return (
+    <section
+      style={{
+        border: "1px solid #d9ddd8",
+        borderRadius: 12,
+        display: "grid",
+        gap: "0.75rem",
+        padding: "1rem",
+      }}
+    >
+      <h2 style={{ margin: 0 }}>Add from campaign roster</h2>
+      <p style={{ margin: 0 }}>
+        The cast is assembled while the Scenario is live. Set the Scenario live to add campaign
+        roster members to it.
+      </p>
     </section>
   );
 }

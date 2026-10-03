@@ -61,6 +61,7 @@ import {
   declareCombatGenericAction,
   updateCombatGenericActionIntent,
   finishCombatGenericAction,
+  isCombatGenericActionLive,
   buildCombatRoundAttackRollResult,
   buildCanonicalCombatModifierReviewFromDraft,
   buildCombatProgressionProjection,
@@ -1958,13 +1959,6 @@ function normalizeCombatDeclarationMovementIntent(input: {
   });
 }
 
-/** A Combat generic action in one of these statuses is no longer live. */
-const TERMINAL_COMBAT_GENERIC_ACTION_STATUSES: ReadonlySet<string> = new Set([
-  "completed",
-  "interrupted",
-  "cancelled",
-]);
-
 /**
  * Combat Task identity is server-owned (A1b, Forgejo issue #311).
  *
@@ -2129,7 +2123,7 @@ function materializeCombatDeclarationTasks(input: {
       throw new Error("The selected Combat Task is not available to this participant.");
     }
     const existing =
-      requestedExisting && !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(requestedExisting.status)
+      requestedExisting && isCombatGenericActionLive(requestedExisting)
         ? requestedExisting
         : undefined;
     const canonicalTaskId = `${declarationId}:${declarationKind}`;
@@ -2192,7 +2186,7 @@ function materializeCombatDeclarationTasks(input: {
             action.declarationKind === "perform_task" &&
             action.ownerParticipantId === input.ownerParticipantId &&
             action.id !== taskId &&
-            !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(action.status),
+            isCombatGenericActionLive(action),
         );
         if (live) {
           throw new Error(
@@ -2205,10 +2199,7 @@ function materializeCombatDeclarationTasks(input: {
       // the persisted intent named a different primary action, or carries no id at all. That is
       // this same task, so its intent is updated exactly as the carry-forward branch above would,
       // rather than being silently dropped.
-      if (
-        canonicalIdOccupant &&
-        !TERMINAL_COMBAT_GENERIC_ACTION_STATUSES.has(canonicalIdOccupant.status)
-      ) {
+      if (canonicalIdOccupant && isCombatGenericActionLive(canonicalIdOccupant)) {
         requireDeclaredItemIdentity(canonicalIdOccupant);
         genericActions = updateCombatGenericActionIntent({
           actionId: taskId,

@@ -30,6 +30,7 @@ export * from "./encounter/combatDefenseCalculation";
 export * from "./encounter/combatDefenseSnapshot";
 export * from "./encounter/combatRoundStep";
 export * from "./encounter/combatRoundEndProcesses";
+export * from "./encounter/combatRoundEndChronology";
 export * from "./encounter/combatActionProcesses";
 export * from "./encounter/combatAutomationEligibility";
 export * from "./encounter/combatStepAutomation";

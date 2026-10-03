@@ -27,6 +27,7 @@ import {
   type CombatParticipationProjectionInput,
 } from "./combatParticipation";
 import { buildCombatProgressionProjection } from "./combatProgressionProjection";
+import { isCompleteDeterministicCombatTask } from "./combatDeterministicTransitions";
 
 const REVISION = "2026-08-03T12:00:00.000Z";
 const NOW = "2026-08-03T11:00:00.000Z";
@@ -766,7 +767,7 @@ describe("canonical combat participation", () => {
     ).toMatchObject({ reason: "no_su_work", status: "not_required", workClass: "no_work" });
   });
 
-  it("classifies typed automatic SU transitions as deterministic and empty SU as no work", () => {
+  it("keeps synthetic automatic-only canonical SU work reviewable without a legacy mirror", () => {
     const projection = project(
       activeState({
         currentStep: "round_summary",
@@ -826,7 +827,7 @@ describe("canonical combat participation", () => {
     );
     expect(
       fact(projection, { family: "effect_review", participantId: "hero", step: "SU_effect" }),
-    ).toMatchObject({ status: "required", workClass: "deterministic_transition" });
+    ).toMatchObject({ status: "required", workClass: "human_decision" });
     expect(
       fact(projection, { family: "effect_review", participantId: "guard", step: "SU_effect" }),
     ).toMatchObject({ reason: "no_su_work", status: "not_required" });
@@ -1563,5 +1564,73 @@ describe("#465 — a GM backtrack hold at the pre-declaration step", () => {
 
     expect(progression.boundary.kind).toBe("declaration");
     expect(tasks.some((task) => task.kind === "gm_advance_boundary")).toBe(true);
+  });
+
+  it("regression: a due nonblocking death timer stays a GM decision and cannot auto-complete", () => {
+    const active = activeState({
+      currentStep: "round_summary",
+      overrides: {
+        roundEndReview: {
+          participantReviews: {
+            guard: { participantId: "guard", status: "complete" },
+            hero: {
+              canonicalReview: {
+                canonicalCutoff: 3,
+                effectVersions: { "death-timer": 1 },
+                participantId: "hero",
+                proposals: [],
+                requirements: [
+                  {
+                    blocksReview: false,
+                    completeness: "unsupported_ambiguity",
+                    effectId: "death-timer",
+                    id: "death-timer-due",
+                    kind: "condition",
+                    label: "Catastrophic process awaits GM resolution",
+                    owner: "source_process",
+                    resolved: false,
+                  },
+                ],
+                reviewId: "su-review-hero",
+                roundNumber: 2,
+                schemaVersion: 1,
+                state: "ready",
+              },
+              participantId: "hero",
+              status: "review_ready",
+            },
+          },
+          roundNumber: 2,
+        },
+      },
+    });
+    const projection = project(active);
+    expect(
+      fact(projection, { family: "effect_review", participantId: "hero", step: "SU_effect" }),
+    ).toMatchObject({
+      completeness: "legacy_incomplete",
+      status: "required",
+      workClass: "human_decision",
+    });
+    expect(
+      fact(projection, {
+        family: "participant_completion",
+        participantId: "hero",
+        step: "SU_complete",
+      }),
+    ).toMatchObject({ status: "conditional" });
+    const progression = buildCombatProgressionProjection(
+      combatRoundStateSchema.parse({ ...active, rounds: [] }),
+      { participation: projection },
+    );
+    const heroReviewTasks = progression.boundary.processes.flatMap((process) =>
+      process.stages.flatMap((stage) =>
+        stage.tasks.filter(
+          (task) => task.kind === "effect_review" && task.identity.participantId === "hero",
+        ),
+      ),
+    );
+    expect(heroReviewTasks).toHaveLength(1);
+    expect(heroReviewTasks.every((task) => !isCompleteDeterministicCombatTask(task))).toBe(true);
   });
 });
