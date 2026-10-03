@@ -782,6 +782,8 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const activeEncounterSummary = activeScenarioEncounters.find(
     (summary) => summary.id === workspaceState.activeEncounterId,
   );
+  const canComposeActionCombat =
+    activeScenario?.status === "live" && activeEncounterSummary?.status === "active";
   const activeEncounterId = activeEncounterSummary?.id;
   const shouldLoadActiveEncounter =
     canAccessGmEncounter &&
@@ -1547,6 +1549,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   embedded
                   encounterId={workspaceState.activeEncounterId}
                   inspectionParticipantId={selectedGmInspectableCandidate.id}
+                  readOnlyInspection
                   scenarioId={workspaceState.activeScenarioId}
                   showWorkspaceHeader={false}
                   surface="skill-rolls"
@@ -1559,15 +1562,30 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               )}
             </>
           ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
-            <PlayerRoleplayingEncounterScreen
-              campaignId={campaignId}
-              embedded
-              encounterId={workspaceState.activeEncounterId}
-              scenarioId={workspaceState.activeScenarioId}
-              surface="skill-rolls"
-              workspaceTab="player-skill-rolls"
-              workspaceScreenName="Player skill rolls"
-            />
+            <>
+              {canComposeActionCombat ? (
+                <ScenarioPlayerCombatPageContent
+                  campaignId={campaignId}
+                  embedded
+                  encounterId={workspaceState.activeEncounterId}
+                  encounterTitle={activeEncounterSummary?.title}
+                  participantId={searchParams.get("participantId") ?? undefined}
+                  scenarioId={workspaceState.activeScenarioId}
+                  showParticipantSelector={false}
+                  showWorkspaceHeader={false}
+                  workspaceTab="player-skill-rolls"
+                />
+              ) : null}
+              <PlayerRoleplayingEncounterScreen
+                campaignId={campaignId}
+                embedded
+                encounterId={workspaceState.activeEncounterId}
+                scenarioId={workspaceState.activeScenarioId}
+                surface="skill-rolls"
+                workspaceTab="player-skill-rolls"
+                workspaceScreenName="Player skill rolls"
+              />
+            </>
           ) : (
             <section style={panelStyle}>
               <strong>No player skill rolls are currently available.</strong>
