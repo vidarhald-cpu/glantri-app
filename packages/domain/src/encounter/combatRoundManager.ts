@@ -234,6 +234,7 @@ import {
   finishCombatGenericAction,
   getCombatGenericActionOpportunityAdvances,
   isCombatGenericActionFinalOpportunity,
+  isCombatGenericActionLive,
   isCombatGenericActionOpportunityOpen,
   isCombatGuardedItemActionLive,
   recordCombatGenericActionRoll,
@@ -30177,9 +30178,7 @@ export function cancelCombatTaskAtDeclarationBoundary(input: {
       candidate.id === input.actionId &&
       candidate.declarationKind === "perform_task" &&
       candidate.ownerParticipantId === input.participantId &&
-      candidate.status !== "completed" &&
-      candidate.status !== "cancelled" &&
-      candidate.status !== "interrupted",
+      isCombatGenericActionLive(candidate),
   );
   if (!previousAction) {
     throw new RangeError("This participant has no live Combat Task to cancel.");

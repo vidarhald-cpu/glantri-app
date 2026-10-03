@@ -25,6 +25,7 @@ import {
   type CombatRoundStep,
   type CombatDistance,
   buildLiveCombatModifierContributionProjection,
+  buildCombatRoundEndPublicChronology,
   canonicalizeCombatObserveTargetContext,
   characterBuildSchema,
   canBackOutCombatRoundPhaseAttack,
@@ -127,6 +128,7 @@ import {
   type CombatParticipantRosterEntry,
 } from "@/features/player-combat/combatParticipantCandidates";
 import { collectCanonicalCombatSituationEffects } from "@/features/player-combat/combatSituationAwareness";
+import { RoundEndEffectsChronology } from "@/features/player-combat/RoundEndEffectsChronology";
 import {
   applyDefaultPlayerCombatPhaseContext,
   buildCombatDeclarationAttackSelection,
@@ -2419,6 +2421,13 @@ export default function ScenarioPlayerCombatPageContent({
     combatRoundState?.currentStep === "round_summary" && selectedRoundParticipant
       ? combatRoundState.roundEndReview?.participantReviews[selectedRoundParticipant.participantId]
       : undefined;
+  const selectedRoundEndMoments = buildCombatRoundEndPublicChronology({
+    effects: selectedParticipant?.state.combatEffects?.effects,
+    ownerParticipantIds: [selectedParticipant?.id, selectedRoundParticipant?.participantId].filter(
+      (id): id is string => Boolean(id),
+    ),
+    review: selectedRoundEndReview,
+  });
   const selectedDistanceControlOwnCalculation = selectedDistanceControlProposal?.ownSide.result
     ? buildDodgeCalculationPresentationFromSnapshot({
         actor: {
@@ -5740,6 +5749,7 @@ export default function ScenarioPlayerCombatPageContent({
                   ) : null}
                 </section>
               ) : null}
+              <RoundEndEffectsChronology moments={selectedRoundEndMoments} />
               {selectedVisibleHealthRoll ? (
                 <section style={panelStyle}>
                   <strong>Round-end health check</strong>

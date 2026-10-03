@@ -45,6 +45,7 @@ import type {
   MovementIntent,
   CombatRoundEndReview,
   CombatRoundEndDistanceProposal,
+  CombatRoundEndPublicMoment,
   RoundEndParticipantReview,
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
@@ -58,6 +59,8 @@ import {
   COMBAT_BREAK_OFF_RESULT_TABLE,
   COMBAT_ROUND_STEP_LABELS,
   buildCombatRoundPhaseResolutionResult,
+  buildCombatRoundEndPublicChronology,
+  buildCombatRoundEndProcessPlan,
   buildLiveCombatModifierContributionProjection,
   buildCombatRoundDamageArmorCoverageFromEquipmentState,
   canonicalizeCombatObserveTargetContext,
@@ -110,10 +113,12 @@ import {
   initializeCombatRoundState,
   isCombatRoundCombatExperienceWindowOpen,
   isCombatRoundPhaseInitiativeResolutionOpen,
+  isCombatGenericActionLive,
   hasCombatRoundCombatExperienceRoll,
   getWeaponPreferredDistances,
   reviewCombatRoundDamageResult,
   projectCombatNpcDeclarationProposal,
+  projectActiveCombatParticipation,
   resolveCombatDeclarationParticipantIdentity,
   validateCombatDeclarationTargets,
   type CombatGenericAction,
@@ -267,6 +272,7 @@ import {
   collectCanonicalCombatSituationEffects,
   type CombatSituationDisplayRow,
 } from "@/features/player-combat/combatSituationAwareness";
+import { RoundEndEffectsChronology } from "@/features/player-combat/RoundEndEffectsChronology";
 import { getPlayerCombatModifierDisplayPhase } from "@/features/player-combat/playerCombatModifierPhase";
 import {
   canAcceptCombatRoundViewRevision,
@@ -3944,6 +3950,7 @@ function CombatDamageReviewPanel(input: {
 
 function CombatRoundEndParticipantReviewPanel(input: {
   controlsDisabled?: boolean;
+  moments?: readonly CombatRoundEndPublicMoment[];
   observationPending?: boolean;
   participantLabel?: string;
   review?: RoundEndParticipantReview;
@@ -3969,6 +3976,7 @@ function CombatRoundEndParticipantReviewPanel(input: {
               ? "observation roll pending"
               : review.status.replaceAll("_", " ")}
           </div>
+          <RoundEndEffectsChronology moments={input.moments ?? []} />
           {review.proposedEffects.length > 0 ? (
             <section style={{ display: "grid", gap: "0.25rem" }}>
               <strong style={{ fontSize: "0.9rem" }}>Duration updates</strong>
@@ -4796,6 +4804,52 @@ export default function CombatRoundManagerPanel({
   const timelineRoundStates = combatPresentation.timelineRoundStates;
   const selectedTimelineRoundState = combatPresentation.selection.selectedRoundState;
   const selectedRoundIsActive = combatPresentation.selection.selectedRoundIsActive;
+  const selectedRoundEndPlan = useMemo(
+    () =>
+      selectedRoundIsActive && roundState.roundEndReview
+        ? buildCombatRoundEndProcessPlan(roundState)
+        : undefined,
+    [roundState, selectedRoundIsActive],
+  );
+  const reviewParticipation = useMemo(
+    () =>
+      selectedRoundIsActive &&
+      roundState.currentStep === "round_summary" &&
+      roundState.roundEndReview
+        ? projectActiveCombatParticipation({
+            encounterRevision: roundView.encounterRevision ?? encounter.updatedAt,
+            scenarioParticipants: effectiveScenarioParticipants,
+            state: roundState,
+          })
+        : undefined,
+    [
+      effectiveScenarioParticipants,
+      encounter.updatedAt,
+      roundState,
+      roundView.encounterRevision,
+      selectedRoundIsActive,
+    ],
+  );
+  const defaultReviewParticipantIds =
+    selectedRoundIsActive && roundState.currentStep === "round_summary"
+      ? (selectedRoundEndPlan?.processes
+          .find((process) => process.kind === "participant_review")
+          ?.stages.flatMap((stage) => {
+            const participantId = stage.key;
+            if (!participantId || stage.state === "complete") return [];
+            return reviewParticipation?.facts.some(
+              (fact) =>
+                fact.identity.participantId === participantId &&
+                ["effect_review", "health_bleed", "observation"].includes(
+                  fact.identity.processFamily,
+                ) &&
+                (fact.status === "required" || fact.status === "blocked") &&
+                fact.workClass !== "no_work",
+            )
+              ? [participantId]
+              : [];
+          }) ?? [])
+      : [];
   const displayParticipants = combatPresentation.active.displayParticipants;
   const projectedCurrentTasks = combatPresentation.active.projectedCurrentTasks;
   const currentActionPresentation = combatPresentation.active.currentAction;
@@ -5156,6 +5210,14 @@ export default function CombatRoundManagerPanel({
           inspector.participant.participantId
         ]
       : undefined;
+  const inspectorRoundEndMoments = buildCombatRoundEndPublicChronology({
+    effects: selectedScenarioParticipant?.state.combatEffects?.effects,
+    ownerParticipantIds: [
+      selectedScenarioParticipant?.id,
+      inspector.participant?.participantId,
+    ].filter((id): id is string => Boolean(id)),
+    review: inspectorRoundEndReview,
+  });
   const inspectorSuPendingRows: CombatSituationDisplayRow[] =
     !selectedRoundIsActive || !inspectorSelectionIsCurrentProgression
       ? []
@@ -8224,9 +8286,7 @@ export default function CombatRoundManagerPanel({
           (action) =>
             action.declarationKind === "perform_task" &&
             action.ownerParticipantId === inspector.participant?.participantId &&
-            action.status !== "completed" &&
-            action.status !== "cancelled" &&
-            action.status !== "interrupted",
+            isCombatGenericActionLive(action),
         )
       : undefined;
   const inspectorLiveCombatTaskControls = inspectorLiveCombatTask ? (
@@ -12744,6 +12804,51 @@ export default function CombatRoundManagerPanel({
           </div>
         ) : null}
 
+        {selectedRoundIsActive &&
+        roundState.currentStep === "round_summary" &&
+        roundState.roundEndReview ? (
+          <section aria-label="Round End Review navigation" style={playerCombatPanelCardStyle}>
+            <strong>GM Review sequence</strong>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.4rem" }}>
+              {defaultReviewParticipantIds.length > 0
+                ? defaultReviewParticipantIds.map((participantId) => (
+                    <button
+                      key={participantId}
+                      onClick={() =>
+                        selectInspector(participantId, "round_summary", roundState.roundNumber)
+                      }
+                      type="button"
+                    >
+                      {roundState.participants.find(
+                        (participant) => participant.participantId === participantId,
+                      )?.label ?? participantId}
+                    </button>
+                  ))
+                : "No consequential participant Review remains."}
+            </div>
+            <div style={{ color: "#5e5a50", fontSize: "0.82rem", marginTop: "0.6rem" }}>
+              Inspect any combatant
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.3rem" }}>
+              {roundState.participants.map((participant) => (
+                <button
+                  key={participant.participantId}
+                  onClick={() =>
+                    selectInspector(
+                      participant.participantId,
+                      "round_summary",
+                      roundState.roundNumber,
+                    )
+                  }
+                  type="button"
+                >
+                  {participant.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <CombatTracker
           followCurrent={!inspectorIsHistorical}
           model={trackerModel}
@@ -13790,6 +13895,7 @@ export default function CombatRoundManagerPanel({
                           {inspectorRoundEndDistanceControlComplete ? (
                             <CombatRoundEndParticipantReviewPanel
                               controlsDisabled={saving || inspectorIsInspectionOnly}
+                              moments={inspectorRoundEndMoments}
                               observationPending={
                                 inspectorRoundEndTask?.kind === "observation_roll" &&
                                 inspectorRoundEndTask.owner?.kind === "combatant" &&

@@ -1167,7 +1167,7 @@ function projectRoundEnd(context: ProjectionContext): void {
         : hasReviewDecision || legacyWork
           ? "human_decision"
           : hasAutomatic
-            ? "deterministic_transition"
+            ? "human_decision"
             : "no_work",
     });
 

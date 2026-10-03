@@ -4,8 +4,12 @@ import {
   activateCombatGenericAction,
   advanceCombatGenericActionsToRound,
   combatGenericActionSchema,
+  combatGenericActionStatusSchema,
+  COMBAT_GENERIC_ACTION_TERMINAL_STATUSES,
   declareCombatGenericAction,
   finishCombatGenericAction,
+  isCombatGenericActionLive,
+  isCombatGenericActionOpportunityOpen,
   projectCombatGenericActionsForPlayer,
   reviewCombatGenericAction,
   recordCombatGenericActionRoll,
@@ -427,5 +431,25 @@ describe("generic Combat actions", () => {
       visibleToParticipantIds: ["hero"],
     });
     expect(player[0]?.rollResult?.rolledByUserId).toBeUndefined();
+  });
+
+  it("uses the same independently specified terminal truth table for every action status", () => {
+    const expectedLive = {
+      declared: true,
+      reviewed: true,
+      active: true,
+      completed: false,
+      interrupted: false,
+      cancelled: false,
+    } as const satisfies Record<CombatGenericAction["status"], boolean>;
+    const base = declared()[0]!;
+    for (const status of combatGenericActionStatusSchema.options) {
+      const action = { ...base, status };
+      expect(COMBAT_GENERIC_ACTION_TERMINAL_STATUSES.has(status)).toBe(!expectedLive[status]);
+      expect(isCombatGenericActionLive(action)).toBe(expectedLive[status]);
+      expect(isCombatGenericActionOpportunityOpen({ action, roundNumber: 3 })).toBe(
+        expectedLive[status],
+      );
+    }
   });
 });
