@@ -8,12 +8,14 @@ import {
 } from "@glantri/database";
 import {
   attachCanonicalPersistentEffectLifecycles,
+  buildPlayerFacingScenarioParticipant,
   isScenarioLiveInteractive,
   buildScenarioPlayerVisibleParticipants,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
   scenarioParticipantStateSchema,
+  type PlayerFacingScenarioParticipant,
 } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -33,6 +35,17 @@ const characterService = new CharacterService();
 const campaignService = new CampaignService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
+
+/**
+ * The player response of a participant boundary converted in #502 (privacy hardening, Tier 1). It
+ * accepts only the declared player-facing participant, so a stored participant cannot be returned
+ * to a player through it.
+ */
+function playerParticipantResponse(response: {
+  participant: PlayerFacingScenarioParticipant | null;
+}) {
+  return response;
+}
 
 export const participantRoutes: FastifyPluginAsync = async (app) => {
   app.get("/scenarios/:scenarioId/participants", async (request, reply) => {
@@ -102,6 +115,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         participants.find(
           (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id,
         ) ?? null;
+
+      if (access.mode === "player") {
+        return playerParticipantResponse({
+          participant: myParticipant ? buildPlayerFacingScenarioParticipant(myParticipant) : null,
+        });
+      }
 
       return { participant: myParticipant };
     } catch (error) {
@@ -199,6 +218,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         scenarioId,
         tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId"),
       });
+
+      if (!isGameMaster) {
+        return playerParticipantResponse({
+          participant: buildPlayerFacingScenarioParticipant(participant),
+        });
+      }
 
       return { participant };
     } catch (error) {
@@ -366,6 +391,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         scenarioId,
         state: nextState,
       });
+
+      if (access.mode === "player") {
+        return playerParticipantResponse({
+          participant: buildPlayerFacingScenarioParticipant(participant),
+        });
+      }
 
       return { participant };
     } catch (error) {

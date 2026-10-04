@@ -3,6 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
+  buildCanonicalCombatModifierReviewFromDraft,
+  combatRoundCommandSchema,
+  scenarioParticipantCombatContextSchema,
+  scenarioParticipantStateSchema,
+  transitionCanonicalCombatModifierEffect,
   buildCombatDefenseSnapshotId,
   buildCombatRoundAttackRollResult,
   buildDamagePersistentLifecycle,
@@ -172,6 +177,7 @@ const mocks = vi.hoisted(() => {
     addCharacterParticipant: vi.fn(),
     addEntityParticipant: vi.fn(),
     getScenarioById: vi.fn(),
+    getScenarioParticipantById: vi.fn(),
     listScenariosByCampaignPlayerAccess: vi.fn(),
     listScenariosByCampaignPlayerControl: vi.fn(),
     listScenariosByCampaign: vi.fn(),
@@ -1371,8 +1377,10 @@ function makeOpenPhase1AttackRoundState(
 function makeCombatScenarioParticipant(overrides: Record<string, unknown> = {}) {
   return {
     controlledByUserId: "player-1",
+    createdAt: "2026-07-30T08:00:00.000Z",
     id: "participant-1",
     isActive: true,
+    joinSource: "gm_added",
     role: "player_character",
     scenarioId: "scenario-1",
     snapshot: {
@@ -5799,12 +5807,10 @@ describe("scenarios route contract", () => {
       },
       status: "active",
     };
-    const participant = {
+    const participant = makeCombatScenarioParticipant({
       characterId: "character-1",
-      controlledByUserId: "player-1",
-      id: "participant-1",
-      scenarioId: "scenario-1",
-    };
+      joinSource: "player_joined",
+    });
     mocks.scenarioService.getScenarioById.mockResolvedValue(scenario);
     mocks.campaignService.getCampaignById.mockResolvedValue(campaign);
     mocks.characterService.getOwnedCharacter.mockResolvedValue({
@@ -5836,7 +5842,16 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ participant });
+    // The joining player receives the player-facing participant (#502), not the stored row.
+    expect(response.json()).toMatchObject({
+      participant: {
+        characterId: "character-1",
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        joinSource: "player_joined",
+        scenarioId: "scenario-1",
+      },
+    });
     expect(mocks.scenarioService.addCharacterParticipant).toHaveBeenCalledWith(
       expect.objectContaining({
         characterId: "character-1",
@@ -28652,4 +28667,697 @@ describe("scenarios route contract", () => {
       await app.close();
     },
   );
+});
+
+// ===== Forgejo #502, privacy hardening Tier 1: the converted player boundaries ==================
+
+/** The keys the control plane named for proof obligation 1. */
+const TIER1_PRIVATE_KEYS = [
+  "canonicalTransitions",
+  "canonicalLifecycle",
+  "gmOverride",
+  "privateDiagnostic",
+  "createdByUserId",
+  "nextEffect",
+  "previousEffect",
+] as const;
+
+/**
+ * Tier 1 converts these boundaries to declared player-facing types. The encounter they return is
+ * still the player encounter projection, whose combat round state is built by spreading the stored
+ * state and removing what a player may not see (`buildPlayerSafeCombatRoundStateForUser`).
+ * Replacing that with additive construction is Tier 3. In these fixtures the one place that
+ * projection still carries a stored combat context is a round-state participant's declaration, so
+ * that is the one place a named key may remain. The participant, the command, the command log, and
+ * every other part of the encounter must be free of all of them.
+ */
+const TIER_3_RESIDUAL_PREFIXES = [
+  "encounter.combatRoundState.participants[].declaration.",
+  "activeCombatState.participants[].declaration.",
+] as const;
+
+function privateKeyPaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) privateKeyPaths(entry, `${path}[]`, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      const nestedPath = path ? `${path}.${key}` : key;
+      if ((TIER1_PRIVATE_KEYS as readonly string[]).includes(key)) found.push(nestedPath);
+      privateKeyPaths(nested, nestedPath, found);
+    }
+  }
+  return found;
+}
+
+function secretValuePaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (typeof value === "string") {
+    if (value.includes("SECRET")) found.push(path);
+  } else if (Array.isArray(value)) {
+    for (const entry of value) secretValuePaths(entry, `${path}[]`, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      secretValuePaths(nested, path ? `${path}.${key}` : key, found);
+    }
+  }
+  return found;
+}
+
+function outsideTier3Residual(paths: string[]): string[] {
+  return [
+    ...new Set(
+      paths.filter((path) => !TIER_3_RESIDUAL_PREFIXES.some((prefix) => path.startsWith(prefix))),
+    ),
+  ];
+}
+
+function expectPlayerBodyFreeOfPrivateMaterial(body: unknown) {
+  expect(outsideTier3Residual(privateKeyPaths(body))).toEqual([]);
+  expect(outsideTier3Residual(secretValuePaths(body))).toEqual([]);
+}
+
+function expectGmBodyCarriesPrivateMaterial(body: unknown, keys: readonly string[]) {
+  const found = new Set(privateKeyPaths(body).map((path) => path.split(".").at(-1)));
+  for (const key of keys) expect(found.has(key), `GM response keeps ${key}`).toBe(true);
+}
+
+/** A canonical lifecycle and transition built by the engine, carrying every private field. */
+function privateCanonicalLifecycle(ownerParticipantId: string) {
+  const context = (rows: unknown[]) =>
+    scenarioParticipantCombatContextSchema.parse({
+      modifierBuckets: {
+        general: rows,
+        situationDb: [],
+        situationInitiative: [],
+        situationObSkill: [],
+      },
+    });
+  const transaction = buildCanonicalCombatModifierReviewFromDraft({
+    canonicalCutoff: 5,
+    commandId: "command-private-review",
+    createdAt: "2026-01-01T00:00:10.000Z",
+    currentContext: context([]),
+    draftContext: context([{ durationRounds: 2, id: "private-row", scope: "until", value: -10 }]),
+    encounterId: "encounter-1",
+    participantState: scenarioParticipantStateSchema.parse({
+      combat: {},
+      equipment: {},
+      health: {},
+      resources: {},
+    }),
+    phase: "M1",
+    revision: "2026-01-01T00:00:10.000Z",
+    roundNumber: 1,
+    scenarioParticipantId: ownerParticipantId,
+  });
+  const effect = transaction.outputEffects.find((candidate) => candidate.id === "private-row");
+  if (!effect) throw new Error("Expected the review engine to produce the private effect.");
+  const transitioned = transitionCanonicalCombatModifierEffect({
+    acceptedRevision: "2026-01-01T00:00:20.000Z",
+    acceptedSequence: 6,
+    effect,
+    gmOverride: { reasonCode: "SECRET_GM_OVERRIDE_REASON", userId: "SECRET_GM_OVERRIDE_USER" },
+    nextState: effect.lifecycle.state,
+    privateDiagnostic: { code: "SECRET_TRANSITION_DIAGNOSTIC" },
+    reason: "duration_decremented",
+    transitionId: "private-transition",
+    transitionType: "update",
+  });
+  return {
+    lifecycle: canonicalCombatModifierEffectSchema.parse({
+      ...transitioned.effect,
+      privateDiagnostic: { code: "SECRET_LIFECYCLE_DIAGNOSTIC" },
+    }),
+    transition: transitioned.transition,
+  };
+}
+
+/**
+ * Populates every location a stored participant can carry a named key: combat effects and
+ * combat-context modifier entries (lifecycle, transitions with `gmOverride`, diagnostics) and
+ * combat-effect events (`createdByUserId`). `nextEffect`/`previousEffect` exist only in command
+ * facts, so the participant carries them as unknown extra fields — a stand-in for a field added to
+ * an internal type later, which must not reach a player either.
+ */
+function withPrivateParticipantMaterial(participant: Record<string, unknown>) {
+  const state = participant.state as ScenarioParticipant["state"];
+  const ownerParticipantId = String(participant.id);
+  const { lifecycle, transition } = privateCanonicalLifecycle(ownerParticipantId);
+  const privateModifierEntry = {
+    canonicalLifecycle: lifecycle,
+    canonicalTransitions: [transition],
+    id: lifecycle.id,
+    scope: "until",
+    value: -10,
+  };
+  const combatContext = scenarioParticipantCombatContextSchema.parse(
+    state.combat.combatContext ?? {},
+  );
+  return {
+    ...participant,
+    nextEffect: { id: "SECRET_NEXT_EFFECT" },
+    state: {
+      ...state,
+      combat: {
+        ...state.combat,
+        combatContext: {
+          ...combatContext,
+          modifierBuckets: {
+            ...combatContext.modifierBuckets,
+            general: [...combatContext.modifierBuckets.general, privateModifierEntry],
+          },
+        },
+        declarationSubmittedByUserId: "SECRET_DECLARING_USER",
+      },
+      combatEffects: {
+        effects: [
+          {
+            canonicalLifecycle: lifecycle,
+            canonicalTransitions: [transition],
+            createdAt: "2026-01-01T00:00:10.000Z",
+            effectGroup: "general",
+            id: lifecycle.id,
+            previousEffect: { id: "SECRET_PREVIOUS_EFFECT" },
+            sourceEventId: "private-effect-event",
+            targetParticipantId: ownerParticipantId,
+            type: "general_modifier",
+            updatedAt: "2026-01-01T00:00:20.000Z",
+          },
+        ],
+        events: [
+          {
+            createdAt: "2026-01-01T00:00:10.000Z",
+            createdByUserId: "SECRET_EFFECT_AUTHOR",
+            description: "Private modifier",
+            id: "private-effect-event",
+            sourceLabel: "GM adjustment",
+            sourceType: "gm_adjustment",
+            targetParticipantId: ownerParticipantId,
+          },
+        ],
+      },
+    },
+  };
+}
+
+/** Command-log private payloads, the two the analysis confirmed among them. */
+const PRIVATE_COMMAND_FACTS = {
+  canonicalSuReview: { requirements: [{ privateDiagnostic: "SECRET_SU_REVIEW_DIAGNOSTIC" }] },
+  notes: "SECRET_GM_NOTES",
+  reason: "SECRET_GM_REASON",
+  updatedEffects: [
+    {
+      nextEffect: { id: "SECRET_NEXT_EFFECT" },
+      previousEffect: { id: "SECRET_PREVIOUS_EFFECT" },
+    },
+  ],
+};
+
+/** Adds the private payloads to every stored command, and records the actor on each. */
+function withPrivateCommandFacts(state: CombatRoundState): CombatRoundState {
+  return {
+    ...state,
+    commands: state.commands.map((command) => ({
+      ...command,
+      createdByUserId: "SECRET_ACTOR_USER",
+      facts: { ...command.facts, ...PRIVATE_COMMAND_FACTS },
+    })),
+  };
+}
+
+/**
+ * Commands of the two types whose facts were confirmed private, plus a skip, for the controlled
+ * participant in the current round. They are the command types that used to reach players raw.
+ */
+function privateRoundEndCommands(input: { participantId: string; roundNumber: number }) {
+  const cursor = { participantId: input.participantId, roundNumber: input.roundNumber, step: "DE" };
+  return (
+    [
+      "roll_round_end_health_check",
+      "commit_round_end_participant_review",
+      "skip_phase_action",
+    ] as const
+  ).map((type, index) =>
+    combatRoundCommandSchema.parse({
+      afterCursor: cursor,
+      beforeCursor: cursor,
+      createdAt: `2026-01-01T00:00:4${index}.000Z`,
+      createdByUserId: "SECRET_ACTOR_USER",
+      facts: PRIVATE_COMMAND_FACTS,
+      id: `private-command-${type}`,
+      participantId: input.participantId,
+      roundNumber: input.roundNumber,
+      type,
+    }),
+  );
+}
+
+const ACTIVE_RESPONSE_HEADERS = { "x-glantri-combat-response": "active-v1" } as const;
+
+describe("#502 privacy hardening Tier 1 — converted player boundaries", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.requireAdminUser.mockResolvedValue(mocks.adminUser);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+  });
+
+  describe("POST /encounters/:encounterId/combat-declaration", () => {
+    function setup(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      const route = setupCombatDeclarationRoute({
+        participant: withPrivateParticipantMaterial(makeCombatScenarioParticipant()),
+        user,
+      });
+      const state = route.encounter.combatRoundState as CombatRoundState;
+      const encounter = {
+        ...route.encounter,
+        combatRoundState: {
+          ...state,
+          commands: [
+            ...state.commands,
+            ...privateRoundEndCommands({
+              participantId: "encounter-participant-1",
+              roundNumber: state.roundNumber,
+            }),
+          ],
+        },
+        gmPrivateClosingNote: "SECRET_CLOSING_NOTE",
+      };
+      mocks.encounterService.getEncounterById.mockResolvedValue(encounter);
+    }
+
+    const declare = (app: Awaited<ReturnType<typeof buildScenarioTestApp>>, headers = {}) =>
+      app.inject({
+        headers,
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementId: "hold",
+          phaseContexts: {
+            phase1: {
+              modifierBuckets: emptyModifierBuckets(),
+              targetParticipantId: "encounter-target-1",
+            },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+
+    it("returns only player-facing values to the declaring player", async () => {
+      setup(mocks.playerUser);
+      const app = await buildScenarioTestApp();
+      const response = await declare(app);
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
+      expectPlayerBodyFreeOfPrivateMaterial(body);
+      expect(privateKeyPaths(body.participant)).toEqual([]);
+      expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
+      expect(body.encounter).not.toHaveProperty("gmPrivateClosingNote");
+      // The formerly raw command types reach the player as envelopes without facts.
+      expect(
+        body.encounter.combatRoundState.commands
+          .filter((command: { id: string }) => command.id.startsWith("private-command-"))
+          .map((command: { facts: unknown; type: string }) => [command.type, command.facts]),
+      ).toEqual([
+        ["roll_round_end_health_check", {}],
+        ["commit_round_end_participant_review", {}],
+        ["skip_phase_action", {}],
+      ]);
+    });
+
+    it("returns only player-facing values through the active combat response", async () => {
+      setup(mocks.playerUser);
+      const app = await buildScenarioTestApp();
+      const response = await declare(app, ACTIVE_RESPONSE_HEADERS);
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(body.version).toBe(1);
+      expectPlayerBodyFreeOfPrivateMaterial(body);
+      expect(privateKeyPaths(body.updatedParticipants)).toEqual([]);
+      expect(privateKeyPaths(body.activeCombatState.commands)).toEqual([]);
+      expect(body).not.toHaveProperty("deterministicAdvance");
+    });
+
+    it("keeps every private field for the GM", async () => {
+      setup(mocks.adminUser);
+      const app = await buildScenarioTestApp();
+      const response = await declare(app);
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expectGmBodyCarriesPrivateMaterial(response.json(), TIER1_PRIVATE_KEYS);
+      expect(response.json().encounter.gmPrivateClosingNote).toBe("SECRET_CLOSING_NOTE");
+    });
+  });
+
+  describe("POST /encounters/:encounterId/combat-round/back-out-phase-attack and continue-phase-attack", () => {
+    function setup(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      // Attacked and attacking without required Combat Experience: both choices are open.
+      const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+        gladiatorInitiative: 9,
+        guardInitiative: 4,
+      });
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: {
+          ...fixture.encounter,
+          combatRoundState: withPrivateCommandFacts(fixture.roundState),
+          gmPrivateClosingNote: "SECRET_CLOSING_NOTE",
+        },
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          fixture.participants[1]!,
+        ],
+        user,
+      });
+    }
+
+    for (const route of ["back-out-phase-attack", "continue-phase-attack"] as const) {
+      const submit = (app: Awaited<ReturnType<typeof buildScenarioTestApp>>, headers = {}) =>
+        app.inject({
+          headers,
+          method: "POST",
+          payload: { phase: "phase1", scenarioParticipantId: "participant-1" },
+          url: `/encounters/encounter-1/combat-round/${route}`,
+        });
+
+      it(`${route}: returns only player-facing values to the controlling player`, async () => {
+        setup(mocks.playerUser);
+        const app = await buildScenarioTestApp();
+        const response = await submit(app);
+        await app.close();
+
+        expect(response.statusCode, response.body).toBe(200);
+        const body = response.json();
+        expect(Object.keys(body).sort()).toEqual(["command", "encounter", "participant"]);
+        expectPlayerBodyFreeOfPrivateMaterial(body);
+        expect(privateKeyPaths(body.participant)).toEqual([]);
+        expect(privateKeyPaths(body.command)).toEqual([]);
+        expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
+        expect(body.encounter).not.toHaveProperty("gmPrivateClosingNote");
+        // The player's own initiative choice keeps the facts their client reads back.
+        expect(body.command).toMatchObject({
+          facts: { attackStep: "A1", choice: expect.any(String) },
+          type: "submit_phase_initiative_choice",
+        });
+      });
+
+      it(`${route}: returns only player-facing values through the active combat response`, async () => {
+        setup(mocks.playerUser);
+        const app = await buildScenarioTestApp();
+        const response = await submit(app, ACTIVE_RESPONSE_HEADERS);
+        await app.close();
+
+        expect(response.statusCode, response.body).toBe(200);
+        expectPlayerBodyFreeOfPrivateMaterial(response.json());
+        expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
+      });
+
+      it(`${route}: keeps every private field for the GM`, async () => {
+        setup(mocks.adminUser);
+        const app = await buildScenarioTestApp();
+        const response = await submit(app);
+        await app.close();
+
+        expect(response.statusCode, response.body).toBe(200);
+        expectGmBodyCarriesPrivateMaterial(response.json(), TIER1_PRIVATE_KEYS);
+      });
+    }
+  });
+
+  describe("POST /encounters/:encounterId/combat-round/double-attack-phase2-decision", () => {
+    function setup(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+      const phase1Result = buildCombatRoundAttackRollResult({
+        actionId: "double_attack",
+        attackerParticipantId: "encounter-participant-1",
+        defenderDb: 20,
+        defenderParticipantId: "encounter-participant-2",
+        ob: 0,
+        phase: "phase1",
+        rollD20: 1,
+        rollTotal: 1,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Sword",
+      });
+      const roundState = combatRoundStateSchema.parse({
+        ...fixture.roundState,
+        currentCursor: {
+          participantId: "encounter-participant-1",
+          roundNumber: fixture.roundState.roundNumber,
+          step: "M2",
+        },
+        currentStep: "review_phase_2_modifiers",
+        participants: fixture.roundState.participants.map((participant) =>
+          participant.participantId === "encounter-participant-1"
+            ? {
+                ...participant,
+                attackResults: { ...participant.attackResults, phase1: phase1Result },
+              }
+            : participant,
+        ),
+        phaseResolutionCursor: undefined,
+        selectedParticipantId: "encounter-participant-1",
+        selectedStep: "review_phase_2_modifiers",
+      });
+      const task = buildCombatProgressionProjection(roundState)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks)
+        .find((candidate) => candidate.kind === "double_attack_decision");
+      if (!task) throw new Error("Expected an executable Double Attack decision task.");
+      const route = setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: {
+          ...fixture.encounter,
+          combatRoundState: withPrivateCommandFacts(roundState),
+          gmPrivateClosingNote: "SECRET_CLOSING_NOTE",
+        },
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          fixture.participants[1]!,
+        ],
+        user,
+      });
+      return {
+        payload: {
+          decision: "continue",
+          executionGroupId: task.executionGroupId,
+          expectedRevision: route.encounter.updatedAt,
+          opportunityId: task.identity.opportunityId,
+          scenarioParticipantId: "participant-1",
+          taskId: task.id,
+        },
+      };
+    }
+
+    const decide = (
+      app: Awaited<ReturnType<typeof buildScenarioTestApp>>,
+      payload: Record<string, unknown>,
+      headers = {},
+    ) =>
+      app.inject({
+        headers,
+        method: "POST",
+        payload,
+        url: "/encounters/encounter-1/combat-round/double-attack-phase2-decision",
+      });
+
+    it("returns only player-facing values to the deciding player", async () => {
+      const { payload } = setup(mocks.playerUser);
+      const app = await buildScenarioTestApp();
+      const response = await decide(app, payload);
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
+      expectPlayerBodyFreeOfPrivateMaterial(body);
+      expect(privateKeyPaths(body.participant)).toEqual([]);
+      expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
+      expect(body.encounter).not.toHaveProperty("gmPrivateClosingNote");
+    });
+
+    it("returns only player-facing values through the active combat response", async () => {
+      const { payload } = setup(mocks.playerUser);
+      const app = await buildScenarioTestApp();
+      const response = await decide(app, payload, ACTIVE_RESPONSE_HEADERS);
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expectPlayerBodyFreeOfPrivateMaterial(response.json());
+      expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
+    });
+
+    it("keeps every private field for the GM", async () => {
+      const { payload } = setup(mocks.adminUser);
+      const app = await buildScenarioTestApp();
+      const response = await decide(app, payload);
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expectGmBodyCarriesPrivateMaterial(response.json(), TIER1_PRIVATE_KEYS);
+    });
+  });
+
+  describe("participant boundaries", () => {
+    const PARTICIPANT_KEYS = [
+      "canonicalTransitions",
+      "canonicalLifecycle",
+      "gmOverride",
+      "privateDiagnostic",
+      "createdByUserId",
+      "nextEffect",
+      "previousEffect",
+    ] as const;
+
+    function storedParticipant(controlledByUserId: string) {
+      return withPrivateParticipantMaterial(
+        makeCombatScenarioParticipant({ controlledByUserId }),
+      ) as unknown as ScenarioParticipant;
+    }
+
+    function setupScenarioAccess() {
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        kind: "combat",
+        name: "Bridge Ambush",
+        status: "live",
+      });
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Border Trouble",
+        status: "active",
+      });
+    }
+
+    describe("GET /scenarios/:scenarioId/my-participant", () => {
+      async function load(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+        setupScenarioAccess();
+        mocks.requireAuthenticatedUser.mockResolvedValue(user);
+        mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+          storedParticipant(user.id),
+        ]);
+        const app = await buildScenarioTestApp();
+        const response = await app.inject({
+          method: "GET",
+          url: "/scenarios/scenario-1/my-participant",
+        });
+        await app.close();
+        return response;
+      }
+
+      it("returns the player-facing participant to its controlling player", async () => {
+        const response = await load(mocks.playerUser);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().participant.id).toBe("participant-1");
+        expect(privateKeyPaths(response.json())).toEqual([]);
+        expect(secretValuePaths(response.json())).toEqual([]);
+      });
+
+      it("keeps every private field for the GM", async () => {
+        const response = await load(mocks.adminUser);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expectGmBodyCarriesPrivateMaterial(response.json(), PARTICIPANT_KEYS);
+      });
+    });
+
+    describe("PUT /scenarios/:scenarioId/participants/:participantId/state", () => {
+      async function update(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+        setupScenarioAccess();
+        mocks.requireAuthenticatedUser.mockResolvedValue(user);
+        const stored = storedParticipant("player-1");
+        mocks.scenarioService.getScenarioParticipantById.mockResolvedValue(stored);
+        mocks.encounterService.updateScenarioParticipantState.mockImplementation(
+          async (input: { state: unknown }) => ({ ...stored, state: input.state }),
+        );
+        const app = await buildScenarioTestApp();
+        const response = await app.inject({
+          method: "PUT",
+          payload: { state: stored.state },
+          url: "/scenarios/scenario-1/participants/participant-1/state",
+        });
+        await app.close();
+        return response;
+      }
+
+      it("returns the player-facing participant to its controlling player", async () => {
+        const response = await update(mocks.playerUser);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().participant.id).toBe("participant-1");
+        expect(privateKeyPaths(response.json())).toEqual([]);
+        expect(secretValuePaths(response.json())).toEqual([]);
+      });
+
+      it("keeps every private field for the GM", async () => {
+        const response = await update(mocks.adminUser);
+
+        expect(response.statusCode, response.body).toBe(200);
+        // `nextEffect`/`previousEffect` are not part of the participant state schema the route
+        // parses the submitted state through, so the GM response keeps the canonical material.
+        expectGmBodyCarriesPrivateMaterial(response.json(), [
+          "canonicalTransitions",
+          "canonicalLifecycle",
+          "gmOverride",
+          "privateDiagnostic",
+          "createdByUserId",
+        ]);
+      });
+    });
+
+    describe("POST /scenarios/:scenarioId/participants/character", () => {
+      async function join(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+        setupScenarioAccess();
+        mocks.requireAuthenticatedUser.mockResolvedValue(user);
+        mocks.characterService.getOwnedCharacter.mockResolvedValue({
+          id: "character-1",
+          ownerId: user.id,
+        });
+        mocks.campaignService.listCampaignRosterEntries.mockResolvedValue([
+          {
+            campaignId: "campaign-1",
+            id: "roster-1",
+            sourceId: "character-1",
+            sourceType: "character",
+          },
+        ]);
+        mocks.scenarioService.addCharacterParticipant.mockResolvedValue(storedParticipant(user.id));
+        const app = await buildScenarioTestApp();
+        const response = await app.inject({
+          method: "POST",
+          payload: { characterId: "character-1", joinSource: "player_joined" },
+          url: "/scenarios/scenario-1/participants/character",
+        });
+        await app.close();
+        return response;
+      }
+
+      it("returns the player-facing participant to the joining player", async () => {
+        const response = await join(mocks.playerUser);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().participant.id).toBe("participant-1");
+        expect(privateKeyPaths(response.json())).toEqual([]);
+        expect(secretValuePaths(response.json())).toEqual([]);
+      });
+
+      it("keeps every private field for the GM", async () => {
+        const response = await join(mocks.adminUser);
+
+        expect(response.statusCode, response.body).toBe(200);
+        expectGmBodyCarriesPrivateMaterial(response.json(), PARTICIPANT_KEYS);
+      });
+    });
+  });
 });
