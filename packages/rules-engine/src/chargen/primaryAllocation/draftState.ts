@@ -1083,7 +1083,27 @@ export function removeSecondaryPoint(input: SpendSecondaryPointInput): SpendPoin
   };
 }
 
+/*
+ * GATE (Forgejo #494, control-plane ruling 2026-10-04, Option C): flexible-pool GROUP purchase
+ * is deliberately DISABLED until the Product Owner rules on the Social-Band eligibility rule.
+ * This guard sits at the entry point so the disabled state does not depend on catalogue
+ * contents or call ordering. `SpendSecondaryPointInput.targetType` excludes "group" at the type
+ * level; this is the runtime backstop for untyped callers. Do not remove it to "enable" group
+ * purchase: that needs the ruling, and `getAllowedSecondaryGroupIdsInternal` (see access.ts)
+ * is NOT an approved rule.
+ */
+const FLEXIBLE_POOL_GROUP_PURCHASE_DISABLED_ERROR =
+  "Flexible-pool group purchase is disabled pending a Product Owner ruling on Social-Band eligibility (#494).";
+
 export function spendSecondaryPoint(input: SpendSecondaryPointInput): SpendPointResult {
+  if ((input.targetType as string) === "group") {
+    return {
+      error: FLEXIBLE_POOL_GROUP_PURCHASE_DISABLED_ERROR,
+      progression: recalculateProgression(structuredClone(input.progression)),
+      warnings: [],
+    };
+  }
+
   if (input.targetType === "skill" && input.content.competencyV2 && input.professionId) {
     return allocateChargenPoint({
       ...input,
