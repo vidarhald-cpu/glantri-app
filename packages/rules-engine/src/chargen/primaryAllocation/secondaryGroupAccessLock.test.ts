@@ -19,9 +19,10 @@ import type { CanonicalContentShape } from "./_helpers";
  * Design: the fixture is synthetic and self-contained, so legitimate edits to the real
  * canonical content cannot break this lock; only a change to the accessor can. Every bound
  * states BOTH `minSocietyLevel` and `minSocialBand` explicitly, so no expectation rests on an
- * implicit default by accident. Exactly two bounds omit one field ON PURPOSE, solely to pin the
- * accessor's current defaults (unset minSocietyLevel behaves as 1, unset minSocialBand as "L1");
- * they are marked below and are not oversights. The societies include a level-1 society,
+ * implicit default by accident. Exactly three bounds omit a field ON PURPOSE, solely to pin the
+ * accessor's current defaults (unset minSocietyLevel behaves as 1, unset minSocialBand as "L1",
+ * and one bound leaves BOTH unset so the two defaults are exercised together); they are marked
+ * below and are not oversights. The societies include a level-1 society,
  * because the minSocietyLevel default is observable only there (at level 1, `1 <= 1` holds
  * while a default of 2 would not); at levels 2 and above every such default behaves
  * identically. The bounds also include ones exactly at the boundary band (band 4 evaluated at
@@ -45,6 +46,10 @@ const groupBounds = [
   // DELIBERATELY leaves minSocialBand UNSET, to exercise the accessor's current default
   // (treated as "L1"). Not an oversight; do not "complete" it.
   { groupId: "g-default-social-band", minSocietyLevel: 1 },
+  // DELIBERATELY leaves BOTH minSocietyLevel AND minSocialBand UNSET, to exercise both of the
+  // accessor's current defaults together (the unconstrained-bound shape). Not an oversight; do
+  // not "complete" it.
+  { groupId: "g-both-unset" },
 ] as const;
 
 const fixture = {
@@ -55,6 +60,31 @@ const fixture = {
   ],
   competencyV2: { groupBounds },
 } as unknown as CanonicalContentShape;
+
+/*
+ * STRUCTURAL GUARD ON THE FIXTURE ITSELF -- not an assertion about eligibility. It says nothing
+ * about which groups should or should not be reachable; it only checks that the fixture above
+ * still contains a bound of every (minSocietyLevel set/unset x minSocialBand set/unset) shape, so a
+ * future fixture rewrite cannot silently drop one shape and widen the lock's blind spot.
+ */
+describe("secondary-group lock fixture shape coverage (structural guard, not an eligibility rule)", () => {
+  it("contains a bound for each set/unset combination of minSocietyLevel and minSocialBand", () => {
+    const shapes = new Set(
+      (groupBounds as readonly { minSocietyLevel?: number; minSocialBand?: string }[]).map(
+        (bound) =>
+          `level:${bound.minSocietyLevel === undefined ? "unset" : "set"}/band:${
+            bound.minSocialBand === undefined ? "unset" : "set"
+          }`,
+      ),
+    );
+    expect([...shapes].sort()).toEqual([
+      "level:set/band:set",
+      "level:set/band:unset",
+      "level:unset/band:set",
+      "level:unset/band:unset",
+    ]);
+  });
+});
 
 describe("secondary-group accessor characterisation lock (current behaviour, not an approved rule)", () => {
   const cases: {
@@ -76,6 +106,7 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s4-b1",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     {
@@ -90,6 +121,7 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s4-b1",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     {
@@ -103,6 +135,7 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s4-b1",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     {
@@ -114,6 +147,7 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s4-b1",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     {
@@ -127,6 +161,7 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s2-b2",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     {
@@ -138,6 +173,7 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s2-b2",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     // Level-1 society: the only place the unset-minSocietyLevel default is observable.
@@ -151,17 +187,24 @@ describe("secondary-group accessor characterisation lock (current behaviour, not
         "g-s1-b4",
         "g-default-society-level",
         "g-default-social-band",
+        "g-both-unset",
       ],
     },
     {
       societyId: "society-level-1",
       band: 2,
-      expected: ["g-s1-b1", "g-s1-b2", "g-default-society-level", "g-default-social-band"],
+      expected: [
+        "g-s1-b1",
+        "g-s1-b2",
+        "g-default-society-level",
+        "g-default-social-band",
+        "g-both-unset",
+      ],
     },
     {
       societyId: "society-level-1",
       band: 1,
-      expected: ["g-s1-b1", "g-default-society-level", "g-default-social-band"],
+      expected: ["g-s1-b1", "g-default-society-level", "g-default-social-band", "g-both-unset"],
     },
     // Out-of-range band: early-return guard (levels outside 1..4 yield nothing).
     { societyId: "society-level-4", band: 5, expected: [] },
