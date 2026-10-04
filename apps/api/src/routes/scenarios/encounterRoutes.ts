@@ -6981,17 +6981,19 @@ function buildPlayerSafeCombatRollMutationEncounterForUser(input: {
 
 /**
  * Round-state declarations as a converted boundary returns them (#502 Tier 1, control-plane
- * ruling 2026-10-04). A declaration's modifier entries carry the canonical lifecycle and the
- * correction history — `gmOverride` with the GM's reason and user id, and diagnostics. They are
- * rebuilt through `buildPlayerFacingCombatContext`, which drops both, in every phase context and
- * in the combat context of every participant the viewer does not control.
+ * rulings 2026-10-04). A declaration's modifier entries carry the canonical lifecycle and the
+ * correction history — `gmOverride` with the GM's reason and user id, and diagnostics. Every combat
+ * and phase context is rebuilt through `buildPlayerFacingCombatContext`, which keeps the context's
+ * own fields and drops both.
  *
- * The combat context of the viewer's own declaration is left as the projection produced it: that is
- * the residual ruled R2 — accepted debt, pinned path by path in the route tests — until Tier 3 builds
- * the round state additively.
+ * `keepOwnCombatContextAsR2Residual` leaves the combat context of the viewer's own declaration as the
+ * projection produced it. That is the residual ruled R2 — accepted debt, pinned path by path in the
+ * route tests — and it is ruled for the combat-declaration route only, until Tier 3 builds the round
+ * state additively.
  */
 function buildPlayerFacingRoundStateDeclarations(input: {
   controlledEncounterParticipantIds: ReadonlySet<string>;
+  keepOwnCombatContextAsR2Residual: boolean;
   state: CombatRoundState;
 }): CombatRoundState {
   return {
@@ -7000,13 +7002,15 @@ function buildPlayerFacingRoundStateDeclarations(input: {
       const declaration = participant.declaration;
       if (!declaration) return participant;
       const phaseContexts = declaration.phaseContexts;
+      const isR2Residual =
+        input.keepOwnCombatContextAsR2Residual &&
+        input.controlledEncounterParticipantIds.has(participant.participantId);
       return {
         ...participant,
         declaration: {
           ...declaration,
           combatContext:
-            declaration.combatContext &&
-            !input.controlledEncounterParticipantIds.has(participant.participantId)
+            declaration.combatContext && !isR2Residual
               ? buildPlayerFacingCombatContext(declaration.combatContext)
               : declaration.combatContext,
           phaseContexts: phaseContexts && {
@@ -7026,6 +7030,8 @@ function buildPlayerFacingRoundStateDeclarations(input: {
  */
 export function buildPlayerFacingEncounterForUser(input: {
   encounter: EncounterSession;
+  /** R2: set by the combat-declaration route only (`buildPlayerFacingRoundStateDeclarations`). */
+  keepOwnCombatContextAsR2Residual?: true;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): PlayerFacingEncounterSession {
@@ -7039,6 +7045,7 @@ export function buildPlayerFacingEncounterForUser(input: {
         projectedEncounter.combatRoundState &&
         buildPlayerFacingRoundStateDeclarations({
           controlledEncounterParticipantIds,
+          keepOwnCombatContextAsR2Residual: input.keepOwnCombatContextAsR2Residual === true,
           state: projectedEncounter.combatRoundState,
         }),
     },
@@ -9967,6 +9974,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return playerCombatMutationResponse({
           encounter: buildPlayerFacingEncounterForUser({
             encounter: saved.encounter,
+            keepOwnCombatContextAsR2Residual: true,
             scenarioParticipants: acceptedScenarioParticipants,
             userId: user.id,
           }),

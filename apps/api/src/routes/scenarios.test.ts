@@ -28730,13 +28730,16 @@ function uniqueSorted(paths: readonly string[]): string[] {
 
 type PinnedResidual = { keys: readonly string[]; secrets: readonly string[] };
 
+/** Every other converted boundary: R2 does not extend to it, so nothing may remain. */
+const NO_RESIDUAL: PinnedResidual = { keys: [], secrets: [] };
+
 /**
  * R2 (control-plane rulings 2026-10-04): the residual accepted as Tier 3's debt is the combat context
- * of the viewer's own round-state declaration, which the player encounter projection passes through
- * with each modifier entry's canonical lifecycle and correction history. These are its exact paths
- * in these fixtures, relative to that combat context: the private entry of the participant's stored
- * modifier buckets, which a player's declaration preserves, and the phase-penalty row the
- * combat-declaration route generates.
+ * of the viewer's own round-state declaration in the combat-declaration response — that route only.
+ * The projection passes it through with each modifier entry's canonical lifecycle and correction
+ * history. These are its exact paths in these fixtures, relative to that combat context: the private
+ * entry of the participant's stored modifier buckets, which a player's declaration preserves, and the
+ * phase-penalty row the combat-declaration route generates.
  *
  * A player response must carry exactly its pinned paths and nothing else. A named key or a SECRET
  * value anywhere else fails — in a phase context, in another participant's declaration, at another
@@ -28784,17 +28787,34 @@ function expectPlayerBodyPrivateMaterial(body: unknown, pinned: PinnedResidual) 
   expect(uniqueSorted(secretValuePaths(body)), "SECRET values").toEqual([...pinned.secrets]);
 }
 
+/**
+ * Stripped, not removed: on the phase-attack routes the viewer's own declaration keeps its combat
+ * context — the base of the player's declaration draft (`buildPlayerCombatDeclarationDraft`) — with
+ * every field of the private entry except its lifecycle and correction history.
+ */
+function expectOwnDeclarationCombatContextKept(roundState: {
+  participants: Array<{ declaration?: { combatContext?: unknown }; participantId: string }>;
+}) {
+  const own = roundState.participants.find(
+    (participant) => participant.participantId === "encounter-participant-1",
+  );
+  expect(own?.declaration?.combatContext).toMatchObject({
+    modifierBuckets: { general: [{ id: "private-row", scope: "until", value: -10 }] },
+  });
+}
+
 function expectGmBodyCarriesPrivateMaterial(body: unknown, keys: readonly string[]) {
   const found = new Set(privateKeyPaths(body).map((path) => path.split(".").at(-1)));
   for (const key of keys) expect(found.has(key), `GM response keeps ${key}`).toBe(true);
 }
 
 /**
- * Locations the player responses of the phase-attack routes narrow: both phase contexts of the
- * viewer's own declaration, and the combat and phase contexts of the other player's declaration.
- * The GM response must carry them, which proves the fixture populates what the player's is free of.
+ * Locations the player responses of the phase-attack routes narrow: the combat and phase contexts of
+ * the viewer's own declaration and of the other player's. The GM response must carry them, which
+ * proves the fixture populates what the player's is free of.
  */
 const NARROWED_DECLARATION_LOCATIONS = [
+  "participants[encounter-participant-1].declaration.combatContext",
   "participants[encounter-participant-1].declaration.phaseContexts.phase1",
   "participants[encounter-participant-1].declaration.phaseContexts.phase2",
   "participants[encounter-participant-2].declaration.combatContext",
@@ -29251,10 +29271,8 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         expect(response.statusCode, response.body).toBe(200);
         const body = response.json();
         expect(Object.keys(body).sort()).toEqual(["command", "encounter", "participant"]);
-        expectPlayerBodyPrivateMaterial(
-          body,
-          pinnedR2Residual("encounter.combatRoundState", R2_PRIVATE_ENTRY),
-        );
+        expectPlayerBodyPrivateMaterial(body, NO_RESIDUAL);
+        expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
         expect(privateKeyPaths(body.participant)).toEqual([]);
         expect(privateKeyPaths(body.command)).toEqual([]);
         expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
@@ -29293,10 +29311,8 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         await app.close();
 
         expect(response.statusCode, response.body).toBe(200);
-        expectPlayerBodyPrivateMaterial(
-          response.json(),
-          pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY),
-        );
+        expectPlayerBodyPrivateMaterial(response.json(), NO_RESIDUAL);
+        expectOwnDeclarationCombatContextKept(response.json().activeCombatState);
         expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
       });
 
@@ -29401,10 +29417,8 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
-      expectPlayerBodyPrivateMaterial(
-        body,
-        pinnedR2Residual("encounter.combatRoundState", R2_PRIVATE_ENTRY),
-      );
+      expectPlayerBodyPrivateMaterial(body, NO_RESIDUAL);
+      expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
       expect(privateKeyPaths(body.participant)).toEqual([]);
       expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
       expect(body.encounter).not.toHaveProperty("gmPrivateClosingNote");
@@ -29417,10 +29431,8 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       await app.close();
 
       expect(response.statusCode, response.body).toBe(200);
-      expectPlayerBodyPrivateMaterial(
-        response.json(),
-        pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY),
-      );
+      expectPlayerBodyPrivateMaterial(response.json(), NO_RESIDUAL);
+      expectOwnDeclarationCombatContextKept(response.json().activeCombatState);
       expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
     });
 
