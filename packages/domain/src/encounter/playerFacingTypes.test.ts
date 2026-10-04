@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildPlayerFacingCombatContext,
   buildPlayerFacingScenarioParticipant,
+  mergePlayerSubmittedScenarioParticipantState,
   type PlayerFacingScenarioParticipant,
 } from "../campaign/playerFacingScenarioParticipant";
 import {
@@ -352,5 +353,78 @@ describe("#502 player-facing types: additive construction", () => {
     expect(JSON.stringify(encounter)).not.toContain("SECRET");
     expect(encounter).not.toHaveProperty("gmPrivateClosingNote");
     expect(encounter.title).toBe("Bridge");
+  });
+});
+
+describe("#502 repair: a player saving back the player-facing state", () => {
+  /** The state a player now receives, as it comes back in a request body. */
+  function receivedState(participant: ScenarioParticipant) {
+    return scenarioParticipantStateSchema.parse(
+      JSON.parse(JSON.stringify(buildPlayerFacingScenarioParticipant(participant).state)),
+    );
+  }
+
+  function withEffectChange(
+    state: ScenarioParticipant["state"],
+    change: Record<string, unknown>,
+  ): ScenarioParticipant["state"] {
+    const effects = state.combatEffects ?? { effects: [], events: [] };
+    return {
+      ...state,
+      combatEffects: {
+        ...effects,
+        effects: effects.effects.map((effect) => ({ ...effect, ...change })),
+      },
+    };
+  }
+
+  it("stores exactly the stored state when the received state is saved back unchanged", () => {
+    const stored = storedParticipantWithPrivateMaterial();
+    const submittedState = receivedState(stored);
+
+    expect(keysAnywhere(submittedState).has("canonicalTransitions")).toBe(false);
+    expect(
+      mergePlayerSubmittedScenarioParticipantState({ currentState: stored.state, submittedState }),
+    ).toEqual(stored.state);
+  });
+
+  it("stores exactly the stored state when the stored state is saved back, as before #502", () => {
+    const stored = storedParticipantWithPrivateMaterial();
+
+    expect(
+      mergePlayerSubmittedScenarioParticipantState({
+        currentState: stored.state,
+        submittedState: stored.state,
+      }),
+    ).toEqual(stored.state);
+  });
+
+  it("refuses any change to combat effects, visible or not", () => {
+    const stored = storedParticipantWithPrivateMaterial();
+    const refused = (submittedState: ScenarioParticipant["state"]) =>
+      mergePlayerSubmittedScenarioParticipantState({ currentState: stored.state, submittedState });
+
+    expect(refused(withEffectChange(receivedState(stored), { modifierValue: 5 }))).toBeUndefined();
+    expect(refused(withEffectChange(stored.state, { modifierValue: 5 }))).toBeUndefined();
+    expect(refused(withEffectChange(stored.state, { canonicalTransitions: [] }))).toBeUndefined();
+  });
+
+  it("takes the player's visible changes and keeps the correction record of a changed entry", () => {
+    const stored = storedParticipantWithPrivateMaterial();
+    const submittedState = receivedState(stored);
+    submittedState.combat.stance = "defensive";
+    submittedState.combat.combatContext.modifierBuckets.general[0]!.value = -5;
+
+    const merged = mergePlayerSubmittedScenarioParticipantState({
+      currentState: stored.state,
+      submittedState,
+    });
+
+    expect(merged?.combat.stance).toBe("defensive");
+    expect(merged?.combat.combatContext.modifierBuckets.general).toEqual([
+      { ...stored.state.combat.combatContext.modifierBuckets.general[0], value: -5 },
+    ]);
+    expect(merged?.combat.declarationSubmittedByUserId).toBe("SECRET_DECLARING_USER");
+    expect(merged?.combatEffects).toEqual(stored.state.combatEffects);
   });
 });

@@ -11,6 +11,7 @@ import {
   buildPlayerFacingScenarioParticipant,
   isScenarioLiveInteractive,
   buildScenarioPlayerVisibleParticipants,
+  mergePlayerSubmittedScenarioParticipantState,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
@@ -359,6 +360,8 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "Scenario is not currently open for live participant updates." });
       }
 
+      let acceptedState = submittedState;
+
       if (access.mode === "player") {
         const participant = await scenarioService.getScenarioParticipantById(
           participantId,
@@ -369,20 +372,23 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(403).send({ error: "Access denied." });
         }
 
-        const currentState = scenarioParticipantStateSchema.parse(participant.state);
+        // The player receives the player-facing state (#502); what it omits is kept from storage.
+        const mergedState = mergePlayerSubmittedScenarioParticipantState({
+          currentState: scenarioParticipantStateSchema.parse(participant.state),
+          submittedState,
+        });
 
-        if (
-          JSON.stringify(currentState.combatEffects ?? { effects: [], events: [] }) !==
-          JSON.stringify(submittedState.combatEffects ?? { effects: [], events: [] })
-        ) {
+        if (!mergedState) {
           return reply.code(403).send({ error: "Only GM users can edit combat effects." });
         }
+
+        acceptedState = mergedState;
       }
 
       const nextState = scenarioParticipantStateSchema.parse({
-        ...submittedState,
+        ...acceptedState,
         combatEffects: attachCanonicalPersistentEffectLifecycles({
-          combatEffects: submittedState.combatEffects,
+          combatEffects: acceptedState.combatEffects,
         }),
       });
 

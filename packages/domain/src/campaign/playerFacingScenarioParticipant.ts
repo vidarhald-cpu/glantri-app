@@ -9,6 +9,7 @@ import {
   type CombatEffectsState,
 } from "../encounter/combatEffects";
 import { revealableEquipmentState } from "../equipment/itemFacts";
+import { canonicalizeLegacyEquipmentSnapshotItems } from "../equipment/schemas";
 import {
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
@@ -18,6 +19,7 @@ import {
   type ScenarioCombatModifierEntry,
   type ScenarioParticipant,
   type ScenarioParticipantCombatContext,
+  type ScenarioParticipantState,
 } from "./scenario";
 
 /**
@@ -38,7 +40,10 @@ import {
  *   `declarationSubmittedByUserId` — actor identities are not player-facing, as every existing
  *   player projection already treats them;
  * - the captured equipment snapshot passes through `revealableEquipmentState`, the established
- *   sanitizer for a snapshot reaching its controlling player.
+ *   sanitizer for a snapshot reaching its controlling player, after its legacy items are given the
+ *   facts and notes their `specialProperties` became on the canonical item
+ *   (`canonicalizeLegacyEquipmentSnapshotItems`). Legacy information the canonical item reveals to
+ *   its holder is therefore kept; only what is not revealed is removed.
  *
  * Sub-structures that carry none of that material reuse their canonical field schemas, as the
  * precedent does for the Character build and combat context.
@@ -383,7 +388,9 @@ export function buildPlayerFacingScenarioParticipant(
       displayName: participant.snapshot.displayName,
       equipmentProjection: participant.snapshot.equipmentProjection,
       entity: participant.snapshot.entity,
-      equipmentState: revealableEquipmentState(participant.snapshot.equipmentState),
+      equipmentState: revealableEquipmentState(
+        canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+      ),
       retainedCharacterRevision: participant.snapshot.retainedCharacterRevision,
       sheetSummary: participant.snapshot.sheetSummary,
       sourceUpdatedAt: participant.snapshot.sourceUpdatedAt,
@@ -422,4 +429,93 @@ export function buildPlayerFacingScenarioParticipant(
     updatedAt: participant.updatedAt,
     visibilityOverrides: participant.visibilityOverrides,
   });
+}
+
+const NO_COMBAT_EFFECTS = { effects: [], events: [] };
+
+type ModifierBucketKey = keyof ScenarioParticipantCombatContext["modifierBuckets"];
+
+/**
+ * The state to store when the player who controls a participant saves its state back through
+ * `PUT /scenarios/:scenarioId/participants/:participantId/state` (#502 Tier 1 repair).
+ *
+ * Players used to receive the stored state, so saving back what they received changed nothing. They
+ * now receive the state `buildPlayerFacingScenarioParticipant` builds, which omits what only the GM
+ * sees. Saving that back must stay valid and must not erase what it omits:
+ *
+ * - combat effects stay the GM's to edit. Effects equal to the stored ones (the state players used to
+ *   receive) or to their player-facing projection (the state players receive now) keep the stored
+ *   effects; any other effects are an edit, and the result is `undefined`, which the route refuses as
+ *   it always has;
+ * - a submitted modifier entry without `canonicalLifecycle` or `canonicalTransitions` keeps the stored
+ *   entry's (same bucket, same id) — the GM correction record the entry a player used to save back
+ *   still carried;
+ * - `declarationSubmittedByUserId` keeps its stored value when the submission omits it.
+ *
+ * Everything the player can see is taken from the submission, exactly as before.
+ */
+export function mergePlayerSubmittedScenarioParticipantState(input: {
+  currentState: ScenarioParticipantState;
+  submittedState: ScenarioParticipantState;
+}): ScenarioParticipantState | undefined {
+  const { currentState, submittedState } = input;
+  const submittedEffects = JSON.stringify(submittedState.combatEffects ?? NO_COMBAT_EFFECTS);
+  const storedEffects = JSON.stringify(currentState.combatEffects ?? NO_COMBAT_EFFECTS);
+  const receivedEffects = JSON.stringify(
+    currentState.combatEffects
+      ? combatEffectsStateSchema.parse(
+          buildPlayerFacingCombatEffectsState(currentState.combatEffects),
+        )
+      : NO_COMBAT_EFFECTS,
+  );
+
+  if (submittedEffects !== storedEffects && submittedEffects !== receivedEffects) {
+    return undefined;
+  }
+
+  const storedBuckets = currentState.combat.combatContext.modifierBuckets;
+  const submittedContext = submittedState.combat.combatContext;
+  const keepStoredCorrectionRecord =
+    (bucket: ModifierBucketKey) =>
+    (entry: ScenarioCombatModifierEntry): ScenarioCombatModifierEntry => {
+      const stored = storedBuckets[bucket].find((candidate) => candidate.id === entry.id);
+      return {
+        ...entry,
+        ...(entry.canonicalLifecycle === undefined && stored?.canonicalLifecycle !== undefined
+          ? { canonicalLifecycle: stored.canonicalLifecycle }
+          : {}),
+        ...(entry.canonicalTransitions === undefined && stored?.canonicalTransitions !== undefined
+          ? { canonicalTransitions: stored.canonicalTransitions }
+          : {}),
+      };
+    };
+  const declarationSubmittedByUserId =
+    submittedState.combat.declarationSubmittedByUserId ??
+    currentState.combat.declarationSubmittedByUserId;
+
+  return {
+    ...submittedState,
+    combat: {
+      ...submittedState.combat,
+      combatContext: {
+        ...submittedContext,
+        modifierBuckets: {
+          general: submittedContext.modifierBuckets.general.map(
+            keepStoredCorrectionRecord("general"),
+          ),
+          situationDb: submittedContext.modifierBuckets.situationDb.map(
+            keepStoredCorrectionRecord("situationDb"),
+          ),
+          situationInitiative: submittedContext.modifierBuckets.situationInitiative.map(
+            keepStoredCorrectionRecord("situationInitiative"),
+          ),
+          situationObSkill: submittedContext.modifierBuckets.situationObSkill.map(
+            keepStoredCorrectionRecord("situationObSkill"),
+          ),
+        },
+      },
+      ...(declarationSubmittedByUserId === undefined ? {} : { declarationSubmittedByUserId }),
+    },
+    combatEffects: currentState.combatEffects,
+  };
 }

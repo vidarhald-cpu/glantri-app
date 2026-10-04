@@ -281,6 +281,7 @@ import {
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
+  buildPlayerFacingCombatContext,
   buildPlayerFacingCombatRoundCommand,
   buildPlayerFacingEncounterSession,
   buildPlayerFacingScenarioParticipant,
@@ -6979,16 +6980,68 @@ function buildPlayerSafeCombatRollMutationEncounterForUser(input: {
 }
 
 /**
+ * Round-state declarations as a converted boundary returns them (#502 Tier 1, control-plane
+ * ruling 2026-10-04). A declaration's modifier entries carry the canonical lifecycle and the
+ * correction history — `gmOverride` with the GM's reason and user id, and diagnostics. They are
+ * rebuilt through `buildPlayerFacingCombatContext`, which drops both, in every phase context and
+ * in the combat context of every participant the viewer does not control.
+ *
+ * The combat context of the viewer's own declaration is left as the projection produced it: that is
+ * the residual ruled R2 — accepted debt, pinned path by path in the route tests — until Tier 3 builds
+ * the round state additively.
+ */
+function buildPlayerFacingRoundStateDeclarations(input: {
+  controlledEncounterParticipantIds: ReadonlySet<string>;
+  state: CombatRoundState;
+}): CombatRoundState {
+  return {
+    ...input.state,
+    participants: input.state.participants.map((participant) => {
+      const declaration = participant.declaration;
+      if (!declaration) return participant;
+      const phaseContexts = declaration.phaseContexts;
+      return {
+        ...participant,
+        declaration: {
+          ...declaration,
+          combatContext:
+            declaration.combatContext &&
+            !input.controlledEncounterParticipantIds.has(participant.participantId)
+              ? buildPlayerFacingCombatContext(declaration.combatContext)
+              : declaration.combatContext,
+          phaseContexts: phaseContexts && {
+            phase1: phaseContexts.phase1 && buildPlayerFacingCombatContext(phaseContexts.phase1),
+            phase2: phaseContexts.phase2 && buildPlayerFacingCombatContext(phaseContexts.phase2),
+          },
+        },
+      };
+    }),
+  };
+}
+
+/**
  * The player-facing encounter a converted boundary returns (#502, Tier 1): the per-viewer player
- * encounter projection, carried into the declared player type field by field.
+ * encounter projection, carried into the declared player type field by field, with its round-state
+ * declarations narrowed by `buildPlayerFacingRoundStateDeclarations`.
  */
 export function buildPlayerFacingEncounterForUser(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): PlayerFacingEncounterSession {
+  const projectedEncounter = buildPlayerSafeEncounterForUser(input);
+  const { controlledEncounterParticipantIds } = buildPlayerSafeCombatScopeForUser(input);
+
   return buildPlayerFacingEncounterSession({
-    projectedEncounter: buildPlayerSafeEncounterForUser(input),
+    projectedEncounter: {
+      ...projectedEncounter,
+      combatRoundState:
+        projectedEncounter.combatRoundState &&
+        buildPlayerFacingRoundStateDeclarations({
+          controlledEncounterParticipantIds,
+          state: projectedEncounter.combatRoundState,
+        }),
+    },
   });
 }
 
