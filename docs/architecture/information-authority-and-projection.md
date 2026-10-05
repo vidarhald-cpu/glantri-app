@@ -106,6 +106,67 @@ See [Architecture decision 0006](../decisions/architecture/0006-setting-foundati
    to the protected fact. Avoid late, ad hoc client filters and parallel
    viewer-unaware response paths.
 
+## GM inspection of player-facing surfaces
+
+A GM may inspect a participant through a player-facing Action or Combat
+surface, but inspection is a view, not a grant of that participant's authority.
+A GM viewing a player-facing Action/Combat surface for inspection must not act
+through player controls as though they were that participant. GM actions belong
+on GM-authorized command paths. Read-only inspection remains valid; player
+action controls do not.
+
+The control plane ratified this rule on
+[Forgejo #433](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/433)
+when accepting
+[PR #496](http://127.0.0.1:3001/recovery-admin/glantri-app/pulls/496), and
+recorded that the earlier ability for a GM to use player Action controls as the
+inspected participant is not an intended capability and does not need to be
+preserved. It is recorded here, through
+[Forgejo #498](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/498),
+because it is a negative rule: code that complies with it shows nothing to a
+reader, so a rule left only in the ratifying issue is easily lost.
+
+The hazard is not visible from either side alone. Player-facing components are
+written for a viewer who controls a participant. When such a component is
+rendered for a GM with an inspected participant, it can make that participant
+the controlled participant, and its player action handlers then act as them.
+The roleplay Action surface, for example, builds its player view with the
+inspected participant as `controlledScenarioParticipantId`. Nothing in the
+GM-side caller looks like an action path and nothing in the player component
+looks GM-aware, yet together they let a GM act as a player.
+
+Enforcement is opt-in and defaults to the unsafe value. The shared player
+components accept a `readOnlyInspection` prop that defaults to `false`:
+`PlayerRoleplayingEncounterScreen` in
+`apps/web/src/features/roleplay/RoleplayEncounterScreens.tsx` derives
+`canUsePlayerActions` from it, and `ScenarioPlayerCombatPageContent` gates its
+declaration and roll handlers on it. Before PR #496 the prop existed but no
+production caller passed it, so a GM inspecting a participant on the Action
+view could clear and make rolls as that player. PR #496 did not remove the
+mechanism; it passed the missing prop on the GM inspection branch of the Action
+view in `CampaignWorkspaceShell.tsx`. Compliance is a single prop at the call
+site, and its absence looks like nothing at all.
+
+Accordingly:
+
+1. Any surface that renders a player-facing component for a GM with an
+   inspected participant must pass `readOnlyInspection`. Omitting it fails
+   open: the GM receives working player controls for the inspected participant.
+2. The flag disables only the controls a component wires to it. A nested panel
+   that issues its own commands does not inherit it and must be checked
+   separately. PR #496 recorded that the player Combat surface's nested Item
+   interaction controls do not honour its inspection flag, which is why Combat
+   is not composed into the GM's Action view.
+3. A GM action the product requires belongs on a GM-authorized command path,
+   such as the GM proxy commands of the
+   [GM Combat Round Manager](../product/combat-panel-contract.md#2-gm-combat-round-manager),
+   not on a player control reached through inspection.
+
+QA reviewing a GM inspection entry point checks the rendered surface as the GM:
+the read-only view of the inspected participant remains usable, and every player
+action control for that participant, including those in nested panels, is
+disabled or absent.
+
 ## Perspective review
 
 Information projection is viewer-specific. At minimum, a role-sensitive or
