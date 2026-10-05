@@ -281,7 +281,6 @@ import {
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
-  buildPlayerFacingCombatContext,
   buildPlayerFacingCombatRoundCommand,
   buildPlayerFacingEncounterSession,
   buildPlayerFacingScenarioParticipant,
@@ -6971,85 +6970,44 @@ function sanitizePlayerSafeCurrentCombatResultsState(input: {
   };
 }
 
-function buildPlayerSafeCombatRollMutationEncounterForUser(input: {
-  encounter: EncounterSession;
-  scenarioParticipants: ScenarioParticipant[];
-  userId: string;
-}): EncounterSession {
-  return buildPlayerSafeEncounterForUser(input);
-}
-
 /**
- * Round-state declarations as a converted boundary returns them (#502 Tier 1, control-plane
- * rulings 2026-10-04). A declaration's modifier entries carry the canonical lifecycle and the
- * correction history — `gmOverride` with the GM's reason and user id, and diagnostics. Every combat
- * and phase context is rebuilt through `buildPlayerFacingCombatContext`, which keeps the context's
- * own fields and drops both.
- *
- * `keepOwnCombatContextAsR2Residual` leaves the combat context of the viewer's own declaration as the
- * projection produced it. That is the residual ruled R2 — accepted debt, pinned path by path in the
- * route tests — and it is ruled for the combat-declaration route only, until Tier 3 builds the round
- * state additively.
- */
-function buildPlayerFacingRoundStateDeclarations(input: {
-  controlledEncounterParticipantIds: ReadonlySet<string>;
-  keepOwnCombatContextAsR2Residual: boolean;
-  state: CombatRoundState;
-}): CombatRoundState {
-  return {
-    ...input.state,
-    participants: input.state.participants.map((participant) => {
-      const declaration = participant.declaration;
-      if (!declaration) return participant;
-      const phaseContexts = declaration.phaseContexts;
-      const isR2Residual =
-        input.keepOwnCombatContextAsR2Residual &&
-        input.controlledEncounterParticipantIds.has(participant.participantId);
-      return {
-        ...participant,
-        declaration: {
-          ...declaration,
-          combatContext:
-            declaration.combatContext && !isR2Residual
-              ? buildPlayerFacingCombatContext(declaration.combatContext)
-              : declaration.combatContext,
-          phaseContexts: phaseContexts && {
-            phase1: phaseContexts.phase1 && buildPlayerFacingCombatContext(phaseContexts.phase1),
-            phase2: phaseContexts.phase2 && buildPlayerFacingCombatContext(phaseContexts.phase2),
-          },
-        },
-      };
-    }),
-  };
-}
-
-/**
- * The player-facing encounter a converted boundary returns (#502, Tier 1): the per-viewer player
- * encounter projection, carried into the declared player type field by field, with its round-state
- * declarations narrowed by `buildPlayerFacingRoundStateDeclarations`.
+ * The player-facing encounter of every player response (#502 Tier 1; every player read and mutation
+ * since #507 Tier 2): the per-viewer player encounter projection, carried into the declared player
+ * type field by field, with its round-state participants and declarations rebuilt from named fields
+ * (`buildPlayerFacingEncounterSession`).
  */
 export function buildPlayerFacingEncounterForUser(input: {
   encounter: EncounterSession;
-  /** R2: set by the combat-declaration route only (`buildPlayerFacingRoundStateDeclarations`). */
+  /**
+   * R2 (#502 Tier 1 rulings): set by the combat-declaration route only. The viewer's own
+   * declarations keep their combat context as the projection produced it, pinned path by path in the
+   * route tests, until Tier 3 builds the round state additively.
+   */
   keepOwnCombatContextAsR2Residual?: true;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): PlayerFacingEncounterSession {
-  const projectedEncounter = buildPlayerSafeEncounterForUser(input);
-  const { controlledEncounterParticipantIds } = buildPlayerSafeCombatScopeForUser(input);
-
   return buildPlayerFacingEncounterSession({
-    projectedEncounter: {
-      ...projectedEncounter,
-      combatRoundState:
-        projectedEncounter.combatRoundState &&
-        buildPlayerFacingRoundStateDeclarations({
-          controlledEncounterParticipantIds,
-          keepOwnCombatContextAsR2Residual: input.keepOwnCombatContextAsR2Residual === true,
-          state: projectedEncounter.combatRoundState,
-        }),
-    },
+    keepDeclarationCombatContextAsR2ResidualFor:
+      input.keepOwnCombatContextAsR2Residual === true
+        ? buildPlayerSafeCombatScopeForUser(input).controlledEncounterParticipantIds
+        : undefined,
+    projectedEncounter: buildPlayerSafeEncounterForUser(input),
   });
+}
+
+/**
+ * The scenario participant of a player response (#507 Tier 2): the viewer's own participant,
+ * through the player-facing participant projection. Any other participant is omitted, so a player
+ * response never carries another participant's stored record.
+ */
+function buildPlayerFacingOwnScenarioParticipant(input: {
+  participant: ScenarioParticipant | undefined;
+  userId: string;
+}): PlayerFacingScenarioParticipant | undefined {
+  return input.participant && input.participant.controlledByUserId === input.userId
+    ? buildPlayerFacingScenarioParticipant(input.participant)
+    : undefined;
 }
 
 /**
@@ -7274,7 +7232,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter:
             access.mode === "gm"
               ? encounter
-              : buildPlayerSafeEncounterForUser({
+              : buildPlayerFacingEncounterForUser({
                   encounter,
                   scenarioParticipants,
                   userId: user.id,
@@ -7448,7 +7406,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter:
           access.mode === "gm"
             ? nextEncounter
-            : buildPlayerSafeEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: nextEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -7806,7 +7764,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           commandEnvelope: buildCombatRoundCommandEnvelope({ state: applied.state }),
           encounter: gmAuthorizedOperation
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -7900,7 +7858,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               }),
             )
             .map((encounter) =>
-              buildPlayerSafeEncounterForUser({
+              buildPlayerFacingEncounterForUser({
                 encounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -8126,7 +8084,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(404).send({ error: "Encounter not found." });
         }
         return {
-          encounter: buildPlayerSafeEncounterForUser({
+          encounter: buildPlayerFacingEncounterForUser({
             encounter: normalizedEncounter,
             scenarioParticipants,
             userId: user.id,
@@ -10199,7 +10157,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return {
           encounter:
             access.mode === "player"
-              ? buildPlayerSafeCombatRollMutationEncounterForUser({
+              ? buildPlayerFacingEncounterForUser({
                   encounter: savedEncounter,
                   scenarioParticipants,
                   userId: user.id,
@@ -10431,7 +10389,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         encounter:
           access.mode === "player"
-            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+            ? buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -10821,7 +10779,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         encounter:
           access.mode === "player"
-            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+            ? buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -11183,7 +11141,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         encounter:
           access.mode === "player"
-            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+            ? buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -11455,7 +11413,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         encounter:
           access.mode === "player"
-            ? buildPlayerSafeCombatRollMutationEncounterForUser({
+            ? buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -12047,7 +12005,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         encounter: gmAuthorizedOperation
           ? savedEncounter
-          : buildPlayerSafeCombatRollMutationEncounterForUser({
+          : buildPlayerFacingEncounterForUser({
               encounter: savedEncounter,
               scenarioParticipants,
               userId: user.id,
@@ -12436,12 +12394,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatExperience: rolled.result,
           encounter: gmAuthorizedOperation
             ? saved.encounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: saved.encounter,
                 scenarioParticipants,
                 userId: user.id,
               }),
-          participant: saved.participant,
+          participant: gmAuthorizedOperation
+            ? saved.participant
+            : buildPlayerFacingOwnScenarioParticipant({
+                participant: saved.participant,
+                userId: user.id,
+              }),
         };
       } catch (error) {
         return reply.code(400).send({
@@ -12749,12 +12712,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             commandEnvelope: buildCombatRoundCommandEnvelope({ state: stateToSave }),
             encounter: gmAuthorizedOperation
               ? saved.encounter
-              : buildPlayerSafeCombatRollMutationEncounterForUser({
+              : buildPlayerFacingEncounterForUser({
                   encounter: saved.encounter,
                   scenarioParticipants: responseScenarioParticipants,
                   userId: user.id,
                 }),
-            participant: updatedParticipant,
+            participant: gmAuthorizedOperation
+              ? updatedParticipant
+              : buildPlayerFacingOwnScenarioParticipant({
+                  participant: updatedParticipant,
+                  userId: user.id,
+                }),
             roll,
           };
         }
@@ -12785,12 +12753,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           commandEnvelope: buildCombatRoundCommandEnvelope({ state: stateToSave }),
           encounter: gmAuthorizedOperation
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants: responseScenarioParticipants,
                 userId: user.id,
               }),
-          participant: updatedParticipant,
+          participant: gmAuthorizedOperation
+            ? updatedParticipant
+            : buildPlayerFacingOwnScenarioParticipant({
+                participant: updatedParticipant,
+                userId: user.id,
+              }),
           roll,
         };
       } catch (error) {
@@ -12933,7 +12906,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
       const responseEncounter = gmAuthorizedOperation
         ? savedEncounter
-        : buildPlayerSafeCombatRollMutationEncounterForUser({
+        : buildPlayerFacingEncounterForUser({
             encounter: savedEncounter,
             scenarioParticipants,
             userId: user.id,
@@ -13157,7 +13130,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         const responseEncounter = gmAuthorizedOperation
           ? savedEncounter
-          : buildPlayerSafeEncounterForUser({
+          : buildPlayerFacingEncounterForUser({
               encounter: savedEncounter,
               scenarioParticipants,
               userId: user.id,
@@ -13176,7 +13149,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return {
           command: responseCommand,
           encounter: responseEncounter,
-          participant: scenarioParticipant,
+          participant: gmAuthorizedOperation
+            ? scenarioParticipant
+            : buildPlayerFacingOwnScenarioParticipant({
+                participant: scenarioParticipant,
+                userId: user.id,
+              }),
         };
       } catch (error) {
         return reply.code(400).send({
@@ -13451,12 +13429,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               userId: user.id,
             }),
           }),
-          encounter: buildPlayerSafeEncounterForUser({
+          encounter: buildPlayerFacingEncounterForUser({
             encounter: savedEncounter,
             scenarioParticipants,
             userId: user.id,
           }),
-          participant: scenarioParticipant,
+          participant: buildPlayerFacingOwnScenarioParticipant({
+            participant: scenarioParticipant,
+            userId: user.id,
+          }),
         };
       } catch (error) {
         return reply.code(400).send({
@@ -13697,15 +13678,29 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
 
       return {
-        command: rolled.command,
+        command: gmAuthorizedOperation
+          ? rolled.command
+          : buildPlayerSafeCombatRoundCommandForUser({
+              command: rolled.command,
+              ...buildPlayerSafeCombatScopeForUser({
+                encounter: saved.encounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
         encounter: gmAuthorizedOperation
           ? saved.encounter
-          : buildPlayerSafeCombatRollMutationEncounterForUser({
+          : buildPlayerFacingEncounterForUser({
               encounter: saved.encounter,
               scenarioParticipants,
               userId: user.id,
             }),
-        participant: saved.participant,
+        participant: gmAuthorizedOperation
+          ? saved.participant
+          : buildPlayerFacingOwnScenarioParticipant({
+              participant: saved.participant,
+              userId: user.id,
+            }),
       };
     } catch (error) {
       const persistenceErrorResponse = sendCombatWriteError(reply, error);
@@ -16688,7 +16683,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           encounter:
             access.mode === "gm"
               ? saved
-              : buildPlayerSafeCombatRollMutationEncounterForUser({
+              : buildPlayerFacingEncounterForUser({
                   encounter: saved,
                   scenarioParticipants,
                   userId: user.id,
@@ -17539,12 +17534,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter:
           access.mode === "gm"
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
               }),
-        participant: refreshedAttackerParticipant,
+        participant:
+          access.mode === "gm"
+            ? refreshedAttackerParticipant
+            : buildPlayerFacingOwnScenarioParticipant({
+                participant: refreshedAttackerParticipant,
+                userId: user.id,
+              }),
       };
     } catch (error) {
       return reply.code(400).send({
@@ -18210,12 +18211,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       });
 
       return {
-        command: parryCommand,
+        command:
+          access.mode === "gm" || !parryCommand
+            ? parryCommand
+            : buildPlayerSafeCombatRoundCommandForUser({
+                command: parryCommand,
+                ...buildPlayerSafeCombatScopeForUser({
+                  encounter: savedEncounter,
+                  scenarioParticipants,
+                  userId: user.id,
+                }),
+              }),
         commandEnvelope,
         encounter:
           access.mode === "gm"
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -18583,12 +18594,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               }),
               participant: undefined,
             };
+        const offensiveParryCommand = nextRoundState.commands.at(-1);
         return {
-          command: nextRoundState.commands.at(-1),
+          command:
+            access.mode === "gm" || !offensiveParryCommand
+              ? offensiveParryCommand
+              : buildPlayerSafeCombatRoundCommandForUser({
+                  command: offensiveParryCommand,
+                  ...buildPlayerSafeCombatScopeForUser({
+                    encounter: saved.encounter,
+                    scenarioParticipants,
+                    userId: user.id,
+                  }),
+                }),
           encounter:
             access.mode === "gm"
               ? saved.encounter
-              : buildPlayerSafeCombatRollMutationEncounterForUser({
+              : buildPlayerFacingEncounterForUser({
                   encounter: saved.encounter,
                   scenarioParticipants,
                   userId: user.id,
@@ -18829,7 +18851,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter:
           access.mode === "gm"
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -19037,7 +19059,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter:
           access.mode === "gm"
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -19221,7 +19243,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         encounter:
           access.mode === "gm"
             ? savedEncounter
-            : buildPlayerSafeCombatRollMutationEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: savedEncounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -20315,7 +20337,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return {
             encounter: gmAuthorizedOperation
               ? encounter
-              : buildPlayerSafeEncounterForUser({
+              : buildPlayerFacingEncounterForUser({
                   encounter,
                   scenarioParticipants,
                   userId: user.id,
@@ -20393,7 +20415,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return {
           encounter: gmAuthorizedOperation
             ? encounter
-            : buildPlayerSafeEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter,
                 scenarioParticipants,
                 userId: user.id,
@@ -20548,7 +20570,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       return {
         encounter: gmAuthorizedOperation
           ? savedEncounter
-          : buildPlayerSafeEncounterForUser({
+          : buildPlayerFacingEncounterForUser({
               encounter: savedEncounter,
               scenarioParticipants,
               userId: user.id,

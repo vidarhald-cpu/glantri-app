@@ -92,7 +92,7 @@ describe("combat route canonical-conformance guards", () => {
       "function sanitizePlayerSafeCurrentCombatResultsState(input:",
     );
     const sanitizerEnd = source.indexOf(
-      "function buildPlayerSafeCombatRollMutationEncounterForUser(input:",
+      "export function buildPlayerFacingEncounterForUser(input:",
       sanitizerStart,
     );
     const sanitizerSource = source.slice(sanitizerStart, sanitizerEnd);

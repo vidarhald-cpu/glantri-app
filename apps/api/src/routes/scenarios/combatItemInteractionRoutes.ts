@@ -31,7 +31,7 @@ import { requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import {
   buildPlayerSafeCombatScopeForUser,
-  buildPlayerSafeEncounterForUser,
+  buildPlayerFacingEncounterForUser,
 } from "./encounterRoutes";
 
 type ItemActionLifecycleOperation =
@@ -291,7 +291,7 @@ export function createCombatItemInteractionRoutes(
         return {
           encounter: isGm
             ? encounter
-            : buildPlayerSafeEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter,
                 scenarioParticipants,
                 userId: currentContext.user.id,
@@ -525,7 +525,7 @@ export function createCombatItemInteractionRoutes(
         return {
           encounter: isGm
             ? nextEncounter
-            : buildPlayerSafeEncounterForUser({
+            : buildPlayerFacingEncounterForUser({
                 encounter: nextEncounter,
                 scenarioParticipants,
                 userId: currentContext.user.id,

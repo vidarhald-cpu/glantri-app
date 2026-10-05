@@ -73,6 +73,12 @@ import {
   setDistanceBetween,
   setCombatRoundCombatExperienceDifficulty,
   undoLatestCombatRoundCommand,
+  openCombatRoundDisarmAfterContact,
+  buildOffensiveParryAttemptId,
+  buildPlayerFacingEncounterSession,
+  playerFacingCombatRoundCommandSchema,
+  playerFacingCombatRoundParticipantSchema,
+  playerFacingScenarioParticipantSchema,
 } from "@glantri/domain";
 import { weaponTemplates } from "@glantri/content/equipment";
 
@@ -29755,6 +29761,3433 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         expect(response.statusCode, response.body).toBe(200);
         expectGmBodyCarriesPrivateMaterial(response.json(), PARTICIPANT_KEYS);
       });
+    });
+  });
+});
+
+// ===== Forgejo #507, privacy hardening Tier 2: player responses against the player-facing types ==
+
+/** A zod schema as these tests read it: by `_def.typeName`, since `apps/api` does not import zod. */
+type PlayerTypeSchema = { _def: Record<string, unknown> & { typeName: string } };
+
+function unwrapPlayerTypeSchema(schema: PlayerTypeSchema): PlayerTypeSchema {
+  let current = schema;
+  for (;;) {
+    const def = current._def;
+    if (
+      ["ZodOptional", "ZodNullable", "ZodDefault", "ZodCatch", "ZodReadonly"].includes(def.typeName)
+    ) {
+      current = def.innerType as PlayerTypeSchema;
+    } else if (def.typeName === "ZodBranded") {
+      current = def.type as PlayerTypeSchema;
+    } else if (def.typeName === "ZodEffects") {
+      current = def.schema as PlayerTypeSchema;
+    } else if (def.typeName === "ZodLazy") {
+      current = (def.getter as () => PlayerTypeSchema)();
+    } else {
+      return current;
+    }
+  }
+}
+
+/**
+ * The keys of a player payload that its declared player-facing type does not name, at every level
+ * the type enumerates. The allow-list is the type itself (#507 ruling: additive allowed-field
+ * assertions, not a secret-field blacklist), so a key nobody named fails by default — whatever its
+ * name. An open record stops the walk: command `facts` is Tier 4's.
+ */
+function keysOutsidePlayerType(value: unknown, schema: PlayerTypeSchema, path: string): string[] {
+  if (value === undefined || value === null) return [];
+  const def = unwrapPlayerTypeSchema(schema)._def;
+  if (def.typeName === "ZodObject") {
+    const shape = (def.shape as () => Record<string, PlayerTypeSchema>)();
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, nested]) => {
+      if (nested === undefined) return [];
+      const keySchema = shape[key];
+      return keySchema
+        ? keysOutsidePlayerType(nested, keySchema, `${path}.${key}`)
+        : [`${path}.${key}`];
+    });
+  }
+  if (def.typeName === "ZodArray") {
+    return (value as unknown[]).flatMap((entry) =>
+      keysOutsidePlayerType(entry, def.type as PlayerTypeSchema, arrayEntryPath(path, entry)),
+    );
+  }
+  if (def.typeName === "ZodRecord") {
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, nested]) =>
+      keysOutsidePlayerType(nested, def.valueType as PlayerTypeSchema, `${path}{${key}}`),
+    );
+  }
+  if (def.typeName === "ZodUnion" || def.typeName === "ZodDiscriminatedUnion") {
+    const attempts = (def.options as PlayerTypeSchema[]).map((option) =>
+      keysOutsidePlayerType(value, option, path),
+    );
+    return (
+      attempts.find((attempt) => attempt.length === 0) ??
+      [...attempts].sort((left, right) => left.length - right.length)[0] ??
+      []
+    );
+  }
+  if (def.typeName === "ZodIntersection") {
+    const left = keysOutsidePlayerType(value, def.left as PlayerTypeSchema, path);
+    const right = keysOutsidePlayerType(value, def.right as PlayerTypeSchema, path);
+    return left.filter((key) => right.includes(key));
+  }
+  return [];
+}
+
+/** The top-level fields of the player-facing encounter, read off its only builder. */
+const PLAYER_ENCOUNTER_FIELDS = Object.keys(
+  buildPlayerFacingEncounterSession({
+    projectedEncounter: makeCombatEncounter() as unknown as EncounterSession,
+  }),
+);
+
+/**
+ * The round-state fields other than `participants` and `commands`: still the per-viewer projection's
+ * own values until Tier 3 types them. Named here, so a new round-state field fails until it is.
+ */
+const TIER3_ROUND_STATE_FIELDS = [
+  "activeParticipantId",
+  "adjustDistanceProposals",
+  "breakOffProposals",
+  "combatExperienceDifficulty",
+  "continuedContacts",
+  "currentCursor",
+  "currentStep",
+  "defenseSnapshots",
+  "disarmAttempts",
+  "disarmUnbalancedConditions",
+  "distanceState",
+  "encounterId",
+  "engagements",
+  "events",
+  "feintProposals",
+  "genericActions",
+  "gmBacktrackHold",
+  "missileReadiness",
+  "observationAttempts",
+  "observationRelationships",
+  "offensiveParryContests",
+  "phaseResolutionCursor",
+  "phaseResolutionResults",
+  "phaseResolutionStatuses",
+  "roundEndReview",
+  "roundNumber",
+  "rounds",
+  "selectedParticipantId",
+  "selectedStep",
+  "stepSnapshots",
+  "unbalancedConditions",
+];
+
+function roundStateKeysOutsidePlayerTypes(state: Record<string, unknown>, path: string): string[] {
+  return Object.entries(state).flatMap(([key, nested]) => {
+    if (nested === undefined) return [];
+    if (key === "participants") {
+      return (nested as unknown[]).flatMap((participant) =>
+        keysOutsidePlayerType(
+          participant,
+          playerFacingCombatRoundParticipantSchema as unknown as PlayerTypeSchema,
+          arrayEntryPath(`${path}.participants`, participant),
+        ),
+      );
+    }
+    if (key === "commands") {
+      return (nested as unknown[]).flatMap((command) =>
+        keysOutsidePlayerType(
+          command,
+          playerFacingCombatRoundCommandSchema as unknown as PlayerTypeSchema,
+          arrayEntryPath(`${path}.commands`, command),
+        ),
+      );
+    }
+    return TIER3_ROUND_STATE_FIELDS.includes(key) ? [] : [`${path}.${key}`];
+  });
+}
+
+function encounterKeysOutsidePlayerTypes(encounter: Record<string, unknown>, path: string) {
+  return Object.entries(encounter).flatMap(([key, nested]) => {
+    if (nested === undefined) return [];
+    if (!PLAYER_ENCOUNTER_FIELDS.includes(key)) return [`${path}.${key}`];
+    return key === "combatRoundState"
+      ? roundStateKeysOutsidePlayerTypes(nested as Record<string, unknown>, `${path}.${key}`)
+      : [];
+  });
+}
+
+/**
+ * Every key of a player response, legacy or `active-v1`, that a declared player-facing type does not
+ * name: the encounter and its round-state participants, declarations and commands, and every
+ * scenario participant and command the response carries.
+ */
+function playerResponseKeysOutsidePlayerTypes(body: Record<string, unknown>): string[] {
+  const participant = playerFacingScenarioParticipantSchema as unknown as PlayerTypeSchema;
+  return [
+    ...(body.encounter
+      ? encounterKeysOutsidePlayerTypes(body.encounter as Record<string, unknown>, "encounter")
+      : []),
+    ...((body.encounters as Array<Record<string, unknown>> | undefined) ?? []).flatMap(
+      (encounter) =>
+        encounterKeysOutsidePlayerTypes(encounter, arrayEntryPath("encounters", encounter)),
+    ),
+    ...(body.activeCombatState
+      ? roundStateKeysOutsidePlayerTypes(
+          body.activeCombatState as Record<string, unknown>,
+          "activeCombatState",
+        )
+      : []),
+    ...keysOutsidePlayerType(body.participant, participant, "participant"),
+    ...((body.updatedParticipants as unknown[] | undefined) ?? []).flatMap((entry) =>
+      keysOutsidePlayerType(entry, participant, arrayEntryPath("updatedParticipants", entry)),
+    ),
+    ...keysOutsidePlayerType(
+      body.command,
+      playerFacingCombatRoundCommandSchema as unknown as PlayerTypeSchema,
+      "command",
+    ),
+  ];
+}
+
+/**
+ * The account-identity-shaped keys of a payload, by category rather than by name (#507 ruling): a
+ * newly added `*UserId`, `*ByUser*`, `createdBy*` — or a bare `userId`, as a GM correction record
+ * carries — is caught without anyone listing it. Compared as a sorted list without
+ * de-duplication, so a second occurrence at a pinned path still fails (Tier 1 finding F1).
+ */
+const ACCOUNT_IDENTITY_KEY = /userid$|byuser|^createdby/i;
+
+function accountIdentityPaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) accountIdentityPaths(entry, arrayEntryPath(path, entry), found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      if (nested === undefined) continue;
+      const nestedPath = path ? `${path}.${key}` : key;
+      if (ACCOUNT_IDENTITY_KEY.test(key)) found.push(nestedPath);
+      accountIdentityPaths(nested, nestedPath, found);
+    }
+  }
+  return found;
+}
+
+const TIER2_PRIVATE = {
+  attackRoller: "SECRET_ATTACK_ROLLER",
+  cancellingUser: "SECRET_CANCELLING_USER",
+  combatExperienceRoller: "SECRET_CE_ROLLER",
+  submittingUser: "SECRET_SUBMITTING_USER",
+} as const;
+
+function tier2CombatExperience(roundNumber: number) {
+  return {
+    difficulty: 26,
+    durationRounds: 1,
+    finalTotal: 28,
+    label: "Steady",
+    modifierValue: 0,
+    needsEffectRow: false,
+    note: "Holds firm.",
+    resultBand: "active",
+    rollD20: 8,
+    rollTotal: 8,
+    rolledAt: "2026-01-01T00:00:30.000Z",
+    roundNumber,
+    skillTotal: 20,
+    trigger: "combat_start",
+  };
+}
+
+/**
+ * Populates, in a stored round state, every participant- and declaration-level location the player
+ * types omit or rebuild, with values the round-state schema keeps — the projection re-parses stored
+ * state, so only schema fields can ever reach it:
+ *
+ * - every declaration: `submittedByUserId`, `adjustDistance`, `secondaryActions`, a canonical
+ *   lifecycle and GM correction record in its combat and phase contexts (Tier 1's
+ *   `withPrivateDeclarationMaterial`), and `cancelledByUserId` on an attack opportunity;
+ * - every participant: a Combat Experience result with `rolledByUserId`, and `rolledByUserId` on
+ *   each attack result it holds.
+ *
+ * `declarations` first gives every participant without a declaration a minimal one, so that the
+ * declaration layer is populated on boundaries whose fixtures declare nothing. Only what a route
+ * saves is given one: a route never reads it, so the route behaves as it does on the fixture.
+ */
+function withTier2PrivateRoundState(
+  state: CombatRoundState,
+  options: { contexts?: boolean; declarations?: boolean } = {},
+): CombatRoundState {
+  const declared: CombatRoundState = options.declarations
+    ? {
+        ...state,
+        participants: state.participants.map((participant) =>
+          participant.declaration
+            ? participant
+            : {
+                ...participant,
+                declaration: {
+                  actionId: "parry",
+                  roundNumber: state.roundNumber,
+                  submittedBy: "player" as const,
+                },
+              },
+        ),
+      }
+    : state;
+  // `contexts: false` leaves the combat and phase contexts as stored: the combat-declaration
+  // route's own context is Tier 1's pinned R2 location, which Tier 1's tests own.
+  const withContexts =
+    options.contexts === false ? declared : withPrivateDeclarationMaterial(declared);
+  const participantIds = withContexts.participants.map((participant) => participant.participantId);
+  const rolledBy = <Result extends object>(result: Result) => ({
+    ...result,
+    rolledByUserId: TIER2_PRIVATE.attackRoller,
+  });
+  return {
+    ...withContexts,
+    participants: withContexts.participants.map((participant) => {
+      const opponentId =
+        participantIds.find((id) => id !== participant.participantId) ?? participant.participantId;
+      const declaration = participant.declaration;
+      return {
+        ...participant,
+        attackResults: Object.fromEntries(
+          Object.entries(participant.attackResults).map(([phase, result]) => [
+            phase,
+            result && rolledBy(result),
+          ]),
+        ),
+        attackResultsByOpportunity:
+          participant.attackResultsByOpportunity &&
+          Object.fromEntries(
+            Object.entries(participant.attackResultsByOpportunity).map(([id, result]) => [
+              id,
+              rolledBy(result),
+            ]),
+          ),
+        combatExperience: {
+          ...(participant.combatExperience ?? tier2CombatExperience(state.roundNumber)),
+          rolledByUserId: TIER2_PRIVATE.combatExperienceRoller,
+        },
+        declaration: declaration && {
+          ...declaration,
+          adjustDistance: declaration.adjustDistance ?? {
+            currentDistance: 2,
+            requestedDistance: 1,
+            targetParticipantId: opponentId,
+          },
+          // A declaration without attack opportunities gets one inert cancelled opportunity, so
+          // the location is populated on every declaration.
+          attackOpportunities: (
+            declaration.attackOpportunities ?? [
+              {
+                actionId: declaration.actionId,
+                cancelledAt: "2026-01-01T00:00:31.000Z",
+                id: `tier2-cancelled-opportunity:${participant.participantId}`,
+                origin: "declared" as const,
+                phase: "phase2" as const,
+                slot: "attack_2" as const,
+                status: "cancelled" as const,
+                targetParticipantId: opponentId,
+              },
+            ]
+          ).map((opportunity) => ({
+            ...opportunity,
+            cancelledByUserId: TIER2_PRIVATE.cancellingUser,
+          })),
+          secondaryActions: declaration.secondaryActions ?? [
+            { action: "observe_opponent" as const, targetParticipantId: opponentId },
+          ],
+          submittedByUserId: TIER2_PRIVATE.submittingUser,
+        },
+      } as CombatRoundState["participants"][number];
+    }),
+  };
+}
+
+function withTier2PrivateEncounter<Encounter extends Record<string, unknown>>(
+  encounter: Encounter,
+  options: { contexts?: boolean; declarations?: boolean } = {},
+): Encounter {
+  return encounter.combatRoundState
+    ? {
+        ...encounter,
+        combatRoundState: withTier2PrivateRoundState(
+          encounter.combatRoundState as CombatRoundState,
+          options,
+        ),
+      }
+    : encounter;
+}
+
+/**
+ * The private material that the stored state carries and the player response must not: the
+ * declaration-level identity and correction record, and the nested actor identities.
+ */
+function tier2PrivateMaterial(value: unknown) {
+  const json = JSON.stringify(value);
+  return {
+    attackRoller: json.includes(TIER2_PRIVATE.attackRoller),
+    cancellingUser: json.includes(TIER2_PRIVATE.cancellingUser),
+    combatExperienceRoller: json.includes(TIER2_PRIVATE.combatExperienceRoller),
+    correctionRecord: json.includes("SECRET_GM_OVERRIDE_REASON"),
+    submittingUser: json.includes(TIER2_PRIVATE.submittingUser),
+  };
+}
+
+const TIER2_NONE = {
+  attackRoller: false,
+  cancellingUser: false,
+  combatExperienceRoller: false,
+  correctionRecord: false,
+  submittingUser: false,
+} as const;
+
+/**
+ * The GM correction history as the GM reads it (#507 proof obligation 6): the `gmOverride` of every
+ * canonical transition a payload carries, wherever it sits.
+ */
+function gmCorrectionRecords(value: unknown, found: unknown[] = []): unknown[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) gmCorrectionRecords(entry, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      if (key === "canonicalTransitions" && Array.isArray(nested)) {
+        for (const transition of nested as Array<{ gmOverride?: unknown }>) {
+          if (transition?.gmOverride) found.push(transition.gmOverride);
+        }
+      }
+      gmCorrectionRecords(nested, found);
+    }
+  }
+  return found;
+}
+
+const TIER2_GM_CORRECTION_RECORD = expect.objectContaining({
+  reasonCode: "SECRET_GM_OVERRIDE_REASON",
+  userId: "SECRET_GM_OVERRIDE_USER",
+});
+
+/**
+ * Positive control. The per-viewer projection — the player-facing builders' input — carries exactly
+ * this fixture's populated private material for this viewer, so the player response's lack of it
+ * is the work of the player-facing types and not of an empty fixture (the #487 failure mode).
+ */
+function expectTier2MaterialReachesThePlayerBuilders(input: {
+  encounter: EncounterSession;
+  expected: Partial<Record<keyof typeof TIER2_NONE, true>>;
+  scenarioParticipants: ScenarioParticipant[];
+}) {
+  const projected = buildPlayerSafeEncounterForUser({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+    userId: mocks.playerUser.id,
+  });
+  expect(tier2PrivateMaterial(projected.combatRoundState?.participants)).toEqual({
+    ...TIER2_NONE,
+    ...input.expected,
+  });
+}
+
+/**
+ * Account identities a player response legitimately carries, and the pinned residuals outside Tier
+ * 2's types. Each entry is the viewer's own id unless it says otherwise.
+ */
+const OWN_PARTICIPANT_CONTROLLER = {
+  // The viewer's own participant names its controller: the viewer (Tier 1's participant type).
+  active: ["updatedParticipants[participant-1].controlledByUserId"],
+  legacy: ["participant.controlledByUserId"],
+} as const;
+
+type Tier2Viewer = typeof mocks.playerUser | typeof mocks.adminUser;
+type Tier2Subject = {
+  app: Awaited<ReturnType<typeof buildScenarioTestApp>>;
+  request: { method: "GET" | "POST"; payload?: Record<string, unknown>; url: string };
+};
+type Tier2Material = Partial<Record<keyof typeof TIER2_NONE, true>>;
+
+/**
+ * One converted player boundary. `arrange` sets up a scenario in which `viewer`'s request succeeds —
+ * mocks, fixtures, and any requests that must precede it — and returns the request under test. The
+ * private material is added to that request's own encounter only. A mutation gets it in what it
+ * saves, after the route's domain logic, so the route behaves exactly as it does on the fixture and
+ * only the response projections see the material. A read, or a request that answers without saving,
+ * gets it in what it loads (`inject: "load"`).
+ */
+type Tier2Case = {
+  active?: boolean;
+  arrange: (viewer: Tier2Viewer) => Promise<Tier2Subject>;
+  /** The exact top-level keys of the GM's legacy response, where they prove the path taken. */
+  gmKeys?: readonly string[];
+  /** Populate the combat and phase contexts too (default); `false` for Tier 1's R2 route. */
+  injectContexts?: boolean;
+  /** Account-identity paths a player response may carry, each explained where it is listed. */
+  identityPaths?: { active?: readonly string[]; legacy?: readonly string[] };
+  inject?: "load" | "save";
+  name: string;
+  /** The exact top-level keys of the player's legacy response. */
+  playerKeys: readonly string[];
+  /** Keys outside the player-facing types a player response may carry: only the ruled R2. */
+  residualKeys?: { active?: readonly string[]; legacy?: readonly string[] };
+  /**
+   * Private material the player response still carries: only combat-declaration's ruled R2
+   * residual (the viewer's own combat context, pinned path by path by Tier 1's tests).
+   */
+  playerMaterial?: Tier2Material;
+  /** Exactly the Tier 2 material this fixture populates where the player's projection reads it. */
+  populated: Tier2Material;
+  /** SECRET values a player response may carry, each explained where it is listed. */
+  secretPaths?: { active?: readonly string[]; legacy?: readonly string[] };
+};
+
+function withTier2Material(mode: "load" | "save", options: { contexts?: boolean } = {}) {
+  const seen: EncounterSession[] = [];
+  if (mode === "load") {
+    const load = mocks.encounterService.getEncounterById.getMockImplementation();
+    if (!load) throw new Error("The case must mock getEncounterById.");
+    mocks.encounterService.getEncounterById.mockImplementation(async (...args: unknown[]) => {
+      const encounter = withTier2PrivateEncounter(await load(...args), options);
+      seen.push(encounter);
+      return encounter;
+    });
+    const list = mocks.encounterService.listEncountersByScenario.getMockImplementation();
+    if (list) {
+      mocks.encounterService.listEncountersByScenario.mockImplementation(
+        async (...args: unknown[]) =>
+          ((await list(...args)) as EncounterSession[]).map((stored) => {
+            const encounter = withTier2PrivateEncounter(stored, options);
+            seen.push(encounter);
+            return encounter;
+          }),
+      );
+    }
+  } else {
+    const save = mocks.encounterService.updateEncounter.getMockImplementation();
+    if (!save) throw new Error("The case must mock updateEncounter.");
+    mocks.encounterService.updateEncounter.mockImplementation(
+      async (update: { session: EncounterSession }) => {
+        const session = withTier2PrivateEncounter(update.session, {
+          ...options,
+          declarations: true,
+        });
+        seen.push(session);
+        return save({ ...update, session });
+      },
+    );
+  }
+  return {
+    encounter: () => {
+      const encounter = seen.at(-1);
+      if (!encounter) throw new Error("The request under test neither loaded nor saved.");
+      return encounter;
+    },
+  };
+}
+
+async function runTier2Case(testCase: Tier2Case, viewer: Tier2Viewer, headers = {}) {
+  const subject = await testCase.arrange(viewer);
+  const material = withTier2Material(testCase.inject ?? "save", {
+    contexts: testCase.injectContexts,
+  });
+  mocks.requireAuthenticatedUser.mockResolvedValue(viewer);
+  try {
+    const response = await subject.app.inject({ ...subject.request, headers });
+    return {
+      encounter: response.statusCode === 200 ? material.encounter() : undefined,
+      response,
+      scenarioParticipants: (await mocks.scenarioService.listScenarioParticipants(
+        "scenario-1",
+      )) as ScenarioParticipant[],
+    };
+  } finally {
+    await subject.app.close();
+  }
+}
+
+/** Sorted, not de-duplicated; command ids embed request timestamps, which are normalised. */
+function sortedPaths(paths: readonly string[]) {
+  return paths.map((path) => path.replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "<time>")).sort();
+}
+
+/**
+ * The proof for one converted boundary (#507 proof obligations 1 and 4): the player's response,
+ * legacy and `active-v1`, carries only keys its player-facing types name, no account identity
+ * beyond the listed ones, and none of the populated private material; the GM's response in the same
+ * scenario carries that material, and the GM reads the correction history from it (obligation 6);
+ * and the per-viewer projection the player-facing builders receive carries it too, so the player's
+ * lack of it is theirs.
+ */
+function describeTier2Case(testCase: Tier2Case) {
+  describe(testCase.name, () => {
+    it("returns only player-facing values to the player", async () => {
+      const { encounter, response, scenarioParticipants } = await runTier2Case(
+        testCase,
+        mocks.playerUser,
+      );
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(sortedPaths(Object.keys(body))).toEqual(sortedPaths(testCase.playerKeys));
+      expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual(
+        sortedPaths(testCase.residualKeys?.legacy ?? []),
+      );
+      expect(sortedPaths(accountIdentityPaths(body))).toEqual(
+        sortedPaths(testCase.identityPaths?.legacy ?? []),
+      );
+      expect(sortedPaths(secretValuePaths(body))).toEqual(
+        sortedPaths(testCase.secretPaths?.legacy ?? []),
+      );
+      expect(tier2PrivateMaterial(body)).toEqual({ ...TIER2_NONE, ...testCase.playerMaterial });
+      expect(JSON.stringify(body)).not.toContain("submittedByUserId");
+      expectTier2MaterialReachesThePlayerBuilders({
+        encounter: encounter!,
+        expected: testCase.populated,
+        scenarioParticipants,
+      });
+    });
+
+    if (testCase.active) {
+      it("returns only player-facing values through the active combat response", async () => {
+        const { response } = await runTier2Case(
+          testCase,
+          mocks.playerUser,
+          ACTIVE_RESPONSE_HEADERS,
+        );
+
+        expect(response.statusCode, response.body).toBe(200);
+        const body = response.json();
+        expect(body.version).toBe(1);
+        expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual(
+          sortedPaths(testCase.residualKeys?.active ?? []),
+        );
+        expect(sortedPaths(accountIdentityPaths(body))).toEqual(
+          sortedPaths(testCase.identityPaths?.active ?? []),
+        );
+        expect(sortedPaths(secretValuePaths(body))).toEqual(
+          sortedPaths(testCase.secretPaths?.active ?? []),
+        );
+        expect(tier2PrivateMaterial(body)).toEqual({ ...TIER2_NONE, ...testCase.playerMaterial });
+        expect(JSON.stringify(body)).not.toContain("submittedByUserId");
+      });
+    }
+
+    it("keeps every private field for the GM", async () => {
+      const { response } = await runTier2Case(testCase, mocks.adminUser);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(tier2PrivateMaterial(response.json())).toMatchObject(testCase.populated);
+      if (testCase.populated.correctionRecord) {
+        expect(gmCorrectionRecords(response.json())).toContainEqual(TIER2_GM_CORRECTION_RECORD);
+      }
+      if (testCase.gmKeys) {
+        expect(sortedPaths(Object.keys(response.json()))).toEqual(sortedPaths(testCase.gmKeys));
+      }
+    });
+  });
+}
+
+describe("#507 privacy hardening Tier 2 — player responses against the player-facing types", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.requireAdminUser.mockResolvedValue(mocks.adminUser);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+  });
+
+  /**
+   * Both participants have declared and initiative is resolved, so each viewer sees the other
+   * player's declaration (the cross-player case Tier 2 opens with). The other player's declaration
+   * carries the GM's correction record and account id.
+   */
+  function declaredPhaseScenario(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+    const route = setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: withPrivateCommandFacts(withTier2PrivateRoundState(fixture.roundState)),
+        gmPrivateClosingNote: "SECRET_CLOSING_NOTE",
+      },
+      participants: [
+        withPrivateParticipantMaterial(fixture.participants[0]!),
+        fixture.participants[1]!,
+      ],
+      user,
+    });
+    return route;
+  }
+
+  describe("GET /encounters/:encounterId", () => {
+    const read = async () => {
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+      await app.close();
+      return response;
+    };
+
+    it("returns the player encounter with only player-facing round-state participants", async () => {
+      const route = declaredPhaseScenario(mocks.playerUser);
+      const response = await read();
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(Object.keys(body)).toEqual(["encounter"]);
+      expect(playerResponseKeysOutsidePlayerTypes(body)).toEqual([]);
+      expect(accountIdentityPaths(body)).toEqual([]);
+      expect(secretValuePaths(body)).toEqual([]);
+      expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
+      // The other player's declaration still reaches the viewer, rebuilt.
+      const other = body.encounter.combatRoundState.participants.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-2",
+      );
+      expect(other.declaration).toMatchObject({ actionId: "double_attack", submittedBy: "gm" });
+      expectTier2MaterialReachesThePlayerBuilders({
+        encounter: route.encounter as unknown as EncounterSession,
+        expected: {
+          cancellingUser: true,
+          combatExperienceRoller: true,
+          correctionRecord: true,
+          submittingUser: true,
+        },
+        scenarioParticipants: route.participants,
+      });
+    });
+
+    it("keeps every private field for the GM", async () => {
+      declaredPhaseScenario(mocks.adminUser);
+      const response = await read();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(tier2PrivateMaterial(response.json())).toMatchObject({
+        cancellingUser: true,
+        combatExperienceRoller: true,
+        correctionRecord: true,
+        submittingUser: true,
+      });
+      expect(gmCorrectionRecords(response.json())).toContainEqual(TIER2_GM_CORRECTION_RECORD);
+      expect(response.json().encounter.gmPrivateClosingNote).toBe("SECRET_CLOSING_NOTE");
+    });
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: {
+            currentStep: "initiative_phase_1",
+            participants: [
+              {
+                declaration: {
+                  actionId: "attack_parry",
+                  roundNumber: 1,
+                  submittedAt: "2026-01-01T00:00:30.000Z",
+                  submittedBy: "player",
+                },
+                initiatives: {},
+                label: "The Gladiator",
+                participantId: "encounter-participant-1",
+                stepStatuses: {
+                  initiative_phase_1: "pending",
+                  initiative_phase_2: "pending",
+                  phase_1_actions: "pending",
+                  phase_2_actions: "pending",
+                  review_action_modifiers: "complete",
+                  review_phase_2_actions: "pending",
+                  review_phase_2_damage: "pending",
+                  review_phase_2_modifiers: "pending",
+                  round_summary: "pending",
+                  select_actions: "submitted",
+                },
+              },
+            ],
+            roundNumber: 1,
+          },
+        },
+        participant: withPrivateParticipantMaterial(makeCombatScenarioParticipant()),
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            initiativeBase: 3,
+            initiativeModifierAdjustment: -1,
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-initiative",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-initiative",
+    playerKeys: ["encounter", "initiative"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        combatExperienceWindowOpen: true,
+        participant: withPrivateParticipantMaterial(
+          makeCombatScenarioParticipant({
+            snapshot: {
+              displayName: "The Gladiator",
+              sheetSummary: {
+                draftView: {
+                  skills: [
+                    {
+                      effectiveSkillNumber: 7,
+                      linkedStatAverage: 14,
+                      name: "Combat Experience",
+                      skillId: "combat_experience",
+                      totalSkill: 21,
+                    },
+                  ],
+                },
+              },
+            },
+          }),
+        ),
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.2);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: { scenarioParticipantId: "participant-1" },
+          url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+        },
+      };
+    },
+    identityPaths: {
+      // `combatExperience` is the route's presentation of the viewer's own roll, not a participant
+      // or encounter sibling: outside Tier 2's scope, recorded for the handback.
+      active: [
+        ...OWN_PARTICIPANT_CONTROLLER.active,
+        "mutationPresentation.combatExperience.rolledByUserId",
+      ],
+      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy, "combatExperience.rolledByUserId"],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-combat-experience",
+    playerKeys: ["combatExperience", "encounter", "participant"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const fixture = makeDistanceControlReviewFixture();
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: fixture.encounter,
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          ...fixture.participants.slice(1),
+        ],
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.2);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            distanceProposalId: fixture.proposalId,
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-distance-control",
+        },
+      };
+    },
+    identityPaths: {
+      // The viewer's own distance-control roll, in the round-end review (Tier 3's round state) and
+      // in the facts of its command (Tier 4's facts allow-lists).
+      active: [
+        ...OWN_PARTICIPANT_CONTROLLER.active,
+        "activeCombatState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.nextProposal.participantA.result.rolledByUserId",
+        "activeCombatState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.rolledParticipantRoll.rolledByUserId",
+        "activeCombatState.roundEndReview.proposedDistances[round-end:1:distance:encounter-participant-1::encounter-participant-2].participantA.result.rolledByUserId",
+      ],
+      legacy: [
+        ...OWN_PARTICIPANT_CONTROLLER.legacy,
+        "command.facts.nextProposal.participantA.result.rolledByUserId",
+        "command.facts.rolledParticipantRoll.rolledByUserId",
+        "encounter.combatRoundState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.nextProposal.participantA.result.rolledByUserId",
+        "encounter.combatRoundState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.rolledParticipantRoll.rolledByUserId",
+        "encounter.combatRoundState.roundEndReview.proposedDistances[round-end:1:distance:encounter-participant-1::encounter-participant-2].participantA.result.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-distance-control",
+    playerKeys: ["command", "encounter", "participant"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const fixture = makeContinuedContactDistanceChoiceFixture();
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: fixture.encounter,
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          ...fixture.participants.slice(1),
+        ],
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            chosenDistance: 2,
+            distanceProposalId: fixture.proposalId,
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/commit-distance-control",
+        },
+      };
+    },
+    identityPaths: OWN_PARTICIPANT_CONTROLLER,
+    name: "POST /encounters/:encounterId/combat-round/commit-distance-control",
+    playerKeys: ["command", "encounter", "participant"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const fixture = makeHealthCheckReviewFixture();
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: fixture.encounter,
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          ...fixture.participants.slice(1),
+        ],
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.9);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            expectedParticipantRevision: fixture.participants[0]!.updatedAt,
+            healthRollId: fixture.healthRollId,
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-health-check",
+        },
+      };
+    },
+    identityPaths: {
+      // The viewer's own health roll, in the round-end review (Tier 3's round state).
+      active: [
+        ...OWN_PARTICIPANT_CONTROLLER.active,
+        "activeCombatState.roundEndReview.participantReviews.encounter-participant-1.proposedHealthRolls[round-end:10:encounter-participant-1:external-bleed:player-bleed:health].result.rolledByUserId",
+      ],
+      legacy: [
+        ...OWN_PARTICIPANT_CONTROLLER.legacy,
+        "encounter.combatRoundState.roundEndReview.participantReviews.encounter-participant-1.proposedHealthRolls[round-end:10:encounter-participant-1:external-bleed:player-bleed:health].result.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-health-check",
+    playerKeys: ["command", "encounter", "participant"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const fixture = makeCriticalRollMutationFixture();
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: fixture.state,
+          participants: fixture.encounterParticipants,
+        },
+        user: viewer,
+      });
+      mocks.scenarioService.listScenarioParticipants.mockResolvedValue(
+        fixture.scenarioParticipants,
+      );
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            ...buildDownstreamTaskPayload(fixture.state, "roll_critical"),
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-critical",
+        },
+      };
+    },
+    identityPaths: {
+      // Phase resolution results are Tier 3's round state, not a round-state participant; Tier 1
+      // recorded `damageResult.createdByUserId` among their unruled nested locations.
+      active: [
+        "activeCombatState.phaseResolutionResults[].criticalRoll.rolledByUserId",
+        "activeCombatState.phaseResolutionResults[].damageResult.createdByUserId",
+        "activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
+      ],
+      legacy: [
+        "encounter.combatRoundState.phaseResolutionResults[].criticalRoll.rolledByUserId",
+        "encounter.combatRoundState.phaseResolutionResults[].damageResult.createdByUserId",
+        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-critical",
+    playerKeys: ["encounter"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      // A graze: the attacking player rolls its damage (`makeGrazeDamageMutationFixture`).
+      const fixture = makeGrazeDamageMutationFixture();
+      const state: CombatRoundState = {
+        ...fixture.stateAfterLocation,
+        stepSnapshots: [
+          {
+            attackSummary: {
+              attackMode: "C",
+              dmb: "8",
+              initiative: "3",
+              maxCrits: "FS",
+              ob: "10",
+              weaponName: "Broad sword",
+            },
+            committedAt: "2026-01-01T00:02:00.000Z",
+            id: "snapshot-graze-attacker",
+            participantId: "encounter-participant-1",
+            participantLabel: "The Gladiator",
+            phase: "phase1",
+            roundNumber: fixture.stateAfterLocation.roundNumber,
+            step: "phase_1_actions",
+          },
+          {
+            committedAt: "2026-01-01T00:02:00.000Z",
+            defenseSummary: { db: "11", dm: "0", parry: "9", sourceName: "Sword / shield" },
+            id: "snapshot-graze-defender",
+            participantId: "encounter-participant-2",
+            participantLabel: "City guard",
+            phase: "phase1",
+            roundNumber: fixture.stateAfterLocation.roundNumber,
+            step: "phase_1_actions",
+          },
+        ],
+      };
+      setupCombatDeclarationRoute({
+        encounter: { combatRoundState: state, participants: fixture.encounterParticipants },
+        participants: fixture.scenarioParticipants,
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            ...buildDownstreamTaskPayload(state, "resolve_damage"),
+            scenarioParticipantId: viewer === mocks.playerUser ? "participant-1" : undefined,
+          },
+          url: "/encounters/encounter-1/combat-round/resolve-phase-damage",
+        },
+      };
+    },
+    identityPaths: {
+      // Phase resolution results: Tier 3's round state (see roll-critical).
+      active: [
+        "activeCombatState.phaseResolutionResults[].damageResult.createdByUserId",
+        "activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
+      ],
+      legacy: [
+        "encounter.combatRoundState.phaseResolutionResults[].damageResult.createdByUserId",
+        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/resolve-phase-damage",
+    playerKeys: ["commandEnvelope", "encounter"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  /** The viewer controls the Continued Contact; the other player's participant is Unbalanced. */
+  async function arrangeContinuedContactMaintenance(viewer: Tier2Viewer, escapes: boolean) {
+    const fixture = makeContinuedContactMaintenanceFixture();
+    setupMutableCombatRouteState({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    vi.spyOn(Math, "random").mockReturnValue(0.2);
+    const app = await buildScenarioTestApp();
+    if (escapes) {
+      // The affected side has rolled (the GM proxies the other player), so the viewer's roll
+      // resolves the contest: the affected participant escapes and its Unbalanced effect ends.
+      const affected = await app.inject({
+        method: "POST",
+        payload: {
+          contestId: fixture.contestId,
+          opponentParticipantId: "encounter-participant-1",
+          scenarioParticipantId: "participant-2",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+      });
+      expect(affected.statusCode, affected.body).toBe(200);
+    }
+    void viewer;
+    return {
+      app,
+      request: {
+        method: "POST" as const,
+        payload: {
+          contestId: fixture.contestId,
+          opponentParticipantId: "encounter-participant-2",
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-continued-contact-maintenance",
+      },
+    };
+  }
+
+  describeTier2Case({
+    active: true,
+    arrange: (viewer) => arrangeContinuedContactMaintenance(viewer, false),
+    gmKeys: ["command", "commandEnvelope", "encounter", "roll"],
+    identityPaths: {
+      // The viewer's own maintenance roll: in the round-end review (Tier 3's round state) and as
+      // the route's `roll` presentation, which is not a participant or encounter sibling.
+      active: [
+        "activeCombatState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
+        "mutationPresentation.roll.rolledByUserId",
+      ],
+      legacy: [
+        "encounter.combatRoundState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
+        "roll.rolledByUserId",
+      ],
+    },
+
+    name: "POST /encounters/:encounterId/combat-round/roll-continued-contact-maintenance (contest open)",
+    playerKeys: ["command", "commandEnvelope", "encounter", "roll"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: (viewer) => arrangeContinuedContactMaintenance(viewer, true),
+    // The GM receives the other player's participant whose Unbalanced effect ended; the player
+    // does not, because it is not theirs.
+    gmKeys: ["command", "commandEnvelope", "encounter", "participant", "roll"],
+    identityPaths: {
+      // The viewer's own maintenance roll: in the round-end review (Tier 3's round state) and as
+      // the route's `roll` presentation, which is not a participant or encounter sibling.
+      active: [
+        "activeCombatState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
+        "mutationPresentation.roll.rolledByUserId",
+      ],
+      legacy: [
+        "encounter.combatRoundState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
+        "roll.rolledByUserId",
+      ],
+    },
+
+    name: "POST /encounters/:encounterId/combat-round/roll-continued-contact-maintenance (escaped: the other player's participant changed)",
+    playerKeys: ["command", "commandEnvelope", "encounter", "roll"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  // ----- Generic actions and Combat Tasks --------------------------------------------------------
+
+  function arrangeGenericActionRoll() {
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: "participant-1",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-2",
+        label: "Visible guard",
+        order: 1,
+        scenarioParticipantId: "participant-2",
+      }),
+    ];
+    const encounter = makeCombatEncounter({
+      participants: encounterParticipants,
+      roleplayState: {
+        visibility: { "encounter-participant-1": { "encounter-participant-2": true } },
+      },
+    }) as EncounterSession;
+    encounter.combatRoundState = combatRoundStateSchema.parse({
+      ...initializeCombatRoundState({ encounter }),
+      genericActions: [
+        {
+          createdAt: "2026-09-18T08:00:00.000Z",
+          duration: { kind: "round" },
+          id: "generic-action-1",
+          intent: "Bar the gate.",
+          lastUpdatedAt: "2026-09-18T08:00:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          rollRequest: {
+            basis: { baseValue: 14, kind: "stat", statId: "dex", statLabel: "Dexterity" },
+            difficulty: 26,
+          },
+          status: "active",
+        },
+      ],
+    });
+    const participants = [
+      makeCombatScenarioParticipant({ id: "participant-1" }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: { displayName: "Visible guard" },
+      }),
+    ] as unknown as ScenarioParticipant[];
+    setupCombatDeclarationRoute({ encounter, participants, user: mocks.playerUser });
+    return setupMutableCombatRouteState({ encounter, participants, user: mocks.playerUser });
+  }
+
+  const GENERIC_ACTION_ROLL = {
+    method: "POST" as const,
+    url: "/encounters/encounter-1/combat-round/generic-actions",
+  };
+
+  describeTier2Case({
+    arrange: async () => {
+      const mutable = arrangeGenericActionRoll();
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          ...GENERIC_ACTION_ROLL,
+          payload: {
+            actionId: "generic-action-1",
+            expectedRevision: mutable.encounter.updatedAt,
+            operation: "roll",
+          },
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/generic-actions (roll)",
+    playerKeys: ["encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const mutable = arrangeGenericActionRoll();
+      const app = await buildScenarioTestApp();
+      // The first roll; the request under test repeats it and is served the stored result.
+      mocks.requireAuthenticatedUser.mockResolvedValue(viewer);
+      const first = await app.inject({
+        ...GENERIC_ACTION_ROLL,
+        payload: {
+          actionId: "generic-action-1",
+          expectedRevision: mutable.encounter.updatedAt,
+          operation: "roll",
+        },
+      });
+      expect(first.statusCode, first.body).toBe(200);
+      return {
+        app,
+        request: {
+          ...GENERIC_ACTION_ROLL,
+          payload: { actionId: "generic-action-1", expectedRevision: "stale", operation: "roll" },
+        },
+      };
+    },
+    inject: "load",
+    name: "POST /encounters/:encounterId/combat-round/generic-actions (repeated roll)",
+    playerKeys: ["encounter"],
+    populated: { combatExperienceRoller: true },
+  });
+
+  function makeTier2PerformTaskFixture() {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = encounterSessionSchema.parse(
+      makeCombatEncounter({ participants: encounterParticipants }),
+    );
+    const initial = initializeCombatRoundState({ encounter: baseEncounter });
+    const taskId = "round:1:participant:encounter-participant-1:declaration:perform_task";
+    const state = combatRoundStateSchema.parse({
+      ...initial,
+      commands: [
+        {
+          afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-i1",
+          participantId: "encounter-participant-1",
+          roundNumber: 1,
+          step: "i1",
+          type: "roll_initiative_phase1",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      genericActions: [
+        {
+          createdAt: "2026-01-01T00:01:00.000Z",
+          createdByUserId: "player-1",
+          declarationKind: "perform_task",
+          duration: { kind: "gm_decided" },
+          id: taskId,
+          intent: "Force the portcullis winch.",
+          lastUpdatedAt: "2026-01-01T00:01:00.000Z",
+          ownerParticipantId: "encounter-participant-1",
+          progress: { completedRounds: 0 },
+          status: "declared",
+        },
+      ],
+      participants: initial.participants.map((participant, index) => ({
+        ...participant,
+        declaration: {
+          actionId: index === 0 ? "perform_task" : "parry",
+          intent:
+            index === 0
+              ? {
+                  primaryAction: {
+                    actionId: "perform_task",
+                    description: "Force the portcullis winch.",
+                    taskId,
+                  },
+                  relativePositions: [],
+                }
+              : undefined,
+          roundNumber: 1,
+          submittedAt: "2026-01-01T00:01:00.000Z",
+          submittedBy: "player",
+        },
+      })),
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        substep: "perform_task",
+      },
+      phaseResolutionStatuses: {
+        "encounter-participant-1": {
+          phase1: { substep: "perform_task", updatedAt: "2026-01-01T00:01:00.000Z" },
+        },
+      },
+      selectedParticipantId: "encounter-participant-1",
+      selectedStep: "phase_1_actions",
+    });
+    const encounter = encounterSessionSchema.parse({
+      ...baseEncounter,
+      combatRoundState: state,
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const participants = [
+      makeCombatScenarioParticipant({
+        controlledByUserId: mocks.playerUser.id,
+        id: "participant-1",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+          displayName: "The Gladiator",
+          sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+      makeCombatScenarioParticipant({
+        controlledByUserId: "gm-1",
+        id: "participant-2",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-2", "City guard"),
+          displayName: "City guard",
+          sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+    ] as unknown as ScenarioParticipant[];
+    return { encounter, participants };
+  }
+
+  function tier2PerformTaskDescriptor(encounter: EncounterSession) {
+    const state = combatRoundStateSchema.parse(encounter.combatRoundState);
+    const task = getCurrentExecutableCombatTasks(buildCombatProgressionProjection(state))[0]!;
+    return {
+      actionId: task.identity.actionId,
+      executionGroupId: task.executionGroupId,
+      expectedRevision: encounter.updatedAt,
+      processId: task.processId,
+      scenarioParticipantId: "participant-1",
+      stageId: task.stageId,
+      taskId: task.id,
+      visibleToParticipantIds: [],
+    };
+  }
+
+  /** The GM reviews the player's Perform Task, then the request under test acts on it. */
+  async function arrangeReviewedPerformTask(review: Record<string, unknown>) {
+    const prepared = makeTier2PerformTaskFixture();
+    const mutable = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const reviewed = await app.inject({
+      method: "POST",
+      payload: { ...tier2PerformTaskDescriptor(mutable.encounter), ...review },
+      url: "/encounters/encounter-1/combat-round/review-combat-task",
+    });
+    expect(reviewed.statusCode, reviewed.body).toBe(200);
+    return { app, mutable };
+  }
+
+  describeTier2Case({
+    arrange: async () => {
+      const { app, mutable } = await arrangeReviewedPerformTask({
+        duration: { kind: "rounds", rounds: 2 },
+        rollKind: "none",
+      });
+      return {
+        app,
+        request: {
+          method: "POST",
+          payload: tier2PerformTaskDescriptor(mutable.encounter),
+          url: "/encounters/encounter-1/combat-round/advance-combat-task",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/advance-combat-task",
+    playerKeys: ["command", "commandEnvelope", "encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    arrange: async () => {
+      const { app, mutable } = await arrangeReviewedPerformTask({
+        difficulty: 26,
+        duration: { kind: "round" },
+        environmentDescription: "The rusted winch housing.",
+        referenceKind: "environment",
+        rollKind: "stat",
+        statId: "dex",
+      });
+      return {
+        app,
+        request: {
+          method: "POST",
+          payload: tier2PerformTaskDescriptor(mutable.encounter),
+          url: "/encounters/encounter-1/combat-round/roll-combat-task",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-combat-task",
+    playerKeys: ["command", "commandEnvelope", "encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  // ----- Adjust Distance and Break Off ------------------------------------------------------------
+
+  function adjustDistanceRoundState(input: {
+    defenderResponse: "allow" | "oppose" | "pending";
+    status: "awaiting_defender_response" | "awaiting_rolls";
+  }) {
+    return combatRoundStateSchema.parse({
+      adjustDistanceProposals: [
+        {
+          attackerParticipantId: "encounter-participant-1",
+          currentDistance: 3,
+          defenderParticipantId: "encounter-participant-2",
+          defenderResponse: input.defenderResponse,
+          direction: "closer",
+          id: "distance-proposal",
+          pairId: "encounter-participant-1::encounter-participant-2",
+          phase1OpportunityId: "distance-opportunity",
+          phase2AttackOpportunityId: "distance-attack",
+          requestedDistance: 2,
+          roundNumber: 1,
+          status: input.status,
+        },
+      ],
+      commands: [
+        {
+          afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+          createdAt: "2026-01-01T00:01:30.000Z",
+          facts: {},
+          id: "command-i1",
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          roundNumber: 1,
+          step: "i1",
+          type: "roll_initiative_phase1",
+        },
+      ],
+      currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+      currentStep: "phase_1_actions",
+      phaseResolutionCursor: {
+        participantId: "encounter-participant-1",
+        phase: "phase1",
+        substep: "adjust_distance",
+      },
+      participants: [
+        {
+          declaration: {
+            actionId: "adjust_range_attack",
+            adjustDistance: {
+              currentDistance: 3,
+              requestedDistance: 2,
+              targetParticipantId: "encounter-participant-2",
+            },
+            attackOpportunities: [
+              {
+                id: "distance-attack",
+                origin: "adjust_range_attack",
+                phase: "phase2",
+                slot: "attack_2",
+                status: "committed",
+                targetParticipantId: "encounter-participant-2",
+              },
+            ],
+            phaseContexts: { phase2: { targetParticipantId: "encounter-participant-2" } },
+            roundNumber: 1,
+            submittedBy: "player",
+          },
+          label: "The Gladiator",
+          participantId: "encounter-participant-1",
+          scenarioParticipantId: "participant-1",
+        },
+        {
+          label: "City guard",
+          participantId: "encounter-participant-2",
+          scenarioParticipantId: "participant-2",
+        },
+      ],
+      roundNumber: 1,
+    });
+  }
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      // The viewer defends against another player's Adjust Distance: that player's declaration,
+      // with its requested distance, reaches the viewer.
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: adjustDistanceRoundState({
+            defenderResponse: "pending",
+            status: "awaiting_defender_response",
+          }),
+          participants: makeTwoCombatEncounterParticipants(),
+        },
+        participants: [
+          { controlledByUserId: "other-player", id: "participant-1" },
+          { controlledByUserId: "player-1", id: "participant-2" },
+        ],
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            proposalId: "distance-proposal",
+            response: "allow",
+            scenarioParticipantId: "participant-2",
+          },
+          url: "/encounters/encounter-1/combat-round/respond-adjust-distance",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/respond-adjust-distance",
+    playerKeys: ["encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      setupMutableCombatRouteState({
+        encounter: makeCombatEncounter({
+          combatRoundState: adjustDistanceRoundState({
+            defenderResponse: "oppose",
+            status: "awaiting_rolls",
+          }),
+          participants: makeTwoCombatEncounterParticipants(),
+        }) as EncounterSession,
+        participants: [
+          makeCombatScenarioParticipant({
+            characterId: "character-1",
+            controlledByUserId: "player-1",
+            id: "participant-1",
+            snapshot: {
+              build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+              displayName: "The Gladiator",
+              equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
+            },
+          }),
+          makeCombatScenarioParticipant({
+            characterId: "character-2",
+            controlledByUserId: "other-player",
+            id: "participant-2",
+            snapshot: {
+              build: makeDodgeCharacterBuild("character-2", "City guard"),
+              displayName: "City guard",
+              equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+            },
+          }),
+        ],
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.4);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: { proposalId: "distance-proposal", scenarioParticipantId: "participant-1" },
+          url: "/encounters/encounter-1/combat-round/roll-adjust-distance",
+        },
+      };
+    },
+    identityPaths: {
+      // The viewer's own Dodge roll, on the Adjust Distance proposal (Tier 3's round state).
+      legacy: [
+        "encounter.combatRoundState.adjustDistanceProposals[distance-proposal].attackerRoll.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-adjust-distance",
+    playerKeys: ["encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    arrange: async () => {
+      const roundState = combatRoundStateSchema.parse({
+        breakOffProposals: [
+          {
+            attackerParticipantId: "encounter-participant-2",
+            escapeeParticipantId: "encounter-participant-1",
+            id: "break-off-proposal",
+            pairKey: "encounter-participant-1::encounter-participant-2",
+            roundNumber: 1,
+            status: "awaiting_gm_review",
+          },
+        ],
+        commands: [
+          {
+            afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+            beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+            createdAt: "2026-01-01T00:01:30.000Z",
+            facts: {},
+            id: "command-i1",
+            participantId: "encounter-participant-1",
+            phase: "phase1",
+            roundNumber: 1,
+            step: "i1",
+            type: "commit_phase_initiative_resolution",
+          },
+        ],
+        currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+        currentStep: "phase_1_actions",
+        phaseResolutionCursor: {
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          substep: "break_off",
+        },
+        participants: [
+          {
+            declaration: {
+              actionId: "break_off_engagement",
+              roundNumber: 1,
+              submittedBy: "player",
+            },
+            initiatives: { phase1: { rolls: [2], total: 2 } },
+            label: "The Gladiator",
+            participantId: "encounter-participant-1",
+            scenarioParticipantId: "participant-1",
+          },
+          {
+            declaration: { actionId: "attack_parry", roundNumber: 1, submittedBy: "gm" },
+            initiatives: { phase1: { rolls: [6], total: 18 } },
+            label: "City guard",
+            participantId: "encounter-participant-2",
+            scenarioParticipantId: "participant-2",
+          },
+        ],
+        phaseResolutionStatuses: {
+          "encounter-participant-1": { phase1: { substep: "break_off" } },
+        },
+        roundNumber: 1,
+      });
+      setupMutableCombatRouteState({
+        encounter: makeCombatEncounter({
+          combatRoundState: roundState,
+          participants: makeTwoCombatEncounterParticipants(),
+        }) as EncounterSession,
+        participants: [
+          makeCombatScenarioParticipant({
+            characterId: "character-1",
+            controlledByUserId: "player-1",
+            id: "participant-1",
+            snapshot: {
+              build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+              displayName: "The Gladiator",
+              equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
+            },
+          }),
+          makeCombatScenarioParticipant({
+            characterId: "character-2",
+            controlledByUserId: "other-player",
+            id: "participant-2",
+            snapshot: {
+              build: makeDodgeCharacterBuild("character-2", "City guard"),
+              displayName: "City guard",
+              equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+            },
+          }),
+        ],
+        user: mocks.adminUser,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.4);
+      const app = await buildScenarioTestApp();
+      const reviewTask = buildCombatProgressionProjection(roundState)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.expectedCommand === "review_break_off")!;
+      const reviewed = await app.inject({
+        method: "POST",
+        payload: {
+          attackerAdjustment: -2,
+          escapeeAdjustment: 3,
+          executionGroupId: reviewTask.executionGroupId,
+          expectedRevision: "2026-01-01T00:00:00.000Z",
+          notes: "SECRET_BREAK_OFF_NOTES",
+          proposalId: "break-off-proposal",
+          taskId: reviewTask.id,
+        },
+        url: "/encounters/encounter-1/combat-round/review-break-off",
+      });
+      expect(reviewed.statusCode, reviewed.body).toBe(200);
+      return {
+        app,
+        request: {
+          method: "POST",
+          payload: { proposalId: "break-off-proposal", scenarioParticipantId: "participant-1" },
+          url: "/encounters/encounter-1/combat-round/roll-break-off",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-break-off",
+    playerKeys: ["encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  // ----- Attack, Parry and Hit Location -----------------------------------------------------------
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const stepStatuses = {
+        initiative_phase_1: "submitted",
+        initiative_phase_2: "pending",
+        phase_1_actions: "submitted",
+        phase_2_actions: "pending",
+        review_action_modifiers: "complete",
+        review_phase_2_actions: "pending",
+        review_phase_2_damage: "pending",
+        review_phase_2_modifiers: "pending",
+        round_summary: "pending",
+        select_actions: "submitted",
+      };
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: {
+            commands: [
+              {
+                afterCursor: {
+                  participantId: "encounter-participant-1",
+                  roundNumber: 1,
+                  step: "i1",
+                },
+                beforeCursor: {
+                  participantId: "encounter-participant-1",
+                  roundNumber: 1,
+                  step: "i1",
+                },
+                createdAt: "2026-01-01T00:01:30.000Z",
+                facts: {},
+                id: "command-i1",
+                participantId: "encounter-participant-1",
+                roundNumber: 1,
+                step: "i1",
+                type: "roll_initiative_phase1",
+              },
+            ],
+            currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+            currentStep: "phase_1_actions",
+            participants: [
+              {
+                attackResults: {},
+                declaration: {
+                  actionId: "attack_parry",
+                  phaseContexts: { phase1: { targetParticipantId: "participant-2" } },
+                  roundNumber: 1,
+                  submittedAt: "2026-01-01T00:01:00.000Z",
+                  submittedBy: "player",
+                },
+                initiatives: {
+                  phase1: {
+                    baseInitiative: 0,
+                    modifierAdjustment: 0,
+                    rolls: [6],
+                    rollTotal: 6,
+                    total: 6,
+                  },
+                },
+                label: "The Gladiator",
+                participantId: "encounter-participant-1",
+                stepStatuses,
+              },
+              {
+                attackResults: {},
+                declaration: { actionId: "parry", roundNumber: 1, submittedBy: "gm" },
+                initiatives: {
+                  phase1: {
+                    baseInitiative: 0,
+                    modifierAdjustment: 0,
+                    rolls: [4],
+                    rollTotal: 4,
+                    total: 4,
+                  },
+                },
+                label: "City guard",
+                participantId: "encounter-participant-2",
+                stepStatuses,
+              },
+            ],
+            phaseResolutionCursor: {
+              participantId: "encounter-participant-1",
+              phase: "phase1",
+              substep: "attack",
+            },
+            phaseResolutionResults: [],
+            phaseResolutionStatuses: {},
+            roundNumber: 1,
+          },
+          participants: [
+            makeCombatEncounter().participants[0],
+            {
+              ...makeCombatEncounter().participants[0],
+              id: "encounter-participant-2",
+              label: "City guard",
+              scenarioParticipantId: "participant-2",
+            },
+          ],
+        },
+        participants: [
+          { id: "participant-1" },
+          { controlledByUserId: "other-player", id: "participant-2" },
+        ],
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            actionId: "attack_parry",
+            attackIndex: 1,
+            attackModeId: "mode-1",
+            declarationId: "round:1:participant:encounter-participant-1:declaration",
+            defenderScenarioParticipantId: "participant-2",
+            ob: 10,
+            obSkillRaw: 0,
+            opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+            phase: "phase1",
+            scenarioParticipantId: "participant-1",
+            weaponSourceId: "unarmed:virtual-weapon-template-punch",
+            weaponSourceSlot: "virtual",
+            weaponTemplateId: "virtual-weapon-template-punch",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-attack",
+        },
+      };
+    },
+    identityPaths: {
+      // `attackResult` is the route's presentation of the viewer's own attack roll, not a
+      // participant or encounter sibling: outside Tier 2's scope, recorded for the handback.
+      active: ["mutationPresentation.attackResult.rolledByUserId"],
+      legacy: ["attackResult.rolledByUserId"],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-attack",
+    playerKeys: ["attackResult", "command", "commandEnvelope", "encounter"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      // A missile attack is the only kind for which the route returns the attacker's participant,
+      // refreshed with the equipment view of whoever asked.
+      const bow = weaponTemplates.find((candidate) => candidate.id === "weapon-template-bow");
+      if (!bow?.missileProfile) throw new Error("Missing Short bow missile fixture.");
+      const weaponItemId = "item-weapon-template-bow";
+      const source = {
+        attackModeId: "mode-1",
+        itemId: weaponItemId,
+        sourceKind: "weapon" as const,
+        weaponInstanceId: weaponItemId,
+        weaponSourceId: `weapon:${weaponItemId}`,
+        // The canonical loadout's missile hand uses the historical `throwing` source slot.
+        weaponSourceSlot: "throwing" as const,
+        weaponTemplateId: bow.id,
+      };
+      const baseState = makeOpenPhase1AttackRoundState({ snapshotWeaponName: bow.name });
+      const build = makeDodgeCharacterBuild("character-1", "The Gladiator");
+      // An attack from the `throwing` slot takes its OB from Throwing (`treatAsThrownUse`).
+      build.progression.skills.push({
+        category: "secondary",
+        categoryId: "combat",
+        groupId: "basic_missile_training",
+        secondaryRanks: 8,
+        skillId: "throwing",
+      });
+      const bowEquipment = makeCanonicalWeaponDefenseEquipmentState({
+        characterId: "character-1",
+        templateId: bow.id,
+      });
+      const equipmentState = {
+        ...bowEquipment,
+        activeLoadoutByCharacterId: {
+          "character-1": {
+            ...bowEquipment.activeLoadoutByCharacterId["character-1"],
+            activeMissileWeaponItemId: weaponItemId,
+            activePrimaryWeaponItemId: null,
+          },
+        },
+      };
+      const attacker = makeCombatScenarioParticipantWithWeapon({
+        characterId: "character-1",
+        id: "participant-1",
+        snapshot: { build, equipmentState },
+        weaponName: bow.name,
+      });
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: {
+            ...baseState,
+            missileReadiness: [
+              {
+                aimCompletedRounds: 0,
+                aimLevel: 0,
+                aimRequiredRounds: 0,
+                ammoFamily: bow.missileProfile.ammoFamily,
+                ammoItemId: "arrow-stack-1",
+                ammoItemRevision: "2026-01-01T00:00:00.000Z",
+                baseCompletedRounds: 1,
+                baseRequiredRounds: 1,
+                family: bow.missileProfile.family,
+                gmPreparationAdjustment: 0,
+                id: `missile-readiness:encounter-participant-1:${weaponItemId}`,
+                lastProgressRound: 1,
+                participantId: "encounter-participant-1",
+                phase: "phase1" as const,
+                profile: bow.missileProfile,
+                rapidShot: false,
+                status: "ready" as const,
+                targetParticipantId: "encounter-participant-2",
+                updatedAt: "2026-01-01T00:02:00.000Z",
+                weaponItemId,
+                weaponTemplateId: bow.id,
+              },
+            ],
+            participants: baseState.participants.map((participant, index) =>
+              index === 0
+                ? {
+                    ...participant,
+                    declaration: {
+                      ...participant.declaration,
+                      attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                        actionId: "attack_parry",
+                        participantId: "encounter-participant-1",
+                        phaseContexts: {
+                          phase1: testCombatPhaseContext("encounter-participant-2"),
+                        },
+                        roundNumber: 1,
+                        sources: { phase1: source },
+                      }),
+                    },
+                  }
+                : participant,
+            ),
+          },
+          participants: makeTwoCombatEncounterParticipants(),
+        },
+        participants: [
+          withPrivateParticipantMaterial(attacker),
+          { controlledByUserId: "other-player", id: "participant-2" },
+        ],
+        user: viewer,
+      });
+      mocks.characterEquipmentReadModelService.getCharacterEquipmentState.mockResolvedValue(
+        equipmentState,
+      );
+      // The missile commit saves through `updateEncounter`, where the case adds its material.
+      mocks.combatItemInteractionService.commitMissileWeaponAttack.mockImplementation(
+        async (input: { session: EncounterSession }) => ({
+          encounter: await mocks.encounterService.updateEncounter({ session: input.session }),
+        }),
+      );
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            defenderParticipantId: "encounter-participant-2",
+            phase: "phase1",
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-attack",
+        },
+      };
+    },
+    gmKeys: ["command", "commandEnvelope", "encounter", "participant", "pendingMissileAttack"],
+    identityPaths: {
+      // `pendingMissileAttack` is the route's presentation of the viewer's own pending missile
+      // roll, a sibling outside Tier 2's scope like the melee `attackResult` (recorded for the
+      // handback). Plus the viewer's own participant's controller.
+      active: [
+        ...OWN_PARTICIPANT_CONTROLLER.active,
+        "mutationPresentation.pendingMissileAttack.rolledByUserId",
+      ],
+      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy, "pendingMissileAttack.rolledByUserId"],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-attack (missile: the attacker's participant)",
+    playerKeys: ["command", "commandEnvelope", "encounter", "participant", "pendingMissileAttack"],
+    // The missile attack result is pending, so no attack result is stored yet.
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const encounterParticipants = [
+        makeCombatEncounter().participants[0],
+        {
+          ...makeCombatEncounter().participants[0],
+          id: "encounter-participant-2",
+          label: "City guard",
+          scenarioParticipantId: "participant-2",
+        },
+      ];
+      const combatEncounter = makeCombatEncounter({
+        participants: encounterParticipants,
+      }) as EncounterSession;
+      const attackHit = buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackOpportunityId: "test-opportunity:canonical-parry",
+        attackerParticipantId: "encounter-participant-1",
+        defenderDb: 10,
+        defenderParticipantId: "encounter-participant-2",
+        ob: 10,
+        phase: "phase1",
+        rollD20: 14,
+        rollTotal: 14,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Broad sword",
+      });
+      const afterAttack = recordCombatRoundAttackResult({
+        command: { createdAt: attackHit.rolledAt, createdByUserId: "gm-1" },
+        participantId: "encounter-participant-1",
+        result: attackHit,
+        state: initializeCombatRoundState({ encounter: combatEncounter }),
+        submittedBy: "gm",
+      });
+      const defenderSnapshot = makeCanonicalCombatCalculationSnapshot({
+        characterId: "character-participant-2",
+        displayName: "City guard",
+      });
+      const defenderLoadout =
+        defenderSnapshot.equipmentState.activeLoadoutByCharacterId["character-participant-2"]!;
+      const primaryItem =
+        defenderSnapshot.equipmentState.itemsById[defenderLoadout.activePrimaryWeaponItemId!]!;
+      const afterDefenseReview = commitTestDefenseReview({
+        attackResult: attackHit,
+        sources: [
+          {
+            decision: "default_included",
+            included: true,
+            itemId: primaryItem.id,
+            itemRevision: primaryItem.revision!,
+            kind: "weapon",
+            label: "Long sword",
+            slot: "mainHand",
+            templateId: primaryItem.templateId,
+          },
+        ],
+        state: afterAttack,
+      });
+      const parryTask = buildCombatProgressionProjection(afterDefenseReview)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "parry")!;
+      setupCombatDeclarationRoute({
+        encounter: { combatRoundState: afterDefenseReview, participants: encounterParticipants },
+        participant: { id: "participant-2" },
+        participants: [
+          {
+            characterId: "character-participant-1",
+            controlledByUserId: "other-player",
+            id: "participant-1",
+            snapshot: makeCanonicalCombatCalculationSnapshot({
+              characterId: "character-participant-1",
+              displayName: "The Gladiator",
+            }),
+          },
+          {
+            characterId: "character-participant-2",
+            controlledByUserId: "player-1",
+            id: "participant-2",
+            snapshot: defenderSnapshot,
+          },
+        ],
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            attackResultId: getCombatRoundAttackResultId({
+              result: attackHit,
+              roundNumber: afterDefenseReview.roundNumber,
+            }),
+            attackerParticipantId: "encounter-participant-1",
+            commandType: "roll_parry",
+            declarationId: parryTask.identity.declarationId,
+            defenderModifierFingerprint: fingerprintCombatModifierResolution({
+              rows: [],
+              total: 0,
+            }),
+            defenderParticipantId: "encounter-participant-2",
+            executionGroupId: parryTask.executionGroupId,
+            expectedRevision: combatEncounter.updatedAt,
+            modifierValidationTaskId: parryTask.id,
+            opportunityId: parryTask.identity.opportunityId,
+            parryPurpose: parryTask.identity.parryPurpose,
+            parrySourceId: parryTask.identity.parrySourceId,
+            phase: "phase1",
+            processId: parryTask.processId,
+            scenarioParticipantId: "participant-2",
+            stageId: parryTask.stageId,
+            taskId: parryTask.id,
+            usedMainHand: true,
+          },
+          url: "/encounters/encounter-1/combat-round/roll-parry",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-parry",
+    playerKeys: ["command", "commandEnvelope", "encounter"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const encounterParticipants = [
+        makeCombatEncounter().participants[0],
+        {
+          ...makeCombatEncounter().participants[0],
+          id: "encounter-participant-2",
+          label: "City guard",
+          scenarioParticipantId: "participant-2",
+        },
+      ];
+      const combatEncounter = makeCombatEncounter({
+        participants: encounterParticipants,
+      }) as EncounterSession;
+      const attackHit = buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackOpportunityId: "test-opportunity:player-location",
+        attackerParticipantId: "encounter-participant-1",
+        defenderDb: 10,
+        defenderParticipantId: "encounter-participant-2",
+        ob: 10,
+        phase: "phase1",
+        rollD20: 14,
+        rollTotal: 14,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Broad sword",
+      });
+      const afterAttack = recordCombatRoundAttackResult({
+        command: { createdAt: attackHit.rolledAt, createdByUserId: "gm-1" },
+        participantId: "encounter-participant-1",
+        result: attackHit,
+        state: initializeCombatRoundState({ encounter: combatEncounter }),
+        submittedBy: "gm",
+      });
+      const afterParry = recordCombatRoundParryResult({
+        attackResult: attackHit,
+        command: { createdAt: "2026-01-01T00:04:00.000Z", createdByUserId: "gm-1" },
+        parryResolution: {
+          combinedParryScore: 9,
+          modifierAdjustment: 0,
+          openEndedD10s: [],
+          resultLabel: "Parry failed",
+          rollD20: 8,
+          rollTotal: 8,
+          status: "resolved",
+          success: false,
+          targetNumber: 21,
+          total: 17,
+        },
+        state: afterAttack,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      });
+      setupCombatDeclarationRoute({
+        encounter: { combatRoundState: afterParry, participants: encounterParticipants },
+        user: viewer,
+      });
+      mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({ controlledByUserId: "other-player", id: "participant-2" }),
+      ]);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            ...buildDownstreamTaskPayload(afterParry, "roll_hit_location"),
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-hit-location",
+        },
+      };
+    },
+    identityPaths: {
+      // Phase resolution results: Tier 3's round state (see roll-critical).
+      active: ["activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId"],
+      legacy: [
+        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-hit-location",
+    playerKeys: ["encounter"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  // ----- Observation and assigned rolls -----------------------------------------------------------
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const prepared = makeObservationAutomationFixture({
+        observerCount: 1,
+        participantCount: 2,
+        playerControlledIndex: 0,
+      });
+      setupMutableCombatRouteState({
+        encounter: prepared.encounter,
+        participants: prepared.participants,
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.4);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: observationRollRequest(prepared),
+          url: "/encounters/encounter-1/combat-round/roll-observation",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-observation",
+    playerKeys: ["attempt", "command", "commandEnvelope", "encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  /** A combat encounter carrying an assigned Stat check for the viewer's participant. */
+  function arrangeAssignedStatCheck(viewer: Tier2Viewer) {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+    const encounter = encounterSessionSchema.parse({
+      ...fixture.encounter,
+      roleplayState: {
+        ...fixture.encounter.roleplayState,
+        pendingStatChecks: [
+          {
+            assignedAt: "2026-01-01T00:02:00.000Z",
+            difficulty: "medium",
+            id: "stat-check-own",
+            participantId: "encounter-participant-1",
+            statId: "dex",
+            statLabel: "Dex",
+            statValue: 14,
+          },
+        ],
+      },
+    });
+    const mutable = setupMutableCombatRouteState({
+      encounter,
+      participants: fixture.participants as unknown as ScenarioParticipant[],
+      user: viewer,
+    });
+    return {
+      mutable,
+      request: {
+        method: "POST" as const,
+        payload: {
+          expectedRevision: encounter.updatedAt,
+          pendingRollId: "stat-check-own",
+          roll: { openEndedD10s: [], rollD20: 9 },
+        },
+        url: "/encounters/encounter-1/player-roll",
+      },
+    };
+  }
+
+  const ASSIGNED_ROLL_POPULATED = {
+    cancellingUser: true,
+    combatExperienceRoller: true,
+    correctionRecord: true,
+    submittingUser: true,
+  } as const;
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const { request } = arrangeAssignedStatCheck(viewer);
+      return { app: await buildScenarioTestApp(), request };
+    },
+    name: "POST /encounters/:encounterId/player-roll (new result)",
+    playerKeys: ["encounter"],
+    populated: ASSIGNED_ROLL_POPULATED,
+  });
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const { mutable, request } = arrangeAssignedStatCheck(viewer);
+      const app = await buildScenarioTestApp();
+      const first = await app.inject(request);
+      expect(first.statusCode, first.body).toBe(200);
+      return {
+        app,
+        request: {
+          ...request,
+          payload: { ...request.payload, expectedRevision: mutable.encounter.updatedAt },
+        },
+      };
+    },
+    inject: "load",
+    name: "POST /encounters/:encounterId/player-roll (result already recorded)",
+    playerKeys: ["encounter", "idempotent"],
+    populated: ASSIGNED_ROLL_POPULATED,
+  });
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const { mutable, request } = arrangeAssignedStatCheck(viewer);
+      const app = await buildScenarioTestApp();
+      const first = await app.inject(request);
+      expect(first.statusCode, first.body).toBe(200);
+      // The assignment is gone; only its recorded result remains.
+      const resolved = encounterSessionSchema.parse({
+        ...mutable.encounter,
+        roleplayState: { ...mutable.encounter.roleplayState, pendingStatChecks: [] },
+      });
+      mocks.encounterService.getEncounterById.mockResolvedValue(resolved);
+      return { app, request };
+    },
+    inject: "load",
+    name: "POST /encounters/:encounterId/player-roll (assignment already resolved)",
+    playerKeys: ["encounter", "idempotent"],
+    populated: ASSIGNED_ROLL_POPULATED,
+  });
+
+  // ----- The four boundaries Tier 1 converted: the nested layer they still spread --------------
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      setupCombatDeclarationRoute({
+        participant: withPrivateParticipantMaterial(makeCombatScenarioParticipant()),
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            actionId: "attack_parry",
+            combatContext: { modifierBuckets: emptyModifierBuckets() },
+            movementId: "hold",
+            phaseContexts: {
+              phase1: {
+                modifierBuckets: emptyModifierBuckets(),
+                targetParticipantId: "encounter-target-1",
+              },
+            },
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-declaration",
+        },
+      };
+    },
+    identityPaths: {
+      // R2 (ruled, Tier 3 removes it): the viewer's own combat context, with its correction
+      // record's `gmOverride.userId`. Plus the viewer's own participant's controller.
+      active: [
+        ...OWN_PARTICIPANT_CONTROLLER.active,
+        "activeCombatState.participants[encounter-participant-1].declaration.combatContext.modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
+      ],
+      legacy: [
+        ...OWN_PARTICIPANT_CONTROLLER.legacy,
+        "encounter.combatRoundState.participants[encounter-participant-1].declaration.combatContext.modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
+      ],
+    },
+    injectContexts: false,
+    name: "POST /encounters/:encounterId/combat-declaration",
+    playerKeys: ["encounter", "participant"],
+    playerMaterial: { correctionRecord: true },
+    // The correction record reaches the builders through the viewer's own combat context:
+    // the R2 location, which the player response keeps as ruled (`playerMaterial`).
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+    // R2 as Tier 1 pins it: the two modifier entries of the viewer's own combat context keep their
+    // lifecycle and correction history. Nothing else may fall outside the player-facing types.
+    residualKeys: {
+      active: tier2R2ResidualKeys("activeCombatState"),
+      legacy: tier2R2ResidualKeys("encounter.combatRoundState"),
+    },
+    secretPaths: {
+      active: pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY).secrets,
+      legacy: pinnedR2Residual("encounter.combatRoundState", R2_PRIVATE_ENTRY).secrets,
+    },
+  });
+
+  function tier2R2ResidualKeys(root: "activeCombatState" | "encounter.combatRoundState") {
+    return pinnedR2Residual(root, R2_PRIVATE_ENTRY, R2_GENERATED_DECLARATION_ROW).keys.filter(
+      (path) => /\.(canonicalLifecycle|canonicalTransitions)$/.test(path),
+    );
+  }
+
+  function arrangeTier1PhaseAttack(viewer: Tier2Viewer, route: string) {
+    return async () => {
+      const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+        gladiatorInitiative: 9,
+        guardInitiative: 4,
+      });
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: fixture.encounter,
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          fixture.participants[1]!,
+        ],
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST" as const,
+          payload: { phase: "phase1", scenarioParticipantId: "participant-1" },
+          url: `/encounters/encounter-1/combat-round/${route}`,
+        },
+      };
+    };
+  }
+
+  for (const route of ["back-out-phase-attack", "continue-phase-attack"] as const) {
+    describeTier2Case({
+      active: true,
+      arrange: (viewer) => arrangeTier1PhaseAttack(viewer, route)(),
+      identityPaths: OWN_PARTICIPANT_CONTROLLER,
+      name: `POST /encounters/:encounterId/combat-round/${route}`,
+      playerKeys: ["command", "encounter", "participant"],
+      populated: {
+        cancellingUser: true,
+        combatExperienceRoller: true,
+        correctionRecord: true,
+        submittingUser: true,
+      },
+    });
+  }
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+      const phase1Result = buildCombatRoundAttackRollResult({
+        actionId: "double_attack",
+        attackerParticipantId: "encounter-participant-1",
+        defenderDb: 20,
+        defenderParticipantId: "encounter-participant-2",
+        ob: 0,
+        phase: "phase1",
+        rollD20: 1,
+        rollTotal: 1,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Sword",
+      });
+      const roundState = combatRoundStateSchema.parse({
+        ...fixture.roundState,
+        currentCursor: {
+          participantId: "encounter-participant-1",
+          roundNumber: fixture.roundState.roundNumber,
+          step: "M2",
+        },
+        currentStep: "review_phase_2_modifiers",
+        participants: fixture.roundState.participants.map((participant) =>
+          participant.participantId === "encounter-participant-1"
+            ? {
+                ...participant,
+                attackResults: { ...participant.attackResults, phase1: phase1Result },
+              }
+            : participant,
+        ),
+        phaseResolutionCursor: undefined,
+        selectedParticipantId: "encounter-participant-1",
+        selectedStep: "review_phase_2_modifiers",
+      });
+      const task = buildCombatProgressionProjection(roundState)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks)
+        .find((candidate) => candidate.kind === "double_attack_decision")!;
+      const route = setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: { ...fixture.encounter, combatRoundState: roundState },
+        participants: [
+          withPrivateParticipantMaterial(fixture.participants[0]!),
+          fixture.participants[1]!,
+        ],
+        user: viewer,
+      });
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            decision: "continue",
+            executionGroupId: task.executionGroupId,
+            expectedRevision: route.encounter.updatedAt,
+            opportunityId: task.identity.opportunityId,
+            scenarioParticipantId: "participant-1",
+            taskId: task.id,
+          },
+          url: "/encounters/encounter-1/combat-round/double-attack-phase2-decision",
+        },
+      };
+    },
+    identityPaths: OWN_PARTICIPANT_CONTROLLER,
+    name: "POST /encounters/:encounterId/combat-round/double-attack-phase2-decision",
+    playerKeys: ["encounter", "participant"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  // ----- Feint, Disarm, Offensive Parry and missile readiness (no earlier route fixture) ----------
+
+  /** Two Dodge-capable participants: the viewer's (participant-1) and another player's. */
+  function tier2SkillContestParticipants() {
+    return [
+      makeCombatScenarioParticipant({
+        characterId: "character-1",
+        controlledByUserId: "player-1",
+        id: "participant-1",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-1", "The Gladiator"),
+          displayName: "The Gladiator",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-1" }),
+        },
+      }),
+      makeCombatScenarioParticipant({
+        characterId: "character-2",
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: {
+          build: makeDodgeCharacterBuild("character-2", "City guard"),
+          displayName: "City guard",
+          equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+        },
+      }),
+    ];
+  }
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const roundState = combatRoundStateSchema.parse({
+        commands: [
+          {
+            afterCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+            beforeCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "i1" },
+            createdAt: "2026-01-01T00:01:30.000Z",
+            facts: {},
+            id: "command-i1",
+            participantId: "encounter-participant-1",
+            phase: "phase1",
+            roundNumber: 1,
+            step: "i1",
+            type: "roll_initiative_phase1",
+          },
+        ],
+        currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+        currentStep: "phase_1_actions",
+        feintProposals: [
+          {
+            attackerParticipantId: "encounter-participant-1",
+            attackerSkillId: "dodge",
+            attackerSkillLabel: "Dodge",
+            defenderParticipantId: "encounter-participant-2",
+            defenderSkillId: "dodge",
+            defenderSkillLabel: "Dodge",
+            feasibility: "possible",
+            id: "combat-feint:round:1:attacker:encounter-participant-1",
+            method: "movement",
+            pairId: "encounter-participant-1::encounter-participant-2",
+            phase1OpportunityId: "feint-opportunity",
+            phase2AttackOpportunityId: "feint-attack",
+            roundNumber: 1,
+            status: "awaiting_rolls",
+          },
+        ],
+        phaseResolutionCursor: {
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          substep: "feint",
+        },
+        participants: [
+          {
+            declaration: {
+              actionId: "feint_attack",
+              attackOpportunities: [
+                {
+                  id: "feint-attack",
+                  origin: "feint_attack",
+                  phase: "phase2",
+                  slot: "attack_2",
+                  status: "committed",
+                  targetParticipantId: "encounter-participant-2",
+                },
+              ],
+              feint: {
+                attackerSkillId: "dodge",
+                attackerSkillLabel: "Dodge",
+                defenderSkillId: "dodge",
+                defenderSkillLabel: "Dodge",
+                method: "movement",
+                targetParticipantId: "encounter-participant-2",
+              },
+              phaseContexts: {
+                phase1: { targetParticipantId: "encounter-participant-2" },
+                phase2: { targetParticipantId: "encounter-participant-2" },
+              },
+              roundNumber: 1,
+              submittedBy: "player",
+            },
+            label: "The Gladiator",
+            participantId: "encounter-participant-1",
+            scenarioParticipantId: "participant-1",
+          },
+          {
+            declaration: { actionId: "parry", roundNumber: 1, submittedBy: "gm" },
+            label: "City guard",
+            participantId: "encounter-participant-2",
+            scenarioParticipantId: "participant-2",
+          },
+        ],
+        phaseResolutionStatuses: { "encounter-participant-1": { phase1: { substep: "feint" } } },
+        roundNumber: 1,
+      });
+      setupMutableCombatRouteState({
+        encounter: makeCombatEncounter({
+          combatRoundState: roundState,
+          participants: makeTwoCombatEncounterParticipants(),
+        }) as EncounterSession,
+        participants: tier2SkillContestParticipants(),
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.4);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            proposalId: "combat-feint:round:1:attacker:encounter-participant-1",
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-feint",
+        },
+      };
+    },
+    identityPaths: {
+      // The viewer's own Feint roll, on the Feint proposal (Tier 3's round state).
+      legacy: [
+        "encounter.combatRoundState.feintProposals[combat-feint:round:1:attacker:encounter-participant-1].attackerRoll.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-feint",
+    playerKeys: ["encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const baseEncounter = encounterSessionSchema.parse(
+        withResolvedCombatStartExperience(
+          makeCombatEncounter({ participants: makeTwoCombatEncounterParticipants() }),
+        ),
+      );
+      const declared = recordCombatRoundDeclaration({
+        command: { commandId: "declare-disarm", createdAt: "2026-01-01T00:01:00.000Z" },
+        declaration: {
+          actionId: "disarm",
+          disarm: {
+            actingWeapon: {
+              capability: "trap",
+              controlRating: 2,
+              itemId: "item-main-gauche",
+              itemRevision: "2026-01-01T00:00:00.000Z",
+              label: "Main gauche",
+              parryModifier: 2,
+              templateId: "weapon-template-main-gauche",
+            },
+            method: "proactive",
+            phase: "phase1",
+            targetParticipantId: "encounter-participant-2",
+            targetWeapon: {
+              capability: "none",
+              controlRating: 4,
+              itemId: "item-knife",
+              itemRevision: "2026-01-01T00:00:00.000Z",
+              label: "Knife",
+              parryModifier: 0,
+              templateId: "weapon-template-knife",
+            },
+          },
+          roundNumber: 1,
+        },
+        participantId: "encounter-participant-1",
+        state:
+          baseEncounter.combatRoundState ??
+          initializeCombatRoundState({ encounter: baseEncounter }),
+        submittedBy: "player",
+      });
+      const attemptId = declared.disarmAttempts[0]!.id;
+      // Contact opens the rolls during the actor's phase-1 action (`combatDisarmLifecycle.test`).
+      const atAction = combatRoundStateSchema.parse({
+        ...declared,
+        currentCursor: { participantId: "encounter-participant-1", roundNumber: 1, step: "A1" },
+        currentStep: "phase_1_actions",
+        phaseResolutionCursor: {
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          substep: "attack",
+        },
+        selectedParticipantId: "encounter-participant-1",
+        selectedStep: "phase_1_actions",
+      });
+      const opened = openCombatRoundDisarmAfterContact({
+        attackResultId: "attack-1",
+        attemptId,
+        command: { commandId: "open-disarm", createdAt: "2026-01-01T00:02:00.000Z" },
+        state: atAction,
+      });
+      setupMutableCombatRouteState({
+        encounter: encounterSessionSchema.parse({ ...baseEncounter, combatRoundState: opened }),
+        participants: tier2SkillContestParticipants(),
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.4);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            attemptId,
+            characteristicChoice: "strength",
+            scenarioParticipantId: "participant-1",
+            skillChoice: "parry",
+          },
+          url: "/encounters/encounter-1/combat-round/roll-disarm",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-disarm",
+    playerKeys: ["encounter"],
+    populated: {
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  describeTier2Case({
+    active: true,
+    arrange: async (viewer) => {
+      // Another player's attack on the viewer, who declared Offensive Parry and parried it: the
+      // successful parry opens the Brawling contest the viewer now rolls (`combatOffensiveParry.test`).
+      const attack = buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackIndex: 1,
+        attackModeId: "mode-sword",
+        attackOpportunityId: "opportunity:1",
+        attackSlot: "attack_1",
+        attackerParticipantId: "encounter-participant-1",
+        declarationId: "declaration:attacker",
+        defenderDb: 10,
+        defenderParticipantId: "encounter-participant-2",
+        ob: 10,
+        phase: "phase1",
+        rollD20: 20,
+        rollTotal: 20,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Sword",
+        weaponSourceId: "weapon:sword",
+        weaponSourceSlot: "primary",
+        weaponTemplateId: "sword",
+      });
+      const base = combatRoundStateSchema.parse({
+        currentCursor: { participantId: "encounter-participant-2", roundNumber: 1, step: "P1" },
+        currentStep: "phase_1_actions",
+        participants: [
+          {
+            attackResults: { phase1: attack },
+            attackResultsByOpportunity: { "opportunity:1": attack },
+            declaration: {
+              actionId: "attack_parry",
+              attackOpportunities: [
+                {
+                  actionId: "attack_parry",
+                  attackIndex: 1,
+                  attackModeId: "mode-sword",
+                  declarationId: "declaration:attacker",
+                  id: "opportunity:1",
+                  origin: "declared",
+                  phase: "phase1",
+                  slot: "attack_1",
+                  status: "committed",
+                  targetParticipantId: "encounter-participant-2",
+                  weaponSourceId: "weapon:sword",
+                  weaponSourceSlot: "primary",
+                  weaponTemplateId: "sword",
+                },
+              ],
+              id: "declaration:attacker",
+              phaseContexts: { phase1: { targetParticipantId: "encounter-participant-2" } },
+              roundNumber: 1,
+              submittedBy: "player",
+            },
+            label: "The Gladiator",
+            participantId: "encounter-participant-1",
+            scenarioParticipantId: "participant-1",
+            stepStatuses: {},
+          },
+          {
+            attackResults: {},
+            declaration: {
+              actionId: "offensive_parry",
+              combatContext: { selectedOpponentId: "encounter-participant-1" },
+              id: "declaration:defender",
+              phaseContexts: { phase1: {} },
+              roundNumber: 1,
+              submittedBy: "player",
+            },
+            label: "City guard",
+            participantId: "encounter-participant-2",
+            scenarioParticipantId: "participant-2",
+            stepStatuses: {},
+          },
+        ],
+        phaseResolutionCursor: {
+          participantId: "encounter-participant-2",
+          phase: "phase1",
+          substep: "defense",
+        },
+        roundNumber: 1,
+      });
+      const reviewed = commitTestDefenseReview({ attackResult: attack, state: base });
+      const attackResultId = getCombatRoundAttackResultId({ result: attack, roundNumber: 1 });
+      const opened = recordCanonicalCombatRoundParryResult({
+        attackResult: attack,
+        command: { commandId: "parry-command", createdAt: "2026-01-01T00:04:00.000Z" },
+        parryResolution: {
+          attackOpportunityId: "opportunity:1",
+          attackResultId,
+          declaredOpponentParticipantId: "encounter-participant-1",
+          offensiveParryAttemptId: buildOffensiveParryAttemptId({
+            attackResultId,
+            declarationId: "declaration:defender",
+          }),
+          offensiveParryDeclarationId: "declaration:defender",
+          openEndedD10s: [],
+          parrySourceId: "auto",
+          purpose: "offensive_parry",
+          resultLabel: "Parry succeeded",
+          rollD20: 16,
+          rollTotal: 16,
+          status: "resolved",
+          success: true,
+          targetNumber: 21,
+          total: 31,
+        },
+        state: reviewed,
+        submittedBy: "player",
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      });
+      const contest = opened.offensiveParryContests[0]!;
+      const task = buildCombatProgressionProjection(opened)
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.executionGroups)
+        .flatMap((group) => group.tasks)
+        .find(
+          (candidate) =>
+            candidate.kind === "offensive_parry_brawling_roll" &&
+            candidate.owner?.kind === "combatant" &&
+            candidate.owner.participantId === "encounter-participant-2",
+        )!;
+      const brawler = (input: { controlledByUserId: string; id: string; name: string }) =>
+        makeCombatScenarioParticipant({
+          controlledByUserId: input.controlledByUserId,
+          id: input.id,
+          snapshot: {
+            displayName: input.name,
+            sheetSummary: {
+              draftView: {
+                skills: [
+                  {
+                    effectiveSkillNumber: 12,
+                    name: "Brawling",
+                    skillId: "brawling",
+                    totalSkill: 12,
+                  },
+                ],
+              },
+            },
+          },
+        });
+      const encounter = encounterSessionSchema.parse(
+        makeCombatEncounter({
+          combatRoundState: opened,
+          participants: makeTwoCombatEncounterParticipants(),
+        }),
+      );
+      setupMutableCombatRouteState({
+        encounter,
+        participants: [
+          brawler({
+            controlledByUserId: "other-player",
+            id: "participant-1",
+            name: "The Gladiator",
+          }),
+          brawler({ controlledByUserId: "player-1", id: "participant-2", name: "City guard" }),
+        ],
+        user: viewer,
+      });
+      vi.spyOn(Math, "random").mockReturnValue(0.4);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            attackResultId: contest.attackResultId,
+            contestId: contest.id,
+            declarationId: contest.declarationId,
+            declaredOpponentParticipantId: contest.declaredOpponentParticipantId,
+            executionGroupId: task.executionGroupId,
+            expectedRevision: encounter.updatedAt,
+            offensiveParryAttemptId: contest.offensiveParryAttemptId,
+            opponentParticipantId: "encounter-participant-1",
+            opportunityId: contest.opportunityId,
+            parryResultId: contest.parryResultId,
+            phase: contest.phase,
+            processId: task.processId,
+            rollPurpose: "offensive_parry_brawling",
+            scenarioParticipantId: "participant-2",
+            stageId: task.stageId,
+            taskId: task.id,
+          },
+          url: "/encounters/encounter-1/combat-round/roll-offensive-parry-brawling",
+        },
+      };
+    },
+    identityPaths: {
+      // The viewer's own Brawling roll: on the contest (Tier 3's round state) and as the route's
+      // `roll` presentation, which is not a participant or encounter sibling.
+      active: [
+        "activeCombatState.offensiveParryContests[1:opportunity:opportunity:1:parry:offensive-parry:brawling].initiatorRoll.rolledByUserId",
+        "mutationPresentation.roll.rolledByUserId",
+      ],
+      legacy: [
+        "encounter.combatRoundState.offensiveParryContests[1:opportunity:opportunity:1:parry:offensive-parry:brawling].initiatorRoll.rolledByUserId",
+        "roll.rolledByUserId",
+      ],
+    },
+    name: "POST /encounters/:encounterId/combat-round/roll-offensive-parry-brawling",
+    playerKeys: ["command", "encounter", "roll"],
+    populated: {
+      attackRoller: true,
+      cancellingUser: true,
+      combatExperienceRoller: true,
+      correctionRecord: true,
+      submittingUser: true,
+    },
+  });
+
+  // ----- Canonical Item actions (`combatItemInteractionRoutes`) -----------------------------------
+
+  /** The declared phase, with the viewer's participant holding an Item action already declared. */
+  function arrangeItemInteraction(viewer: Tier2Viewer, existingAction: boolean) {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+    const genericActions = existingAction
+      ? [
+          {
+            createdAt: "2026-01-01T00:02:50.000Z",
+            createdByUserId: "player-1",
+            duration: { kind: "gm_decided" as const },
+            id: "item-action-1",
+            intent: "Drop Silver dagger",
+            itemInteraction: {
+              itemId: "item-1",
+              itemLabel: "Silver dagger",
+              itemRevision: "2026-08-16T09:29:00.000Z",
+              operation: "drop" as const,
+              stateAtDeclaration: "held" as const,
+              visibleToParticipantIds: ["encounter-participant-1"],
+            },
+            lastUpdatedAt: "2026-01-01T00:02:50.000Z",
+            ownerParticipantId: "encounter-participant-1",
+            preset: "item_interaction" as const,
+            progress: { completedRounds: 0 },
+            reference: {
+              itemId: "item-1",
+              kind: "item" as const,
+              label: "Silver dagger",
+              ownerParticipantId: "encounter-participant-1",
+            },
+            status: "declared" as const,
+          },
+        ]
+      : [];
+    const route = setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: combatRoundStateSchema.parse({ ...fixture.roundState, genericActions }),
+      },
+      participants: fixture.participants,
+      user: viewer,
+    });
+    mocks.combatItemInteractionService.resolveDeclaration.mockResolvedValue({
+      interaction: {
+        itemId: "item-1",
+        itemLabel: "Silver dagger",
+        itemRevision: "2026-08-16T09:29:00.000Z",
+        operation: "drop",
+        stateAtDeclaration: "held",
+        visibleToParticipantIds: ["encounter-participant-1"],
+      },
+      reference: {
+        itemId: "item-1",
+        kind: "item",
+        label: "Silver dagger",
+        ownerParticipantId: "encounter-participant-1",
+      },
+    });
+    return route;
+  }
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const route = arrangeItemInteraction(viewer, false);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            actionId: "item-action-new",
+            expectedItemRevision: "2026-08-16T09:29:00.000Z",
+            expectedRevision: route.encounter.updatedAt,
+            itemId: "item-1",
+            itemOperation: "drop",
+            operation: "declare",
+            participantId: "encounter-participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/item-interactions",
+        },
+      };
+    },
+    name: "POST /encounters/:encounterId/combat-round/item-interactions (declare)",
+    playerKeys: ["encounter"],
+    populated: ASSIGNED_ROLL_POPULATED,
+  });
+
+  describeTier2Case({
+    arrange: async (viewer) => {
+      const route = arrangeItemInteraction(viewer, true);
+      return {
+        app: await buildScenarioTestApp(),
+        request: {
+          method: "POST",
+          payload: {
+            actionId: "item-action-1",
+            expectedRevision: route.encounter.updatedAt,
+            operation: "declare",
+          },
+          url: "/encounters/encounter-1/combat-round/item-interactions",
+        },
+      };
+    },
+    inject: "load",
+    name: "POST /encounters/:encounterId/combat-round/item-interactions (declared already)",
+    playerKeys: ["encounter"],
+    populated: ASSIGNED_ROLL_POPULATED,
+  });
+
+  /**
+   * #507 proof obligation 3, at the route: a field added to the stored declaration is omitted by
+   * default. The projection re-parses stored state, so a new field reaches it only once it is in the
+   * round-state schema; wrapping that parse to add the field to every declaration simulates exactly
+   * that schema change. The per-viewer projection (the old spread) then carries it — the control —
+   * and no player response does. (A new participant-level field would also need copying in
+   * `participantStateFromEncounterParticipant`, which rebuilds participants by name; the domain tests
+   * simulate it on the projected participant directly.)
+   */
+  describe("a field added to the stored declaration", () => {
+    function withFutureDeclarationFields(state: CombatRoundState): CombatRoundState {
+      return {
+        ...state,
+        participants: state.participants.map((participant) =>
+          participant.declaration
+            ? ({
+                ...participant,
+                declaration: {
+                  ...participant.declaration,
+                  futureDeclarationField: "SECRET_FUTURE_DECLARATION",
+                  futureDeclarationUserId: "SECRET_FUTURE_DECLARATION_USER",
+                },
+              } as CombatRoundState["participants"][number])
+            : participant,
+        ),
+      };
+    }
+
+    function withSchemaThatKeepsTheFutureField() {
+      const parse = combatRoundStateSchema.parse.bind(combatRoundStateSchema);
+      return vi
+        .spyOn(combatRoundStateSchema, "parse")
+        .mockImplementation((value) => withFutureDeclarationFields(parse(value)));
+    }
+
+    it("reaches the per-viewer projection but no GET /encounters/:encounterId player response", async () => {
+      const route = declaredPhaseScenario(mocks.playerUser);
+      const spy = withSchemaThatKeepsTheFutureField();
+      try {
+        const projected = buildPlayerSafeEncounterForUser({
+          encounter: route.encounter as unknown as EncounterSession,
+          scenarioParticipants: route.participants,
+          userId: mocks.playerUser.id,
+        });
+        expect(JSON.stringify(projected.combatRoundState?.participants)).toContain(
+          "SECRET_FUTURE_DECLARATION",
+        );
+
+        const app = await buildScenarioTestApp();
+        const response = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+        await app.close();
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).not.toContain("SECRET_FUTURE");
+        expect(playerResponseKeysOutsidePlayerTypes(response.json())).toEqual([]);
+        expect(accountIdentityPaths(response.json())).toEqual([]);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("reaches no player response of a converted mutation, legacy or active", async () => {
+      // Control: the GM's response in the same scenario carries the field the stored state holds.
+      {
+        const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+          gladiatorInitiative: 9,
+          guardInitiative: 4,
+        });
+        setupCombatDeclarationRoute({
+          combatExperienceResolved: false,
+          encounter: fixture.encounter,
+          participants: fixture.participants,
+          user: mocks.adminUser,
+        });
+        const spy = withSchemaThatKeepsTheFutureField();
+        try {
+          const app = await buildScenarioTestApp();
+          const response = await app.inject({
+            method: "POST",
+            payload: { phase: "phase1", scenarioParticipantId: "participant-1" },
+            url: "/encounters/encounter-1/combat-round/back-out-phase-attack",
+          });
+          await app.close();
+          expect(response.statusCode, response.body).toBe(200);
+          expect(response.body).toContain("SECRET_FUTURE_DECLARATION");
+        } finally {
+          spy.mockRestore();
+        }
+        mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+      }
+      for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+        const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+          gladiatorInitiative: 9,
+          guardInitiative: 4,
+        });
+        setupCombatDeclarationRoute({
+          combatExperienceResolved: false,
+          encounter: fixture.encounter,
+          participants: fixture.participants,
+          user: mocks.playerUser,
+        });
+        const spy = withSchemaThatKeepsTheFutureField();
+        try {
+          const app = await buildScenarioTestApp();
+          const response = await app.inject({
+            headers,
+            method: "POST",
+            payload: { phase: "phase1", scenarioParticipantId: "participant-1" },
+            url: "/encounters/encounter-1/combat-round/back-out-phase-attack",
+          });
+          await app.close();
+
+          expect(response.statusCode, response.body).toBe(200);
+          expect(response.body).not.toContain("SECRET_FUTURE");
+          expect(playerResponseKeysOutsidePlayerTypes(response.json())).toEqual([]);
+        } finally {
+          spy.mockRestore();
+        }
+      }
+    });
+  });
+
+  /**
+   * #507 proof obligation 6, through a save-back. Players now receive every combat and phase context
+   * without the canonical lifecycle and correction history, and the player page seeds its next
+   * declaration from the declaration it received and submits those contexts. A player's modifier
+   * buckets are taken from the stored participant (`preservePlayerCombatModifierBuckets`), so the
+   * GM correction record stays where the GM reads it.
+   */
+  it("keeps the GM correction record when a player declares from what they received", async () => {
+    const send = async (request: { method: "GET" | "POST"; payload?: object; url: string }) => {
+      const app = await buildScenarioTestApp();
+      const response = await app.inject(request);
+      await app.close();
+      return response;
+    };
+    const ownDeclaration = (state: { participants: CombatRoundState["participants"] }) =>
+      state.participants.find(
+        (participant) => participant.participantId === "encounter-participant-1",
+      )!.declaration!;
+
+    declaredPhaseScenario(mocks.playerUser);
+    const read = await send({ method: "GET", url: "/encounters/encounter-1" });
+    expect(read.statusCode, read.body).toBe(200);
+    const received = ownDeclaration(read.json().encounter.combatRoundState);
+    expect(gmCorrectionRecords(received)).toEqual([]);
+
+    // The next declaration, in a round where the player has not declared yet.
+    setupCombatDeclarationRoute({
+      encounter: { participants: makeTwoCombatEncounterParticipants() },
+      participants: [
+        withPrivateParticipantMaterial(makeCombatScenarioParticipant()),
+        { controlledByUserId: "other-player", id: "participant-2" },
+      ],
+      user: mocks.playerUser,
+    });
+    const declared = await send({
+      method: "POST",
+      payload: {
+        actionId: "attack_parry",
+        combatContext: received.combatContext,
+        movementId: "hold",
+        phaseContexts: {
+          phase1: {
+            ...received.phaseContexts?.phase1,
+            targetParticipantId: "encounter-participant-2",
+          },
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    expect(declared.statusCode, declared.body).toBe(200);
+    const stored = mocks.encounterService.updateEncounter.mock.calls.at(-1)![0]
+      .session as EncounterSession;
+    expect(gmCorrectionRecords(ownDeclaration(stored.combatRoundState!))).toContainEqual(
+      TIER2_GM_CORRECTION_RECORD,
+    );
+    const storedState = mocks.encounterService.updateScenarioParticipantState.mock.calls.at(-1)![0]
+      .state as ScenarioParticipant["state"];
+    expect(gmCorrectionRecords(storedState.combat.combatContext)).toContainEqual(
+      TIER2_GM_CORRECTION_RECORD,
+    );
+  });
+
+  describe("GET /scenarios/:scenarioId/encounters", () => {
+    const list = async () => {
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({ method: "GET", url: "/scenarios/scenario-1/encounters" });
+      await app.close();
+      return response;
+    };
+
+    it("returns each assigned encounter as a player-facing encounter", async () => {
+      const route = declaredPhaseScenario(mocks.playerUser);
+      mocks.encounterService.listEncountersByScenario.mockResolvedValue([route.encounter]);
+      const response = await list();
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      expect(Object.keys(body)).toEqual(["encounters"]);
+      expect(body.encounters).toHaveLength(1);
+      expect(playerResponseKeysOutsidePlayerTypes(body)).toEqual([]);
+      expect(accountIdentityPaths(body)).toEqual([]);
+      expect(secretValuePaths(body)).toEqual([]);
+      expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
+    });
+
+    it("lists the GM's management projections unchanged", async () => {
+      declaredPhaseScenario(mocks.adminUser);
+      mocks.combatStateReadService.listScenarioEncounterManagementProjections.mockResolvedValue([
+        { id: "encounter-1" },
+      ]);
+      const response = await list();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toEqual({ encounters: [{ id: "encounter-1" }] });
+      expect(mocks.encounterService.listEncountersByScenario).not.toHaveBeenCalled();
     });
   });
 });
