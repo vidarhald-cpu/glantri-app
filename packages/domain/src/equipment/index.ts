@@ -6,3 +6,4 @@ export * from "./weapon";
 export * from "./itemFacts";
 export * from "./quantity";
 export * from "./itemOverrides";
+export * from "./attackModeReference";
