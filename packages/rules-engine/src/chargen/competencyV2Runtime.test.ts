@@ -244,23 +244,16 @@ describe("canonical V2 runtime projection", () => {
     expect(access.otherSkillIds).toEqual(expect.arrayContaining(access.normalSkillIds));
   });
 
-  it("resolves V2 flexible group access at band 4 without a Profession filter", () => {
+  it("locks current V2 secondary-group output at band 4 (current behaviour, not an approved rule)", () => {
+    /* Characterisation only (Forgejo #494). The Social-Band eligibility rule and whether
+       Profession participates are unruled; this asserts nothing about either. It only guards
+       that the accessor still yields a non-empty set of known groups, because skill and
+       specialization parent-group filtering consume it. The predicate is not re-derived here. */
     const allowed = getAllowedSecondaryGroupIds(content, "renaissance_city_state", 4);
-    const courier = available("profession:courier", 6, 4);
+    const knownGroupIds = projection.groupBounds.map((bound) => bound.groupId);
 
     expect(allowed.length).toBeGreaterThan(0);
-    expect(allowed.some((groupId) => !courier.availableGroupIds.includes(groupId))).toBe(true);
-    expect(allowed).toEqual(
-      expect.arrayContaining(
-        projection.groupBounds
-          .filter(
-            (bound) =>
-              (bound.minSocietyLevel ?? 1) <= 6 &&
-              Number((bound.minSocialBand ?? "L1").slice(1)) <= 4,
-          )
-          .map((bound) => bound.groupId),
-      ),
-    );
+    expect(allowed.every((groupId) => knownGroupIds.includes(groupId))).toBe(true);
   });
 
   it("persists one applicable core route for completion without narrowing acquisition", () => {

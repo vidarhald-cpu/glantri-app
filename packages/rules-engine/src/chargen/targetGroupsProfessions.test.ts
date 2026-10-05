@@ -10,7 +10,10 @@ import {
   buildChargenDraftView,
 } from "./primaryAllocation";
 import { getActiveGroupSkillCost } from "./primaryAllocation/costs";
-import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
+import {
+  buildChargenSkillAccessSummary,
+  getAllowedSecondaryGroupIdsInternal as getAllowedSecondaryGroupIds,
+} from "./primaryAllocation/access";
 import { validateTargetChargenBuild } from "./validateTargetChargenBuild";
 import { characterBuildSchema } from "@glantri/domain";
 
@@ -52,6 +55,38 @@ describe("combined target Chargen", () => {
     const p = applyProfessionGrants(context);
     expect(p.skills.every((s) => s.ranks === 0)).toBe(true);
     expect(p.skillGroups.every((g) => g.ranks === 0)).toBe(true);
+  });
+  it("explicitly disables flexible-pool group purchase at spendSecondaryPoint (#494)", () => {
+    const progression = createChargenProgression();
+    progression.secondaryPoolTotal = 100;
+    // Pick a group the (unruled, non-canonical) V2 accessor DOES allow, so the refusal below
+    // cannot be explained by the group being ineligible or absent from the catalogue.
+    const groupId = getAllowedSecondaryGroupIds(
+      content,
+      context.societyId,
+      context.societyLevel,
+    )[0];
+    expect(groupId).toBeTruthy();
+    const disabled = /Flexible-pool group purchase is disabled/;
+    const attempt = (c: typeof content) =>
+      spendSecondaryPoint({
+        ...context,
+        content: c,
+        progression,
+        targetId: groupId!,
+        // "group" is excluded by the input type; this exercises the runtime backstop.
+        targetType: "group" as unknown as "skill",
+      });
+
+    for (const withoutCatalogue of [false, true]) {
+      // The gate must not depend on catalogue contents, so also run with the catalogue removed.
+      const c = withoutCatalogue ? { ...content, chargenCatalogue: undefined } : content;
+      const result = attempt(c);
+      expect(result.error).toMatch(disabled);
+      expect(result.error).not.toMatch(/legacy competency|Specialization definition/);
+      expect(result.spentCost).toBeUndefined();
+      expect(result.progression).toEqual(progression);
+    }
   });
   it("refuses flexible-only group access without mutating pools", () => {
     const progression = createChargenProgression();

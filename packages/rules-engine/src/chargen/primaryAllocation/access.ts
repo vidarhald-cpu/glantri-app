@@ -163,6 +163,16 @@ export function getAllowedPrimaryGroupIdsInternal(
   return getAllowedSkillGroupIdsInternal(content, professionId, societyId, societyLevel);
 }
 
+/*
+ * UNRULED / NON-CANONICAL (Forgejo #494, control-plane ruling 2026-10-04, Option C).
+ * The V2 branch below (Social-Band "at or below your band" via groupBounds) is NOT an approved
+ * Glantri rule. Its presence, and any test that reproduces it, is not a product ruling. Whether
+ * Profession participates in eligibility is also unruled; do not infer it from the groupBounds
+ * shape. The Product Owner ruling on the intended eligibility rule is still owed.
+ * Flexible-pool group purchase is explicitly disabled at its entry point (`spendSecondaryPoint`
+ * in draftState.ts). This result is nevertheless consumed to filter skill and specialization
+ * parent groups there, so its return value must not be changed without that ruling.
+ */
 export function getAllowedSecondaryGroupIdsInternal(
   content: CanonicalContentShape,
   societyId: string | undefined,
