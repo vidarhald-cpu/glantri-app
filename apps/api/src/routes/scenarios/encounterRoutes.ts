@@ -281,6 +281,15 @@ import {
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
+  buildPlayerFacingCombatContext,
+  buildPlayerFacingCombatRoundCommand,
+  buildPlayerFacingEncounterSession,
+  buildPlayerFacingScenarioParticipant,
+  combatTaskCommandUndoFactsSchema,
+  type CombatRoundCommandType,
+  type PlayerFacingCombatRoundCommand,
+  type PlayerFacingEncounterSession,
+  type PlayerFacingScenarioParticipant,
 } from "@glantri/domain";
 import {
   ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER,
@@ -6158,198 +6167,300 @@ function sanitizePlayerSafeDistanceControlCommandFacts(input: {
   return input.command;
 }
 
-function buildPlayerSafeCombatRoundCommandForUser(input: {
+/**
+ * Player command projection, Forgejo issue #502 (privacy hardening, Tier 1).
+ *
+ * Every command type has an explicit decision in `PLAYER_COMBAT_COMMAND_PROJECTIONS`, and a type
+ * without one is omitted rather than passed through. A projected command is built by
+ * `buildPlayerFacingCombatRoundCommand` from named envelope fields and a facts object enumerated
+ * field by field, so it never carries the actor identity (`createdByUserId`) or a fact no decision
+ * names.
+ *
+ * The types decided by name before #502 keep exactly the facts they had. The types that used to
+ * fall through to the stored command record public combat progression: the player's own client
+ * re-derives the current combat step from command envelopes, so the envelope (who acted, at which
+ * step, and where the cursor went) is kept for commands whose participants the viewer can see. Their
+ * facts are undo material and outcome detail; the combat history projects the public part of each
+ * outcome separately, so none of those facts reach a player through the command log.
+ */
+type PlayerCombatCommandProjectionInput = {
   command: CombatRoundCommand;
   controlledEncounterParticipantIds: Set<string>;
   visibleParticipantIds: Set<string>;
-}): CombatRoundCommand | undefined {
+};
+
+type PlayerCombatCommandProjection = (
+  input: PlayerCombatCommandProjectionInput,
+) => PlayerFacingCombatRoundCommand | undefined;
+
+/**
+ * A player's client keeps only the commands whose participants are all in its encounter
+ * (`initializeCombatRoundState` filters the rest out), so a command naming a participant the viewer
+ * cannot see is omitted here instead of being sent and discarded.
+ */
+function isPlayerVisibleCombatRoundCommandEnvelope(
+  input: PlayerCombatCommandProjectionInput,
+): boolean {
+  return [
+    input.command.participantId,
+    input.command.beforeCursor.participantId,
+    input.command.afterCursor.participantId,
+  ].every(
+    (participantId) =>
+      participantId === undefined || input.visibleParticipantIds.has(participantId),
+  );
+}
+
+const omitPlayerCombatCommand: PlayerCombatCommandProjection = () => undefined;
+
+/** Public combat progression: the envelope without facts, for participants the viewer sees. */
+const projectPlayerCombatProgressionEnvelope: PlayerCombatCommandProjection = (input) =>
+  isPlayerVisibleCombatRoundCommandEnvelope(input)
+    ? buildPlayerFacingCombatRoundCommand({ command: input.command, facts: {} })
+    : undefined;
+
+/** Progression whose history event is shown only to the acting participant's controller. */
+const projectControlledPlayerCombatProgressionEnvelope: PlayerCombatCommandProjection = (input) =>
+  input.controlledEncounterParticipantIds.has(input.command.participantId)
+    ? projectPlayerCombatProgressionEnvelope(input)
+    : undefined;
+
+const projectPlayerDeclareAction: PlayerCombatCommandProjection = (input) => {
+  if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+    return undefined;
+  }
+  const facts = {
+    actionId: input.command.facts.actionId,
+    status: input.command.facts.status,
+    step: input.command.facts.step,
+  };
+  if (
+    input.command.facts.actionId === "disarm" ||
+    input.command.facts.actionId === "parry_disarm" ||
+    input.command.facts.disarm !== undefined ||
+    input.command.facts.previousDisarmAttempts !== undefined
+  ) {
+    return buildPlayerFacingCombatRoundCommand({ command: input.command, facts });
+  }
+  // Every other controlled declaration used to fall through to the stored command. It now carries
+  // the same declaration facts as the disarm path above.
+  return isPlayerVisibleCombatRoundCommandEnvelope(input)
+    ? buildPlayerFacingCombatRoundCommand({ command: input.command, facts })
+    : undefined;
+};
+
+const projectPlayerModifierReview: PlayerCombatCommandProjection = (input) => {
+  if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+    return undefined;
+  }
+  const transaction = canonicalCombatModifierReviewTransactionSchema.safeParse(
+    input.command.facts.modifierReview,
+  );
+  return buildPlayerFacingCombatRoundCommand({
+    command: input.command,
+    facts: transaction.success
+      ? {
+          modifierReviewPublicResult: projectCanonicalCombatModifierReviewPublicResult({
+            transaction: transaction.data,
+            viewer: {
+              controlledParticipantIds: input.controlledEncounterParticipantIds,
+              isGm: false,
+              visibleParticipantIds: input.visibleParticipantIds,
+            },
+          }),
+        }
+      : {},
+  });
+};
+
+const projectPlayerAttackRoll: PlayerCombatCommandProjection = (input) => {
+  if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+    return undefined;
+  }
+  return buildPlayerFacingCombatRoundCommand({
+    command: input.command,
+    facts: {
+      actionId: input.command.facts.actionId,
+      attackOpportunityId: input.command.facts.attackOpportunityId,
+      attackResultId: input.command.facts.attackResultId,
+      attackType: input.command.facts.attackType,
+      phase: input.command.facts.phase,
+      status: input.command.facts.status,
+    },
+  });
+};
+
+const projectPlayerRoundEndDistanceControl: PlayerCombatCommandProjection = (input) => {
+  const sanitized = sanitizePlayerSafeDistanceControlCommandFacts(input);
+  return sanitized
+    ? buildPlayerFacingCombatRoundCommand({ command: input.command, facts: sanitized.facts })
+    : undefined;
+};
+
+const projectPlayerContinuedContactMaintenance: PlayerCombatCommandProjection = (input) => {
+  const contactId =
+    typeof input.command.facts.continuedContactId === "string"
+      ? input.command.facts.continuedContactId
+      : undefined;
+  const contact = contactId ? input.command.facts.previousContinuedContact : undefined;
+  const parsedContact =
+    contact && typeof contact === "object"
+      ? (contact as {
+          affectedParticipantId?: unknown;
+          controllerParticipantId?: unknown;
+        })
+      : undefined;
+  const involved = [
+    parsedContact?.affectedParticipantId,
+    parsedContact?.controllerParticipantId,
+  ].some(
+    (participantId) =>
+      typeof participantId === "string" &&
+      (input.controlledEncounterParticipantIds.has(participantId) ||
+        input.visibleParticipantIds.has(participantId)),
+  );
+  if (!involved) return undefined;
+  return buildPlayerFacingCombatRoundCommand({
+    command: input.command,
+    facts: {
+      contactMaintained: input.command.facts.contactMaintained,
+      contestId: input.command.facts.contestId,
+      continuedContactId: input.command.facts.continuedContactId,
+      opponentParticipantId: input.command.facts.opponentParticipantId,
+      resolved: input.command.facts.resolved,
+      resultId: input.command.facts.resultId,
+      rollId: input.command.facts.rollId,
+      rollPurpose: input.command.facts.rollPurpose,
+      unbalancedConditionId: input.command.facts.unbalancedConditionId,
+    },
+  });
+};
+
+const projectPlayerObservationRoll: PlayerCombatCommandProjection = (input) => {
+  if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+    return undefined;
+  }
+  return buildPlayerFacingCombatRoundCommand({
+    command: input.command,
+    facts: {
+      observationAttemptId: input.command.facts.observationAttemptId,
+      relationshipId: input.command.facts.relationshipId,
+      targetParticipantId: input.command.facts.targetParticipantId,
+    },
+  });
+};
+
+const projectPlayerPhaseInitiativeChoice: PlayerCombatCommandProjection = (input) => {
+  if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
+    return undefined;
+  }
+  if (!isPlayerVisibleCombatRoundCommandEnvelope(input)) return undefined;
+  // The controlled choice used to fall through to the stored command. These are the fields
+  // `getCombatRoundPhaseInitiativeChoice` reads back from the command on the player's client.
+  return buildPlayerFacingCombatRoundCommand({
+    command: input.command,
+    facts: {
+      attackActionId: input.command.facts.attackActionId,
+      attackStep: input.command.facts.attackStep,
+      ceRequired: input.command.facts.ceRequired,
+      choice: input.command.facts.choice,
+      combatExperience: input.command.facts.combatExperience,
+      defaultedOnCommit: input.command.facts.defaultedOnCommit,
+      threatened: input.command.facts.threatened,
+    },
+  });
+};
+
+const projectPlayerCombatTaskCancellation: PlayerCombatCommandProjection = (input) => {
+  // A cancellation taken at the declaration boundary changes only the task: it holds no cursor and
+  // is not phase-action progress, which is why the player's client excludes it from completion
+  // evidence. The task's own status already reaches the player through the generic actions.
+  const undo = combatTaskCommandUndoFactsSchema.safeParse(input.command.facts.taskUndo);
+  if (undo.success && undo.data.boundary === "declaration") return undefined;
+  return projectPlayerCombatProgressionEnvelope(input);
+};
+
+const PLAYER_COMBAT_COMMAND_PROJECTIONS: Record<
+  CombatRoundCommandType,
+  PlayerCombatCommandProjection
+> = {
+  declare_action: projectPlayerDeclareAction,
+  review_modifiers_phase1: projectPlayerModifierReview,
+  roll_initiative_phase1: projectPlayerCombatProgressionEnvelope,
+  review_modifiers_phase2: projectPlayerModifierReview,
+  roll_initiative_phase2: projectPlayerCombatProgressionEnvelope,
+  roll_attack: projectPlayerAttackRoll,
+  // Readiness commands carry exact ammunition identities/revisions, GM timing adjustments, and
+  // undo snapshots. Players use their sanitized readiness row.
+  progress_missile_readiness: omitPlayerCombatCommand,
+  interrupt_missile_readiness: omitPlayerCombatCommand,
+  // Defense-review command facts retain exact canonical item identities, revisions, GM provenance,
+  // and undo material. The defender receives the safe event projection.
+  commit_defense_review: omitPlayerCombatCommand,
+  roll_parry: projectPlayerCombatProgressionEnvelope,
+  roll_offensive_parry_brawling: projectPlayerCombatProgressionEnvelope,
+  roll_continued_contact_maintenance: projectPlayerContinuedContactMaintenance,
+  roll_observation: projectPlayerObservationRoll,
+  roll_hit_location: projectPlayerCombatProgressionEnvelope,
+  roll_critical: projectPlayerCombatProgressionEnvelope,
+  decide_double_attack_phase2: projectPlayerCombatProgressionEnvelope,
+  // Feint command facts retain undo provenance, including both raw rolls and GM notes. Player live
+  // state uses the separately sanitized proposal and projected event history.
+  review_feint_feasibility: omitPlayerCombatCommand,
+  roll_feint: omitPlayerCombatCommand,
+  commit_feint_result: omitPlayerCombatCommand,
+  respond_adjust_distance: omitPlayerCombatCommand,
+  review_adjust_distance_roll_adjustment: omitPlayerCombatCommand,
+  roll_adjust_distance: omitPlayerCombatCommand,
+  commit_adjust_distance: omitPlayerCombatCommand,
+  review_break_off: projectPlayerCombatProgressionEnvelope,
+  roll_break_off: projectPlayerCombatProgressionEnvelope,
+  commit_break_off: projectPlayerCombatProgressionEnvelope,
+  // Disarm command facts are exact undo snapshots and contain both sides' private roll
+  // calculations and canonical Item identities. The authoritative state keeps them for
+  // retry/undo; player views use the sanitized attempt projection instead.
+  open_disarm: omitPlayerCombatCommand,
+  roll_disarm: omitPlayerCombatCommand,
+  commit_disarm: omitPlayerCombatCommand,
+  complete_remaining_step: projectPlayerCombatProgressionEnvelope,
+  skip_phase_action: projectPlayerCombatProgressionEnvelope,
+  back_out_phase_attack: projectPlayerCombatProgressionEnvelope,
+  submit_phase_initiative_choice: projectPlayerPhaseInitiativeChoice,
+  commit_phase_initiative_resolution: projectPlayerCombatProgressionEnvelope,
+  complete_damage_review_phase1: projectPlayerCombatProgressionEnvelope,
+  complete_damage_review_phase2: projectPlayerCombatProgressionEnvelope,
+  resolve_damage: projectPlayerCombatProgressionEnvelope,
+  commit_phase_damage: projectPlayerCombatProgressionEnvelope,
   // Treatment commands retain exact before/after effect snapshots and the authenticated GM actor.
   // Players receive only the separately sanitized involved event/current-effect projection.
-  if (input.command.type === "transition_critical_bleed") {
+  transition_critical_bleed: omitPlayerCombatCommand,
+  roll_combat_experience: projectControlledPlayerCombatProgressionEnvelope,
+  set_pair_distance: projectPlayerCombatProgressionEnvelope,
+  // The GM's round-end preparation has no player history event, runs at a global step no player
+  // cursor depends on, and its facts list every participant in the round.
+  prepare_round_end_review: omitPlayerCombatCommand,
+  commit_round_end_participant_review: projectControlledPlayerCombatProgressionEnvelope,
+  roll_round_end_health_check: projectControlledPlayerCombatProgressionEnvelope,
+  roll_round_end_distance_control: projectPlayerRoundEndDistanceControl,
+  commit_round_end_distance_control: projectPlayerRoundEndDistanceControl,
+  advance_combat_boundary: projectPlayerCombatProgressionEnvelope,
+  complete_round: projectPlayerCombatProgressionEnvelope,
+  review_combat_task: projectPlayerCombatProgressionEnvelope,
+  advance_combat_task: projectPlayerCombatProgressionEnvelope,
+  roll_combat_task: projectPlayerCombatProgressionEnvelope,
+  resolve_combat_task: projectPlayerCombatProgressionEnvelope,
+  interrupt_combat_task: projectPlayerCombatProgressionEnvelope,
+  cancel_combat_task: projectPlayerCombatTaskCancellation,
+};
+
+export function buildPlayerSafeCombatRoundCommandForUser(
+  input: PlayerCombatCommandProjectionInput,
+): PlayerFacingCombatRoundCommand | undefined {
+  // Fail closed: a command type without an explicit decision is omitted, never passed through.
+  if (!Object.hasOwn(PLAYER_COMBAT_COMMAND_PROJECTIONS, input.command.type)) {
     return undefined;
   }
-
-  // Feint command facts retain undo provenance, including both raw rolls and GM notes.
-  // Player live state uses the separately sanitized proposal and projected event history.
-  if (
-    input.command.type === "review_feint_feasibility" ||
-    input.command.type === "roll_feint" ||
-    input.command.type === "commit_feint_result" ||
-    input.command.type === "respond_adjust_distance" ||
-    input.command.type === "review_adjust_distance_roll_adjustment" ||
-    input.command.type === "roll_adjust_distance" ||
-    input.command.type === "commit_adjust_distance"
-  ) {
-    return undefined;
-  }
-
-  // Disarm command facts are exact undo snapshots and contain both sides' private
-  // roll calculations and canonical Item identities. The authoritative state keeps
-  // them for retry/undo; player views use the sanitized attempt projection instead.
-  if (
-    input.command.type === "open_disarm" ||
-    input.command.type === "roll_disarm" ||
-    input.command.type === "commit_disarm"
-  ) {
-    return undefined;
-  }
-
-  if (
-    input.command.type === "submit_phase_initiative_choice" &&
-    !input.controlledEncounterParticipantIds.has(input.command.participantId)
-  ) {
-    return undefined;
-  }
-
-  if (input.command.type === "declare_action") {
-    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
-      return undefined;
-    }
-    if (
-      input.command.facts.actionId === "disarm" ||
-      input.command.facts.actionId === "parry_disarm" ||
-      input.command.facts.disarm !== undefined ||
-      input.command.facts.previousDisarmAttempts !== undefined
-    ) {
-      return {
-        ...input.command,
-        facts: {
-          actionId: input.command.facts.actionId,
-          status: input.command.facts.status,
-          step: input.command.facts.step,
-        },
-      };
-    }
-  }
-
-  if (
-    input.command.type === "review_modifiers_phase1" ||
-    input.command.type === "review_modifiers_phase2"
-  ) {
-    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
-      return undefined;
-    }
-    const transaction = canonicalCombatModifierReviewTransactionSchema.safeParse(
-      input.command.facts.modifierReview,
-    );
-    return {
-      ...input.command,
-      facts: transaction.success
-        ? {
-            modifierReviewPublicResult: projectCanonicalCombatModifierReviewPublicResult({
-              transaction: transaction.data,
-              viewer: {
-                controlledParticipantIds: input.controlledEncounterParticipantIds,
-                isGm: false,
-                visibleParticipantIds: input.visibleParticipantIds,
-              },
-            }),
-          }
-        : {},
-    };
-  }
-
-  if (
-    input.command.type === "roll_combat_experience" &&
-    !input.controlledEncounterParticipantIds.has(input.command.participantId)
-  ) {
-    return undefined;
-  }
-
-  if (input.command.type === "roll_attack") {
-    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
-      return undefined;
-    }
-    return {
-      ...input.command,
-      createdByUserId: undefined,
-      facts: {
-        actionId: input.command.facts.actionId,
-        attackOpportunityId: input.command.facts.attackOpportunityId,
-        attackResultId: input.command.facts.attackResultId,
-        attackType: input.command.facts.attackType,
-        phase: input.command.facts.phase,
-        status: input.command.facts.status,
-      },
-    };
-  }
-
-  // Defense-review command facts retain exact canonical item identities, revisions,
-  // GM provenance, and undo material. The defender receives the safe event projection.
-  if (input.command.type === "commit_defense_review") {
-    return undefined;
-  }
-
-  // Readiness commands carry exact ammunition identities/revisions, GM timing
-  // adjustments, and undo snapshots. Players use their sanitized readiness row.
-  if (
-    input.command.type === "progress_missile_readiness" ||
-    input.command.type === "interrupt_missile_readiness"
-  ) {
-    return undefined;
-  }
-
-  if (
-    input.command.type === "roll_round_end_distance_control" ||
-    input.command.type === "commit_round_end_distance_control"
-  ) {
-    return sanitizePlayerSafeDistanceControlCommandFacts(input);
-  }
-
-  if (input.command.type === "roll_continued_contact_maintenance") {
-    const contactId =
-      typeof input.command.facts.continuedContactId === "string"
-        ? input.command.facts.continuedContactId
-        : undefined;
-    const contact = contactId ? input.command.facts.previousContinuedContact : undefined;
-    const parsedContact =
-      contact && typeof contact === "object"
-        ? (contact as {
-            affectedParticipantId?: unknown;
-            controllerParticipantId?: unknown;
-          })
-        : undefined;
-    const involved = [
-      parsedContact?.affectedParticipantId,
-      parsedContact?.controllerParticipantId,
-    ].some(
-      (participantId) =>
-        typeof participantId === "string" &&
-        (input.controlledEncounterParticipantIds.has(participantId) ||
-          input.visibleParticipantIds.has(participantId)),
-    );
-    if (!involved) return undefined;
-    return {
-      ...input.command,
-      facts: {
-        contactMaintained: input.command.facts.contactMaintained,
-        contestId: input.command.facts.contestId,
-        continuedContactId: input.command.facts.continuedContactId,
-        opponentParticipantId: input.command.facts.opponentParticipantId,
-        resolved: input.command.facts.resolved,
-        resultId: input.command.facts.resultId,
-        rollId: input.command.facts.rollId,
-        rollPurpose: input.command.facts.rollPurpose,
-        unbalancedConditionId: input.command.facts.unbalancedConditionId,
-      },
-    };
-  }
-
-  if (input.command.type === "roll_observation") {
-    if (!input.controlledEncounterParticipantIds.has(input.command.participantId)) {
-      return undefined;
-    }
-    return {
-      ...input.command,
-      facts: {
-        observationAttemptId: input.command.facts.observationAttemptId,
-        relationshipId: input.command.facts.relationshipId,
-        targetParticipantId: input.command.facts.targetParticipantId,
-      },
-    };
-  }
-
-  return input.command;
+  return PLAYER_COMBAT_COMMAND_PROJECTIONS[input.command.type](input);
 }
 
 function sanitizePlayerSafeDisarmRoll(roll: CombatDisarmRoll): CombatDisarmRoll {
@@ -6517,7 +6628,7 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
           visibleParticipantIds,
         }),
       )
-      .filter((command): command is CombatRoundCommand => Boolean(command)),
+      .filter((command): command is PlayerFacingCombatRoundCommand => Boolean(command)),
     defenseSnapshots: [],
     distanceState: {
       edges: safeDistanceEdges,
@@ -6866,6 +6977,92 @@ function buildPlayerSafeCombatRollMutationEncounterForUser(input: {
   userId: string;
 }): EncounterSession {
   return buildPlayerSafeEncounterForUser(input);
+}
+
+/**
+ * Round-state declarations as a converted boundary returns them (#502 Tier 1, control-plane
+ * rulings 2026-10-04). A declaration's modifier entries carry the canonical lifecycle and the
+ * correction history — `gmOverride` with the GM's reason and user id, and diagnostics. Every combat
+ * and phase context is rebuilt through `buildPlayerFacingCombatContext`, which keeps the context's
+ * own fields and drops both.
+ *
+ * `keepOwnCombatContextAsR2Residual` leaves the combat context of the viewer's own declaration as the
+ * projection produced it. That is the residual ruled R2 — accepted debt, pinned path by path in the
+ * route tests — and it is ruled for the combat-declaration route only, until Tier 3 builds the round
+ * state additively.
+ */
+function buildPlayerFacingRoundStateDeclarations(input: {
+  controlledEncounterParticipantIds: ReadonlySet<string>;
+  keepOwnCombatContextAsR2Residual: boolean;
+  state: CombatRoundState;
+}): CombatRoundState {
+  return {
+    ...input.state,
+    participants: input.state.participants.map((participant) => {
+      const declaration = participant.declaration;
+      if (!declaration) return participant;
+      const phaseContexts = declaration.phaseContexts;
+      const isR2Residual =
+        input.keepOwnCombatContextAsR2Residual &&
+        input.controlledEncounterParticipantIds.has(participant.participantId);
+      return {
+        ...participant,
+        declaration: {
+          ...declaration,
+          combatContext:
+            declaration.combatContext && !isR2Residual
+              ? buildPlayerFacingCombatContext(declaration.combatContext)
+              : declaration.combatContext,
+          phaseContexts: phaseContexts && {
+            phase1: phaseContexts.phase1 && buildPlayerFacingCombatContext(phaseContexts.phase1),
+            phase2: phaseContexts.phase2 && buildPlayerFacingCombatContext(phaseContexts.phase2),
+          },
+        },
+      };
+    }),
+  };
+}
+
+/**
+ * The player-facing encounter a converted boundary returns (#502, Tier 1): the per-viewer player
+ * encounter projection, carried into the declared player type field by field, with its round-state
+ * declarations narrowed by `buildPlayerFacingRoundStateDeclarations`.
+ */
+export function buildPlayerFacingEncounterForUser(input: {
+  encounter: EncounterSession;
+  /** R2: set by the combat-declaration route only (`buildPlayerFacingRoundStateDeclarations`). */
+  keepOwnCombatContextAsR2Residual?: true;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): PlayerFacingEncounterSession {
+  const projectedEncounter = buildPlayerSafeEncounterForUser(input);
+  const { controlledEncounterParticipantIds } = buildPlayerSafeCombatScopeForUser(input);
+
+  return buildPlayerFacingEncounterSession({
+    projectedEncounter: {
+      ...projectedEncounter,
+      combatRoundState:
+        projectedEncounter.combatRoundState &&
+        buildPlayerFacingRoundStateDeclarations({
+          controlledEncounterParticipantIds,
+          keepOwnCombatContextAsR2Residual: input.keepOwnCombatContextAsR2Residual === true,
+          state: projectedEncounter.combatRoundState,
+        }),
+    },
+  });
+}
+
+/**
+ * The player response of a combat boundary converted in #502. It accepts only declared
+ * player-facing types, so a stored encounter, participant, or command cannot be returned to a
+ * player through it.
+ */
+function playerCombatMutationResponse(response: {
+  command?: PlayerFacingCombatRoundCommand;
+  encounter: PlayerFacingEncounterSession;
+  participant: PlayerFacingScenarioParticipant;
+}) {
+  return response;
 }
 
 function preservePlayerCombatModifierBuckets(input: {
@@ -9771,6 +9968,19 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       const acceptedScenarioParticipants = scenarioParticipants.map((candidate) =>
         candidate.id === saved.participant.id ? saved.participant : candidate,
       );
+      if (!gmAuthorizedOperation) {
+        // The deterministic-advance descriptor drives the GM-only advance route and is not
+        // player-facing, so a player declaration returns only the player encounter and participant.
+        return playerCombatMutationResponse({
+          encounter: buildPlayerFacingEncounterForUser({
+            encounter: saved.encounter,
+            keepOwnCombatContextAsR2Residual: true,
+            scenarioParticipants: acceptedScenarioParticipants,
+            userId: user.id,
+          }),
+          participant: buildPlayerFacingScenarioParticipant(saved.participant),
+        });
+      }
       const deterministicAdvance = projectAcceptedDeterministicAdvance({
         encounter: saved.encounter,
         scenarioParticipants: acceptedScenarioParticipants,
@@ -9879,6 +10089,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             },
           },
         });
+        if (access.mode !== "gm") {
+          return playerCombatMutationResponse({
+            encounter: buildPlayerFacingEncounterForUser({
+              encounter: saved.encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+            participant: buildPlayerFacingScenarioParticipant(saved.participant),
+          });
+        }
         return { encounter: saved.encounter, participant: saved.participant };
       } catch (error) {
         return reply.code(400).send({
@@ -13621,6 +13841,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
         });
 
+        if (access.mode !== "gm") {
+          return playerCombatMutationResponse({
+            command: buildPlayerSafeCombatRoundCommandForUser({
+              command: backedOut.command,
+              ...buildPlayerSafeCombatScopeForUser({
+                encounter: saved.encounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
+            encounter: buildPlayerFacingEncounterForUser({
+              encounter: saved.encounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+            participant: buildPlayerFacingScenarioParticipant(saved.participant),
+          });
+        }
+
         return {
           command: backedOut.command,
           encounter: saved.encounter,
@@ -13748,6 +13987,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: submittedAt,
           },
         });
+
+        if (access.mode !== "gm") {
+          return playerCombatMutationResponse({
+            command: buildPlayerSafeCombatRoundCommandForUser({
+              command: continued.command,
+              ...buildPlayerSafeCombatScopeForUser({
+                encounter: savedEncounter,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
+            encounter: buildPlayerFacingEncounterForUser({
+              encounter: savedEncounter,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+            participant: buildPlayerFacingScenarioParticipant(scenarioParticipant),
+          });
+        }
 
         return {
           command: continued.command,

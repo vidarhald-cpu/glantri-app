@@ -8,12 +8,15 @@ import {
 } from "@glantri/database";
 import {
   attachCanonicalPersistentEffectLifecycles,
+  buildPlayerFacingScenarioParticipant,
   isScenarioLiveInteractive,
   buildScenarioPlayerVisibleParticipants,
+  mergePlayerSubmittedScenarioParticipantState,
   reusableEntityKindSchema,
   scenarioParticipantJoinSourceSchema,
   scenarioParticipantRoleSchema,
   scenarioParticipantStateSchema,
+  type PlayerFacingScenarioParticipant,
 } from "@glantri/domain";
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
@@ -33,6 +36,17 @@ const characterService = new CharacterService();
 const campaignService = new CampaignService();
 const encounterService = new EncounterService();
 const scenarioService = new ScenarioService();
+
+/**
+ * The player response of a participant boundary converted in #502 (privacy hardening, Tier 1). It
+ * accepts only the declared player-facing participant, so a stored participant cannot be returned
+ * to a player through it.
+ */
+function playerParticipantResponse(response: {
+  participant: PlayerFacingScenarioParticipant | null;
+}) {
+  return response;
+}
 
 export const participantRoutes: FastifyPluginAsync = async (app) => {
   app.get("/scenarios/:scenarioId/participants", async (request, reply) => {
@@ -102,6 +116,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         participants.find(
           (p) => p.isActive && p.role === "player_character" && p.controlledByUserId === user.id,
         ) ?? null;
+
+      if (access.mode === "player") {
+        return playerParticipantResponse({
+          participant: myParticipant ? buildPlayerFacingScenarioParticipant(myParticipant) : null,
+        });
+      }
 
       return { participant: myParticipant };
     } catch (error) {
@@ -199,6 +219,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         scenarioId,
         tacticalGroupId: parseOptionalNullableString(body, "tacticalGroupId"),
       });
+
+      if (!isGameMaster) {
+        return playerParticipantResponse({
+          participant: buildPlayerFacingScenarioParticipant(participant),
+        });
+      }
 
       return { participant };
     } catch (error) {
@@ -334,6 +360,8 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "Scenario is not currently open for live participant updates." });
       }
 
+      let acceptedState = submittedState;
+
       if (access.mode === "player") {
         const participant = await scenarioService.getScenarioParticipantById(
           participantId,
@@ -344,20 +372,23 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
           return reply.code(403).send({ error: "Access denied." });
         }
 
-        const currentState = scenarioParticipantStateSchema.parse(participant.state);
+        // The player receives the player-facing state (#502); what it omits is kept from storage.
+        const mergedState = mergePlayerSubmittedScenarioParticipantState({
+          currentState: scenarioParticipantStateSchema.parse(participant.state),
+          submittedState,
+        });
 
-        if (
-          JSON.stringify(currentState.combatEffects ?? { effects: [], events: [] }) !==
-          JSON.stringify(submittedState.combatEffects ?? { effects: [], events: [] })
-        ) {
+        if (!mergedState) {
           return reply.code(403).send({ error: "Only GM users can edit combat effects." });
         }
+
+        acceptedState = mergedState;
       }
 
       const nextState = scenarioParticipantStateSchema.parse({
-        ...submittedState,
+        ...acceptedState,
         combatEffects: attachCanonicalPersistentEffectLifecycles({
-          combatEffects: submittedState.combatEffects,
+          combatEffects: acceptedState.combatEffects,
         }),
       });
 
@@ -366,6 +397,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         scenarioId,
         state: nextState,
       });
+
+      if (access.mode === "player") {
+        return playerParticipantResponse({
+          participant: buildPlayerFacingScenarioParticipant(participant),
+        });
+      }
 
       return { participant };
     } catch (error) {
