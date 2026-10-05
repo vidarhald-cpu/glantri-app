@@ -495,6 +495,64 @@ export const AnyEquipmentTemplateSchema = z.discriminatedUnion("category", [
   ValuableTemplateSchema,
 ]);
 
+/**
+ * What an item's pre-authority `specialProperties` bag becomes on the canonical item. This is the
+ * one definition of that conversion, as the item-authority migration applied it to stored items:
+ * legacy roleplay traits and effect strings become revealed descriptive or unsupported facts
+ * (`migrateLegacySpecialProperties`), legacy custom notes join the item's ordinary notes, and the
+ * bag is cleared. An item that already carries facts keeps them.
+ */
+export function deriveCanonicalLegacyItemFields(input: Record<string, unknown>): {
+  itemFacts: unknown;
+  notes: unknown;
+  specialProperties: null;
+} {
+  const legacy = EquipmentSpecialPropertiesSchema.nullable().safeParse(input.specialProperties);
+  const legacyCustomNotes = legacy.success ? legacy.data?.customNotes?.trim() : undefined;
+  const existingNotes = typeof input.notes === "string" ? input.notes.trim() : "";
+
+  return {
+    itemFacts:
+      input.itemFacts ??
+      (legacy.success
+        ? migrateLegacySpecialProperties(legacy.data)
+        : createEmptyEquipmentItemFacts()),
+    notes: legacyCustomNotes
+      ? [existingNotes, legacyCustomNotes].filter(Boolean).join("\n\n")
+      : input.notes,
+    specialProperties: null,
+  };
+}
+
+/**
+ * Brings the items of a captured equipment snapshot to their canonical form for legacy content
+ * (`deriveCanonicalLegacyItemFields`), leaving everything else as captured. A snapshot taken before
+ * the item authority still holds the untyped `specialProperties` bag the stored items were migrated
+ * from; this gives it the same facts and notes the stored item has. It decides no visibility:
+ * `revealableEquipmentState` does that afterwards.
+ */
+export function canonicalizeLegacyEquipmentSnapshotItems(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const state = value as Record<string, unknown>;
+  const items = state.itemsById;
+  if (!items || typeof items !== "object" || Array.isArray(items)) return value;
+
+  return {
+    ...state,
+    itemsById: Object.fromEntries(
+      Object.entries(items).map(([id, raw]) => [
+        id,
+        raw && typeof raw === "object" && !Array.isArray(raw)
+          ? {
+              ...(raw as Record<string, unknown>),
+              ...deriveCanonicalLegacyItemFields(raw as Record<string, unknown>),
+            }
+          : raw,
+      ]),
+    ),
+  };
+}
+
 function normalizeEquipmentItemInput(value: unknown): unknown {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return value;
@@ -509,24 +567,13 @@ function normalizeEquipmentItemInput(value: unknown): unknown {
       ? input.characterId
       : null;
   const characterId = hasCharacter ? input.characterId : holderCharacterId;
-  const legacy = EquipmentSpecialPropertiesSchema.nullable().safeParse(input.specialProperties);
-  const legacyCustomNotes = legacy.success ? legacy.data?.customNotes?.trim() : undefined;
-  const existingNotes = typeof input.notes === "string" ? input.notes.trim() : "";
 
   return {
     ...input,
     campaignContextId: input.campaignContextId ?? null,
     characterId,
     holderCharacterId,
-    itemFacts:
-      input.itemFacts ??
-      (legacy.success
-        ? migrateLegacySpecialProperties(legacy.data)
-        : createEmptyEquipmentItemFacts()),
-    notes: legacyCustomNotes
-      ? [existingNotes, legacyCustomNotes].filter(Boolean).join("\n\n")
-      : input.notes,
-    specialProperties: null,
+    ...deriveCanonicalLegacyItemFields(input),
   };
 }
 
