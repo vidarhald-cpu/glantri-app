@@ -1,3 +1,7 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerEncounter";
@@ -575,7 +579,22 @@ describe("player combat phase model", () => {
     });
 
     expect(summary.selectedAttackModeId).toBe("mode-3");
+    // A player's attack stats name the provenance kind, never the workbook coordinates (#517
+    // ruling E2); only the GM's Combat Round Manager asks for them.
     expect(summary.attackStats).toMatchObject({
+      provenance: "imported",
+      range: "10/30/60",
+    });
+    expect(JSON.stringify(summary)).not.toContain("A12:K12");
+    const gmSummary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      includeSourceProvenance: true,
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackModeId: "mode-3",
+    });
+    expect(gmSummary.attackStats).toMatchObject({
       provenance: "Weapon2 row 12 · A12:K12",
       range: "10/30/60",
     });
@@ -1752,5 +1771,38 @@ describe("player combat phase model", () => {
       },
       targetParticipantId: "encounter-a",
     });
+  });
+});
+
+describe("workbook import provenance in the attack stats (#517 ruling E2)", () => {
+  const webRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const sourceFiles = (directory: string): string[] =>
+    readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) return entry.name === "node_modules" ? [] : sourceFiles(path);
+      return /\.tsx?$/.test(entry.name) && !/\.(test|spec)\.tsx?$/.test(entry.name) ? [path] : [];
+    });
+  const read = (path: string) => readFileSync(join(webRoot, path), "utf8");
+  const count = (source: string, text: string) => source.split(text).length - 1;
+
+  it("is asked for the coordinates only by the GM's Combat Round Manager, at every one of its calls", () => {
+    const askers = [...sourceFiles(join(webRoot, "src")), ...sourceFiles(join(webRoot, "app"))]
+      .filter((path) => readFileSync(path, "utf8").includes("includeSourceProvenance"))
+      .map((path) => relative(webRoot, path))
+      .sort();
+    expect(askers).toEqual([
+      "src/features/combat-round-manager/CombatRoundManagerPanel.tsx",
+      "src/features/player-combat/playerCombatPhaseModel.ts",
+    ]);
+
+    const gmPanel = read("src/features/combat-round-manager/CombatRoundManagerPanel.tsx");
+    expect(count(gmPanel, "buildPlayerCombatLoadoutSummary({")).toBe(5);
+    expect(count(gmPanel, "includeSourceProvenance: true,")).toBe(5);
+
+    const playerPage = read(
+      "app/(app)/campaigns/[campaignId]/scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent.tsx",
+    );
+    expect(count(playerPage, "buildPlayerCombatLoadoutSummary(")).toBe(4);
+    expect(playerPage).not.toContain("includeSourceProvenance");
   });
 });

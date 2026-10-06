@@ -5,10 +5,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { canonicalCombatModifierEffectSchema } from "@glantri/domain";
 
 import type { CombatSituationLifecycleEffect } from "./combatSituationAwareness";
+import { buildPlayerCombatLoadoutSummary } from "./playerCombatPhaseModel";
 import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackModeSelector,
+  PlayerCombatAttackStatsTable,
   PlayerCombatCommittedDefenseReview,
   PlayerCombatCurrentConsequences,
   PlayerCombatModifierPanel,
@@ -1227,5 +1229,122 @@ describe("a calculation group whose breakdown is incomplete", () => {
     const group = screen.getByText("Total -2%").closest("div")?.parentElement;
     expect(group).not.toBeNull();
     expect(group?.children).toHaveLength(2);
+  });
+});
+
+describe("PlayerCombatAttackStatsTable", () => {
+  it("shows a selected mode's workbook coordinates to the GM and never to the player (#517 ruling E2)", () => {
+    const loadoutModel = {
+      armorSummary: null,
+      combatStatePanelModel: {
+        capabilityRows: [],
+        description: "",
+        statsRows: [],
+        title: "Combat State Panel",
+        weaponModeTable: {
+          columns: ["Mode", "Weapon", "I", "Attack 1", "OB", "DMB", "Crit 1", "Sec", "AM"],
+          description: "",
+          rows: [
+            ["Primary", "Dagger", "2", "Thrust", "8", "3", "DP", "—", "A"],
+            ["Thrown", "Dagger", "-1", "Throw", "5", "1", "DP", "—", "A"],
+          ],
+          title: "Weapons",
+        },
+        weaponRows: [
+          {
+            attackModes: [
+              {
+                attackType: "melee",
+                canonicalMeleeMode: "thrust",
+                crit: "DP",
+                dmb: 3,
+                id: "mode-1",
+                initiative: 2,
+                isPrimaryAttack: true,
+                label: "Thrust",
+                ob: 8,
+                order: 0,
+              },
+            ],
+            attackMode1Id: "mode-1",
+            currentItemLabel: "Dagger",
+            itemId: "scenario-dagger",
+            modeLabel: "Primary",
+            templateId: "weapon-template-dagger",
+          },
+          {
+            attackModes: [
+              {
+                allowsRepeatedRoundAttack: false,
+                armorModifier: "A",
+                attackType: "thrown",
+                canonicalMeleeMode: null,
+                crit: "DP",
+                damageClass: "pointed",
+                dmb: 1,
+                id: "mode-3",
+                initiative: -1,
+                isPrimaryAttack: true,
+                label: "Throw",
+                ob: 5,
+                order: 2,
+                provenance: "imported",
+                range: "10/30/60",
+                sourceMetadata: {
+                  rawRow: { A: "Dagger" },
+                  row: 12,
+                  sheet: "Weapon2",
+                  sourceColumns: { A: "Weapon" },
+                  sourceRange: "A12:K12",
+                  workbook: "Themistogenes 1.07.xlsx",
+                },
+              },
+            ],
+            attackMode1Id: "mode-3",
+            currentItemLabel: "Dagger",
+            itemId: "scenario-dagger",
+            modeLabel: "Thrown",
+            templateId: "weapon-template-dagger",
+          },
+        ],
+      },
+      encumbranceSkillsTable: null,
+      fields: [
+        {
+          id: "primary",
+          label: "Primary weapon",
+          options: [],
+          value: "scenario-dagger",
+          valueLabel: "Dagger",
+        },
+        {
+          id: "throwing",
+          label: "Throwing weapon",
+          options: [],
+          value: "scenario-dagger",
+          valueLabel: "Dagger",
+        },
+      ],
+    } as unknown as Parameters<typeof buildPlayerCombatLoadoutSummary>[0]["loadoutModel"];
+    const summaryFor = (includeSourceProvenance?: boolean) =>
+      buildPlayerCombatLoadoutSummary({
+        actionId: "attack_parry",
+        includeSourceProvenance,
+        loadoutModel,
+        phaseKey: "phase1",
+        secondaryActionId: "",
+        selectedAttackModeId: "mode-3",
+      }).attackStats!;
+
+    // The player page's call, which never asks for the coordinates.
+    const player = render(<PlayerCombatAttackStatsTable stats={summaryFor()} />);
+    expect(player.container.textContent).toContain("Source: imported");
+    expect(player.container.textContent).not.toContain("Weapon2");
+    expect(player.container.textContent).not.toContain("A12:K12");
+    cleanup();
+
+    // The GM's Combat Round Manager's call, for the same loadout.
+    const gm = render(<PlayerCombatAttackStatsTable stats={summaryFor(true)} />);
+    expect(gm.container.textContent).toContain("Source: Weapon2 row 12 · A12:K12");
   });
 });

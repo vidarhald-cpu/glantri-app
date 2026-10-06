@@ -618,6 +618,12 @@ export function getCombatDeclarationAttackModeUnavailableMessage(input: {
 export function buildPlayerCombatLoadoutSummary(input: {
   actionId: PlayerEncounterActionId | "";
   allowUnarmedFallback?: boolean;
+  /**
+   * Whether the attack stats name the selected mode's workbook import coordinates (sheet, row and
+   * range). Only the GM's Combat Round Manager passes `true`: workbook import provenance is not
+   * player-facing (#517, ruling E2). Without it the stats name only the provenance kind.
+   */
+  includeSourceProvenance?: boolean;
   loadoutModel: EquipmentLoadoutModuleModel;
   phaseKey?: PlayerCombatPhaseKey;
   selectedAttackModeId?: string;
@@ -984,9 +990,10 @@ export function buildPlayerCombatLoadoutSummary(input: {
       label: "Parry",
       row: referenceRow,
     }),
-    provenance: sourceMetadata
-      ? `${sourceMetadata.sheet} row ${sourceMetadata.row} · ${sourceMetadata.sourceRange}`
-      : selectedDerivedMode?.provenance,
+    provenance:
+      input.includeSourceProvenance === true && sourceMetadata
+        ? `${sourceMetadata.sheet} row ${sourceMetadata.row} · ${sourceMetadata.sourceRange}`
+        : selectedDerivedMode?.provenance,
     range: selectedDerivedMode?.range ?? "—",
     secondCrit: selectedDerivedMode
       ? String(selectedDerivedMode.secondCrit ?? "—")

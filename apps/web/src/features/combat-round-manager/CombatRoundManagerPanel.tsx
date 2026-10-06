@@ -6235,6 +6235,7 @@ export default function CombatRoundManagerPanel({
           allowUnarmedFallback:
             inspectorEquipmentStatus.kind === "ready" ||
             inspectorEquipmentStatus.kind === "unarmed",
+          includeSourceProvenance: true,
           loadoutModel: inspectorLoadoutModel!,
           secondaryActionId: inspectorDraft.secondaryActionId,
         }),
@@ -6384,6 +6385,7 @@ export default function CombatRoundManagerPanel({
             allowUnarmedFallback:
               inspectorEquipmentStatus.kind === "ready" ||
               inspectorEquipmentStatus.kind === "unarmed",
+            includeSourceProvenance: true,
             loadoutModel: phaseLoadoutModel,
             phaseKey,
             selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
@@ -6394,6 +6396,7 @@ export default function CombatRoundManagerPanel({
             allowUnarmedFallback:
               inspectorEquipmentStatus.kind === "ready" ||
               inspectorEquipmentStatus.kind === "unarmed",
+            includeSourceProvenance: true,
             loadoutModel: requestPhaseLoadoutModel,
             phaseKey,
             selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
@@ -8911,6 +8914,7 @@ export default function CombatRoundManagerPanel({
     });
     const loadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
+      includeSourceProvenance: true,
       loadoutModel,
       phaseKey: input.phaseKey,
       selectedAttackModeId: input.phaseKey
@@ -8920,6 +8924,7 @@ export default function CombatRoundManagerPanel({
     });
     const baseLoadoutSummary = buildPlayerCombatLoadoutSummary({
       actionId: draft.actionId,
+      includeSourceProvenance: true,
       loadoutModel: baseLoadoutModel,
       phaseKey: input.phaseKey,
       selectedAttackModeId: input.phaseKey
