@@ -327,11 +327,23 @@ function buildPlayerFacingCombatEffectsState(
 }
 
 /**
+ * Whether a field holds workbook import provenance. Every such field in the domain is named
+ * `sourceMetadata` or ends in `SourceMetadata`, after the `Imported…SourceMetadata` schema that
+ * types it: `sourceMetadata` on weapon templates and attack modes (`ImportedWeaponSourceMetadata`)
+ * and on armor templates and component profiles (`ImportedArmorSourceMetadata`), a shield
+ * template's `offensiveSourceMetadata` and `defensiveSourceMetadata` (`ImportedShieldSourceMetadata`),
+ * and a round-state attack's `weaponModeSourceMetadata`. A test derives the provenance fields from
+ * the domain's schemas by shape and fails if one is ever named otherwise.
+ */
+function isWorkbookImportProvenanceKey(key: string): boolean {
+  return key === "sourceMetadata" || key.endsWith("SourceMetadata");
+}
+
+/**
  * A captured equipment snapshot without its workbook import provenance, which is not player-facing
- * (#517, ruling E2). In the equipment domain a `sourceMetadata` field is always that provenance —
- * `ImportedWeaponSourceMetadata` on weapon templates and attack modes, `ImportedArmorSourceMetadata`
- * on armor templates and component profiles — so every such field is removed, at any depth, and
- * nothing else is. A mode's `provenance` kind (`imported`, `manual` or `derived`) is kept.
+ * (#517, ruling E2): every field `isWorkbookImportProvenanceKey` names is removed, at any depth.
+ * Nothing else is — a mode's `provenance` kind (`imported`, `manual` or `derived`) is kept, as are
+ * rules-source citations and authored notes (ruling E2, Decision 3).
  */
 export function withoutWorkbookImportProvenance(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -342,7 +354,7 @@ export function withoutWorkbookImportProvenance(value: unknown): unknown {
   }
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, entry]) =>
-      key === "sourceMetadata" ? [] : [[key, withoutWorkbookImportProvenance(entry)]],
+      isWorkbookImportProvenanceKey(key) ? [] : [[key, withoutWorkbookImportProvenance(entry)]],
     ),
   );
 }

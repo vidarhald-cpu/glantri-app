@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   buildPlayerFacingCombatContext,
   buildPlayerFacingScenarioParticipant,
   mergePlayerSubmittedScenarioParticipantState,
+  withoutWorkbookImportProvenance,
   type PlayerFacingScenarioParticipant,
 } from "../campaign/playerFacingScenarioParticipant";
+import * as domain from "../index";
 import {
   scenarioParticipantCombatContextSchema,
   scenarioParticipantSchema,
@@ -365,6 +368,14 @@ describe("#502 player-facing types: additive construction", () => {
       sourceRange: "A5:P5",
       workbook: "SECRET_WORKBOOK.xlsx",
     };
+    const shieldProvenance = {
+      rawRow: { A: "Round shield" },
+      row: 37,
+      sheet: "Weapon1",
+      sourceColumns: { name: "A" },
+      sourceRange: "Weapon1!A37:Q37",
+      workbook: "SECRET_WORKBOOK.xlsx",
+    };
     const templatesById = {
       "armor-template-mail": {
         category: "armor",
@@ -382,6 +393,19 @@ describe("#502 player-facing types: additive construction", () => {
         name: "Javelin",
         sourceMetadata: weaponProvenance,
       },
+      // A shield carries the same import provenance under two other names (QA F1).
+      "shield-template-round": {
+        attackModes: [
+          { id: "mode-1", ob: 2, provenance: "imported", sourceMetadata: weaponProvenance },
+        ],
+        category: "shield",
+        defensiveSourceMetadata: shieldProvenance,
+        defensiveValue: 3,
+        id: "shield-template-round",
+        name: "Round shield",
+        offensiveSourceMetadata: shieldProvenance,
+        shieldBonus: 15,
+      },
     };
     const stored = storedParticipantWithPrivateMaterial();
     const withEquipment = scenarioParticipantSchema.parse({
@@ -394,9 +418,13 @@ describe("#502 player-facing types: additive construction", () => {
 
     const player = buildPlayerFacingScenarioParticipant(withEquipment);
 
-    expect(keysAnywhere(player).has("sourceMetadata")).toBe(false);
+    const playerKeys = keysAnywhere(player);
+    for (const key of ["sourceMetadata", "offensiveSourceMetadata", "defensiveSourceMetadata"]) {
+      expect(playerKeys.has(key), key).toBe(false);
+    }
     expect(JSON.stringify(player)).not.toContain("SECRET");
     expect(JSON.stringify(player)).not.toContain("A17:K17");
+    expect(JSON.stringify(player)).not.toContain("A37:Q37");
     const equipment = player.snapshot.equipmentState as {
       templates: { templatesById: Record<string, Record<string, unknown>> };
       templatesById: Record<string, Record<string, unknown>>;
@@ -414,9 +442,103 @@ describe("#502 player-facing types: additive construction", () => {
         id: "armor-template-mail",
         name: "Mail",
       });
+      expect(playerTemplates["shield-template-round"]).toEqual({
+        attackModes: [{ id: "mode-1", ob: 2, provenance: "imported" }],
+        category: "shield",
+        defensiveValue: 3,
+        id: "shield-template-round",
+        name: "Round shield",
+        shieldBonus: 15,
+      });
     }
-    // The stored participant, which the GM path reads, keeps it.
-    expect(keysAnywhere(withEquipment).has("sourceMetadata")).toBe(true);
+    // The stored participant, which the GM path reads, keeps every one of them.
+    const storedKeys = keysAnywhere(withEquipment);
+    for (const key of ["sourceMetadata", "offensiveSourceMetadata", "defensiveSourceMetadata"]) {
+      expect(storedKeys.has(key), key).toBe(true);
+    }
+  });
+
+  /**
+   * Completeness (QA F1): the strip matched one of the three names the equipment domain gives its
+   * import provenance. The provenance fields are derived here from the domain's own schemas — every
+   * exported zod schema is walked, and a field whose schema has the shape of an import record
+   * (`workbook`, `sheet`, `sourceRange` and `sourceColumns`, which only `Imported…SourceMetadata`
+   * schemas have) is one — so a provenance field added under any name is found, and the strip must
+   * remove it. Rules-source citations such as the movement burden's `provenance` lack that shape.
+   */
+  it("removes every import-provenance field the domain's schemas declare, whatever it is named", () => {
+    const provenanceFields = new Set<string>();
+    const seen = new Set<z.ZodTypeAny>();
+    const isImportRecord = (schema: z.ZodTypeAny): boolean => {
+      let inner = schema;
+      while (inner instanceof z.ZodOptional || inner instanceof z.ZodNullable)
+        inner = inner.unwrap();
+      return (
+        inner instanceof z.ZodObject &&
+        ["workbook", "sheet", "sourceRange", "sourceColumns"].every((key) => key in inner.shape)
+      );
+    };
+    const walk = (schema: z.ZodTypeAny): void => {
+      if (seen.has(schema)) return;
+      seen.add(schema);
+      const def = schema._def as Record<string, unknown> & { typeName?: string };
+      if (schema instanceof z.ZodObject) {
+        for (const [field, fieldSchema] of Object.entries(schema.shape as z.ZodRawShape)) {
+          if (isImportRecord(fieldSchema)) provenanceFields.add(field);
+          walk(fieldSchema);
+        }
+        return;
+      }
+      if (schema instanceof z.ZodLazy) return walk(schema.schema);
+      if (schema instanceof z.ZodRecord) return walk(schema.valueSchema);
+      if (schema instanceof z.ZodMap) return walk(schema._def.valueType);
+      for (const key of [
+        "innerType",
+        "schema",
+        "type",
+        "in",
+        "out",
+        "left",
+        "right",
+        "valueType",
+      ]) {
+        if (def[key] instanceof z.ZodType) walk(def[key] as z.ZodTypeAny);
+      }
+      for (const key of ["options", "items"]) {
+        const value = def[key];
+        const entries =
+          value instanceof Map ? [...value.values()] : Array.isArray(value) ? value : [];
+        for (const entry of entries) if (entry instanceof z.ZodType) walk(entry);
+      }
+      if (schema instanceof z.ZodArray) walk(schema.element);
+    };
+    for (const exported of Object.values(domain)) {
+      if (exported instanceof z.ZodType) walk(exported);
+    }
+
+    // Non-vacuous: the walk reaches every import record declared today.
+    expect([...provenanceFields].sort()).toEqual(
+      expect.arrayContaining([
+        "defensiveSourceMetadata",
+        "offensiveSourceMetadata",
+        "sourceMetadata",
+        "weaponModeSourceMetadata",
+      ]),
+    );
+    const importRecord = {
+      rawRow: { A: "x" },
+      row: 1,
+      sheet: "Sheet",
+      sourceColumns: { name: "A" },
+      sourceRange: "SECRET_RANGE",
+      workbook: "SECRET_WORKBOOK.xlsx",
+    };
+    for (const field of provenanceFields) {
+      const stripped = withoutWorkbookImportProvenance({
+        templatesById: { template: { [field]: importRecord, name: "kept" } },
+      });
+      expect(stripped, field).toEqual({ templatesById: { template: { name: "kept" } } });
+    }
   });
 
   it("copies only the named top-level encounter fields", () => {

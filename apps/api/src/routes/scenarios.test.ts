@@ -83,7 +83,7 @@ import {
   playerFacingEncounterSessionSchema,
   playerFacingScenarioParticipantSchema,
 } from "@glantri/domain";
-import { weaponTemplates } from "@glantri/content/equipment";
+import { shieldTemplates, weaponTemplates } from "@glantri/content/equipment";
 
 const mocks = vi.hoisted(() => {
   class CampaignCharacterAlreadyRosteredError extends Error {
@@ -30096,9 +30096,23 @@ const TIER2_NONE = {
 } as const;
 
 /**
+ * An import record, by shape: only the `Imported…SourceMetadata` schemas carry `workbook`, `sheet`,
+ * `sourceRange` and `sourceColumns` together (rules-source citations do not).
+ */
+function isImportRecord(value: unknown): boolean {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    ["workbook", "sheet", "sourceRange", "sourceColumns"].every((key) => key in (value as object))
+  );
+}
+
+/**
  * Where workbook import provenance, which is not player-facing (#517 ruling E2), sits in a
- * response: every populated `weaponModeSourceMetadata` and `sourceMetadata` field, and a latest
- * combat event summary that names a workbook row.
+ * response: every populated field named `sourceMetadata` or `…SourceMetadata` (a weapon or armor
+ * template's, an attack mode's, a shield's `offensiveSourceMetadata` and `defensiveSourceMetadata`,
+ * a round-state attack's `weaponModeSourceMetadata`), any other field holding an import record,
+ * and a latest combat event summary that names a workbook row.
  */
 function workbookImportProvenancePaths(value: unknown, path = "", found: string[] = []): string[] {
   if (Array.isArray(value)) {
@@ -30106,7 +30120,7 @@ function workbookImportProvenancePaths(value: unknown, path = "", found: string[
   } else if (value && typeof value === "object") {
     for (const [key, nested] of Object.entries(value)) {
       const nestedPath = path ? `${path}.${key}` : key;
-      if (key === "weaponModeSourceMetadata" || key === "sourceMetadata") {
+      if (key === "sourceMetadata" || key.endsWith("SourceMetadata") || isImportRecord(nested)) {
         if (nested != null) found.push(nestedPath);
       } else if (
         key === "latestEvent" &&
@@ -33492,5 +33506,64 @@ describe("#517 privacy hardening Tier 3", () => {
       });
       expect(workbookImportProvenancePaths(body)).toEqual([]);
     }
+  });
+
+  /**
+   * QA F1: a shield template carries its import provenance as `offensiveSourceMetadata` and
+   * `defensiveSourceMetadata`, not `sourceMetadata`. Reproduced on the combat-declaration route
+   * with the content's own shield templates in the declaring participant's equipment snapshot.
+   */
+  it("returns the declaring player's snapshot without shield import provenance; the GM keeps it", async () => {
+    const templatesById = Object.fromEntries(
+      shieldTemplates.map((template) => [template.id, template]),
+    );
+    const shieldProvenanceCount = shieldTemplates.filter(
+      (template) => template.offensiveSourceMetadata || template.defensiveSourceMetadata,
+    ).length;
+    expect(shieldProvenanceCount).toBeGreaterThan(0);
+
+    async function declare(user: typeof mocks.playerUser) {
+      setupCombatDeclarationRoute({
+        participant: makeCombatScenarioParticipant({
+          snapshot: {
+            displayName: "The Gladiator",
+            equipmentState: { itemsById: {}, templates: { templatesById } },
+          },
+        }),
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementId: "hold",
+          phaseContexts: {
+            phase1: {
+              modifierBuckets: emptyModifierBuckets(),
+              targetParticipantId: "encounter-target-1",
+            },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const gm = await declare(mocks.adminUser);
+    const gmShieldPaths = workbookImportProvenancePaths(gm).filter((path) =>
+      /(offensive|defensive)SourceMetadata$/.test(path),
+    );
+    expect(gmShieldPaths.length).toBeGreaterThanOrEqual(shieldProvenanceCount);
+
+    const player = await declare(mocks.playerUser);
+    const playerTemplates = player.participant.snapshot.equipmentState.templates.templatesById;
+    expect(Object.keys(playerTemplates).sort()).toEqual(Object.keys(templatesById).sort());
+    expect(workbookImportProvenancePaths(player)).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("Weapon1!A37:Q37");
   });
 });
