@@ -194,9 +194,9 @@ const playerFacingCombatRoundPhaseContextsSchema = playerFacingObject(
  * - `submittedByUserId` — the submitting account's id, which is the GM's when the GM declared for
  *   the participant. Nothing outside the routes that write it reads it; actor identities are not
  *   player-facing (Tier 1, `playerFacingScenarioParticipant`).
- * - `disarm` — the per-viewer projection removes it from every declaration a player can see
- *   (`sanitizePlayerSafeDisarmDeclaration`, and the whole declaration of another participant who
- *   declared a disarm), so players never receive it; the page's draft read of it gets `undefined`.
+ * - `disarm` — players never received it: the per-viewer projection removed it from the viewer's
+ *   own declaration and hides another participant's disarm declaration whole; the page's draft read
+ *   of it gets `undefined`.
  * - `adjustDistance` — no player consumer: its only reader on a player's state is the server's
  *   `nextTask` derivation (`buildManeuverAdapter`), and no client reads `nextTask`.
  * - `secondaryActions` — no player consumer: it repeats `secondaryActionContext`, which every writer
