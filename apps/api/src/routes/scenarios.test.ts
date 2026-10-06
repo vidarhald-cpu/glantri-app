@@ -33184,6 +33184,76 @@ describe("#517 privacy hardening Tier 3", () => {
   });
 
   /**
+   * The per-viewer rule for another participant's visible declaration — no notes, intent, movement
+   * intent or observed target — which the round-state participant builder applies from the
+   * projection's overrides. The viewer's own declaration keeps them; the GM sees both.
+   */
+  it("shows another participant's declaration without its notes, intent, movement or observed target", async () => {
+    const withDeclarationDetail = (state: CombatRoundState): CombatRoundState => ({
+      ...state,
+      participants: state.participants.map((participant) => ({
+        ...participant,
+        declaration: participant.declaration && {
+          ...participant.declaration,
+          additionalActionNotes: `NOTE_${participant.participantId}`,
+          intent: { facing: "forward", primaryAction: { actionId: "double_attack" } },
+          movementIntent: {
+            distancePreferences: [
+              {
+                desiredDistance: 1,
+                notes: `MOVE_${participant.participantId}`,
+                source: "player_declared",
+                targetParticipantId: "encounter-participant-1",
+              },
+            ],
+            mode: "set_distance_preferences",
+          },
+          secondaryActionContext: {
+            action: "observe_opponent",
+            targetParticipantId: "encounter-participant-1",
+          },
+          secondaryActionId: "observe_opponent",
+        },
+      })) as CombatRoundState["participants"],
+    });
+    const declarationOf = (body: string, participantId: string) =>
+      (
+        JSON.parse(body).encounter.combatRoundState.participants as Array<{
+          declaration?: Record<string, unknown>;
+          participantId: string;
+        }>
+      ).find((participant) => participant.participantId === participantId)?.declaration;
+
+    const gm = await readPhaseEncounter(mocks.adminUser, withDeclarationDetail);
+    expect(declarationOf(gm, "encounter-participant-2")).toMatchObject({
+      additionalActionNotes: "NOTE_encounter-participant-2",
+      secondaryActionId: "observe_opponent",
+    });
+
+    const player = await readPhaseEncounter(mocks.playerUser, withDeclarationDetail);
+    const own = declarationOf(player, "encounter-participant-1");
+    const other = declarationOf(player, "encounter-participant-2");
+    expect(own).toMatchObject({
+      additionalActionNotes: "NOTE_encounter-participant-1",
+      intent: { primaryAction: { actionId: "double_attack" } },
+      movementIntent: { mode: "set_distance_preferences" },
+      secondaryActionId: "observe_opponent",
+    });
+    expect(other).toMatchObject({ actionId: "double_attack" });
+    for (const hidden of [
+      "additionalActionNotes",
+      "intent",
+      "movementIntent",
+      "secondaryActionContext",
+      "secondaryActionId",
+    ]) {
+      expect(other, hidden).not.toHaveProperty(hidden);
+    }
+    expect(player).not.toContain("NOTE_encounter-participant-2");
+    expect(player).not.toContain("MOVE_encounter-participant-2");
+  });
+
+  /**
    * Tier 1's unruled nested locations: continued contacts and unbalanced conditions carried their
    * canonical lifecycle and GM correction history to every player who could see them — including
    * the correction record of another player's participant. They are player-facing structures now,

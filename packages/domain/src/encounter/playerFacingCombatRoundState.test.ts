@@ -236,12 +236,42 @@ describe("#517 player-facing encounter: whole-path", () => {
   });
 
   it("leaves exactly one value open: command facts, Tier 4's", () => {
-    const open: string[] = [];
-    walkSchema(playerFacingEncounterSessionSchema, (node, path) => {
-      if (node === TIER_4_OPEN_COMMAND_FACTS) open.push(path);
-    });
+    // Every path, not every schema: the open record must not be reachable a second way. The paths
+    // below each schema to it are memoized, so shared structures are expanded once.
+    const memo = new Map<z.ZodTypeAny, string[]>();
+    const openSuffixes = (schema: z.ZodTypeAny): string[] => {
+      if (schema === TIER_4_OPEN_COMMAND_FACTS) return [""];
+      const known = memo.get(schema);
+      if (known) return known;
+      memo.set(schema, []);
+      const suffixes: string[] = [];
+      const def = schema._def as Record<string, unknown>;
+      const children: Array<[z.ZodTypeAny, string]> =
+        schema instanceof z.ZodObject
+          ? Object.entries(schema.shape as z.ZodRawShape).map(([key, field]) => [field, `.${key}`])
+          : schema instanceof z.ZodArray
+            ? [[schema.element, "[]"]]
+            : schema instanceof z.ZodRecord
+              ? [[schema.valueSchema, "{}"]]
+              : schema instanceof z.ZodUnion || schema instanceof z.ZodDiscriminatedUnion
+                ? (schema.options as z.ZodTypeAny[]).map((option) => [option, ""])
+                : schema instanceof z.ZodEffects
+                  ? [[schema.innerType(), ""]]
+                  : schema instanceof z.ZodBranded
+                    ? [[schema.unwrap(), ""]]
+                    : def.innerType
+                      ? [[def.innerType as z.ZodTypeAny, ""]]
+                      : [];
+      for (const [child, step] of children) {
+        for (const suffix of openSuffixes(child)) suffixes.push(`${step}${suffix}`);
+      }
+      memo.set(schema, suffixes);
+      return suffixes;
+    };
 
-    expect(open).toEqual(["$.combatRoundState.commands[].facts"]);
+    expect([...new Set(openSuffixes(playerFacingEncounterSessionSchema))]).toEqual([
+      ".combatRoundState.commands[].facts",
+    ]);
   });
 
   it("names no account identity, lifecycle, correction history or GM-only field at any level", () => {
