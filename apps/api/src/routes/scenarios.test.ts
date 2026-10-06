@@ -64,7 +64,10 @@ import {
   scenarioParticipantSchema,
   type CombatProgressionBoundaryKind,
   type CombatDefenseSnapshot,
+  combatRoundInitiativeResultSchema,
+  movementIntentSchema,
   type CombatRoundState,
+  type MovementIntent,
   type CombatEffectsState,
   type EncounterSession,
   type ScenarioParticipant,
@@ -314,6 +317,16 @@ function withoutTheAllowList<Value>(build: () => Value): Value {
   allowList.disabled = true;
   try {
     return build();
+  } finally {
+    allowList.disabled = false;
+  }
+}
+
+/** `withoutTheAllowList` for a request: the switch stays off until the response has been built. */
+async function withoutTheAllowListAsync<Value>(build: () => Promise<Value>): Promise<Value> {
+  allowList.disabled = true;
+  try {
+    return await build();
   } finally {
     allowList.disabled = false;
   }
@@ -33073,5 +33086,174 @@ describe("#517 privacy hardening Tier 3", () => {
 
       expect(general.map((entry) => entry.id)).toEqual(["submitted-row"]);
     });
+  });
+
+  /** `GET /encounters/encounter-1` in the declared phase-attack fixture, its state adjusted. */
+  async function readPhaseEncounter(
+    user: typeof mocks.playerUser,
+    adjust: (state: CombatRoundState) => CombatRoundState,
+    headers: Record<string, string> = {},
+  ) {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: { ...fixture.encounter, combatRoundState: adjust(fixture.roundState) },
+      participants: fixture.participants,
+      user,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({ headers, method: "GET", url: "/encounters/encounter-1" });
+    await app.close();
+    expect(response.statusCode, response.body).toBe(200);
+    return response.body;
+  }
+
+  /** Simulates adding an optional field to an internal schema, everywhere that schema is used. */
+  function addFieldInPlace(object: unknown, key: string): () => void {
+    const schema = object as { _cached: unknown; _def: { shape: () => Record<string, unknown> } };
+    const original = schema._def.shape;
+    // A string field, as Tier 2's floor QA added (the command id schema is a non-empty string).
+    schema._def.shape = () => ({
+      ...original(),
+      [key]: combatRoundCommandSchema.shape.id.optional(),
+    });
+    schema._cached = null;
+    return () => {
+      schema._def.shape = original;
+      schema._cached = null;
+    };
+  }
+
+  /**
+   * Proof obligation 2, at the route: Tier 2's floor QA added a field to the movement intent schema
+   * and one to the initiative result schema, populated both, and saw them in a player's
+   * `GET /encounters/:encounterId`. Repeated here exactly: the GM's response carries both, the
+   * viewer's projection without the allow-list carries both, and no player response does.
+   */
+  it("does not deliver fields added to the movement intent and initiative result schemas", async () => {
+    const withAddedFields = (state: CombatRoundState): CombatRoundState => ({
+      ...state,
+      participants: state.participants.map((participant) => ({
+        ...participant,
+        declaration: participant.declaration && {
+          ...participant.declaration,
+          movementIntent: {
+            distancePreferences: [],
+            mode: "hold_position",
+            qaMoveSecret: "SECRET_QA_MOVE",
+          } as MovementIntent,
+        },
+        initiatives: {
+          ...participant.initiatives,
+          phase1: participant.initiatives.phase1 && {
+            ...participant.initiatives.phase1,
+            qaInitSecret: "SECRET_QA_INIT",
+          },
+        },
+      })),
+    });
+    const restores = [
+      addFieldInPlace(
+        (movementIntentSchema as unknown as { innerType: () => unknown }).innerType(),
+        "qaMoveSecret",
+      ),
+      addFieldInPlace(combatRoundInitiativeResultSchema, "qaInitSecret"),
+    ];
+    try {
+      const gm = await readPhaseEncounter(mocks.adminUser, withAddedFields);
+      expect(gm).toContain("SECRET_QA_MOVE");
+      expect(gm).toContain("SECRET_QA_INIT");
+
+      const unfiltered = await withoutTheAllowListAsync(() =>
+        readPhaseEncounter(mocks.playerUser, withAddedFields),
+      );
+      expect(unfiltered).toContain("SECRET_QA_MOVE");
+      expect(unfiltered).toContain("SECRET_QA_INIT");
+
+      for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+        const player = await readPhaseEncounter(mocks.playerUser, withAddedFields, headers);
+        expect(player).not.toContain("SECRET_QA");
+        expect(playerResponseKeysOutsidePlayerTypes(JSON.parse(player))).toEqual([]);
+      }
+    } finally {
+      for (const restore of restores.reverse()) restore();
+    }
+  });
+
+  /**
+   * Tier 1's unruled nested locations: continued contacts and unbalanced conditions carried their
+   * canonical lifecycle and GM correction history to every player who could see them — including
+   * the correction record of another player's participant. They are player-facing structures now,
+   * and neither is part of them.
+   */
+  it("delivers continued contacts and unbalanced conditions without lifecycle or correction history", async () => {
+    const { lifecycle, transition } = privateCanonicalLifecycle("participant-2");
+    const withPrivateConditions = (state: CombatRoundState): CombatRoundState => ({
+      ...state,
+      continuedContacts: [
+        {
+          affectedParticipantId: "encounter-participant-2",
+          brawlingContestResultId: "brawling-result",
+          canonicalLifecycle: lifecycle,
+          canonicalTransitions: [transition],
+          controllerParticipantId: "encounter-participant-1",
+          establishedPhase: "phase1",
+          establishedRound: state.roundNumber,
+          id: "private-contact",
+          sourceActionId: "offensive_parry",
+          sourceAttackResultId: "attack-result",
+          sourceDeclarationId: "declaration",
+          sourceOpportunityId: "opportunity",
+          sourceParryResultId: "parry-result",
+          status: "active",
+        },
+      ],
+      unbalancedConditions: [
+        {
+          affectedParticipantId: "encounter-participant-2",
+          canonicalLifecycle: lifecycle,
+          canonicalTransitions: [transition],
+          establishedRound: state.roundNumber,
+          id: "private-unbalanced",
+          modifierValue: -2,
+          sourceActionId: "offensive_parry",
+          sourceContinuedContactId: "private-contact",
+          status: "active",
+        },
+      ],
+    });
+
+    const gm = JSON.parse(await readPhaseEncounter(mocks.adminUser, withPrivateConditions));
+    expect(gmCorrectionRecords(gm.encounter.combatRoundState.continuedContacts)).toContainEqual(
+      TIER2_GM_CORRECTION_RECORD,
+    );
+    expect(gmCorrectionRecords(gm.encounter.combatRoundState.unbalancedConditions)).toContainEqual(
+      TIER2_GM_CORRECTION_RECORD,
+    );
+    const unfiltered = JSON.parse(
+      await withoutTheAllowListAsync(() =>
+        readPhaseEncounter(mocks.playerUser, withPrivateConditions),
+      ),
+    );
+    expect(gmCorrectionRecords(unfiltered)).toContainEqual(TIER2_GM_CORRECTION_RECORD);
+
+    for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+      const body = JSON.parse(
+        await readPhaseEncounter(mocks.playerUser, withPrivateConditions, headers),
+      );
+      const state = body.encounter?.combatRoundState ?? body.activeCombatState;
+      expect(state.continuedContacts.map((contact: { id: string }) => contact.id)).toEqual([
+        "private-contact",
+      ]);
+      expect(state.unbalancedConditions.map((condition: { id: string }) => condition.id)).toEqual([
+        "private-unbalanced",
+      ]);
+      expect([...privateKeyPaths(body)].sort()).toEqual([]);
+      expect([...secretValuePaths(body)].sort()).toEqual([]);
+      expect(playerResponseKeysOutsidePlayerTypes(body)).toEqual([]);
+    }
   });
 });
