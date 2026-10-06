@@ -230,7 +230,11 @@ describe("#502 player-facing types: non-assignability from internal types", () =
       storedParticipantWithPrivateMaterial(),
     );
     const encounter: PlayerFacingEncounterSession = buildPlayerFacingEncounterSession({
-      projectedEncounter: storedEncounter(),
+      combatRoundState: undefined,
+      encounter: storedEncounter(),
+      itemReferences: undefined,
+      participants: [],
+      roleplayState: undefined,
     });
 
     expect([command, participant, encounter]).toHaveLength(3);
@@ -346,10 +350,14 @@ describe("#502 player-facing types: additive construction", () => {
 
   it("copies only the named top-level encounter fields", () => {
     const encounter = buildPlayerFacingEncounterSession({
-      projectedEncounter: {
+      combatRoundState: undefined,
+      encounter: {
         ...storedEncounter(),
         futureEncounterField: "SECRET_FUTURE_ENCOUNTER",
       } as unknown as EncounterSession,
+      itemReferences: undefined,
+      participants: [],
+      roleplayState: undefined,
     });
 
     expect(JSON.stringify(encounter)).not.toContain("SECRET");

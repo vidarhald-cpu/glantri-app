@@ -1,126 +1,84 @@
-import type { z } from "zod";
+import { z } from "zod";
 
-import type { CombatRoundState } from "./combatRoundManager";
 import {
-  buildPlayerFacingCombatRoundParticipant,
-  type PlayerFacingCombatRoundParticipant,
-} from "./playerFacingCombatRoundParticipant";
-import type { EncounterSession } from "./session";
-
-/**
- * The combat round state of a player-facing encounter (#507, Tier 2): its participants and their
- * declarations are the player-facing types, built field by field. The rest of the round state is
- * still what the per-viewer player projection produced; replacing it with additive construction is
- * Tier 3.
- */
-export type PlayerFacingEncounterCombatRoundState = Omit<CombatRoundState, "participants"> & {
-  participants: PlayerFacingCombatRoundParticipant[];
-};
+  playerFacingCombatRoundStateSchema,
+  type PlayerFacingCombatRoundState,
+} from "./playerFacingCombatRoundState";
+import {
+  playerFacingEncounterAttackResolutionSchema,
+  playerFacingEncounterItemReferenceSchema,
+  playerFacingEncounterParticipantSchema,
+  playerFacingRoleplayStateSchema,
+} from "./playerFacingCombatRoundStructures";
+import { buildPlayerFacing, LEAF, playerFacingObject } from "./playerFacingSchema";
+import { encounterSessionSchema, type EncounterSession } from "./session";
 
 /**
  * The player-facing encounter — an encounter as it reaches a non-GM actor — Forgejo issue #502
- * (privacy hardening, Tier 1).
+ * (privacy hardening, Tier 1), whole-path since #517 (Tier 3).
  *
- * Its top-level fields are enumerated additively and `gmPrivateClosingNote` is never one of them,
- * so a field added to `encounterSessionSchema` changes nothing a player can see.
- *
- * The nested values are the ones the player encounter projection produced for this viewer, except
- * the round-state participants and declarations, which are rebuilt additively (#507, Tier 2). That
- * projection still builds the rest of its combat round state by spreading the stored state and
- * removing what a player may not see; replacing it with additive construction is Tier 3, at which
- * point `combatRoundState` becomes a player-facing round-state type throughout. Until then this
- * type marks the boundary every converted response emits, and the seam Tier 3 fills.
- *
- * The type is branded so a stored encounter is not assignable to it.
+ * Every field at every level is named by a player-facing schema (`playerFacingSchema.ts`):
+ * `gmPrivateClosingNote` is not one of them, the round state is the player-facing round state
+ * (`playerFacingCombatRoundState`), and the action log, item references, encounter participants and
+ * roleplay state are player-facing structures (`playerFacingCombatRoundStructures`). A field added
+ * to `encounterSessionSchema` or to anything nested in it therefore changes nothing a player can
+ * see. Every level is branded, so a stored encounter, or any stored value inside one, is not
+ * assignable to it.
  */
-export type PlayerFacingEncounterSession = {
-  actionLog: EncounterSession["actionLog"];
-  campaignId?: EncounterSession["campaignId"];
-  combatRoundState?: PlayerFacingEncounterCombatRoundState;
-  createdAt: EncounterSession["createdAt"];
-  currentRound: EncounterSession["currentRound"];
-  currentTurnIndex: EncounterSession["currentTurnIndex"];
-  declarationsLocked: EncounterSession["declarationsLocked"];
-  description?: EncounterSession["description"];
-  id: EncounterSession["id"];
-  itemReferencesVersion?: EncounterSession["itemReferencesVersion"];
-  itemReferences?: EncounterSession["itemReferences"];
-  kind: EncounterSession["kind"];
-  participantMembershipMode?: EncounterSession["participantMembershipMode"];
-  participants: EncounterSession["participants"];
-  playerOutcome?: EncounterSession["playerOutcome"];
-  roleplayState?: EncounterSession["roleplayState"];
-  scenarioId?: EncounterSession["scenarioId"];
-  status: EncounterSession["status"];
-  timelineLabel?: EncounterSession["timelineLabel"];
-  title: EncounterSession["title"];
-  turnOrderMode: EncounterSession["turnOrderMode"];
-  updatedAt: EncounterSession["updatedAt"];
-} & z.BRAND<"PlayerFacingEncounterSession">;
-
-function buildPlayerFacingEncounterCombatRoundState(input: {
-  keepDeclarationCombatContextAsR2ResidualFor?: ReadonlySet<string>;
-  state: CombatRoundState;
-}): PlayerFacingEncounterCombatRoundState {
-  return {
-    // Every round-state field other than `participants` is the per-viewer projection's (Tier 3).
-    ...input.state,
-    participants: input.state.participants.map((participant) =>
-      buildPlayerFacingCombatRoundParticipant({
-        keepDeclarationCombatContextAsR2Residual:
-          input.keepDeclarationCombatContextAsR2ResidualFor?.has(participant.participantId)
-            ? true
-            : undefined,
-        participant,
-      }),
-    ),
-  };
-}
+export const playerFacingEncounterSessionSchema = playerFacingObject(
+  "PlayerFacingEncounterSession",
+  encounterSessionSchema,
+  {
+    actionLog: z.array(playerFacingEncounterAttackResolutionSchema).default([]),
+    campaignId: LEAF,
+    combatRoundState: playerFacingCombatRoundStateSchema.optional(),
+    createdAt: LEAF,
+    currentRound: LEAF,
+    currentTurnIndex: LEAF,
+    declarationsLocked: LEAF,
+    description: LEAF,
+    id: LEAF,
+    itemReferencesVersion: LEAF,
+    itemReferences: z.array(playerFacingEncounterItemReferenceSchema).optional(),
+    kind: LEAF,
+    participantMembershipMode: LEAF,
+    participants: z.array(playerFacingEncounterParticipantSchema).default([]),
+    playerOutcome: LEAF,
+    roleplayState: playerFacingRoleplayStateSchema.optional(),
+    scenarioId: LEAF,
+    status: LEAF,
+    timelineLabel: LEAF,
+    title: LEAF,
+    turnOrderMode: LEAF,
+    updatedAt: LEAF,
+  },
+);
+export type PlayerFacingEncounterSession = z.infer<typeof playerFacingEncounterSessionSchema>;
+export type PlayerFacingEncounterParticipant = z.infer<
+  typeof playerFacingEncounterParticipantSchema
+>;
+export type PlayerFacingEncounterItemReference = z.infer<
+  typeof playerFacingEncounterItemReferenceSchema
+>;
+export type PlayerFacingRoleplayState = z.infer<typeof playerFacingRoleplayStateSchema>;
 
 /**
- * Copies the named top-level fields of an encounter that has already been projected for one
- * player, and rebuilds its round-state participants as player-facing participants. The input must
- * be the output of the player encounter projection; this function adds the barrier and the type, it
- * does not decide per-viewer visibility.
- *
- * `keepDeclarationCombatContextAsR2ResidualFor` names the round-state participants whose
- * declaration keeps its combat context as the projection produced it: the R2 residual (#502 Tier 1
- * rulings), which only the combat-declaration route passes, for the viewer's own participants.
+ * Builds the player-facing encounter from the stored encounter's named top-level fields and the
+ * values the per-viewer projection built for one viewer. The per-viewer values are required and
+ * already player-facing, so this function cannot be used to show a player a stored round state,
+ * participant list, roleplay state or item list it has not been projected for.
  */
 export function buildPlayerFacingEncounterSession(input: {
-  keepDeclarationCombatContextAsR2ResidualFor?: ReadonlySet<string>;
-  projectedEncounter: EncounterSession;
+  combatRoundState: PlayerFacingCombatRoundState | undefined;
+  encounter: EncounterSession;
+  itemReferences: readonly PlayerFacingEncounterItemReference[] | undefined;
+  participants: readonly PlayerFacingEncounterParticipant[];
+  roleplayState: PlayerFacingRoleplayState | undefined;
 }): PlayerFacingEncounterSession {
-  const encounter = input.projectedEncounter;
-
-  return {
-    actionLog: encounter.actionLog,
-    campaignId: encounter.campaignId,
-    combatRoundState:
-      encounter.combatRoundState &&
-      buildPlayerFacingEncounterCombatRoundState({
-        keepDeclarationCombatContextAsR2ResidualFor:
-          input.keepDeclarationCombatContextAsR2ResidualFor,
-        state: encounter.combatRoundState,
-      }),
-    createdAt: encounter.createdAt,
-    currentRound: encounter.currentRound,
-    currentTurnIndex: encounter.currentTurnIndex,
-    declarationsLocked: encounter.declarationsLocked,
-    description: encounter.description,
-    id: encounter.id,
-    itemReferencesVersion: encounter.itemReferencesVersion,
-    itemReferences: encounter.itemReferences,
-    kind: encounter.kind,
-    participantMembershipMode: encounter.participantMembershipMode,
-    participants: encounter.participants,
-    playerOutcome: encounter.playerOutcome,
-    roleplayState: encounter.roleplayState,
-    scenarioId: encounter.scenarioId,
-    status: encounter.status,
-    timelineLabel: encounter.timelineLabel,
-    title: encounter.title,
-    turnOrderMode: encounter.turnOrderMode,
-    updatedAt: encounter.updatedAt,
-  } as PlayerFacingEncounterSession;
+  return buildPlayerFacing(playerFacingEncounterSessionSchema, input.encounter, {
+    combatRoundState: input.combatRoundState,
+    itemReferences: input.itemReferences,
+    participants: input.participants,
+    roleplayState: input.roleplayState,
+  });
 }

@@ -4,8 +4,8 @@ import {
   combatRoundCommandSchema,
   combatRoundCursorSchema,
   type CombatRoundCommand,
-  type CombatRoundCursor,
 } from "./combatRoundManager";
+import { LEAF, playerFacingObject, TIER_4_OPEN_COMMAND_FACTS } from "./playerFacingSchema";
 
 /**
  * The player-facing combat-round command, Forgejo issue #502 (privacy hardening, Tier 1).
@@ -23,41 +23,35 @@ import {
  * tell a raw command from a projected one. The brand makes `buildPlayerFacingCombatRoundCommand`
  * the only way to produce a value of this type.
  *
- * `facts` remains an open record at the type level. Facts-level allow-lists for every command
- * type are Tier 4; each projection enumerates its facts by name at runtime.
+ * `facts` remains an open record at the type level (`TIER_4_OPEN_COMMAND_FACTS`, the one open value
+ * the Tier 3 whole-path check admits). Facts-level allow-lists for every command type are Tier 4;
+ * each projection enumerates its facts by name at runtime. The cursors are player-facing objects
+ * (#517 Tier 3), parsed from the stored cursors so only their three named fields remain.
  */
-export const playerFacingCombatRoundCursorSchema = z.object({
-  participantId: combatRoundCursorSchema.shape.participantId,
-  roundNumber: combatRoundCursorSchema.shape.roundNumber,
-  step: combatRoundCursorSchema.shape.step,
-});
+export const playerFacingCombatRoundCursorSchema = playerFacingObject(
+  "PlayerFacingCombatRoundCursor",
+  combatRoundCursorSchema,
+  { participantId: LEAF, roundNumber: LEAF, step: LEAF },
+);
 export type PlayerFacingCombatRoundCursor = z.infer<typeof playerFacingCombatRoundCursorSchema>;
 
-export const playerFacingCombatRoundCommandSchema = z
-  .object({
+export const playerFacingCombatRoundCommandSchema = playerFacingObject(
+  "PlayerFacingCombatRoundCommand",
+  combatRoundCommandSchema,
+  {
     afterCursor: playerFacingCombatRoundCursorSchema,
     beforeCursor: playerFacingCombatRoundCursorSchema,
-    createdAt: combatRoundCommandSchema.shape.createdAt,
-    facts: z.record(z.string(), z.unknown()),
-    id: combatRoundCommandSchema.shape.id,
-    participantId: combatRoundCommandSchema.shape.participantId,
-    phase: combatRoundCommandSchema.shape.phase,
-    roundNumber: combatRoundCommandSchema.shape.roundNumber,
-    step: combatRoundCommandSchema.shape.step,
-    type: combatRoundCommandSchema.shape.type,
-  })
-  .brand<"PlayerFacingCombatRoundCommand">();
+    createdAt: LEAF,
+    facts: TIER_4_OPEN_COMMAND_FACTS,
+    id: LEAF,
+    participantId: LEAF,
+    phase: LEAF,
+    roundNumber: LEAF,
+    step: LEAF,
+    type: LEAF,
+  },
+);
 export type PlayerFacingCombatRoundCommand = z.infer<typeof playerFacingCombatRoundCommandSchema>;
-
-function buildPlayerFacingCombatRoundCursor(
-  cursor: CombatRoundCursor,
-): PlayerFacingCombatRoundCursor {
-  return {
-    participantId: cursor.participantId,
-    roundNumber: cursor.roundNumber,
-    step: cursor.step,
-  };
-}
 
 /**
  * Builds a player command from the named envelope fields of a stored command and a facts object
@@ -70,8 +64,8 @@ export function buildPlayerFacingCombatRoundCommand(input: {
   facts: Record<string, unknown>;
 }): PlayerFacingCombatRoundCommand {
   return playerFacingCombatRoundCommandSchema.parse({
-    afterCursor: buildPlayerFacingCombatRoundCursor(input.command.afterCursor),
-    beforeCursor: buildPlayerFacingCombatRoundCursor(input.command.beforeCursor),
+    afterCursor: input.command.afterCursor,
+    beforeCursor: input.command.beforeCursor,
     createdAt: input.command.createdAt,
     facts: input.facts,
     id: input.command.id,

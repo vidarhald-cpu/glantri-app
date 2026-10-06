@@ -8,6 +8,7 @@ import {
   type CombatEffectEvent,
   type CombatEffectsState,
 } from "../encounter/combatEffects";
+import { buildPlayerFacing, LEAF, playerFacingObject } from "../encounter/playerFacingSchema";
 import { revealableEquipmentState } from "../equipment/itemFacts";
 import { canonicalizeLegacyEquipmentSnapshotItems } from "../equipment/schemas";
 import {
@@ -52,57 +53,75 @@ import {
  * `scenarioParticipantSchema`, which the active combat mutation response validates its updated
  * participants against. The type is branded so a stored participant is not assignable to it.
  */
-const modifierEntryShape = scenarioCombatModifierEntrySchema.shape;
-
-export const playerFacingCombatModifierEntrySchema = z.object({
-  application: modifierEntryShape.application,
-  combatWide: modifierEntryShape.combatWide,
-  durationRounds: modifierEntryShape.durationRounds,
-  excludedRollPurposes: modifierEntryShape.excludedRollPurposes,
-  expiresAtRound: modifierEntryShape.expiresAtRound,
-  generated: modifierEntryShape.generated,
-  id: modifierEntryShape.id,
-  imported: modifierEntryShape.imported,
-  notes: modifierEntryShape.notes,
-  readOnly: modifierEntryShape.readOnly,
-  resultGroupId: modifierEntryShape.resultGroupId,
-  resultGroupKind: modifierEntryShape.resultGroupKind,
-  persistsAcrossEncounters: modifierEntryShape.persistsAcrossEncounters,
-  scope: modifierEntryShape.scope,
-  sourceActionId: modifierEntryShape.sourceActionId,
-  sourceDuration: modifierEntryShape.sourceDuration,
-  sourceEncounterId: modifierEntryShape.sourceEncounterId,
-  sourceEffectId: modifierEntryShape.sourceEffectId,
-  sourceOpportunityId: modifierEntryShape.sourceOpportunityId,
-  sourcePhase: modifierEntryShape.sourcePhase,
-  sourceProcessId: modifierEntryShape.sourceProcessId,
-  sourceProposalId: modifierEntryShape.sourceProposalId,
-  sourceRoundNumber: modifierEntryShape.sourceRoundNumber,
-  sourceRule: modifierEntryShape.sourceRule,
-  sourceType: modifierEntryShape.sourceType,
-  provisional: modifierEntryShape.provisional,
-  value: modifierEntryShape.value,
-});
+/**
+ * A combat-context modifier entry and the combat context as a player receives them. Both are built
+ * with the Tier 3 construction kit (#517, `playerFacingSchema.ts`) because the round state carries
+ * them in declarations: every field is a leaf reused from the canonical schema or a player-facing
+ * schema, so a field added to the canonical entry or context reaches no player.
+ */
+export const playerFacingCombatModifierEntrySchema = playerFacingObject(
+  "PlayerFacingCombatModifierEntry",
+  scenarioCombatModifierEntrySchema,
+  {
+    application: LEAF,
+    combatWide: LEAF,
+    durationRounds: LEAF,
+    excludedRollPurposes: LEAF,
+    expiresAtRound: LEAF,
+    generated: LEAF,
+    id: LEAF,
+    imported: LEAF,
+    notes: LEAF,
+    readOnly: LEAF,
+    resultGroupId: LEAF,
+    resultGroupKind: LEAF,
+    persistsAcrossEncounters: LEAF,
+    scope: LEAF,
+    sourceActionId: LEAF,
+    sourceDuration: LEAF,
+    sourceEncounterId: LEAF,
+    sourceEffectId: LEAF,
+    sourceOpportunityId: LEAF,
+    sourcePhase: LEAF,
+    sourceProcessId: LEAF,
+    sourceProposalId: LEAF,
+    sourceRoundNumber: LEAF,
+    sourceRule: LEAF,
+    sourceType: LEAF,
+    provisional: LEAF,
+    value: LEAF,
+  },
+);
 export type PlayerFacingCombatModifierEntry = z.infer<typeof playerFacingCombatModifierEntrySchema>;
 
 const combatContextShape = scenarioParticipantCombatContextSchema.shape;
 
-export const playerFacingCombatContextSchema = z.object({
-  attackModeId: combatContextShape.attackModeId,
-  incomingAttackSide: combatContextShape.incomingAttackSide,
-  mainHandParryDirection: combatContextShape.mainHandParryDirection,
-  modifierBuckets: z.object({
+const playerFacingCombatModifierBucketsSchema = playerFacingObject(
+  "PlayerFacingCombatModifierBuckets",
+  combatContextShape.modifierBuckets.removeDefault(),
+  {
     general: z.array(playerFacingCombatModifierEntrySchema),
     situationDb: z.array(playerFacingCombatModifierEntrySchema),
     situationInitiative: z.array(playerFacingCombatModifierEntrySchema),
     situationObSkill: z.array(playerFacingCombatModifierEntrySchema),
-  }),
-  offHandParryDirection: combatContextShape.offHandParryDirection,
-  parrySource: combatContextShape.parrySource,
-  selectedOpponentId: combatContextShape.selectedOpponentId,
-  targetLocation: combatContextShape.targetLocation,
-  targetParticipantId: combatContextShape.targetParticipantId,
-});
+  },
+);
+
+export const playerFacingCombatContextSchema = playerFacingObject(
+  "PlayerFacingCombatContext",
+  scenarioParticipantCombatContextSchema,
+  {
+    attackModeId: LEAF,
+    incomingAttackSide: LEAF,
+    mainHandParryDirection: LEAF,
+    modifierBuckets: playerFacingCombatModifierBucketsSchema,
+    offHandParryDirection: LEAF,
+    parrySource: LEAF,
+    selectedOpponentId: LEAF,
+    targetLocation: LEAF,
+    targetParticipantId: LEAF,
+  },
+);
 export type PlayerFacingCombatContext = z.infer<typeof playerFacingCombatContextSchema>;
 
 const combatEffectShape = combatEffectSchema.innerType().shape;
@@ -237,64 +256,11 @@ export const playerFacingScenarioParticipantSchema = z
   .brand<"PlayerFacingScenarioParticipant">();
 export type PlayerFacingScenarioParticipant = z.infer<typeof playerFacingScenarioParticipantSchema>;
 
-function buildPlayerFacingCombatModifierEntry(
-  entry: ScenarioCombatModifierEntry,
-): PlayerFacingCombatModifierEntry {
-  return {
-    application: entry.application,
-    combatWide: entry.combatWide,
-    durationRounds: entry.durationRounds,
-    excludedRollPurposes: entry.excludedRollPurposes,
-    expiresAtRound: entry.expiresAtRound,
-    generated: entry.generated,
-    id: entry.id,
-    imported: entry.imported,
-    notes: entry.notes,
-    readOnly: entry.readOnly,
-    resultGroupId: entry.resultGroupId,
-    resultGroupKind: entry.resultGroupKind,
-    persistsAcrossEncounters: entry.persistsAcrossEncounters,
-    scope: entry.scope,
-    sourceActionId: entry.sourceActionId,
-    sourceDuration: entry.sourceDuration,
-    sourceEncounterId: entry.sourceEncounterId,
-    sourceEffectId: entry.sourceEffectId,
-    sourceOpportunityId: entry.sourceOpportunityId,
-    sourcePhase: entry.sourcePhase,
-    sourceProcessId: entry.sourceProcessId,
-    sourceProposalId: entry.sourceProposalId,
-    sourceRoundNumber: entry.sourceRoundNumber,
-    sourceRule: entry.sourceRule,
-    sourceType: entry.sourceType,
-    provisional: entry.provisional,
-    value: entry.value,
-  };
-}
-
 /** Builds a player combat context from named fields; modifier entries lose their lifecycle. */
 export function buildPlayerFacingCombatContext(
   context: ScenarioParticipantCombatContext,
 ): PlayerFacingCombatContext {
-  return playerFacingCombatContextSchema.parse({
-    attackModeId: context.attackModeId,
-    incomingAttackSide: context.incomingAttackSide,
-    mainHandParryDirection: context.mainHandParryDirection,
-    modifierBuckets: {
-      general: context.modifierBuckets.general.map(buildPlayerFacingCombatModifierEntry),
-      situationDb: context.modifierBuckets.situationDb.map(buildPlayerFacingCombatModifierEntry),
-      situationInitiative: context.modifierBuckets.situationInitiative.map(
-        buildPlayerFacingCombatModifierEntry,
-      ),
-      situationObSkill: context.modifierBuckets.situationObSkill.map(
-        buildPlayerFacingCombatModifierEntry,
-      ),
-    },
-    offHandParryDirection: context.offHandParryDirection,
-    parrySource: context.parrySource,
-    selectedOpponentId: context.selectedOpponentId,
-    targetLocation: context.targetLocation,
-    targetParticipantId: context.targetParticipantId,
-  });
+  return buildPlayerFacing(playerFacingCombatContextSchema, context);
 }
 
 function buildPlayerFacingCombatEffect(effect: CombatEffect): PlayerFacingCombatEffect {

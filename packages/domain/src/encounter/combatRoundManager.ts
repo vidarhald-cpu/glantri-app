@@ -3086,7 +3086,7 @@ export interface CombatRoundState {
 
 export type ActiveCombatRoundState = Omit<CombatRoundState, "rounds">;
 
-const activeCombatRoundStateShape = {
+export const activeCombatRoundStateShape = {
   adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
   breakOffProposals: z.array(combatBreakOffProposalSchema).default([]),
   activeParticipantId: idSchema.optional(),

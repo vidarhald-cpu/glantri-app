@@ -75,9 +75,9 @@ import {
   undoLatestCombatRoundCommand,
   openCombatRoundDisarmAfterContact,
   buildOffensiveParryAttemptId,
-  buildPlayerFacingEncounterSession,
   playerFacingCombatRoundCommandSchema,
-  playerFacingCombatRoundParticipantSchema,
+  playerFacingCombatRoundStateSchema,
+  playerFacingEncounterSessionSchema,
   playerFacingScenarioParticipantSchema,
 } from "@glantri/domain";
 import { weaponTemplates } from "@glantri/content/equipment";
@@ -284,7 +284,40 @@ vi.mock("../lib/sessionAuth", () => ({
 }));
 
 import { scenariosRoutes } from "./scenarios";
-import { buildPlayerSafeEncounterForUser } from "./scenarios/encounterRoutes";
+import { buildPlayerFacingEncounterForUser } from "./scenarios/encounterRoutes";
+
+/**
+ * #517 (privacy hardening Tier 3) test seam: the allow-list switch. Switched on, `buildPlayerFacing`
+ * returns what the per-viewer projection selected, field overrides applied, without parsing it
+ * through its player-facing schema — exactly the value the deny-list projection Tier 3 replaced
+ * returned. Tests use it to show which private material a fixture puts in front of a viewer (the
+ * positive control) and that every absence test fails without the allow-list (the mutation). Off,
+ * it is the real function. Production code has no such switch.
+ */
+const allowList = vi.hoisted(() => ({ disabled: false }));
+vi.mock("../../../../packages/domain/src/encounter/playerFacingSchema", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../../packages/domain/src/encounter/playerFacingSchema")
+    >();
+  return {
+    ...actual,
+    buildPlayerFacing: ((schema, source, overrides = {}) =>
+      allowList.disabled
+        ? { ...source, ...overrides }
+        : actual.buildPlayerFacing(schema, source, overrides)) as typeof actual.buildPlayerFacing,
+  };
+});
+
+/** What `build` returns with the allow-list switched off: the per-viewer selection alone. */
+function withoutTheAllowList<Value>(build: () => Value): Value {
+  allowList.disabled = true;
+  try {
+    return build();
+  } finally {
+    allowList.disabled = false;
+  }
+}
 
 function emptyModifierBuckets() {
   return {
@@ -28379,7 +28412,7 @@ describe("scenarios route contract", () => {
    * Forgejo issue #340, acceptance criteria 2 and 3. The GM drives `roll_combat_task` — not only
    * the player — and the resolve carries the audience the GM chose. The privacy assertion is made
    * on the **API payload** the player is served, through the same
-   * `buildPlayerSafeEncounterForUser` projection the encounter routes serialize with, not on the
+   * `buildPlayerFacingEncounterForUser` projection the encounter routes serialize with, not on the
    * DOM. No privacy projection is changed here; the resolve only supplies the existing
    * `visibleToParticipantIds` input.
    */
@@ -28457,7 +28490,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     // The non-entitled viewer receives no row at all in the payload the API serves them.
-    const nonEntitled = buildPlayerSafeEncounterForUser({
+    const nonEntitled = buildPlayerFacingEncounterForUser({
       encounter: resolved,
       scenarioParticipants: participants,
       userId: mocks.playerUser.id,
@@ -28504,7 +28537,7 @@ describe("scenarios route contract", () => {
     expect(resolve.statusCode, resolve.body).toBe(200);
     await app.close();
 
-    const entitled = buildPlayerSafeEncounterForUser({
+    const entitled = buildPlayerFacingEncounterForUser({
       encounter: mutable.encounter,
       scenarioParticipants: participants,
       userId: mocks.playerUser.id,
@@ -28591,7 +28624,7 @@ describe("scenarios route contract", () => {
 
     // P3 — absent from the payload a non-entitled player is served, at the same projection the
     // encounter routes serialize with.
-    const nonEntitled = buildPlayerSafeEncounterForUser({
+    const nonEntitled = buildPlayerFacingEncounterForUser({
       encounter: mutable.encounter,
       scenarioParticipants: participants,
       userId: mocks.playerUser.id,
@@ -28730,67 +28763,16 @@ function secretValuePaths(value: unknown, path = "", found: string[] = []): stri
   return found;
 }
 
-function uniqueSorted(paths: readonly string[]): string[] {
-  return [...new Set(paths)].sort();
-}
-
-type PinnedResidual = { keys: readonly string[]; secrets: readonly string[] };
-
-/** Every other converted boundary: R2 does not extend to it, so nothing may remain. */
-const NO_RESIDUAL: PinnedResidual = { keys: [], secrets: [] };
-
 /**
- * R2 (control-plane rulings 2026-10-04): the residual accepted as Tier 3's debt is the combat context
- * of the viewer's own round-state declaration in the combat-declaration response — that route only.
- * The projection passes it through with each modifier entry's canonical lifecycle and correction
- * history. These are its exact paths in these fixtures, relative to that combat context: the private
- * entry of the participant's stored modifier buckets, which a player's declaration preserves, and the
- * phase-penalty row the combat-declaration route generates.
- *
- * A player response must carry exactly its pinned paths and nothing else. A named key or a SECRET
- * value anywhere else fails — in a phase context, in another participant's declaration, at another
- * entry of the same bucket, or at another key of the same entry.
+ * No player response carries a named key or a SECRET value. Until #517 (Tier 3) the combat-declaration
+ * response was the one exception: R2, the viewer's own combat context as the per-viewer projection
+ * produced it, pinned path by path. Tier 3 removed R2, so every converted boundary is held to nothing.
+ * The paths are compared as a sorted list without de-duplication, so a repeated path still counts
+ * (Tier 1 finding F1).
  */
-const R2_PRIVATE_ENTRY: PinnedResidual = {
-  keys: [
-    "modifierBuckets.general[private-row].canonicalLifecycle",
-    "modifierBuckets.general[private-row].canonicalLifecycle.privateDiagnostic",
-    "modifierBuckets.general[private-row].canonicalTransitions",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].privateDiagnostic",
-  ],
-  secrets: [
-    "modifierBuckets.general[private-row].canonicalLifecycle.privateDiagnostic.code",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.reasonCode",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].privateDiagnostic.code",
-  ],
-};
-const R2_GENERATED_DECLARATION_ROW: PinnedResidual = {
-  keys: [
-    "modifierBuckets.situationDb[generated:attack-phase-penalty:round:1:participant:encounter-participant-1:phase1:attack_1:db-parry].canonicalLifecycle",
-    "modifierBuckets.situationDb[generated:attack-phase-penalty:round:1:participant:encounter-participant-1:phase1:attack_1:db-parry].canonicalTransitions",
-  ],
-  secrets: [],
-};
-
-/** The pinned residual under the viewer's own declaration, at one response root. */
-function pinnedR2Residual(
-  root: "activeCombatState" | "encounter.combatRoundState",
-  ...parts: PinnedResidual[]
-): PinnedResidual {
-  const at = (path: string) =>
-    `${root}.participants[encounter-participant-1].declaration.combatContext.${path}`;
-  return {
-    keys: uniqueSorted(parts.flatMap((part) => part.keys.map(at))),
-    secrets: uniqueSorted(parts.flatMap((part) => part.secrets.map(at))),
-  };
-}
-
-/** The response's named keys and SECRET values are exactly the pinned residual. */
-function expectPlayerBodyPrivateMaterial(body: unknown, pinned: PinnedResidual) {
-  expect(uniqueSorted(privateKeyPaths(body)), "named keys").toEqual([...pinned.keys]);
-  expect(uniqueSorted(secretValuePaths(body)), "SECRET values").toEqual([...pinned.secrets]);
+function expectNoPrivateMaterialInPlayerBody(body: unknown) {
+  expect([...privateKeyPaths(body)].sort(), "named keys").toEqual([]);
+  expect([...secretValuePaths(body)].sort(), "SECRET values").toEqual([]);
 }
 
 /**
@@ -29164,14 +29146,9 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
-      expectPlayerBodyPrivateMaterial(
-        body,
-        pinnedR2Residual(
-          "encounter.combatRoundState",
-          R2_PRIVATE_ENTRY,
-          R2_GENERATED_DECLARATION_ROW,
-        ),
-      );
+      // R2 is removed (#517 Tier 3): the viewer's own combat context is rebuilt like every other.
+      expectNoPrivateMaterialInPlayerBody(body);
+      expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
       expect(privateKeyPaths(body.participant)).toEqual([]);
       expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
       expect(body.encounter).not.toHaveProperty("gmPrivateClosingNote");
@@ -29196,10 +29173,8 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(body.version).toBe(1);
-      expectPlayerBodyPrivateMaterial(
-        body,
-        pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY, R2_GENERATED_DECLARATION_ROW),
-      );
+      expectNoPrivateMaterialInPlayerBody(body);
+      expectOwnDeclarationCombatContextKept(body.activeCombatState);
       expect(privateKeyPaths(body.updatedParticipants)).toEqual([]);
       expect(privateKeyPaths(body.activeCombatState.commands)).toEqual([]);
       expect(body).not.toHaveProperty("deterministicAdvance");
@@ -29277,7 +29252,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         expect(response.statusCode, response.body).toBe(200);
         const body = response.json();
         expect(Object.keys(body).sort()).toEqual(["command", "encounter", "participant"]);
-        expectPlayerBodyPrivateMaterial(body, NO_RESIDUAL);
+        expectNoPrivateMaterialInPlayerBody(body);
         expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
         expect(privateKeyPaths(body.participant)).toEqual([]);
         expect(privateKeyPaths(body.command)).toEqual([]);
@@ -29317,7 +29292,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         await app.close();
 
         expect(response.statusCode, response.body).toBe(200);
-        expectPlayerBodyPrivateMaterial(response.json(), NO_RESIDUAL);
+        expectNoPrivateMaterialInPlayerBody(response.json());
         expectOwnDeclarationCombatContextKept(response.json().activeCombatState);
         expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
       });
@@ -29423,7 +29398,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
-      expectPlayerBodyPrivateMaterial(body, NO_RESIDUAL);
+      expectNoPrivateMaterialInPlayerBody(body);
       expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
       expect(privateKeyPaths(body.participant)).toEqual([]);
       expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
@@ -29437,7 +29412,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       await app.close();
 
       expect(response.statusCode, response.body).toBe(200);
-      expectPlayerBodyPrivateMaterial(response.json(), NO_RESIDUAL);
+      expectNoPrivateMaterialInPlayerBody(response.json());
       expectOwnDeclarationCombatContextKept(response.json().activeCombatState);
       expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
     });
@@ -29641,7 +29616,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         expect(fromReceived.response.statusCode, fromReceived.response.body).toBe(200);
         expect(fromReceived.written).toEqual(fromStored.written);
         // What is kept is the GM's: the correction record and the declaring user.
-        expect(uniqueSorted(privateKeyPaths(fromReceived.written))).toEqual([
+        expect([...privateKeyPaths(fromReceived.written)].sort()).toEqual([
           "combat.combatContext.modifierBuckets.general[private-row].canonicalLifecycle",
           "combat.combatContext.modifierBuckets.general[private-row].canonicalLifecycle.privateDiagnostic",
           "combat.combatContext.modifierBuckets.general[private-row].canonicalTransitions",
@@ -29837,84 +29812,27 @@ function keysOutsidePlayerType(value: unknown, schema: PlayerTypeSchema, path: s
   return [];
 }
 
-/** The top-level fields of the player-facing encounter, read off its only builder. */
-const PLAYER_ENCOUNTER_FIELDS = Object.keys(
-  buildPlayerFacingEncounterSession({
-    projectedEncounter: makeCombatEncounter() as unknown as EncounterSession,
-  }),
-);
-
 /**
- * The round-state fields other than `participants` and `commands`: still the per-viewer projection's
- * own values until Tier 3 types them. Named here, so a new round-state field fails until it is.
+ * The keys of a player encounter, or of the round state an `active-v1` response carries, outside the
+ * player-facing types. Since #517 (Tier 3) these name every field at every level, so the walk covers
+ * the whole encounter: round-state participants, declarations and commands as in Tier 2, and every
+ * other round-state structure, the encounter participants, action log, item references and roleplay
+ * state. It stops only at command `facts`, Tier 4's open record.
  */
-const TIER3_ROUND_STATE_FIELDS = [
-  "activeParticipantId",
-  "adjustDistanceProposals",
-  "breakOffProposals",
-  "combatExperienceDifficulty",
-  "continuedContacts",
-  "currentCursor",
-  "currentStep",
-  "defenseSnapshots",
-  "disarmAttempts",
-  "disarmUnbalancedConditions",
-  "distanceState",
-  "encounterId",
-  "engagements",
-  "events",
-  "feintProposals",
-  "genericActions",
-  "gmBacktrackHold",
-  "missileReadiness",
-  "observationAttempts",
-  "observationRelationships",
-  "offensiveParryContests",
-  "phaseResolutionCursor",
-  "phaseResolutionResults",
-  "phaseResolutionStatuses",
-  "roundEndReview",
-  "roundNumber",
-  "rounds",
-  "selectedParticipantId",
-  "selectedStep",
-  "stepSnapshots",
-  "unbalancedConditions",
-];
-
-function roundStateKeysOutsidePlayerTypes(state: Record<string, unknown>, path: string): string[] {
-  return Object.entries(state).flatMap(([key, nested]) => {
-    if (nested === undefined) return [];
-    if (key === "participants") {
-      return (nested as unknown[]).flatMap((participant) =>
-        keysOutsidePlayerType(
-          participant,
-          playerFacingCombatRoundParticipantSchema as unknown as PlayerTypeSchema,
-          arrayEntryPath(`${path}.participants`, participant),
-        ),
-      );
-    }
-    if (key === "commands") {
-      return (nested as unknown[]).flatMap((command) =>
-        keysOutsidePlayerType(
-          command,
-          playerFacingCombatRoundCommandSchema as unknown as PlayerTypeSchema,
-          arrayEntryPath(`${path}.commands`, command),
-        ),
-      );
-    }
-    return TIER3_ROUND_STATE_FIELDS.includes(key) ? [] : [`${path}.${key}`];
-  });
+function encounterKeysOutsidePlayerTypes(encounter: Record<string, unknown>, path: string) {
+  return keysOutsidePlayerType(
+    encounter,
+    playerFacingEncounterSessionSchema as unknown as PlayerTypeSchema,
+    path,
+  );
 }
 
-function encounterKeysOutsidePlayerTypes(encounter: Record<string, unknown>, path: string) {
-  return Object.entries(encounter).flatMap(([key, nested]) => {
-    if (nested === undefined) return [];
-    if (!PLAYER_ENCOUNTER_FIELDS.includes(key)) return [`${path}.${key}`];
-    return key === "combatRoundState"
-      ? roundStateKeysOutsidePlayerTypes(nested as Record<string, unknown>, `${path}.${key}`)
-      : [];
-  });
+function roundStateKeysOutsidePlayerTypes(state: Record<string, unknown>, path: string): string[] {
+  return keysOutsidePlayerType(
+    state,
+    playerFacingCombatRoundStateSchema as unknown as PlayerTypeSchema,
+    path,
+  );
 }
 
 /**
@@ -30015,7 +29933,7 @@ function tier2CombatExperience(roundNumber: number) {
  */
 function withTier2PrivateRoundState(
   state: CombatRoundState,
-  options: { contexts?: boolean; declarations?: boolean } = {},
+  options: { declarations?: boolean } = {},
 ): CombatRoundState {
   const declared: CombatRoundState = options.declarations
     ? {
@@ -30034,10 +29952,7 @@ function withTier2PrivateRoundState(
         ),
       }
     : state;
-  // `contexts: false` leaves the combat and phase contexts as stored: the combat-declaration
-  // route's own context is Tier 1's pinned R2 location, which Tier 1's tests own.
-  const withContexts =
-    options.contexts === false ? declared : withPrivateDeclarationMaterial(declared);
+  const withContexts = withPrivateDeclarationMaterial(declared);
   const participantIds = withContexts.participants.map((participant) => participant.participantId);
   const rolledBy = <Result extends object>(result: Result) => ({
     ...result,
@@ -30107,7 +30022,7 @@ function withTier2PrivateRoundState(
 
 function withTier2PrivateEncounter<Encounter extends Record<string, unknown>>(
   encounter: Encounter,
-  options: { contexts?: boolean; declarations?: boolean } = {},
+  options: { declarations?: boolean } = {},
 ): Encounter {
   return encounter.combatRoundState
     ? {
@@ -30169,21 +30084,24 @@ const TIER2_GM_CORRECTION_RECORD = expect.objectContaining({
 });
 
 /**
- * Positive control. The per-viewer projection — the player-facing builders' input — carries exactly
- * this fixture's populated private material for this viewer, so the player response's lack of it
- * is the work of the player-facing types and not of an empty fixture (the #487 failure mode).
+ * Positive control. With the allow-list switched off, the per-viewer projection returns what the
+ * deny-list projection Tier 3 replaced returned — and that carries exactly this fixture's populated
+ * private material for this viewer, so the player response's lack of it is the work of the
+ * player-facing types and not of an empty fixture (the #487 failure mode).
  */
 function expectTier2MaterialReachesThePlayerBuilders(input: {
   encounter: EncounterSession;
   expected: Partial<Record<keyof typeof TIER2_NONE, true>>;
   scenarioParticipants: ScenarioParticipant[];
 }) {
-  const projected = buildPlayerSafeEncounterForUser({
-    encounter: input.encounter,
-    scenarioParticipants: input.scenarioParticipants,
-    userId: mocks.playerUser.id,
-  });
-  expect(tier2PrivateMaterial(projected.combatRoundState?.participants)).toEqual({
+  const selected = withoutTheAllowList(() =>
+    buildPlayerFacingEncounterForUser({
+      encounter: input.encounter,
+      scenarioParticipants: input.scenarioParticipants,
+      userId: mocks.playerUser.id,
+    }),
+  );
+  expect(tier2PrivateMaterial(selected.combatRoundState?.participants)).toEqual({
     ...TIER2_NONE,
     ...input.expected,
   });
@@ -30219,34 +30137,25 @@ type Tier2Case = {
   arrange: (viewer: Tier2Viewer) => Promise<Tier2Subject>;
   /** The exact top-level keys of the GM's legacy response, where they prove the path taken. */
   gmKeys?: readonly string[];
-  /** Populate the combat and phase contexts too (default); `false` for Tier 1's R2 route. */
-  injectContexts?: boolean;
   /** Account-identity paths a player response may carry, each explained where it is listed. */
   identityPaths?: { active?: readonly string[]; legacy?: readonly string[] };
   inject?: "load" | "save";
   name: string;
   /** The exact top-level keys of the player's legacy response. */
   playerKeys: readonly string[];
-  /** Keys outside the player-facing types a player response may carry: only the ruled R2. */
-  residualKeys?: { active?: readonly string[]; legacy?: readonly string[] };
-  /**
-   * Private material the player response still carries: only combat-declaration's ruled R2
-   * residual (the viewer's own combat context, pinned path by path by Tier 1's tests).
-   */
-  playerMaterial?: Tier2Material;
   /** Exactly the Tier 2 material this fixture populates where the player's projection reads it. */
   populated: Tier2Material;
   /** SECRET values a player response may carry, each explained where it is listed. */
   secretPaths?: { active?: readonly string[]; legacy?: readonly string[] };
 };
 
-function withTier2Material(mode: "load" | "save", options: { contexts?: boolean } = {}) {
+function withTier2Material(mode: "load" | "save") {
   const seen: EncounterSession[] = [];
   if (mode === "load") {
     const load = mocks.encounterService.getEncounterById.getMockImplementation();
     if (!load) throw new Error("The case must mock getEncounterById.");
     mocks.encounterService.getEncounterById.mockImplementation(async (...args: unknown[]) => {
-      const encounter = withTier2PrivateEncounter(await load(...args), options);
+      const encounter = withTier2PrivateEncounter(await load(...args));
       seen.push(encounter);
       return encounter;
     });
@@ -30255,7 +30164,7 @@ function withTier2Material(mode: "load" | "save", options: { contexts?: boolean 
       mocks.encounterService.listEncountersByScenario.mockImplementation(
         async (...args: unknown[]) =>
           ((await list(...args)) as EncounterSession[]).map((stored) => {
-            const encounter = withTier2PrivateEncounter(stored, options);
+            const encounter = withTier2PrivateEncounter(stored);
             seen.push(encounter);
             return encounter;
           }),
@@ -30266,10 +30175,7 @@ function withTier2Material(mode: "load" | "save", options: { contexts?: boolean 
     if (!save) throw new Error("The case must mock updateEncounter.");
     mocks.encounterService.updateEncounter.mockImplementation(
       async (update: { session: EncounterSession }) => {
-        const session = withTier2PrivateEncounter(update.session, {
-          ...options,
-          declarations: true,
-        });
+        const session = withTier2PrivateEncounter(update.session, { declarations: true });
         seen.push(session);
         return save({ ...update, session });
       },
@@ -30286,9 +30192,7 @@ function withTier2Material(mode: "load" | "save", options: { contexts?: boolean 
 
 async function runTier2Case(testCase: Tier2Case, viewer: Tier2Viewer, headers = {}) {
   const subject = await testCase.arrange(viewer);
-  const material = withTier2Material(testCase.inject ?? "save", {
-    contexts: testCase.injectContexts,
-  });
+  const material = withTier2Material(testCase.inject ?? "save");
   mocks.requireAuthenticatedUser.mockResolvedValue(viewer);
   try {
     const response = await subject.app.inject({ ...subject.request, headers });
@@ -30328,16 +30232,14 @@ function describeTier2Case(testCase: Tier2Case) {
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(sortedPaths(Object.keys(body))).toEqual(sortedPaths(testCase.playerKeys));
-      expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual(
-        sortedPaths(testCase.residualKeys?.legacy ?? []),
-      );
+      expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual([]);
       expect(sortedPaths(accountIdentityPaths(body))).toEqual(
         sortedPaths(testCase.identityPaths?.legacy ?? []),
       );
       expect(sortedPaths(secretValuePaths(body))).toEqual(
         sortedPaths(testCase.secretPaths?.legacy ?? []),
       );
-      expect(tier2PrivateMaterial(body)).toEqual({ ...TIER2_NONE, ...testCase.playerMaterial });
+      expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
       expect(JSON.stringify(body)).not.toContain("submittedByUserId");
       expectTier2MaterialReachesThePlayerBuilders({
         encounter: encounter!,
@@ -30357,16 +30259,14 @@ function describeTier2Case(testCase: Tier2Case) {
         expect(response.statusCode, response.body).toBe(200);
         const body = response.json();
         expect(body.version).toBe(1);
-        expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual(
-          sortedPaths(testCase.residualKeys?.active ?? []),
-        );
+        expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual([]);
         expect(sortedPaths(accountIdentityPaths(body))).toEqual(
           sortedPaths(testCase.identityPaths?.active ?? []),
         );
         expect(sortedPaths(secretValuePaths(body))).toEqual(
           sortedPaths(testCase.secretPaths?.active ?? []),
         );
-        expect(tier2PrivateMaterial(body)).toEqual({ ...TIER2_NONE, ...testCase.playerMaterial });
+        expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
         expect(JSON.stringify(body)).not.toContain("submittedByUserId");
       });
     }
@@ -30619,13 +30519,12 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // The viewer's own distance-control roll, in the round-end review (Tier 3's round state) and
-      // in the facts of its command (Tier 4's facts allow-lists).
+      // The viewer's own distance-control roll in the facts of its command (Tier 4's facts
+      // allow-lists). The round-end review's copy is a player-facing structure without it (#517).
       active: [
         ...OWN_PARTICIPANT_CONTROLLER.active,
         "activeCombatState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.nextProposal.participantA.result.rolledByUserId",
         "activeCombatState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.rolledParticipantRoll.rolledByUserId",
-        "activeCombatState.roundEndReview.proposedDistances[round-end:1:distance:encounter-participant-1::encounter-participant-2].participantA.result.rolledByUserId",
       ],
       legacy: [
         ...OWN_PARTICIPANT_CONTROLLER.legacy,
@@ -30633,7 +30532,6 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         "command.facts.rolledParticipantRoll.rolledByUserId",
         "encounter.combatRoundState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.nextProposal.participantA.result.rolledByUserId",
         "encounter.combatRoundState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.rolledParticipantRoll.rolledByUserId",
-        "encounter.combatRoundState.roundEndReview.proposedDistances[round-end:1:distance:encounter-participant-1::encounter-participant-2].participantA.result.rolledByUserId",
       ],
     },
     name: "POST /encounters/:encounterId/combat-round/roll-distance-control",
@@ -30711,15 +30609,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // The viewer's own health roll, in the round-end review (Tier 3's round state).
-      active: [
-        ...OWN_PARTICIPANT_CONTROLLER.active,
-        "activeCombatState.roundEndReview.participantReviews.encounter-participant-1.proposedHealthRolls[round-end:10:encounter-participant-1:external-bleed:player-bleed:health].result.rolledByUserId",
-      ],
-      legacy: [
-        ...OWN_PARTICIPANT_CONTROLLER.legacy,
-        "encounter.combatRoundState.roundEndReview.participantReviews.encounter-participant-1.proposedHealthRolls[round-end:10:encounter-participant-1:external-bleed:player-bleed:health].result.rolledByUserId",
-      ],
+      // The viewer's own participant's controller. The round-end review's health roll is a
+      // player-facing structure without its roller (#517).
+      active: [...OWN_PARTICIPANT_CONTROLLER.active],
+      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy],
     },
     name: "POST /encounters/:encounterId/combat-round/roll-health-check",
     playerKeys: ["command", "encounter", "participant"],
@@ -30757,20 +30650,9 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // Phase resolution results are Tier 3's round state, not a round-state participant; Tier 1
-      // recorded `damageResult.createdByUserId` among their unruled nested locations.
-      active: [
-        "activeCombatState.phaseResolutionResults[].criticalRoll.rolledByUserId",
-        "activeCombatState.phaseResolutionResults[].damageResult.createdByUserId",
-        "activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.phaseResolutionResults[].criticalRoll.rolledByUserId",
-        "encounter.combatRoundState.phaseResolutionResults[].damageResult.createdByUserId",
-        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-    },
+    // Phase resolution results are player-facing structures (#517): the critical and hit-location
+    // rollers and `damageResult.createdByUserId` — one of Tier 1's unruled nested locations — are
+    // not part of them, so no account identity remains.
     name: "POST /encounters/:encounterId/combat-round/roll-critical",
     playerKeys: ["encounter"],
     populated: {
@@ -30836,17 +30718,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // Phase resolution results: Tier 3's round state (see roll-critical).
-      active: [
-        "activeCombatState.phaseResolutionResults[].damageResult.createdByUserId",
-        "activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.phaseResolutionResults[].damageResult.createdByUserId",
-        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-    },
+    // Phase resolution results are player-facing structures (see roll-critical).
     name: "POST /encounters/:encounterId/combat-round/resolve-phase-damage",
     playerKeys: ["commandEnvelope", "encounter"],
     populated: {
@@ -30902,16 +30774,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     arrange: (viewer) => arrangeContinuedContactMaintenance(viewer, false),
     gmKeys: ["command", "commandEnvelope", "encounter", "roll"],
     identityPaths: {
-      // The viewer's own maintenance roll: in the round-end review (Tier 3's round state) and as
-      // the route's `roll` presentation, which is not a participant or encounter sibling.
-      active: [
-        "activeCombatState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "mutationPresentation.roll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "roll.rolledByUserId",
-      ],
+      // The viewer's own maintenance roll as the route's `roll` presentation, which is not part of
+      // the encounter. The round-end review's copy is a player-facing structure without it (#517).
+      active: ["mutationPresentation.roll.rolledByUserId"],
+      legacy: ["roll.rolledByUserId"],
     },
 
     name: "POST /encounters/:encounterId/combat-round/roll-continued-contact-maintenance (contest open)",
@@ -30931,16 +30797,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     // does not, because it is not theirs.
     gmKeys: ["command", "commandEnvelope", "encounter", "participant", "roll"],
     identityPaths: {
-      // The viewer's own maintenance roll: in the round-end review (Tier 3's round state) and as
-      // the route's `roll` presentation, which is not a participant or encounter sibling.
-      active: [
-        "activeCombatState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "mutationPresentation.roll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "roll.rolledByUserId",
-      ],
+      // The viewer's own maintenance roll as the route's `roll` presentation, which is not part of
+      // the encounter. The round-end review's copy is a player-facing structure without it (#517).
+      active: ["mutationPresentation.roll.rolledByUserId"],
+      legacy: ["roll.rolledByUserId"],
     },
 
     name: "POST /encounters/:encounterId/combat-round/roll-continued-contact-maintenance (escaped: the other player's participant changed)",
@@ -31418,12 +31278,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // The viewer's own Dodge roll, on the Adjust Distance proposal (Tier 3's round state).
-      legacy: [
-        "encounter.combatRoundState.adjustDistanceProposals[distance-proposal].attackerRoll.rolledByUserId",
-      ],
-    },
+    // The Adjust Distance proposal is a player-facing structure without its roller (#517).
     name: "POST /encounters/:encounterId/combat-round/roll-adjust-distance",
     playerKeys: ["encounter"],
     populated: {
@@ -32060,13 +31915,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // Phase resolution results: Tier 3's round state (see roll-critical).
-      active: ["activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId"],
-      legacy: [
-        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-    },
+    // Phase resolution results are player-facing structures (see roll-critical).
     name: "POST /encounters/:encounterId/combat-round/roll-hit-location",
     playerKeys: ["encounter"],
     populated: {
@@ -32242,46 +32091,20 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // R2 (ruled, Tier 3 removes it): the viewer's own combat context, with its correction
-      // record's `gmOverride.userId`. Plus the viewer's own participant's controller.
-      active: [
-        ...OWN_PARTICIPANT_CONTROLLER.active,
-        "activeCombatState.participants[encounter-participant-1].declaration.combatContext.modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
-      ],
-      legacy: [
-        ...OWN_PARTICIPANT_CONTROLLER.legacy,
-        "encounter.combatRoundState.participants[encounter-participant-1].declaration.combatContext.modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
-      ],
+      // The viewer's own participant's controller. R2 — the viewer's own combat context with its
+      // correction record's `gmOverride.userId` — is removed (#517 Tier 3).
+      active: [...OWN_PARTICIPANT_CONTROLLER.active],
+      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy],
     },
-    injectContexts: false,
     name: "POST /encounters/:encounterId/combat-declaration",
     playerKeys: ["encounter", "participant"],
-    playerMaterial: { correctionRecord: true },
-    // The correction record reaches the builders through the viewer's own combat context:
-    // the R2 location, which the player response keeps as ruled (`playerMaterial`).
     populated: {
       cancellingUser: true,
       combatExperienceRoller: true,
       correctionRecord: true,
       submittingUser: true,
     },
-    // R2 as Tier 1 pins it: the two modifier entries of the viewer's own combat context keep their
-    // lifecycle and correction history. Nothing else may fall outside the player-facing types.
-    residualKeys: {
-      active: tier2R2ResidualKeys("activeCombatState"),
-      legacy: tier2R2ResidualKeys("encounter.combatRoundState"),
-    },
-    secretPaths: {
-      active: pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY).secrets,
-      legacy: pinnedR2Residual("encounter.combatRoundState", R2_PRIVATE_ENTRY).secrets,
-    },
   });
-
-  function tier2R2ResidualKeys(root: "activeCombatState" | "encounter.combatRoundState") {
-    return pinnedR2Residual(root, R2_PRIVATE_ENTRY, R2_GENERATED_DECLARATION_ROW).keys.filter(
-      (path) => /\.(canonicalLifecycle|canonicalTransitions)$/.test(path),
-    );
-  }
 
   function arrangeTier1PhaseAttack(viewer: Tier2Viewer, route: string) {
     return async () => {
@@ -32536,12 +32359,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // The viewer's own Feint roll, on the Feint proposal (Tier 3's round state).
-      legacy: [
-        "encounter.combatRoundState.feintProposals[combat-feint:round:1:attacker:encounter-participant-1].attackerRoll.rolledByUserId",
-      ],
-    },
+    // The Feint proposal is a player-facing structure without its roller (#517).
     name: "POST /encounters/:encounterId/combat-round/roll-feint",
     playerKeys: ["encounter"],
     populated: {
@@ -32834,16 +32652,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // The viewer's own Brawling roll: on the contest (Tier 3's round state) and as the route's
-      // `roll` presentation, which is not a participant or encounter sibling.
-      active: [
-        "activeCombatState.offensiveParryContests[1:opportunity:opportunity:1:parry:offensive-parry:brawling].initiatorRoll.rolledByUserId",
-        "mutationPresentation.roll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.offensiveParryContests[1:opportunity:opportunity:1:parry:offensive-parry:brawling].initiatorRoll.rolledByUserId",
-        "roll.rolledByUserId",
-      ],
+      // The viewer's own Brawling roll as the route's `roll` presentation, which is not part of the
+      // encounter. The contest's copy is a player-facing structure without it (#517).
+      active: ["mutationPresentation.roll.rolledByUserId"],
+      legacy: ["roll.rolledByUserId"],
     },
     name: "POST /encounters/:encounterId/combat-round/roll-offensive-parry-brawling",
     playerKeys: ["command", "encounter", "roll"],
@@ -33008,11 +32820,14 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       const route = declaredPhaseScenario(mocks.playerUser);
       const spy = withSchemaThatKeepsTheFutureField();
       try {
-        const projected = buildPlayerSafeEncounterForUser({
-          encounter: route.encounter as unknown as EncounterSession,
-          scenarioParticipants: route.participants,
-          userId: mocks.playerUser.id,
-        });
+        // Control: the viewer's projection without the allow-list (#517 Tier 3) carries it.
+        const projected = withoutTheAllowList(() =>
+          buildPlayerFacingEncounterForUser({
+            encounter: route.encounter as unknown as EncounterSession,
+            scenarioParticipants: route.participants,
+            userId: mocks.playerUser.id,
+          }),
+        );
         expect(JSON.stringify(projected.combatRoundState?.participants)).toContain(
           "SECRET_FUTURE_DECLARATION",
         );

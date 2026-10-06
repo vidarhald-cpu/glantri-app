@@ -34,7 +34,7 @@ import {
 
 import {
   buildPlayerSafeCombatRoundCommandForUser as projectPlayerCombatCommand,
-  buildPlayerSafeEncounterForUser,
+  buildPlayerFacingEncounterForUser,
 } from "./encounterRoutes";
 
 /**
@@ -496,6 +496,14 @@ function makeCommand(input: {
     step: "A1",
     type: input.type,
   });
+}
+
+/**
+ * A player encounter as the client holds it: the JSON it receives, read through the encounter
+ * schema the client's domain helpers run on.
+ */
+function asReceivedByClient(encounter: unknown) {
+  return encounterSessionSchema.parse(JSON.parse(JSON.stringify(encounter)));
 }
 
 function json(value: unknown): string | undefined {
@@ -1272,13 +1280,13 @@ describe("#502 player command projection — the player's client still derives t
     for (const viewer of ACTORS) {
       it(`${label}, viewed by ${viewer}`, () => {
         const server = buildState();
-        const projected = buildPlayerSafeEncounterForUser({
+        const projected = buildPlayerFacingEncounterForUser({
           encounter: threeWayEncounter(server),
           scenarioParticipants: threeWayScenarioParticipants(),
           userId: OWNER[viewer]!,
         });
 
-        const client = initializeCombatRoundState({ encounter: projected });
+        const client = initializeCombatRoundState({ encounter: asReceivedByClient(projected) });
 
         expect(progressionView(client)).toEqual(progressionView(server));
         expect(json(projected.combatRoundState?.commands)).not.toContain("SECRET");
@@ -1288,7 +1296,7 @@ describe("#502 player command projection — the player's client still derives t
 
   it("would not, if the formerly raw types were omitted instead of projected", () => {
     const server = skipGladiator(openPhaseOne(["gladiator", "guard", "observer"]));
-    const projected = buildPlayerSafeEncounterForUser({
+    const projected = buildPlayerFacingEncounterForUser({
       encounter: threeWayEncounter(server),
       scenarioParticipants: threeWayScenarioParticipants(),
       userId: OWNER.gladiator!,
@@ -1298,10 +1306,10 @@ describe("#502 player command projection — the player's client still derives t
     );
 
     const client = initializeCombatRoundState({
-      encounter: {
+      encounter: asReceivedByClient({
         ...projected,
         combatRoundState: { ...projected.combatRoundState!, commands: withoutFormerlyRaw },
-      },
+      }),
     });
 
     // The player's own skipped action would read as pending again.

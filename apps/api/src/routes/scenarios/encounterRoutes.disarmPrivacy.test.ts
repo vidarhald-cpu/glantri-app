@@ -13,7 +13,7 @@ import {
   type EncounterSession,
   type ScenarioParticipant,
 } from "@glantri/domain";
-import { buildPlayerSafeEncounterForUser } from "./encounterRoutes";
+import { buildPlayerFacingEncounterForUser } from "./encounterRoutes";
 
 const NOW = "2026-08-17T10:00:00.000Z";
 const REVISION = "2026-08-17T09:00:00.000Z";
@@ -173,6 +173,7 @@ function fixture(input?: { hiddenSuffix?: string }) {
   );
   const encounter = {
     combatRoundState: state,
+    createdAt: NOW,
     currentRound: 3,
     id: "encounter-1",
     participantVisibility: {
@@ -183,6 +184,7 @@ function fixture(input?: { hiddenSuffix?: string }) {
     },
     participants: encounterParticipants,
     scenarioId: "scenario-1",
+    title: "Disarm",
     updatedAt: NOW,
   } as unknown as EncounterSession;
   return {
@@ -202,7 +204,7 @@ function fixture(input?: { hiddenSuffix?: string }) {
 describe("player-safe Disarm state", () => {
   it("omits GM-only Encounter Item identities from the player projection", () => {
     const { encounter, scenarioParticipants } = fixture();
-    const projected = buildPlayerSafeEncounterForUser({
+    const projected = buildPlayerFacingEncounterForUser({
       encounter: {
         ...encounter,
         itemReferences: [
@@ -221,12 +223,12 @@ describe("player-safe Disarm state", () => {
 
   it("keeps each involved roll usable without commands, opposite roll math, or hidden ratings", () => {
     const { encounter, scenarioParticipants } = fixture();
-    const actor = buildPlayerSafeEncounterForUser({
+    const actor = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants,
       userId: "user-actor",
     }).combatRoundState!;
-    const holder = buildPlayerSafeEncounterForUser({
+    const holder = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants,
       userId: "user-holder",
@@ -238,28 +240,28 @@ describe("player-safe Disarm state", () => {
       expect.arrayContaining(["open_disarm", "roll_disarm", "commit_disarm"]),
     );
     expect(actorAttempt).toMatchObject({
-      actingRoll: { finalTotal: 31, rolledByUserId: undefined },
+      actingRoll: { finalTotal: 31 },
       actingWeaponItemId: "redacted:disarm:acting-weapon",
       actingWeaponTemplateId: "redacted:disarm:acting-template",
-      difference: undefined,
-      resistingRoll: undefined,
       targetWeaponItemId: "redacted:disarm:target-weapon",
       targetWeaponItemRevision: "1970-01-01T00:00:00.000Z",
       targetWeaponTemplateId: "redacted:disarm:target-template",
     });
+    expect(actorAttempt.actingRoll).not.toHaveProperty("rolledByUserId");
+    expect(actorAttempt).not.toHaveProperty("difference");
+    expect(actorAttempt).not.toHaveProperty("resistingRoll");
     expect(actorAttempt.id).toBe("disarm:round:3:phase1:actor:actor");
     expect(actorAttempt.actingRoll?.calculation.percentageContributions).toEqual([]);
     expect(JSON.stringify(actorAttempt)).not.toMatch(
       /Target 5 vs acting 2|secret-acting|secret-target|gm-only-control/,
     );
-    expect(holderAttempt).toMatchObject({
-      actingRoll: undefined,
-      difference: undefined,
-      resistingRoll: { finalTotal: 15, rolledByUserId: undefined },
-    });
+    expect(holderAttempt).toMatchObject({ resistingRoll: { finalTotal: 15 } });
+    expect(holderAttempt).not.toHaveProperty("actingRoll");
+    expect(holderAttempt).not.toHaveProperty("difference");
+    expect(holderAttempt.resistingRoll).not.toHaveProperty("rolledByUserId");
     expect(
-      actor.participants.find((entry) => entry.participantId === "actor")?.declaration?.disarm,
-    ).toBeUndefined();
+      actor.participants.find((entry) => entry.participantId === "actor")?.declaration,
+    ).not.toHaveProperty("disarm");
     expect(JSON.stringify(holderAttempt)).not.toMatch(/secret-acting|secret-target/);
   });
 
@@ -269,12 +271,12 @@ describe("player-safe Disarm state", () => {
 
     canonical.lifecycleStates.forEach((state, index) => {
       for (const role of ["actor", "holder"] as const) {
-        const projected = buildPlayerSafeEncounterForUser({
+        const projected = buildPlayerFacingEncounterForUser({
           encounter: { ...canonical.encounter, combatRoundState: state },
           scenarioParticipants: canonical.scenarioParticipants,
           userId: `user-${role}`,
         });
-        const projectedNonexistent = buildPlayerSafeEncounterForUser({
+        const projectedNonexistent = buildPlayerFacingEncounterForUser({
           encounter: {
             ...nonexistent.encounter,
             combatRoundState: nonexistent.lifecycleStates[index],
@@ -303,12 +305,12 @@ describe("player-safe Disarm state", () => {
 
   it("makes an uncontrolled Disarm declaration equivalent to no declaration and hides it from an uninvolved viewer", () => {
     const { encounter, scenarioParticipants } = fixture();
-    const holder = buildPlayerSafeEncounterForUser({
+    const holder = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants,
       userId: "user-holder",
     });
-    const noDeclaration = buildPlayerSafeEncounterForUser({
+    const noDeclaration = buildPlayerFacingEncounterForUser({
       encounter: {
         ...encounter,
         combatRoundState: {
@@ -329,7 +331,7 @@ describe("player-safe Disarm state", () => {
     );
     expect(holderActor?.declaration).toEqual(noDeclarationActor?.declaration);
 
-    const observer = buildPlayerSafeEncounterForUser({
+    const observer = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants,
       userId: "user-observer",
@@ -342,12 +344,12 @@ describe("player-safe Disarm state", () => {
 
   it("does not mutate authoritative undo snapshots while projecting safe views", () => {
     const { encounter, scenarioParticipants, state } = fixture();
-    buildPlayerSafeEncounterForUser({ encounter, scenarioParticipants, userId: "user-actor" });
+    buildPlayerFacingEncounterForUser({ encounter, scenarioParticipants, userId: "user-actor" });
     const undone = undoLatestCombatRoundCommand({ state });
 
     expect(undone?.disarmAttempts[0]?.status).toBe("awaiting_commit");
     expect(undone?.commands.at(-1)?.type).toBe("roll_disarm");
-    const safeUndone = buildPlayerSafeEncounterForUser({
+    const safeUndone = buildPlayerFacingEncounterForUser({
       encounter: { ...encounter, combatRoundState: undone },
       scenarioParticipants,
       userId: "user-actor",
@@ -450,22 +452,22 @@ describe("player-safe missile readiness state", () => {
         ],
       },
     } as EncounterSession;
-    const actor = buildPlayerSafeEncounterForUser({
+    const actor = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants: current.scenarioParticipants,
       userId: "user-actor",
     }).combatRoundState!;
-    const observer = buildPlayerSafeEncounterForUser({
+    const observer = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants: current.scenarioParticipants,
       userId: "user-observer",
     }).combatRoundState!;
-    const target = buildPlayerSafeEncounterForUser({
+    const target = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants: current.scenarioParticipants,
       userId: "user-holder",
     }).combatRoundState!;
-    const bystander = buildPlayerSafeEncounterForUser({
+    const bystander = buildPlayerFacingEncounterForUser({
       encounter,
       scenarioParticipants: current.scenarioParticipants,
       userId: "user-bystander",
@@ -476,14 +478,14 @@ describe("player-safe missile readiness state", () => {
       aimCompletedRounds: 1,
       aimLevel: 2,
       aimRequiredRounds: 4,
-      ammoItemId: undefined,
-      ammoItemRevision: undefined,
       baseCompletedRounds: 1,
       baseRequiredRounds: 5,
       gmPreparationAdjustment: 0,
-      lastCommandId: undefined,
       participantId: "actor",
     });
+    for (const removed of ["ammoItemId", "ammoItemRevision", "lastCommandId"]) {
+      expect(actor.missileReadiness[0]).not.toHaveProperty(removed);
+    }
     expect(actor.commands.map((command) => command.type)).not.toContain(
       "progress_missile_readiness",
     );

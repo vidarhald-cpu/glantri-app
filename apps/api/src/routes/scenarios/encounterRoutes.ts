@@ -256,7 +256,6 @@ import {
   combatFeintMethodSchema,
   combatFeintProposalSchema,
   combatFeintRollResultSchema,
-  combatAdjustDistanceProposalSchema,
   setCombatRoundCombatExperienceDifficulty,
   setCombatRoundPairDistance,
   setCombatRoundSelection,
@@ -281,12 +280,30 @@ import {
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
+  buildPlayerFacing,
   buildPlayerFacingCombatRoundCommand,
+  buildPlayerFacingCombatRoundParticipant,
   buildPlayerFacingEncounterSession,
   buildPlayerFacingScenarioParticipant,
   combatTaskCommandUndoFactsSchema,
+  playerFacingCombatAdjustDistanceProposalSchema,
+  playerFacingCombatBreakOffProposalSchema,
+  playerFacingCombatDisarmAttemptSchema,
+  playerFacingCombatDisarmRollSchema,
+  playerFacingCombatFeintProposalSchema,
+  playerFacingCombatMissileReadinessSchema,
+  playerFacingCombatRoundEndReviewSchema,
+  playerFacingCombatRoundStateSchema,
+  playerFacingCombatSkillContestCalculationSchema,
+  playerFacingContinuedContactMaintenanceContestSchema,
+  playerFacingEncounterItemReferenceSchema,
+  playerFacingEncounterParticipantSchema,
+  playerFacingOffensiveParryContestSchema,
+  playerFacingRoleplayStateSchema,
   type CombatRoundCommandType,
   type PlayerFacingCombatRoundCommand,
+  type PlayerFacingCombatRoundParticipant,
+  type PlayerFacingCombatRoundState,
   type PlayerFacingEncounterSession,
   type PlayerFacingScenarioParticipant,
 } from "@glantri/domain";
@@ -312,7 +329,6 @@ import type {
   CombatRoundPhase,
   CombatRoundPhaseInitiativeCommitParticipantInput,
   CombatRoundAttackDistanceModifierDetail,
-  CombatRoundPhaseResolutionResult,
   CombatRoundDamageReview,
   CombatRoundDeclaration,
   CombatRoundStepSnapshot,
@@ -6462,57 +6478,120 @@ export function buildPlayerSafeCombatRoundCommandForUser(
   return PLAYER_COMBAT_COMMAND_PROJECTIONS[input.command.type](input);
 }
 
-function sanitizePlayerSafeDisarmRoll(roll: CombatDisarmRoll): CombatDisarmRoll {
-  return {
-    ...roll,
-    calculation: {
-      ...roll.calculation,
-      percentageContributions: roll.calculation.percentageContributions.filter(
-        (contribution) => contribution.category !== "weapon_control",
-      ),
-    },
-    rolledByUserId: undefined,
-  };
-}
-
 const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
 
-function sanitizePlayerSafeDisarmAttempt(input: {
+/**
+ * A disarm roll as the participant who made it sees it: without the weapon-control contributions,
+ * which describe the opponent's weapon.
+ */
+function buildPlayerFacingOwnDisarmRoll(roll: CombatDisarmRoll) {
+  return buildPlayerFacing(playerFacingCombatDisarmRollSchema, roll, {
+    calculation: buildPlayerFacing(
+      playerFacingCombatSkillContestCalculationSchema,
+      roll.calculation,
+      {
+        percentageContributions: roll.calculation.percentageContributions.filter(
+          (contribution) => contribution.category !== "weapon_control",
+        ),
+      },
+    ),
+  });
+}
+
+/**
+ * A disarm attempt as a viewer who controls one of its participants sees it: only the viewer's own
+ * roll, and every weapon reference redacted.
+ */
+function buildPlayerFacingDisarmAttempt(input: {
   attempt: CombatDisarmAttempt;
   controlledEncounterParticipantIds: ReadonlySet<string>;
-}): CombatDisarmAttempt {
-  return {
-    ...input.attempt,
-    actingRoll: input.controlledEncounterParticipantIds.has(input.attempt.actingParticipantId)
-      ? input.attempt.actingRoll
-        ? sanitizePlayerSafeDisarmRoll(input.attempt.actingRoll)
-        : undefined
-      : undefined,
+}) {
+  const { attempt } = input;
+  return buildPlayerFacing(playerFacingCombatDisarmAttemptSchema, attempt, {
+    actingRoll:
+      input.controlledEncounterParticipantIds.has(attempt.actingParticipantId) && attempt.actingRoll
+        ? buildPlayerFacingOwnDisarmRoll(attempt.actingRoll)
+        : undefined,
     actingWeaponItemId: "redacted:disarm:acting-weapon",
     actingWeaponTemplateId: "redacted:disarm:acting-template",
-    difference: undefined,
-    resistingRoll: input.controlledEncounterParticipantIds.has(input.attempt.resistingParticipantId)
-      ? input.attempt.resistingRoll
-        ? sanitizePlayerSafeDisarmRoll(input.attempt.resistingRoll)
-        : undefined
-      : undefined,
+    resistingRoll:
+      input.controlledEncounterParticipantIds.has(attempt.resistingParticipantId) &&
+      attempt.resistingRoll
+        ? buildPlayerFacingOwnDisarmRoll(attempt.resistingRoll)
+        : undefined,
     targetWeaponItemId: "redacted:disarm:target-weapon",
     targetWeaponItemRevision: PLAYER_SAFE_DISARM_ITEM_REVISION,
     targetWeaponTemplateId: "redacted:disarm:target-template",
-  };
+  });
 }
 
-function sanitizePlayerSafeDisarmDeclaration(
-  declaration: CombatRoundDeclaration | undefined,
-): CombatRoundDeclaration | undefined {
-  return declaration?.disarm ? { ...declaration, disarm: undefined } : declaration;
+/**
+ * A round-state participant as the viewer sees it. A participant the viewer controls keeps its own
+ * declaration; another participant's declaration is hidden while declarations are being made or
+ * when it declared a disarm, and otherwise shows without its notes, intent, movement intent and —
+ * when it observes — the observed target. Attack results are those between the viewer's own
+ * participants and the participants it can see.
+ */
+function buildPlayerFacingRoundParticipantForViewer(input: {
+  controls: (participantId: string) => boolean;
+  currentStep: CombatRoundState["currentStep"];
+  isVisiblePair: (attackerParticipantId: string, defenderParticipantId: string) => boolean;
+  participant: CombatRoundState["participants"][number];
+}): PlayerFacingCombatRoundParticipant {
+  const { participant } = input;
+  const attackResultsByOpportunity = Object.fromEntries(
+    Object.entries(participant.attackResultsByOpportunity ?? {}).filter(([, result]) =>
+      input.isVisiblePair(result.attackerParticipantId, result.defenderParticipantId),
+    ),
+  );
+  const attackResults = deriveCombatRoundAttackResultsCompatibility({
+    attackResultsByOpportunity,
+    participantId: participant.participantId,
+  });
+
+  if (input.controls(participant.participantId)) {
+    return buildPlayerFacingCombatRoundParticipant({
+      attackResults,
+      attackResultsByOpportunity,
+      participant,
+    });
+  }
+
+  const declaration = participant.declaration;
+  const observes = declaration?.secondaryActionId === "observe_opponent";
+  return buildPlayerFacingCombatRoundParticipant({
+    attackResults,
+    attackResultsByOpportunity,
+    declaration:
+      input.currentStep === "select_actions" || declaration?.disarm ? undefined : declaration,
+    declarationOverrides: {
+      additionalActionNotes: undefined,
+      intent: undefined,
+      movementIntent: undefined,
+      secondaryActionContext: observes ? undefined : declaration?.secondaryActionContext,
+      secondaryActionId: observes ? undefined : declaration?.secondaryActionId,
+    },
+    participant,
+  });
 }
 
-function buildPlayerSafeCombatRoundStateForUser(input: {
+/**
+ * The combat round state one player receives (#517, privacy hardening Tier 3).
+ *
+ * This replaces a projection that spread the stored round state, removed what a player may not see
+ * and returned the same `CombatRoundState` it was given, so a projected and a stored round state
+ * were indistinguishable to the compiler and a field added to any internal structure reached
+ * players. The per-viewer decisions are unchanged — which participants, declarations, attack
+ * results, proposals, contests, conditions and phase results the viewer sees, and which of another
+ * participant's rolls are withheld — but every value is built from a player-facing schema
+ * (`playerFacingCombatRoundStateSchema`), which names each field a player receives at every level,
+ * and the result is a type no stored round state is assignable to.
+ */
+function buildPlayerFacingCombatRoundStateForUser(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
-}): CombatRoundState | undefined {
+}): PlayerFacingCombatRoundState | undefined {
   const roundState = input.encounter.combatRoundState
     ? initializeMaterializedCombatRoundState({
         encounter: input.encounter,
@@ -6526,99 +6605,51 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
 
   const { controlledEncounterParticipantIds, visibleParticipantIds } =
     buildPlayerSafeCombatScopeForUser(input);
-  const safeCurrentCursor =
-    !roundState.currentCursor?.participantId ||
-    visibleParticipantIds.has(roundState.currentCursor.participantId)
-      ? roundState.currentCursor
-      : undefined;
-  const safePhaseResolutionCursor =
-    roundState.phaseResolutionCursor &&
-    visibleParticipantIds.has(roundState.phaseResolutionCursor.participantId)
-      ? roundState.phaseResolutionCursor
-      : undefined;
-  const safePhaseResolutionStatuses = Object.fromEntries(
-    Object.entries(roundState.phaseResolutionStatuses).filter(([participantId]) =>
-      visibleParticipantIds.has(participantId),
-    ),
-  );
-  const safeDistanceEdges = Object.fromEntries(
-    Object.entries(roundState.distanceState?.edges ?? {}).filter(
-      ([, edge]) =>
-        (controlledEncounterParticipantIds.has(edge.participantAId) &&
-          visibleParticipantIds.has(edge.participantBId)) ||
-        (controlledEncounterParticipantIds.has(edge.participantBId) &&
-          visibleParticipantIds.has(edge.participantAId)),
-    ),
-  );
-  const safeRoundEndReview = roundState.roundEndReview
-    ? {
-        ...roundState.roundEndReview,
-        continuedContactMaintenanceContests:
-          roundState.roundEndReview.continuedContactMaintenanceContests
-            .filter((contest) =>
-              isPlayerVisibleCombatRoundResultPair({
-                attackerParticipantId: contest.controllerParticipantId,
-                controlledEncounterParticipantIds,
-                defenderParticipantId: contest.affectedParticipantId,
-                visibleParticipantIds,
-              }),
-            )
-            .map((contest) => ({
-              ...contest,
-              affectedRoll: controlledEncounterParticipantIds.has(contest.affectedParticipantId)
-                ? contest.affectedRoll
-                : undefined,
-              controllerRoll: controlledEncounterParticipantIds.has(contest.controllerParticipantId)
-                ? contest.controllerRoll
-                : undefined,
-            })),
-        participantReviews: Object.fromEntries(
-          Object.entries(roundState.roundEndReview.participantReviews).filter(([participantId]) =>
-            visibleParticipantIds.has(participantId),
-          ),
-        ),
-        proposedDistances: roundState.roundEndReview.proposedDistances
-          .map((proposal) =>
-            buildPlayerSafeDistanceControlProposalForUser({
-              controlledEncounterParticipantIds,
-              proposal,
-              visibleParticipantIds,
-            }),
-          )
-          .filter((proposal): proposal is CombatRoundEndDistanceProposal => Boolean(proposal)),
-      }
-    : undefined;
-  const safeBreakOffProposals = roundState.breakOffProposals
-    .filter((proposal) =>
-      isPlayerVisibleCombatRoundResultPair({
-        attackerParticipantId: proposal.attackerParticipantId,
-        controlledEncounterParticipantIds,
-        defenderParticipantId: proposal.escapeeParticipantId,
-        visibleParticipantIds,
-      }),
-    )
-    .map((proposal) => ({
-      ...proposal,
-      attackerRoll: controlledEncounterParticipantIds.has(proposal.attackerParticipantId)
-        ? proposal.attackerRoll
-          ? { ...proposal.attackerRoll, rolledByUserId: undefined }
-          : undefined
-        : undefined,
-      committedByUserId: undefined,
-      escapeeRoll: controlledEncounterParticipantIds.has(proposal.escapeeParticipantId)
-        ? proposal.escapeeRoll
-          ? { ...proposal.escapeeRoll, rolledByUserId: undefined }
-          : undefined
-        : undefined,
-      gmReview: proposal.gmReview ? { ...proposal.gmReview, notes: undefined } : undefined,
-    }));
+  const controls = (participantId: string) => controlledEncounterParticipantIds.has(participantId);
+  const isVisiblePair = (attackerParticipantId: string, defenderParticipantId: string) =>
+    isPlayerVisibleCombatRoundResultPair({
+      attackerParticipantId,
+      controlledEncounterParticipantIds,
+      defenderParticipantId,
+      visibleParticipantIds,
+    });
+  const isVisibleOrControlled = (participantId: string) =>
+    controls(participantId) || visibleParticipantIds.has(participantId);
+  const { roundEndReview } = roundState;
 
-  const safeState: CombatRoundState = {
-    ...roundState,
+  return buildPlayerFacing(playerFacingCombatRoundStateSchema, roundState, {
     activeParticipantId:
       roundState.activeParticipantId && visibleParticipantIds.has(roundState.activeParticipantId)
         ? roundState.activeParticipantId
         : undefined,
+    adjustDistanceProposals: roundState.adjustDistanceProposals
+      .filter((proposal) =>
+        isVisiblePair(proposal.attackerParticipantId, proposal.defenderParticipantId),
+      )
+      .map((proposal) =>
+        buildPlayerFacing(playerFacingCombatAdjustDistanceProposalSchema, proposal, {
+          attackerRoll: controls(proposal.attackerParticipantId)
+            ? proposal.attackerRoll
+            : undefined,
+          attackerRollRecorded: proposal.attackerRollRecorded || Boolean(proposal.attackerRoll),
+          defenderRoll: controls(proposal.defenderParticipantId)
+            ? proposal.defenderRoll
+            : undefined,
+          defenderRollRecorded: proposal.defenderRollRecorded || Boolean(proposal.defenderRoll),
+        }),
+      ),
+    breakOffProposals: roundState.breakOffProposals
+      .filter((proposal) =>
+        isVisiblePair(proposal.attackerParticipantId, proposal.escapeeParticipantId),
+      )
+      .map((proposal) =>
+        buildPlayerFacing(playerFacingCombatBreakOffProposalSchema, proposal, {
+          attackerRoll: controls(proposal.attackerParticipantId)
+            ? proposal.attackerRoll
+            : undefined,
+          escapeeRoll: controls(proposal.escapeeParticipantId) ? proposal.escapeeRoll : undefined,
+        }),
+      ),
     commands: roundState.commands
       .map((command) =>
         buildPlayerSafeCombatRoundCommandForUser({
@@ -6628,93 +6659,53 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         }),
       )
       .filter((command): command is PlayerFacingCombatRoundCommand => Boolean(command)),
-    defenseSnapshots: [],
-    distanceState: {
-      edges: safeDistanceEdges,
-    },
-    events: [],
-    breakOffProposals: safeBreakOffProposals,
-    disarmUnbalancedConditions: roundState.disarmUnbalancedConditions.filter(
-      (condition) =>
-        controlledEncounterParticipantIds.has(condition.affectedParticipantId) ||
-        visibleParticipantIds.has(condition.affectedParticipantId),
+    continuedContacts: roundState.continuedContacts.filter((contact) =>
+      isVisiblePair(contact.controllerParticipantId, contact.affectedParticipantId),
     ),
+    currentCursor:
+      !roundState.currentCursor?.participantId ||
+      visibleParticipantIds.has(roundState.currentCursor.participantId)
+        ? roundState.currentCursor
+        : undefined,
+    defenseSnapshots: [],
     disarmAttempts: roundState.disarmAttempts
       .filter((attempt) =>
-        isPlayerVisibleCombatRoundResultPair({
-          attackerParticipantId: attempt.actingParticipantId,
-          controlledEncounterParticipantIds,
-          defenderParticipantId: attempt.resistingParticipantId,
-          visibleParticipantIds,
-        }),
+        isVisiblePair(attempt.actingParticipantId, attempt.resistingParticipantId),
       )
       .map((attempt) =>
-        sanitizePlayerSafeDisarmAttempt({ attempt, controlledEncounterParticipantIds }),
+        buildPlayerFacingDisarmAttempt({ attempt, controlledEncounterParticipantIds }),
       ),
-    engagements: roundState.engagements.filter((engagement) =>
-      isPlayerVisibleCombatRoundResultPair({
-        attackerParticipantId: engagement.participantAId,
-        controlledEncounterParticipantIds,
-        defenderParticipantId: engagement.participantBId,
-        visibleParticipantIds,
-      }),
+    disarmUnbalancedConditions: roundState.disarmUnbalancedConditions.filter((condition) =>
+      isVisibleOrControlled(condition.affectedParticipantId),
     ),
-    gmBacktrackHold: undefined,
-    adjustDistanceProposals: roundState.adjustDistanceProposals
-      .filter((proposal) =>
-        isPlayerVisibleCombatRoundResultPair({
-          attackerParticipantId: proposal.attackerParticipantId,
-          controlledEncounterParticipantIds,
-          defenderParticipantId: proposal.defenderParticipantId,
-          visibleParticipantIds,
-        }),
-      )
-      .map((proposal) => {
-        const viewerIsAttacker = controlledEncounterParticipantIds.has(
-          proposal.attackerParticipantId,
-        );
-        const viewerIsDefender = controlledEncounterParticipantIds.has(
-          proposal.defenderParticipantId,
-        );
-        return combatAdjustDistanceProposalSchema.parse({
-          ...proposal,
-          attackerRoll: viewerIsAttacker ? proposal.attackerRoll : undefined,
-          attackerRollRecorded: proposal.attackerRollRecorded || Boolean(proposal.attackerRoll),
-          committedByUserId: undefined,
-          defenderRoll: viewerIsDefender ? proposal.defenderRoll : undefined,
-          defenderRollRecorded: proposal.defenderRollRecorded || Boolean(proposal.defenderRoll),
-          gmRollAdjustment: proposal.gmRollAdjustment
-            ? { ...proposal.gmRollAdjustment, notes: undefined }
-            : undefined,
-          review: proposal.review ? { ...proposal.review, notes: undefined } : undefined,
-        });
-      }),
+    distanceState: {
+      edges: Object.fromEntries(
+        Object.entries(roundState.distanceState?.edges ?? {}).filter(
+          ([, edge]) =>
+            (controls(edge.participantAId) && visibleParticipantIds.has(edge.participantBId)) ||
+            (controls(edge.participantBId) && visibleParticipantIds.has(edge.participantAId)),
+        ),
+      ),
+    },
+    engagements: roundState.engagements.filter((engagement) =>
+      isVisiblePair(engagement.participantAId, engagement.participantBId),
+    ),
+    events: [],
     feintProposals: roundState.feintProposals
       .filter((proposal) =>
-        isPlayerVisibleCombatRoundResultPair({
-          attackerParticipantId: proposal.attackerParticipantId,
-          controlledEncounterParticipantIds,
-          defenderParticipantId: proposal.defenderParticipantId,
-          visibleParticipantIds,
-        }),
+        isVisiblePair(proposal.attackerParticipantId, proposal.defenderParticipantId),
       )
       .map((proposal) => {
-        const viewerIsAttacker = controlledEncounterParticipantIds.has(
-          proposal.attackerParticipantId,
-        );
-        const viewerIsDefender = controlledEncounterParticipantIds.has(
-          proposal.defenderParticipantId,
-        );
         const committed = proposal.status === "committed" || proposal.status === "impossible";
-        return combatFeintProposalSchema.parse({
-          ...proposal,
-          attackerRoll: viewerIsAttacker ? proposal.attackerRoll : undefined,
-          committedByUserId: undefined,
-          defenderRoll: viewerIsDefender ? proposal.defenderRoll : undefined,
+        return buildPlayerFacing(playerFacingCombatFeintProposalSchema, proposal, {
+          attackerRoll: controls(proposal.attackerParticipantId)
+            ? proposal.attackerRoll
+            : undefined,
+          defenderRoll: controls(proposal.defenderParticipantId)
+            ? proposal.defenderRoll
+            : undefined,
           difference: committed ? proposal.difference : undefined,
-          feasibilityNote: undefined,
-          review:
-            committed && proposal.review ? { ...proposal.review, notes: undefined } : undefined,
+          review: committed ? proposal.review : undefined,
           tableResult: committed ? proposal.tableResult : undefined,
         });
       }),
@@ -6724,90 +6715,92 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
       visibleParticipantIds,
     }),
     missileReadiness: roundState.missileReadiness
-      .filter((readiness) => controlledEncounterParticipantIds.has(readiness.participantId))
-      .map((readiness) => ({
-        ...readiness,
-        ammoItemId: undefined,
-        ammoItemRevision: undefined,
-        gmPreparationAdjustment: 0,
-        lastCommandId: undefined,
-      })),
-    offensiveParryContests: roundState.offensiveParryContests
-      .filter((contest) =>
-        isPlayerVisibleCombatRoundResultPair({
-          attackerParticipantId: contest.controllerParticipantId,
-          controlledEncounterParticipantIds,
-          defenderParticipantId: contest.affectedParticipantId,
-          visibleParticipantIds,
+      .filter((readiness) => controls(readiness.participantId))
+      .map((readiness) =>
+        buildPlayerFacing(playerFacingCombatMissileReadinessSchema, readiness, {
+          gmPreparationAdjustment: 0,
         }),
-      )
-      .map((contest) => ({
-        ...contest,
-        initiatorRoll: controlledEncounterParticipantIds.has(contest.controllerParticipantId)
-          ? contest.initiatorRoll
-          : undefined,
-        responderRoll: controlledEncounterParticipantIds.has(contest.affectedParticipantId)
-          ? contest.responderRoll
-          : undefined,
-      })),
-    observationRelationships: buildPlayerSafeCombatObservationRelationships({
-      controlledParticipantIds: controlledEncounterParticipantIds,
-      relationships: roundState.observationRelationships,
-    }),
+      ),
     observationAttempts: buildPlayerSafeCombatObservationAttempts({
       attempts: roundState.observationAttempts,
       controlledParticipantIds: controlledEncounterParticipantIds,
       relationships: roundState.observationRelationships,
     }),
-    continuedContacts: roundState.continuedContacts.filter((contact) =>
-      isPlayerVisibleCombatRoundResultPair({
-        attackerParticipantId: contact.controllerParticipantId,
-        controlledEncounterParticipantIds,
-        defenderParticipantId: contact.affectedParticipantId,
-        visibleParticipantIds,
-      }),
-    ),
-    currentCursor: safeCurrentCursor,
+    observationRelationships: buildPlayerSafeCombatObservationRelationships({
+      controlledParticipantIds: controlledEncounterParticipantIds,
+      relationships: roundState.observationRelationships,
+    }),
+    offensiveParryContests: roundState.offensiveParryContests
+      .filter((contest) =>
+        isVisiblePair(contest.controllerParticipantId, contest.affectedParticipantId),
+      )
+      .map((contest) =>
+        buildPlayerFacing(playerFacingOffensiveParryContestSchema, contest, {
+          initiatorRoll: controls(contest.controllerParticipantId)
+            ? contest.initiatorRoll
+            : undefined,
+          responderRoll: controls(contest.affectedParticipantId)
+            ? contest.responderRoll
+            : undefined,
+        }),
+      ),
     participants: roundState.participants
       .filter((participant) => visibleParticipantIds.has(participant.participantId))
       .map((participant) =>
-        controlledEncounterParticipantIds.has(participant.participantId)
-          ? {
-              ...participant,
-              declaration: sanitizePlayerSafeDisarmDeclaration(participant.declaration),
-            }
-          : {
-              ...participant,
-              declaration:
-                roundState.currentStep === "select_actions"
-                  ? undefined
-                  : participant.declaration?.disarm
-                    ? undefined
-                    : participant.declaration
-                      ? {
-                          ...participant.declaration,
-                          additionalActionNotes: undefined,
-                          intent: undefined,
-                          movementIntent: undefined,
-                          secondaryActions:
-                            participant.declaration.secondaryActionId === "observe_opponent"
-                              ? undefined
-                              : participant.declaration.secondaryActions,
-                          secondaryActionContext:
-                            participant.declaration.secondaryActionId === "observe_opponent"
-                              ? undefined
-                              : participant.declaration.secondaryActionContext,
-                          secondaryActionId:
-                            participant.declaration.secondaryActionId === "observe_opponent"
-                              ? undefined
-                              : participant.declaration.secondaryActionId,
-                        }
-                      : undefined,
-            },
+        buildPlayerFacingRoundParticipantForViewer({
+          controls,
+          currentStep: roundState.currentStep,
+          isVisiblePair,
+          participant,
+        }),
       ),
-    phaseResolutionCursor: safePhaseResolutionCursor,
-    phaseResolutionStatuses: safePhaseResolutionStatuses,
-    roundEndReview: safeRoundEndReview,
+    phaseResolutionCursor:
+      roundState.phaseResolutionCursor &&
+      visibleParticipantIds.has(roundState.phaseResolutionCursor.participantId)
+        ? roundState.phaseResolutionCursor
+        : undefined,
+    phaseResolutionResults: roundState.phaseResolutionResults.filter((result) =>
+      isVisiblePair(result.attackerParticipantId, result.defenderParticipantId),
+    ),
+    phaseResolutionStatuses: Object.fromEntries(
+      Object.entries(roundState.phaseResolutionStatuses).filter(([participantId]) =>
+        visibleParticipantIds.has(participantId),
+      ),
+    ),
+    roundEndReview:
+      roundEndReview &&
+      buildPlayerFacing(playerFacingCombatRoundEndReviewSchema, roundEndReview, {
+        continuedContactMaintenanceContests: roundEndReview.continuedContactMaintenanceContests
+          .filter((contest) =>
+            isVisiblePair(contest.controllerParticipantId, contest.affectedParticipantId),
+          )
+          .map((contest) =>
+            buildPlayerFacing(playerFacingContinuedContactMaintenanceContestSchema, contest, {
+              affectedRoll: controls(contest.affectedParticipantId)
+                ? contest.affectedRoll
+                : undefined,
+              controllerRoll: controls(contest.controllerParticipantId)
+                ? contest.controllerRoll
+                : undefined,
+            }),
+          ),
+        participantReviews: Object.fromEntries(
+          Object.entries(roundEndReview.participantReviews).filter(([participantId]) =>
+            visibleParticipantIds.has(participantId),
+          ),
+        ),
+        // The distance-control projection shared with the command facts (Tier 4) decides what the
+        // viewer sees of each proposal; the player-facing schema decides which fields carry it.
+        proposedDistances: roundEndReview.proposedDistances
+          .map((proposal) =>
+            buildPlayerSafeDistanceControlProposalForUser({
+              controlledEncounterParticipantIds,
+              proposal,
+              visibleParticipantIds,
+            }),
+          )
+          .filter((proposal): proposal is CombatRoundEndDistanceProposal => Boolean(proposal)),
+      }),
     rounds: [],
     selectedParticipantId:
       roundState.selectedParticipantId &&
@@ -6815,75 +6808,79 @@ function buildPlayerSafeCombatRoundStateForUser(input: {
         ? roundState.selectedParticipantId
         : undefined,
     stepSnapshots: [],
-    unbalancedConditions: roundState.unbalancedConditions.filter(
-      (condition) =>
-        controlledEncounterParticipantIds.has(condition.affectedParticipantId) ||
-        visibleParticipantIds.has(condition.affectedParticipantId),
+    unbalancedConditions: roundState.unbalancedConditions.filter((condition) =>
+      isVisibleOrControlled(condition.affectedParticipantId),
     ),
-  };
-
-  return sanitizePlayerSafeCurrentCombatResultsState({
-    controlledEncounterParticipantIds,
-    state: safeState,
-    visibleParticipantIds,
   });
 }
 
-export function buildPlayerSafeEncounterForUser(input: {
+/**
+ * The encounter participants a player sees: the members whose aliases the viewer can see, each with
+ * its resolved character and scenario participant.
+ */
+function buildPlayerFacingEncounterParticipantsForUser(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
-}): EncounterSession {
-  const { gmPrivateClosingNote: _gmPrivateClosingNote, ...playerSafeEncounter } = input.encounter;
-
-  if (!Array.isArray(input.encounter.participants)) {
-    return {
-      ...playerSafeEncounter,
-      combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
-      itemReferences: (input.encounter.itemReferences ?? []).filter(
-        (reference) => reference.visibility === "players",
-      ),
-      roleplayState: input.encounter.roleplayState
-        ? buildPlayerSafeRoleplayStateForUser(input)
-        : undefined,
-    };
-  }
-
+}) {
   const membership = resolveEncounterParticipantMembership(input);
   const { visibleParticipantIds } = buildPlayerSafeCombatScopeForUser(input);
 
-  return {
-    ...playerSafeEncounter,
-    combatRoundState: buildPlayerSafeCombatRoundStateForUser(input),
-    itemReferences: (input.encounter.itemReferences ?? []).filter(
-      (reference) => reference.visibility === "players",
-    ),
-    participants: membership.participants
-      .filter((participant) =>
-        getCombatDistanceParticipantAliases(participant).some((alias) =>
-          visibleParticipantIds.has(alias),
-        ),
-      )
-      .map((participant) => {
-        const resolution = resolveEncounterParticipantForViewer({
-          encounter: input.encounter,
-          requestedParticipantId: participant.id,
-          scenarioParticipants: input.scenarioParticipants,
-          viewer: { kind: "gm" },
-        });
+  return membership.participants
+    .filter((participant) =>
+      getCombatDistanceParticipantAliases(participant).some((alias) =>
+        visibleParticipantIds.has(alias),
+      ),
+    )
+    .map((participant) => {
+      const resolution = resolveEncounterParticipantForViewer({
+        encounter: input.encounter,
+        requestedParticipantId: participant.id,
+        scenarioParticipants: input.scenarioParticipants,
+        viewer: { kind: "gm" },
+      });
 
-        return resolution
+      return buildPlayerFacing(
+        playerFacingEncounterParticipantSchema,
+        participant,
+        resolution
           ? {
-              ...participant,
               characterId: resolution.characterId ?? participant.characterId,
               scenarioParticipantId: resolution.scenarioParticipantId,
             }
-          : participant;
-      }),
+          : {},
+      );
+    });
+}
+
+/**
+ * The player-facing encounter of every player response (#502 Tier 1; every player read and mutation
+ * since #507 Tier 2). Since #517 (Tier 3) this is the per-viewer player projection itself, not a
+ * wrapper around one: every value is built from the player-facing schemas
+ * (`playerFacingEncounterSessionSchema`), so nothing reaches the player that a player-facing type
+ * does not name, at any level, and the result is not assignable from a stored encounter.
+ */
+export function buildPlayerFacingEncounterForUser(input: {
+  encounter: EncounterSession;
+  scenarioParticipants: ScenarioParticipant[];
+  userId: string;
+}): PlayerFacingEncounterSession {
+  return buildPlayerFacingEncounterSession({
+    combatRoundState: buildPlayerFacingCombatRoundStateForUser(input),
+    encounter: input.encounter,
+    itemReferences: (input.encounter.itemReferences ?? [])
+      .filter((reference) => reference.visibility === "players")
+      .map((reference) => buildPlayerFacing(playerFacingEncounterItemReferenceSchema, reference)),
+    participants: Array.isArray(input.encounter.participants)
+      ? buildPlayerFacingEncounterParticipantsForUser(input)
+      : [],
     roleplayState: input.encounter.roleplayState
-      ? buildPlayerSafeRoleplayStateForUser(input)
+      ? buildPlayerFacing(
+          playerFacingRoleplayStateSchema,
+          buildPlayerSafeRoleplayStateForUser(input),
+        )
       : undefined,
-  };
+  });
 }
 
 function hasPlayerEncounterReadAccess(input: {
@@ -6913,87 +6910,6 @@ function isPlayerVisibleCombatRoundResultPair(input: {
   }
 
   return false;
-}
-
-function sanitizePlayerSafeCurrentCombatResultResolution(
-  result: CombatRoundPhaseResolutionResult,
-): CombatRoundPhaseResolutionResult {
-  return {
-    ...result,
-    damageResult: result.damageResult
-      ? {
-          ...result.damageResult,
-          review: undefined,
-        }
-      : undefined,
-  };
-}
-
-function sanitizePlayerSafeCurrentCombatResultsState(input: {
-  controlledEncounterParticipantIds: Set<string>;
-  state: CombatRoundState;
-  visibleParticipantIds: Set<string>;
-}): CombatRoundState {
-  return {
-    ...input.state,
-    participants: input.state.participants.map((participant) => {
-      const attackResultsByOpportunity = Object.fromEntries(
-        Object.entries(participant.attackResultsByOpportunity ?? {}).filter(([, result]) =>
-          isPlayerVisibleCombatRoundResultPair({
-            attackerParticipantId: result.attackerParticipantId,
-            controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
-            defenderParticipantId: result.defenderParticipantId,
-            visibleParticipantIds: input.visibleParticipantIds,
-          }),
-        ),
-      );
-
-      return {
-        ...participant,
-        attackResultsByOpportunity,
-        attackResults: deriveCombatRoundAttackResultsCompatibility({
-          attackResultsByOpportunity,
-          participantId: participant.participantId,
-        }),
-      };
-    }),
-    phaseResolutionResults: input.state.phaseResolutionResults
-      .filter((result) =>
-        isPlayerVisibleCombatRoundResultPair({
-          attackerParticipantId: result.attackerParticipantId,
-          controlledEncounterParticipantIds: input.controlledEncounterParticipantIds,
-          defenderParticipantId: result.defenderParticipantId,
-          visibleParticipantIds: input.visibleParticipantIds,
-        }),
-      )
-      .map(sanitizePlayerSafeCurrentCombatResultResolution),
-  };
-}
-
-/**
- * The player-facing encounter of every player response (#502 Tier 1; every player read and mutation
- * since #507 Tier 2): the per-viewer player encounter projection, carried into the declared player
- * type field by field, with its round-state participants and declarations rebuilt from named fields
- * (`buildPlayerFacingEncounterSession`).
- */
-export function buildPlayerFacingEncounterForUser(input: {
-  encounter: EncounterSession;
-  /**
-   * R2 (#502 Tier 1 rulings): set by the combat-declaration route only. The viewer's own
-   * declarations keep their combat context as the projection produced it, pinned path by path in the
-   * route tests, until Tier 3 builds the round state additively.
-   */
-  keepOwnCombatContextAsR2Residual?: true;
-  scenarioParticipants: ScenarioParticipant[];
-  userId: string;
-}): PlayerFacingEncounterSession {
-  return buildPlayerFacingEncounterSession({
-    keepDeclarationCombatContextAsR2ResidualFor:
-      input.keepOwnCombatContextAsR2Residual === true
-        ? buildPlayerSafeCombatScopeForUser(input).controlledEncounterParticipantIds
-        : undefined,
-    projectedEncounter: buildPlayerSafeEncounterForUser(input),
-  });
 }
 
 /**
@@ -9932,7 +9848,6 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         return playerCombatMutationResponse({
           encounter: buildPlayerFacingEncounterForUser({
             encounter: saved.encounter,
-            keepOwnCombatContextAsR2Residual: true,
             scenarioParticipants: acceptedScenarioParticipants,
             userId: user.id,
           }),
