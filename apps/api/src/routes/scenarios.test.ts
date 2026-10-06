@@ -33006,3 +33006,72 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     });
   });
 });
+
+// ===== Forgejo #517, privacy hardening Tier 3 ===================================================
+
+describe("#517 privacy hardening Tier 3", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.requireAdminUser.mockResolvedValue(mocks.adminUser);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+  });
+
+  /**
+   * T3.3, Tier 2 finding F2 (derived at source: passing a player's submitted phase contexts through
+   * unchanged failed 0 of 805 api tests). A player receives its phase contexts without the canonical
+   * lifecycle and correction history, so the phase contexts it submits lack them; the route must
+   * store the participant's own modifier buckets — the GM's correction record included — and never
+   * the submitted ones. The GM's submission is stored as sent, which shows the route does store what
+   * it is given.
+   */
+  describe("a declaration's phase contexts keep the server's modifier buckets", () => {
+    async function declareWithForgedPhaseContext(user: typeof mocks.playerUser) {
+      setupCombatDeclarationRoute({
+        participant: withPrivateParticipantMaterial(makeCombatScenarioParticipant()),
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const forgedBuckets = {
+        ...emptyModifierBuckets(),
+        general: [{ id: "submitted-row", scope: "until", value: 50 }],
+      };
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementId: "hold",
+          phaseContexts: {
+            phase1: { modifierBuckets: forgedBuckets, targetParticipantId: "encounter-target-1" },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      const saved = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0] as
+        | { session: EncounterSession }
+        | undefined;
+      const declaration = saved?.session.combatRoundState?.participants.find(
+        (participant) => participant.participantId === "encounter-participant-1",
+      )?.declaration;
+      return declaration?.phaseContexts?.phase1?.modifierBuckets.general ?? [];
+    }
+
+    it("stores the participant's own buckets, with the GM correction record, for a player", async () => {
+      const general = await declareWithForgedPhaseContext(mocks.playerUser);
+
+      expect(general.map((entry) => entry.id)).toEqual(["private-row"]);
+      expect(gmCorrectionRecords(general)).toContainEqual(TIER2_GM_CORRECTION_RECORD);
+    });
+
+    it("stores the GM's submitted buckets as sent", async () => {
+      const general = await declareWithForgedPhaseContext(mocks.adminUser);
+
+      expect(general.map((entry) => entry.id)).toEqual(["submitted-row"]);
+    });
+  });
+});

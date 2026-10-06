@@ -437,4 +437,42 @@ describe("#502 repair: a player saving back the player-facing state", () => {
     expect(merged?.combat.declarationSubmittedByUserId).toBe("SECRET_DECLARING_USER");
     expect(merged?.combatEffects).toEqual(stored.state.combatEffects);
   });
+
+  // #517 (Tier 3) closes Tier 1 finding F2: matching a stored entry by id across buckets, rather
+  // than within the entry's own bucket, failed no test.
+  it("keeps each entry's own bucket's correction record when an id occurs in two buckets", () => {
+    const stored = storedParticipantWithPrivateMaterial();
+    const general = stored.state.combat.combatContext.modifierBuckets.general[0]!;
+    const transition = general.canonicalTransitions![0] as {
+      gmOverride: Record<string, unknown>;
+    };
+    const situationDbEntry = {
+      ...general,
+      canonicalTransitions: [
+        { ...transition, gmOverride: { ...transition.gmOverride, reasonCode: "SECRET_DB_REASON" } },
+      ],
+    };
+    const current = {
+      ...stored.state,
+      combat: {
+        ...stored.state.combat,
+        combatContext: {
+          ...stored.state.combat.combatContext,
+          modifierBuckets: {
+            ...stored.state.combat.combatContext.modifierBuckets,
+            situationDb: [situationDbEntry],
+          },
+        },
+      },
+    } as ScenarioParticipant["state"];
+    const submittedState = receivedState({ ...stored, state: current });
+
+    const merged = mergePlayerSubmittedScenarioParticipantState({
+      currentState: current,
+      submittedState,
+    });
+
+    expect(merged?.combat.combatContext.modifierBuckets.general).toEqual([general]);
+    expect(merged?.combat.combatContext.modifierBuckets.situationDb).toEqual([situationDbEntry]);
+  });
 });
