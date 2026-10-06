@@ -537,9 +537,12 @@ describe("#507 player-facing round-state participant: additive construction", ()
     });
   });
 
-  it("does not carry a field added to the stored participant, its declaration or a nested result", () => {
+  it("does not carry an unknown key at any level the player-facing types enumerate", () => {
     // A field added to an internal schema survives the parse the projection runs, so the projected
-    // participant the builder receives would carry it. Simulate exactly that at every level.
+    // participant the builder receives would carry it. Simulate that at every level the player-facing
+    // types enumerate. Keys planted inside a reused canonical field schema (`feint`, `intent`,
+    // `movementIntent`, `initiatives`, ...) are only an unknown key to that schema, which strips them;
+    // a field actually added to that schema would be kept, so this test does not cover that case.
     const stored = storedRoundParticipant();
     const declaration = stored.declaration!;
     const withFutureFields = {

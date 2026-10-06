@@ -32,7 +32,10 @@ import {
  * it calls), or the schemas both the server and the client parse a player's round state with
  * (`activeCombatRoundStateSchema` for the `active-v1` response, `combatRoundStateSchema` in those
  * domain helpers), which require some fields. Each field names its consumer. A field nothing on the
- * player path reads is not here, so a field added to an internal type changes nothing a player sees.
+ * player path reads is not here, so a field added to the stored participant or declaration — or to
+ * a structure enumerated below — changes nothing a player sees. That does not hold for a field added
+ * to one of the canonical field schemas reused below: the player type reuses that schema, so it would
+ * carry the field.
  *
  * Nested structures follow the Tier 1 precedent (`playerFacingScenarioParticipant`): those carrying
  * an actor identity are enumerated one level further down and never carry it — attack results and

@@ -279,7 +279,9 @@ describe("#502 player-facing types: additive construction", () => {
     expect(player.state.combat.combatContext.modifierBuckets.general[0]?.value).toBe(-10);
   });
 
-  it("does not carry a field added to an internal participant structure", () => {
+  // Covers the structures the player-facing participant enumerates. A field added to a canonical
+  // field schema it reuses (the build, equipment, health and similar) would be carried.
+  it("does not carry an unknown key in a participant structure the player-facing type enumerates", () => {
     const stored = storedParticipantWithPrivateMaterial();
     const effect = stored.state.combatEffects!.effects[0]!;
     const withFutureFields = {
