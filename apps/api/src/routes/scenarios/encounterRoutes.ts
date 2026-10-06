@@ -6478,6 +6478,21 @@ export function buildPlayerSafeCombatRoundCommandForUser(
   return PLAYER_COMBAT_COMMAND_PROJECTIONS[input.command.type](input);
 }
 
+/**
+ * The player's own attack, as the roll-attack response returns it to them: without the attack
+ * mode's workbook import provenance, which is not player-facing (#517, ruling E2). The GM's
+ * response keeps it.
+ */
+function withoutWeaponModeSourceMetadata<Attack extends { weaponModeSourceMetadata?: unknown }>(
+  attack: Attack | undefined,
+): Omit<Attack, "weaponModeSourceMetadata"> | undefined {
+  if (!attack) {
+    return undefined;
+  }
+  const { weaponModeSourceMetadata: _workbookProvenance, ...playerAttack } = attack;
+  return playerAttack;
+}
+
 const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
 
 /**
@@ -17432,8 +17447,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
 
       return {
-        attackResult,
-        pendingMissileAttack,
+        attackResult:
+          access.mode === "gm" ? attackResult : withoutWeaponModeSourceMetadata(attackResult),
+        pendingMissileAttack:
+          access.mode === "gm"
+            ? pendingMissileAttack
+            : withoutWeaponModeSourceMetadata(pendingMissileAttack),
         command:
           access.mode === "gm" || !attackCommand
             ? attackCommand

@@ -7856,7 +7856,18 @@ describe("scenarios route contract", () => {
       encounterId: "encounter-1",
       facts: {
         gmReview: { privateNote: "secret override" },
-        involvedOutcome: { outcome: "hit" },
+        // Workbook import provenance is not player-facing (#517 ruling E2).
+        involvedOutcome: {
+          outcome: "hit",
+          weaponModeSourceMetadata: {
+            rawRow: { A: "T. Javelin" },
+            row: 17,
+            sheet: "Weapon2",
+            sourceColumns: { name: "A" },
+            sourceRange: "A17:K17",
+            workbook: "Themistogenes 1.07.xlsx",
+          },
+        },
         publicOutcome: {},
         resultPresentation: {
           conciseOutcome: { label: "Attack resolved" },
@@ -7970,6 +7981,8 @@ describe("scenarios route contract", () => {
     });
     const serialized = JSON.stringify(response.json());
     expect(serialized).not.toContain("secret override");
+    expect(serialized).not.toContain("weaponModeSourceMetadata");
+    expect(serialized).not.toContain("A17:K17");
     expect(serialized).not.toContain("rollD20");
     expect(serialized).not.toContain("encounter-participant-hidden");
     expect(serialized).not.toContain("diagnostics");
@@ -7992,7 +8005,17 @@ describe("scenarios route contract", () => {
             encounterId: "encounter-1",
             facts: {
               gmReview: { privateNote: "GM fact" },
-              involvedOutcome: { outcome: "hit" },
+              involvedOutcome: {
+                outcome: "hit",
+                weaponModeSourceMetadata: {
+                  rawRow: { A: "T. Javelin" },
+                  row: 17,
+                  sheet: "Weapon2",
+                  sourceColumns: { name: "A" },
+                  sourceRange: "A17:K17",
+                  workbook: "Themistogenes 1.07.xlsx",
+                },
+              },
               publicOutcome: {},
               rollerPrivate: { rollD20: 18 },
             },
@@ -8030,6 +8053,7 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().history.activeRound.events[0].facts).toMatchObject({
       gmReview: { privateNote: "GM fact" },
+      involvedOutcome: { weaponModeSourceMetadata: { row: 17, sheet: "Weapon2" } },
       privateCalculation: { rollD20: 18 },
     });
     expect(response.json().history.progression).toBeDefined();
@@ -30072,6 +30096,32 @@ const TIER2_NONE = {
 } as const;
 
 /**
+ * Where workbook import provenance, which is not player-facing (#517 ruling E2), sits in a
+ * response: every populated `weaponModeSourceMetadata` and `sourceMetadata` field, and a latest
+ * combat event summary that names a workbook row.
+ */
+function workbookImportProvenancePaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) workbookImportProvenancePaths(entry, `${path}[]`, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      const nestedPath = path ? `${path}.${key}` : key;
+      if (key === "weaponModeSourceMetadata" || key === "sourceMetadata") {
+        if (nested != null) found.push(nestedPath);
+      } else if (
+        key === "latestEvent" &&
+        /\brow \d+/.test(String((nested as { details?: unknown } | undefined)?.details ?? ""))
+      ) {
+        found.push(`${nestedPath}.details`);
+      } else {
+        workbookImportProvenancePaths(nested, nestedPath, found);
+      }
+    }
+  }
+  return found;
+}
+
+/**
  * The GM correction history as the GM reads it (#507 proof obligation 6): the `gmOverride` of every
  * canonical transition a payload carries, wherever it sits.
  */
@@ -30160,6 +30210,11 @@ type Tier2Case = {
   populated: Tier2Material;
   /** SECRET values a player response may carry, each explained where it is listed. */
   secretPaths?: { active?: readonly string[]; legacy?: readonly string[] };
+  /**
+   * The fixture carries workbook import provenance where the route reads it, and the GM's
+   * response must keep it (#517 ruling E2's positive control).
+   */
+  workbookProvenance?: true;
 };
 
 function withTier2Material(mode: "load" | "save") {
@@ -30254,6 +30309,7 @@ function describeTier2Case(testCase: Tier2Case) {
       );
       expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
       expect(JSON.stringify(body)).not.toContain("submittedByUserId");
+      expect(workbookImportProvenancePaths(body)).toEqual([]);
       expectTier2MaterialReachesThePlayerBuilders({
         encounter: encounter!,
         expected: testCase.populated,
@@ -30281,6 +30337,7 @@ function describeTier2Case(testCase: Tier2Case) {
         );
         expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
         expect(JSON.stringify(body)).not.toContain("submittedByUserId");
+        expect(workbookImportProvenancePaths(body)).toEqual([]);
       });
     }
 
@@ -30294,6 +30351,9 @@ function describeTier2Case(testCase: Tier2Case) {
       }
       if (testCase.gmKeys) {
         expect(sortedPaths(Object.keys(response.json()))).toEqual(sortedPaths(testCase.gmKeys));
+      }
+      if (testCase.workbookProvenance) {
+        expect(workbookImportProvenancePaths(response.json())).not.toEqual([]);
       }
     });
   });
@@ -31723,6 +31783,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       correctionRecord: true,
       submittingUser: true,
     },
+    workbookProvenance: true,
   });
 
   describeTier2Case({
@@ -33324,6 +33385,112 @@ describe("#517 privacy hardening Tier 3", () => {
       expect([...privateKeyPaths(body)].sort()).toEqual([]);
       expect([...secretValuePaths(body)].sort()).toEqual([]);
       expect(playerResponseKeysOutsidePlayerTypes(body)).toEqual([]);
+    }
+  });
+
+  /**
+   * Ruling E2: the attack mode's workbook import provenance is not player-facing. The roll-attack
+   * response returns the attacker's own attack result; the player receives it without the
+   * provenance, the GM with it. (The Tier 2 boundary walk covers the pending missile attack, the
+   * equipment snapshot and the latest-event summary on every Tier 2 route.)
+   */
+  it("returns a player's own attack without its workbook import provenance; the GM keeps it", async () => {
+    async function rollThrownDagger(user: typeof mocks.playerUser, headers = {}) {
+      const baseState = makeOpenPhase1AttackRoundState({ snapshotWeaponName: "Dagger" });
+      const itemId = "item-character-1-weapon-template-dagger";
+      const source = {
+        attackModeId: "mode-3",
+        itemId,
+        sourceKind: "weapon" as const,
+        weaponInstanceId: itemId,
+        weaponSourceId: `weapon:${itemId}`,
+        weaponSourceSlot: "throwing" as const,
+        weaponTemplateId: "weapon-template-dagger",
+      };
+      const attackerSnapshot = makeCanonicalCombatCalculationSnapshot({
+        characterId: "character-1",
+        displayName: "The Gladiator",
+      });
+      attackerSnapshot.build.progression.skills.push({
+        category: "secondary",
+        categoryId: "combat",
+        groupId: "basic_missile_training",
+        secondaryRanks: 8,
+        skillId: "throwing",
+      });
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: {
+            ...baseState,
+            participants: baseState.participants.map((participant, index) =>
+              index === 0
+                ? {
+                    ...participant,
+                    declaration: {
+                      ...participant.declaration,
+                      attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                        actionId: "attack_parry",
+                        participantId: "encounter-participant-1",
+                        phaseContexts: {
+                          phase1: testCombatPhaseContext("encounter-participant-2"),
+                        },
+                        roundNumber: 1,
+                        sources: { phase1: source },
+                      }),
+                    },
+                  }
+                : participant,
+            ),
+          },
+          participants: makeTwoCombatEncounterParticipants(),
+        },
+        participants: [
+          { characterId: "character-1", id: "participant-1", snapshot: attackerSnapshot },
+          { controlledByUserId: "other-player", id: "participant-2" },
+        ],
+        user,
+      });
+      mocks.combatItemInteractionService.commitThrownWeaponAttack.mockImplementation(
+        async (input: { session: EncounterSession }) => ({ encounter: input.session }),
+      );
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        headers,
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          attackIndex: 1,
+          attackModeId: "mode-3",
+          declarationId: "round:1:participant:encounter-participant-1:declaration",
+          defenderScenarioParticipantId: "participant-2",
+          opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+          weaponSourceId: `weapon:${itemId}`,
+          weaponSourceSlot: "throwing",
+          weaponTemplateId: "weapon-template-dagger",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const gm = await rollThrownDagger(mocks.adminUser);
+    expect(gm.attackResult.weaponModeSourceMetadata).toMatchObject({
+      row: expect.any(Number),
+      sheet: expect.any(String),
+    });
+
+    for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+      const body = await rollThrownDagger(mocks.playerUser, headers);
+      const attack = body.attackResult ?? body.mutationPresentation?.attackResult;
+      expect(attack).toMatchObject({
+        attackModeId: "mode-3",
+        weaponName: gm.attackResult.weaponName,
+      });
+      expect(workbookImportProvenancePaths(body)).toEqual([]);
     }
   });
 });

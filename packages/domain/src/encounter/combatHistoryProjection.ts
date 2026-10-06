@@ -598,6 +598,21 @@ function hasFacts(facts: Record<string, unknown>): boolean {
   return Object.keys(facts).length > 0;
 }
 
+/**
+ * An event fact bucket as a player sees it: without `weaponModeSourceMetadata`, the attack mode's
+ * workbook import provenance, which is not player-facing (#517, ruling E2). The GM's facts keep it.
+ */
+function playerFacingEventFacts<Facts extends Record<string, unknown>>(
+  facts: Facts,
+  viewer: CombatHistoryViewer,
+): Facts {
+  if (viewer.kind === "gm" || !Object.hasOwn(facts, "weaponModeSourceMetadata")) {
+    return facts;
+  }
+  const { weaponModeSourceMetadata: _workbookProvenance, ...playerFacts } = facts;
+  return playerFacts as Facts;
+}
+
 function isVisible(input: { participantId: string; viewer: CombatHistoryViewer }): boolean {
   return input.viewer.kind === "gm" || input.viewer.visibleParticipantIds.has(input.participantId);
 }
@@ -767,13 +782,13 @@ export function projectCombatHistoryEvent(input: {
       gmReview: gm && hasFacts(input.event.facts.gmReview) ? input.event.facts.gmReview : undefined,
       involvedOutcome:
         involved && hasFacts(input.event.facts.involvedOutcome)
-          ? input.event.facts.involvedOutcome
+          ? playerFacingEventFacts(input.event.facts.involvedOutcome, input.viewer)
           : undefined,
       privateCalculation:
         ownRoll && hasFacts(input.event.facts.rollerPrivate)
-          ? input.event.facts.rollerPrivate
+          ? playerFacingEventFacts(input.event.facts.rollerPrivate, input.viewer)
           : undefined,
-      publicOutcome: input.event.facts.publicOutcome,
+      publicOutcome: playerFacingEventFacts(input.event.facts.publicOutcome, input.viewer),
     },
     // Canonical event/opportunity ids may embed participant or attack lineage. Player read models
     // use sequence-scoped aliases unless every referenced identity is visible to that viewer.

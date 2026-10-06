@@ -1047,6 +1047,62 @@ describe("combat history projection", () => {
     expect(uninvolved).toBeUndefined();
     expect(roller?.ownerParticipantId).toBe("aria");
   });
+  it("gives no player the attack mode's workbook import provenance; the GM keeps it (#517 ruling E2)", () => {
+    const workbookProvenance = {
+      rawRow: { A: "T. Javelin", B: "12" },
+      row: 17,
+      sheet: "Weapon2",
+      sourceColumns: { name: "A" },
+      sourceRange: "A17:K17",
+      workbook: "Themistogenes 1.07.xlsx",
+    };
+    const attack = event({
+      attackerParticipantId: "aria",
+      defenderParticipantId: "borin",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          status: "shot_committed",
+          weaponModeRange: "3.0",
+          weaponModeSourceMetadata: workbookProvenance,
+          weaponName: "Javelin",
+        },
+        publicOutcome: { status: "shot_committed", weaponModeSourceMetadata: workbookProvenance },
+        rollerPrivate: { rollD20: 14, weaponModeSourceMetadata: workbookProvenance },
+      },
+      ownerParticipantId: "aria",
+      rollerParticipantId: "aria",
+      type: "attack",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "attacker" },
+          { participantId: "borin", role: "defender" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+    const project = (viewer: Parameters<typeof projectCombatHistoryEvent>[0]["viewer"]) =>
+      projectCombatHistoryEvent({ event: attack, participants, viewer });
+    const roller = project(player(["aria"], ["aria", "borin"]));
+    const defender = project(player(["borin"], ["aria", "borin"]));
+    const gm = project({ kind: "gm" });
+
+    for (const viewer of [roller, defender]) {
+      expect(viewer?.facts.involvedOutcome).toEqual({
+        status: "shot_committed",
+        weaponModeRange: "3.0",
+        weaponName: "Javelin",
+      });
+      expect(viewer?.facts.publicOutcome).toEqual({ status: "shot_committed" });
+      expect(JSON.stringify(viewer)).not.toContain("Weapon2");
+    }
+    expect(roller?.facts.privateCalculation).toEqual({ rollD20: 14 });
+    expect(gm?.facts.involvedOutcome?.weaponModeSourceMetadata).toEqual(workbookProvenance);
+    expect(gm?.facts.publicOutcome.weaponModeSourceMetadata).toEqual(workbookProvenance);
+    expect(gm?.facts.privateCalculation?.weaponModeSourceMetadata).toEqual(workbookProvenance);
+  });
 
   it("keeps missile preparation progress private to the actor while targets see safe status", () => {
     const readiness = event({

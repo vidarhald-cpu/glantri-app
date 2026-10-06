@@ -44,7 +44,8 @@ import {
  *   sanitizer for a snapshot reaching its controlling player, after its legacy items are given the
  *   facts and notes their `specialProperties` became on the canonical item
  *   (`canonicalizeLegacyEquipmentSnapshotItems`). Legacy information the canonical item reveals to
- *   its holder is therefore kept; only what is not revealed is removed.
+ *   its holder is therefore kept; only what is not revealed is removed. Its workbook import
+ *   provenance is then removed as well (`withoutWorkbookImportProvenance`, #517 ruling E2).
  *
  * Sub-structures that carry none of that material reuse their canonical field schemas, as the
  * precedent does for the Character build and combat context.
@@ -326,6 +327,27 @@ function buildPlayerFacingCombatEffectsState(
 }
 
 /**
+ * A captured equipment snapshot without its workbook import provenance, which is not player-facing
+ * (#517, ruling E2). In the equipment domain a `sourceMetadata` field is always that provenance —
+ * `ImportedWeaponSourceMetadata` on weapon templates and attack modes, `ImportedArmorSourceMetadata`
+ * on armor templates and component profiles — so every such field is removed, at any depth, and
+ * nothing else is. A mode's `provenance` kind (`imported`, `manual` or `derived`) is kept.
+ */
+export function withoutWorkbookImportProvenance(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withoutWorkbookImportProvenance);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entry]) =>
+      key === "sourceMetadata" ? [] : [[key, withoutWorkbookImportProvenance(entry)]],
+    ),
+  );
+}
+
+/**
  * The additive projection of a participant for the player who controls it. Callers decide that
  * the viewer controls the participant; this function decides what such a viewer sees.
  */
@@ -354,8 +376,10 @@ export function buildPlayerFacingScenarioParticipant(
       displayName: participant.snapshot.displayName,
       equipmentProjection: participant.snapshot.equipmentProjection,
       entity: participant.snapshot.entity,
-      equipmentState: revealableEquipmentState(
-        canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+      equipmentState: withoutWorkbookImportProvenance(
+        revealableEquipmentState(
+          canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+        ),
       ),
       retainedCharacterRevision: participant.snapshot.retainedCharacterRevision,
       sheetSummary: participant.snapshot.sheetSummary,

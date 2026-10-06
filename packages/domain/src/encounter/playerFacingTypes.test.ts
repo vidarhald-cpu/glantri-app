@@ -348,6 +348,77 @@ describe("#502 player-facing types: additive construction", () => {
     expect(keysAnywhere(context).has("canonicalTransitions")).toBe(false);
   });
 
+  it("removes the workbook import provenance from the equipment snapshot and keeps the rest (#517 ruling E2)", () => {
+    const weaponProvenance = {
+      rawRow: { A: "T. Javelin" },
+      row: 17,
+      sheet: "Weapon2",
+      sourceColumns: { name: "A" },
+      sourceRange: "A17:K17",
+      workbook: "SECRET_WORKBOOK.xlsx",
+    };
+    const armorProvenance = {
+      finishedRow: 5,
+      rawRows: { "5": { A: "Mail" } },
+      sheet: "Armour",
+      sourceColumns: { name: "A" },
+      sourceRange: "A5:P5",
+      workbook: "SECRET_WORKBOOK.xlsx",
+    };
+    const templatesById = {
+      "armor-template-mail": {
+        category: "armor",
+        componentProfiles: [{ name: "Mail", sourceMetadata: armorProvenance }],
+        id: "armor-template-mail",
+        name: "Mail",
+        sourceMetadata: armorProvenance,
+      },
+      "weapon-template-javelin": {
+        attackModes: [
+          { id: "mode-1", ob: 10, provenance: "imported", sourceMetadata: weaponProvenance },
+        ],
+        category: "weapon",
+        id: "weapon-template-javelin",
+        name: "Javelin",
+        sourceMetadata: weaponProvenance,
+      },
+    };
+    const stored = storedParticipantWithPrivateMaterial();
+    const withEquipment = scenarioParticipantSchema.parse({
+      ...stored,
+      snapshot: {
+        ...stored.snapshot,
+        equipmentState: { itemsById: {}, templates: { templatesById }, templatesById },
+      },
+    });
+
+    const player = buildPlayerFacingScenarioParticipant(withEquipment);
+
+    expect(keysAnywhere(player).has("sourceMetadata")).toBe(false);
+    expect(JSON.stringify(player)).not.toContain("SECRET");
+    expect(JSON.stringify(player)).not.toContain("A17:K17");
+    const equipment = player.snapshot.equipmentState as {
+      templates: { templatesById: Record<string, Record<string, unknown>> };
+      templatesById: Record<string, Record<string, unknown>>;
+    };
+    for (const playerTemplates of [equipment.templatesById, equipment.templates.templatesById]) {
+      expect(playerTemplates["weapon-template-javelin"]).toEqual({
+        attackModes: [{ id: "mode-1", ob: 10, provenance: "imported" }],
+        category: "weapon",
+        id: "weapon-template-javelin",
+        name: "Javelin",
+      });
+      expect(playerTemplates["armor-template-mail"]).toEqual({
+        category: "armor",
+        componentProfiles: [{ name: "Mail" }],
+        id: "armor-template-mail",
+        name: "Mail",
+      });
+    }
+    // The stored participant, which the GM path reads, keeps it.
+    expect(keysAnywhere(withEquipment).has("sourceMetadata")).toBe(true);
+  });
+
   it("copies only the named top-level encounter fields", () => {
     const encounter = buildPlayerFacingEncounterSession({
       combatRoundState: undefined,
