@@ -254,6 +254,22 @@ function buildPlayerFacingShape<Shape extends z.ZodRawShape>(
 }
 
 /**
+ * A player-facing schema as other modules see it: a schema whose output is its branded player-facing
+ * value. It is declared this way, rather than as the zod object it is, so that its emitted
+ * declaration is that plain output type: as the full zod object type, every schema's declaration
+ * would repeat all the zod generics of the schemas nested in it, and a package consuming those
+ * declarations (`apps/api` builds against `dist`) could not compute its output (TS2589). The runtime
+ * value is the branded zod object, so `unwrap()` reaches it.
+ */
+export interface PlayerFacingSchema<Output, Key extends string = string> extends z.ZodType<
+  Output,
+  z.ZodTypeDef,
+  unknown
+> {
+  unwrap(): z.ZodObject<{ [Field in Key]: z.ZodTypeAny }>;
+}
+
+/**
  * A player-facing object: the named fields of `internal`, each reused (`LEAF`) or given a
  * player-facing schema, branded `name`. Fields not named are not part of it.
  */
@@ -265,14 +281,17 @@ export function playerFacingObject<
   name: Name,
   internal: z.ZodObject<Shape, z.UnknownKeysParam>,
   fields: Fields & NoExtraFields<Fields, Shape>,
-): z.ZodBranded<PlayerFacingObjectSchema<ResolvedShape<Shape, Fields>>, Name> {
+): PlayerFacingSchema<
+  z.output<PlayerFacingObjectSchema<ResolvedShape<Shape, Fields>>> & z.BRAND<Name>,
+  Extract<keyof Fields, string>
+> {
   const object = z.object(
     buildPlayerFacingShape(name, internal, fields as Record<string, Leaf | z.ZodTypeAny>),
   );
   playerFacingObjects.add(object);
-  return object.brand<Name>() as unknown as z.ZodBranded<
-    PlayerFacingObjectSchema<ResolvedShape<Shape, Fields>>,
-    Name
+  return object.brand<Name>() as unknown as PlayerFacingSchema<
+    z.output<PlayerFacingObjectSchema<ResolvedShape<Shape, Fields>>> & z.BRAND<Name>,
+    Extract<keyof Fields, string>
   >;
 }
 
@@ -295,16 +314,23 @@ export function playerFacingVariant<
   return object as unknown as PlayerFacingObjectSchema<ResolvedShape<Shape, Fields>>;
 }
 
-/** Brands a player-facing union (or any whole-path player-facing schema) after checking it. */
+/**
+ * Brands a player-facing union (or any whole-path player-facing schema) after checking it. Declared
+ * by its branded output, like `PlayerFacingSchema`, for the same reason.
+ */
 export function brandPlayerFacing<Name extends string, Schema extends z.ZodTypeAny>(
   name: Name,
   schema: Schema,
-): z.ZodBranded<Schema, Name> {
+): z.ZodType<z.output<Schema> & z.BRAND<Name>, z.ZodTypeDef, unknown> {
   const violations = findWholePathViolations(schema, name);
   if (violations.length > 0) {
     throw new Error(`Player-facing ${name} is not whole-path: ${violations.join("; ")}.`);
   }
-  return schema.brand<Name>();
+  return schema.brand<Name>() as unknown as z.ZodType<
+    z.output<Schema> & z.BRAND<Name>,
+    z.ZodTypeDef,
+    unknown
+  >;
 }
 
 /**
@@ -315,15 +341,10 @@ export function isPlayerFacingObjectSchema(schema: z.ZodTypeAny): boolean {
   return playerFacingObjects.has(schema);
 }
 
-type ObjectShapeOf<Schema> =
-  Schema extends z.ZodBranded<infer Inner, string>
-    ? ObjectShapeOf<Inner>
-    : Schema extends z.ZodObject<infer Shape, z.UnknownKeysParam>
-      ? Shape
-      : never;
-
 /** Per-viewer values for some fields of a player-facing object, replacing the source's. */
-export type PlayerFacingOverrides<Schema> = { [Key in keyof ObjectShapeOf<Schema>]?: unknown };
+export type PlayerFacingOverrides<Schema extends z.ZodTypeAny> = {
+  [Key in Exclude<keyof z.output<Schema>, typeof z.BRAND>]?: unknown;
+};
 
 /**
  * Builds a player-facing value additively: for each field the schema names — and only those — the
