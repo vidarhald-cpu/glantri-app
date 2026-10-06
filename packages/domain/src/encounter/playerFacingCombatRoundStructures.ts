@@ -1,10 +1,7 @@
 import { z } from "zod";
 
 import { scenarioParticipantSecondaryActionContextSchema } from "../campaign/scenario";
-import {
-  ImportedWeaponSourceMetadataSchema,
-  MissileWeaponProfileSchema,
-} from "../equipment/schemas";
+import { MissileWeaponProfileSchema } from "../equipment/schemas";
 import {
   combatAdjustDistanceAppliedModifierSchema,
   combatAdjustDistanceProposalSchema,
@@ -1879,19 +1876,6 @@ export const playerFacingCombatRoundWeaponDmbFormulaSchema = playerFacingObject(
     textModifier: LEAF,
     specialValue: LEAF,
     note: LEAF,
-  },
-);
-
-export const playerFacingImportedWeaponSourceMetadataSchema = playerFacingObject(
-  "PlayerFacingImportedWeaponSourceMetadata",
-  ImportedWeaponSourceMetadataSchema,
-  {
-    workbook: LEAF,
-    sheet: LEAF,
-    row: LEAF,
-    sourceRange: LEAF,
-    sourceColumns: LEAF,
-    rawRow: LEAF,
   },
 );
 

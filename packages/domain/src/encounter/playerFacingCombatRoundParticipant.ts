@@ -21,7 +21,6 @@ import {
   playerFacingCombatRoundInitiativeResultSchema,
   playerFacingCombatRoundWeaponDmbFormulaSchema,
   playerFacingCombatRoundWeaponDmbRollSchema,
-  playerFacingImportedWeaponSourceMetadataSchema,
   playerFacingMissileWeaponProfileSchema,
   playerFacingMovementIntentSchema,
   playerFacingScenarioParticipantSecondaryActionContextSchema,
@@ -61,7 +60,11 @@ import {
  * Every player-facing object is branded, so a stored value is not assignable to these types at any
  * level.
  */
-/** An attack result as a player receives it: everything but the roller's account identity. */
+/**
+ * An attack result as a player receives it: everything but the roller's account identity and
+ * `weaponModeSourceMetadata`, the attack mode's workbook import provenance — not player-facing
+ * gameplay data (control-plane ruling E2, 2026-10-06, #517); nothing on the player path read it.
+ */
 export const playerFacingCombatRoundAttackRollResultSchema = playerFacingObject(
   "PlayerFacingCombatRoundAttackRollResult",
   combatRoundAttackRollResultSchema.innerType().innerType(),
@@ -100,10 +103,6 @@ export const playerFacingCombatRoundAttackRollResultSchema = playerFacingObject(
     weaponDmbRaw: LEAF,
     weaponModeInitiative: LEAF,
     weaponModeRange: LEAF,
-    // Workbook provenance of the attack mode, as players received it before Tier 3. Whether any of
-    // it is player-facing is escalated for a control-plane ruling (#517); it is enumerated meanwhile,
-    // so a field added to the import metadata reaches no player.
-    weaponModeSourceMetadata: playerFacingImportedWeaponSourceMetadataSchema.optional(),
     weaponInstanceId: LEAF,
     weaponName: LEAF,
     weaponSecondaryCriticalCode: LEAF,

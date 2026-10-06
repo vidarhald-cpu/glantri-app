@@ -225,6 +225,14 @@ function attackRollResult(input: { opportunityId: string; phase: "phase1" | "pha
     rolledByUserId: "SECRET_ATTACK_ROLLER",
     tableResult: "C",
     weaponCriticalCode: "S",
+    weaponModeSourceMetadata: {
+      rawRow: { A: "SECRET_RAW_ROW_CELL" },
+      row: 12,
+      sheet: "Weapon2",
+      sourceColumns: { name: "A" },
+      sourceRange: "A12:Q12",
+      workbook: "SECRET_WORKBOOK.xlsx",
+    },
     weaponName: "Spear",
     weaponSecondaryCriticalCode: "K",
     weaponSourceId: "item-spear",
@@ -467,6 +475,25 @@ describe("#507 player-facing round-state participant: additive construction", ()
     );
   });
 
+  it("omits the attack mode's workbook import provenance although it is populated (ruling E2)", () => {
+    const stored = storedRoundParticipant();
+    expect(stored.attackResults.phase1?.weaponModeSourceMetadata).toBeDefined();
+    expect(
+      stored.attackResultsByOpportunity?.["opportunity-1"]?.weaponModeSourceMetadata,
+    ).toBeDefined();
+
+    const participant = buildPlayerFacingCombatRoundParticipant({ participant: stored });
+
+    expect(Object.keys(playerFacingCombatRoundAttackRollResultSchema.unwrap().shape)).not.toContain(
+      "weaponModeSourceMetadata",
+    );
+    expect(participant.attackResults.phase1).not.toHaveProperty("weaponModeSourceMetadata");
+    expect(participant.attackResultsByOpportunity?.["opportunity-1"]).not.toHaveProperty(
+      "weaponModeSourceMetadata",
+    );
+    expect(JSON.stringify(participant)).not.toMatch(/SECRET_(RAW_ROW_CELL|WORKBOOK)/);
+  });
+
   it("drops the canonical lifecycle and correction history from every combat and phase context", () => {
     const declaration = buildPlayerFacingCombatRoundParticipant({
       participant: storedRoundParticipant(),
@@ -503,11 +530,13 @@ describe("#507 player-facing round-state participant: additive construction", ()
     expect(participant.combatExperience).toEqual(
       withoutIdentity(stored.combatExperience!, "rolledByUserId"),
     );
+    const withoutRollerAndProvenance = (result: Record<string, unknown>) =>
+      withoutIdentity(withoutIdentity(result, "rolledByUserId"), "weaponModeSourceMetadata");
     expect(participant.attackResults.phase1).toEqual(
-      withoutIdentity(stored.attackResults.phase1!, "rolledByUserId"),
+      withoutRollerAndProvenance(stored.attackResults.phase1!),
     );
     expect(participant.attackResultsByOpportunity?.["opportunity-1"]).toEqual(
-      withoutIdentity(stored.attackResultsByOpportunity!["opportunity-1"]!, "rolledByUserId"),
+      withoutRollerAndProvenance(stored.attackResultsByOpportunity!["opportunity-1"]!),
     );
 
     const retained = participant.declaration!;
