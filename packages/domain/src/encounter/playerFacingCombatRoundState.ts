@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { activeCombatRoundStateShape, completedCombatRoundSchema } from "./combatRoundManager";
+import {
+  activeCombatRoundStateSchema,
+  combatRoundPhaseResolutionStatusesSchema,
+} from "./combatRoundManager";
+import type { combatRoundStepSchema } from "./combatRoundStep";
 import {
   playerFacingCombatRoundCommandSchema,
   playerFacingCombatRoundCursorSchema,
@@ -29,12 +33,58 @@ import {
 import { LEAF, playerFacingObject } from "./playerFacingSchema";
 
 /**
+ * The combat round state's own field schemas, read from the canonical schema itself so the leaves
+ * below are the canonical ones. The canonical round-state schemas are declared as plain `ZodType`s
+ * (their inferred type is too large to emit), so the shape is typed here: the leaves with the types
+ * of the canonical schemas they are, which `playerFacingObject` checks are leaves when this module
+ * loads, and every structured field as an opaque schema it never reuses.
+ */
+const internalRoundStateShape = (
+  activeCombatRoundStateSchema as unknown as z.ZodEffects<z.ZodObject<z.ZodRawShape>>
+).innerType().shape as {
+  activeParticipantId: z.ZodOptional<z.ZodString>;
+  combatExperienceDifficulty: z.ZodOptional<z.ZodNumber>;
+  currentStep: z.ZodDefault<typeof combatRoundStepSchema>;
+  encounterId: z.ZodOptional<z.ZodString>;
+  roundNumber: z.ZodDefault<z.ZodNumber>;
+  selectedParticipantId: z.ZodOptional<z.ZodString>;
+  selectedStep: z.ZodOptional<typeof combatRoundStepSchema>;
+} & Record<
+  | "adjustDistanceProposals"
+  | "breakOffProposals"
+  | "commands"
+  | "continuedContacts"
+  | "currentCursor"
+  | "defenseSnapshots"
+  | "disarmAttempts"
+  | "disarmUnbalancedConditions"
+  | "distanceState"
+  | "engagements"
+  | "events"
+  | "feintProposals"
+  | "genericActions"
+  | "gmBacktrackHold"
+  | "missileReadiness"
+  | "observationAttempts"
+  | "observationRelationships"
+  | "offensiveParryContests"
+  | "participants"
+  | "phaseResolutionCursor"
+  | "phaseResolutionResults"
+  | "phaseResolutionStatuses"
+  | "roundEndReview"
+  | "stepSnapshots"
+  | "unbalancedConditions",
+  z.ZodTypeAny
+>;
+
+/**
  * The combat round state as an encounter carries it, with its archived rounds: the internal object
  * whose fields the player-facing round state names.
  */
 const combatRoundStateObjectSchema = z.object({
-  ...activeCombatRoundStateShape,
-  rounds: z.array(completedCombatRoundSchema).default([]),
+  ...internalRoundStateShape,
+  rounds: z.unknown(),
 });
 
 /**
@@ -94,7 +144,7 @@ export const playerFacingCombatRoundStateSchema = playerFacingObject(
     phaseResolutionResults: z.array(playerFacingCombatRoundPhaseResolutionResultSchema).default([]),
     phaseResolutionStatuses: z
       .record(
-        activeCombatRoundStateShape.phaseResolutionStatuses.removeDefault().keySchema,
+        combatRoundPhaseResolutionStatusesSchema.keySchema,
         playerFacingCombatRoundPhaseResolutionParticipantStatusesSchema,
       )
       .default({}),
