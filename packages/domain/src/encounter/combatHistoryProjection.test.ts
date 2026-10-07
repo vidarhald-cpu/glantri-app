@@ -1047,7 +1047,7 @@ describe("combat history projection", () => {
     expect(uninvolved).toBeUndefined();
     expect(roller?.ownerParticipantId).toBe("aria");
   });
-  it("gives no player the attack mode's workbook import provenance; the GM keeps it (#517 ruling E2)", () => {
+  it("gives no player the attack result's workbook import provenance; the GM keeps it (#517 ruling E2)", () => {
     const workbookProvenance = {
       rawRow: { A: "T. Javelin", B: "12" },
       row: 17,
@@ -1056,6 +1056,16 @@ describe("combat history projection", () => {
       sourceRange: "A17:K17",
       workbook: "Themistogenes 1.07.xlsx",
     };
+    // The missile DMB roll as production stored it on 17-18 August 2026: its `provenance` names the
+    // workbook sheet and row. Players receive no part of it; the DMB value stays in `weaponDmb`.
+    const dmbRoll = {
+      diceCount: 1,
+      diceSides: 6,
+      flatModifier: 0,
+      provenance: "Weapon2:17:1d6",
+      rolls: [4],
+      total: 4,
+    };
     const attack = event({
       attackerParticipantId: "aria",
       defenderParticipantId: "borin",
@@ -1063,12 +1073,22 @@ describe("combat history projection", () => {
         gmReview: {},
         involvedOutcome: {
           status: "shot_committed",
+          weaponDmb: 4,
+          weaponDmbRoll: dmbRoll,
           weaponModeRange: "3.0",
           weaponModeSourceMetadata: workbookProvenance,
           weaponName: "Javelin",
         },
-        publicOutcome: { status: "shot_committed", weaponModeSourceMetadata: workbookProvenance },
-        rollerPrivate: { rollD20: 14, weaponModeSourceMetadata: workbookProvenance },
+        publicOutcome: {
+          status: "shot_committed",
+          weaponDmbRoll: dmbRoll,
+          weaponModeSourceMetadata: workbookProvenance,
+        },
+        rollerPrivate: {
+          rollD20: 14,
+          weaponDmbRoll: dmbRoll,
+          weaponModeSourceMetadata: workbookProvenance,
+        },
       },
       ownerParticipantId: "aria",
       rollerParticipantId: "aria",
@@ -1092,6 +1112,7 @@ describe("combat history projection", () => {
     for (const viewer of [roller, defender]) {
       expect(viewer?.facts.involvedOutcome).toEqual({
         status: "shot_committed",
+        weaponDmb: 4,
         weaponModeRange: "3.0",
         weaponName: "Javelin",
       });
@@ -1102,6 +1123,13 @@ describe("combat history projection", () => {
     expect(gm?.facts.involvedOutcome?.weaponModeSourceMetadata).toEqual(workbookProvenance);
     expect(gm?.facts.publicOutcome.weaponModeSourceMetadata).toEqual(workbookProvenance);
     expect(gm?.facts.privateCalculation?.weaponModeSourceMetadata).toEqual(workbookProvenance);
+    for (const facts of [
+      gm?.facts.involvedOutcome,
+      gm?.facts.publicOutcome,
+      gm?.facts.privateCalculation,
+    ]) {
+      expect(facts?.weaponDmbRoll).toEqual(dmbRoll);
+    }
   });
 
   it("keeps missile preparation progress private to the actor while targets see safe status", () => {

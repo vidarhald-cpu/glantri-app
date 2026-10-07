@@ -82,8 +82,16 @@ import {
   playerFacingCombatRoundStateSchema,
   playerFacingEncounterSessionSchema,
   playerFacingScenarioParticipantSchema,
+  activeCombatMutationResponseSchema,
+  armorComponentKey,
+  resolveEffectiveItemTemplate,
+  type ArmorTemplate,
 } from "@glantri/domain";
-import { shieldTemplates, weaponTemplates } from "@glantri/content/equipment";
+import {
+  equipmentTemplatesById,
+  shieldTemplates,
+  weaponTemplates,
+} from "@glantri/content/equipment";
 
 const mocks = vi.hoisted(() => {
   class CampaignCharacterAlreadyRosteredError extends Error {
@@ -287,6 +295,7 @@ vi.mock("../lib/sessionAuth", () => ({
 }));
 
 import { scenariosRoutes } from "./scenarios";
+import { buildRequestedCombatMutationResponse } from "./scenarios/combatMutationResponse";
 import { buildPlayerFacingEncounterForUser } from "./scenarios/encounterRoutes";
 
 /**
@@ -7856,9 +7865,19 @@ describe("scenarios route contract", () => {
       encounterId: "encounter-1",
       facts: {
         gmReview: { privateNote: "secret override" },
-        // Workbook import provenance is not player-facing (#517 ruling E2).
+        // Workbook import provenance is not player-facing (#517 ruling E2): neither the attack
+        // mode's import record nor the missile DMB roll, whose `provenance` names the sheet and row.
         involvedOutcome: {
           outcome: "hit",
+          weaponDmb: 4,
+          weaponDmbRoll: {
+            diceCount: 1,
+            diceSides: 6,
+            flatModifier: 0,
+            provenance: "Weapon2:17:1d6",
+            rolls: [4],
+            total: 4,
+          },
           weaponModeSourceMetadata: {
             rawRow: { A: "T. Javelin" },
             row: 17,
@@ -7983,6 +8002,13 @@ describe("scenarios route contract", () => {
     expect(serialized).not.toContain("secret override");
     expect(serialized).not.toContain("weaponModeSourceMetadata");
     expect(serialized).not.toContain("A17:K17");
+    expect(serialized).not.toContain("weaponDmbRoll");
+    expect(serialized).not.toContain("Weapon2:17");
+    expect(workbookImportProvenancePaths(response.json())).toEqual([]);
+    expect(response.json().history.activeRound.events[0].facts.involvedOutcome).toEqual({
+      outcome: "hit",
+      weaponDmb: 4,
+    });
     expect(serialized).not.toContain("rollD20");
     expect(serialized).not.toContain("encounter-participant-hidden");
     expect(serialized).not.toContain("diagnostics");
@@ -8007,6 +8033,15 @@ describe("scenarios route contract", () => {
               gmReview: { privateNote: "GM fact" },
               involvedOutcome: {
                 outcome: "hit",
+                weaponDmb: 4,
+                weaponDmbRoll: {
+                  diceCount: 1,
+                  diceSides: 6,
+                  flatModifier: 0,
+                  provenance: "Weapon2:17:1d6",
+                  rolls: [4],
+                  total: 4,
+                },
                 weaponModeSourceMetadata: {
                   rawRow: { A: "T. Javelin" },
                   row: 17,
@@ -8053,7 +8088,10 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().history.activeRound.events[0].facts).toMatchObject({
       gmReview: { privateNote: "GM fact" },
-      involvedOutcome: { weaponModeSourceMetadata: { row: 17, sheet: "Weapon2" } },
+      involvedOutcome: {
+        weaponDmbRoll: { provenance: "Weapon2:17:1d6", total: 4 },
+        weaponModeSourceMetadata: { row: 17, sheet: "Weapon2" },
+      },
       privateCalculation: { rollD20: 18 },
     });
     expect(response.json().history.progression).toBeDefined();
@@ -30109,18 +30147,35 @@ function isImportRecord(value: unknown): boolean {
 
 /**
  * Where workbook import provenance, which is not player-facing (#517 ruling E2), sits in a
- * response: every populated field named `sourceMetadata` or `…SourceMetadata` (a weapon or armor
- * template's, an attack mode's, a shield's `offensiveSourceMetadata` and `defensiveSourceMetadata`,
- * a round-state attack's `weaponModeSourceMetadata`), any other field holding an import record,
- * and a latest combat event summary that names a workbook row.
+ * response. At any depth, array elements included, it finds:
+ *
+ * - every populated field named `sourceMetadata` or `…SourceMetadata` (a weapon or armor
+ *   template's, an attack mode's, an armor component's, a shield's `offensiveSourceMetadata` and
+ *   `defensiveSourceMetadata`, a round-state attack's `weaponModeSourceMetadata`);
+ * - any other value with the shape of an import record;
+ * - every populated `weaponDmbRoll`, the missile DMB roll whose `provenance` names the workbook sheet
+ *   and row, and which players do not receive at all;
+ * - a latest combat event summary that names a workbook row.
+ *
+ * It does not find provenance in any other form, such as an object of another shape or coordinates
+ * inside a string. The armor component identity (`componentKey`), whose string embeds them, is the
+ * ruled exception and is asserted exactly where it is exercised.
  */
 function workbookImportProvenancePaths(value: unknown, path = "", found: string[] = []): string[] {
   if (Array.isArray(value)) {
-    for (const entry of value) workbookImportProvenancePaths(entry, `${path}[]`, found);
+    for (const entry of value) {
+      if (isImportRecord(entry)) found.push(`${path}[]`);
+      else workbookImportProvenancePaths(entry, `${path}[]`, found);
+    }
   } else if (value && typeof value === "object") {
     for (const [key, nested] of Object.entries(value)) {
       const nestedPath = path ? `${path}.${key}` : key;
-      if (key === "sourceMetadata" || key.endsWith("SourceMetadata") || isImportRecord(nested)) {
+      if (
+        key === "sourceMetadata" ||
+        key.endsWith("SourceMetadata") ||
+        key === "weaponDmbRoll" ||
+        isImportRecord(nested)
+      ) {
         if (nested != null) found.push(nestedPath);
       } else if (
         key === "latestEvent" &&
@@ -33107,6 +33162,49 @@ describe("#517 privacy hardening Tier 3", () => {
   });
 
   /**
+   * The route scan finds what its comment says it finds, including the forms no player response
+   * carries today, so a player-side `[]` from it means something (QA run 2, F-C: its array branch
+   * used to miss an array of import records). It finds nothing else.
+   */
+  it("has a route scan that finds import provenance in every form it claims", () => {
+    const importRecord = {
+      rawRow: { A: "x" },
+      row: 1,
+      sheet: "Weapon2",
+      sourceColumns: { name: "A" },
+      sourceRange: "A1:K1",
+      workbook: "Workbook.xlsx",
+    };
+    expect(
+      workbookImportProvenancePaths({
+        attack: { weaponDmbRoll: { provenance: "Weapon2:1:1d6", total: 4 } },
+        commandEnvelope: { latestEvent: { details: "Range 3.0 · Weapon2 row 14" } },
+        history: [importRecord, { kept: true }],
+        nested: [{ elsewhere: importRecord }],
+        template: { offensiveSourceMetadata: importRecord, sourceMetadata: importRecord },
+      }).sort(),
+    ).toEqual([
+      "attack.weaponDmbRoll",
+      "commandEnvelope.latestEvent.details",
+      "history[]",
+      "nested[].elsewhere",
+      "template.offensiveSourceMetadata",
+      "template.sourceMetadata",
+    ]);
+    expect(
+      workbookImportProvenancePaths({
+        // Kept by ruling: a mode's provenance kind, a rules-source citation, the armor component
+        // identity carve-out, and a latest event without a workbook row.
+        attackModes: [{ provenance: "imported" }],
+        commandEnvelope: { latestEvent: { details: "Range 3.0" } },
+        componentProfiles: [{ componentKey: "Themistogenes 1.07.xlsx:Armor:5", name: "Jerkin" }],
+        movementBurden: { provenance: { sourceRange: "Calculations!L39:S42", workbook: "W.xlsx" } },
+        sourceMetadata: null,
+      }),
+    ).toEqual([]);
+  });
+
+  /**
    * T3.3, Tier 2 finding F2 (derived at source: passing a player's submitted phase contexts through
    * unchanged failed 0 of 805 api tests). A player receives its phase contexts without the canonical
    * lifecycle and correction history, so the phase contexts it submits lack them; the route must
@@ -33566,4 +33664,230 @@ describe("#517 privacy hardening Tier 3", () => {
     expect(workbookImportProvenancePaths(player)).toEqual([]);
     expect(JSON.stringify(player)).not.toContain("Weapon1!A37:Q37");
   });
+
+  /**
+   * QA run 2, F-A and F-B, reproduced with the QA's override on the content's own catalogue: a GM
+   * override of a Leather Jerkin component, revealed to its holder. The player's snapshot keeps that
+   * component's identity, so the override resolves where it used to throw (and the player combat page
+   * died); no import record reaches the player, and the identity string appears only on the override
+   * and on the one component it targets. The GM receives the snapshot as stored.
+   */
+  it("returns a revealed armor override that still resolves, with the component identity only where it targets (#517 F-A, F-B)", async () => {
+    const jerkin = equipmentTemplatesById["armor-template-leather-jerkin"] as ArmorTemplate;
+    const [revealedKey, gmOnlyKey] = jerkin.componentProfiles!.map(armorComponentKey);
+    expect([revealedKey, gmOnlyKey]).toEqual([
+      "Themistogenes 1.07.xlsx:Armor:5",
+      "Themistogenes 1.07.xlsx:Armor:6",
+    ]);
+    const revealedOverride = {
+      componentKey: revealedKey!,
+      kind: "armor" as const,
+      property: "encumbranceFactor" as const,
+      value: 0.5,
+      visibility: "revealed" as const,
+    };
+    const equipmentState = {
+      itemsById: {
+        "item-jerkin": {
+          displayName: "Leather jerkin",
+          id: "item-jerkin",
+          mechanicalOverrides: [
+            revealedOverride,
+            {
+              componentKey: gmOnlyKey!,
+              kind: "armor" as const,
+              property: "frontArm" as const,
+              value: 3,
+              visibility: "gm_only" as const,
+            },
+          ],
+          templateId: jerkin.id,
+        },
+      },
+      templates: { templatesById: equipmentTemplatesById },
+    };
+    const stored = {
+      ...makeCombatScenarioParticipant({ snapshot: { displayName: "Hero", equipmentState } }),
+      characterId: "character-1",
+    } as unknown as ScenarioParticipant;
+
+    async function loadOwnParticipant(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        kind: "combat",
+        name: "Bridge Ambush",
+        status: "live",
+      });
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Border Trouble",
+        status: "active",
+      });
+      mocks.requireAuthenticatedUser.mockResolvedValue(user);
+      mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+        { ...stored, controlledByUserId: user.id },
+      ]);
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "GET",
+        url: "/scenarios/scenario-1/my-participant",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const player = await loadOwnParticipant(mocks.playerUser);
+    const playerEquipment = player.participant.snapshot.equipmentState;
+    expect(workbookImportProvenancePaths(player)).toEqual([]);
+    expect(playerEquipment.itemsById["item-jerkin"].mechanicalOverrides).toEqual([
+      revealedOverride,
+    ]);
+    // Every workbook-named string the player receives: the override's identity, and the same
+    // identity on the one component it targets, in the whole catalogue.
+    expect(workbookNamedStringPaths(player)).toEqual([
+      `participant.snapshot.equipmentState.itemsById.item-jerkin.mechanicalOverrides[].componentKey=${revealedKey}`,
+      `participant.snapshot.equipmentState.templates.templatesById.${jerkin.id}.componentProfiles[].componentKey=${revealedKey}`,
+    ]);
+    expect(playerEquipment.templates.templatesById[jerkin.id].componentProfiles[0]).toEqual({
+      ...withoutKey(jerkin.componentProfiles![0]!, "sourceMetadata"),
+      componentKey: revealedKey,
+    });
+    // The revealed override resolves on the player's snapshot, exactly as the player page does it.
+    const effective = resolveEffectiveItemTemplate(
+      playerEquipment.itemsById["item-jerkin"],
+      playerEquipment.templates.templatesById,
+    ) as ArmorTemplate;
+    expect(effective.componentProfiles?.[0]?.encumbranceFactor).toBe(0.5);
+    expect(effective.encumbranceFactor).toBe(
+      (
+        resolveEffectiveItemTemplate(
+          { ...equipmentState.itemsById["item-jerkin"], mechanicalOverrides: [revealedOverride] },
+          equipmentTemplatesById,
+        ) as ArmorTemplate
+      ).encumbranceFactor,
+    );
+
+    const gm = await loadOwnParticipant(mocks.adminUser);
+    expect(gm.participant.snapshot.equipmentState).toEqual(
+      JSON.parse(JSON.stringify(equipmentState)),
+    );
+    const gmComponent =
+      gm.participant.snapshot.equipmentState.templates.templatesById[jerkin.id]
+        .componentProfiles[0];
+    expect(gmComponent.sourceMetadata).toMatchObject({ finishedRow: 5, sheet: "Armor" });
+    expect(gmComponent).not.toHaveProperty("componentKey");
+  });
+
+  /**
+   * QA run 2, F-D: the missile DMB roll's `provenance` names the workbook sheet and row. The roll is
+   * omitted for players as a whole (ruling 2026-10-07): the stored schema requires `provenance`, and
+   * the `active-v1` response parses a player's round state with it, on the server and in the client.
+   * The DMB value stays in `weaponDmb`. The GM keeps the roll.
+   */
+  it("returns a player's round state without a stored missile DMB roll, still valid for the active response; the GM keeps it (#517 F-D)", async () => {
+    const baseState = makeOpenPhase1AttackRoundState();
+    const dmbRoll = {
+      diceCount: 1,
+      diceSides: 6,
+      flatModifier: 1,
+      provenance: "Weapon2:17:1d6+1",
+      rolls: [3],
+      total: 4,
+    };
+    const encounter = makeCombatEncounter({
+      combatRoundState: {
+        ...baseState,
+        participants: baseState.participants.map((participant, index) =>
+          index === 0
+            ? {
+                ...participant,
+                attackResults: {
+                  phase1: {
+                    actionId: "attack_parry",
+                    attackerParticipantId: "encounter-participant-1",
+                    defenderDb: 10,
+                    defenderParryModifier: 0,
+                    defenderParticipantId: "encounter-participant-2",
+                    grazing: false,
+                    hit: true,
+                    kind: "attackRoll",
+                    lookupTotal: 14,
+                    marginOverMissThreshold: 4,
+                    ob: 10,
+                    openEndedD10s: [],
+                    phase: "phase1",
+                    rollD20: 14,
+                    rollTotal: 14,
+                    rolledAt: "2026-01-01T00:01:00.000Z",
+                    tableResult: "C",
+                    weaponDmb: 4,
+                    weaponDmbRoll: dmbRoll,
+                    weaponName: "Javelin",
+                  },
+                },
+              }
+            : participant,
+        ),
+      },
+      participants: makeTwoCombatEncounterParticipants(),
+    });
+
+    async function loadEncounter(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      setupCombatDeclarationRoute({
+        encounter,
+        participants: [
+          { controlledByUserId: "player-1", id: "participant-1" },
+          { controlledByUserId: "other-player", id: "participant-2" },
+        ],
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const gm = await loadEncounter(mocks.adminUser);
+    expect(
+      gm.encounter.combatRoundState.participants[0].attackResults.phase1.weaponDmbRoll,
+    ).toEqual(dmbRoll);
+
+    const player = await loadEncounter(mocks.playerUser);
+    const playerAttack = player.encounter.combatRoundState.participants[0].attackResults.phase1;
+    expect(playerAttack).toMatchObject({ weaponDmb: 4, weaponName: "Javelin" });
+    expect(playerAttack).not.toHaveProperty("weaponDmbRoll");
+    expect(workbookImportProvenancePaths(player)).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("Weapon2:17");
+    // The active response parses the player's round state with the stored schema, and the client
+    // parses that response again: both still accept it.
+    const active = buildRequestedCombatMutationResponse({
+      activeResponseRequested: true,
+      payload: { encounter: player.encounter },
+    }) as { activeCombatState: CombatRoundState };
+    expect(activeCombatMutationResponseSchema.parse(active)).toBeDefined();
+    expect(active.activeCombatState.participants[0]?.attackResults.phase1?.weaponDmb).toBe(4);
+    expect(JSON.stringify(active)).not.toContain("weaponDmbRoll");
+  });
 });
+
+/** Every string anywhere in `value` that names a workbook (`….xlsx`), as `path=value`. */
+function workbookNamedStringPaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) workbookNamedStringPaths(entry, `${path}[]`, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      workbookNamedStringPaths(nested, path ? `${path}.${key}` : key, found);
+    }
+  } else if (typeof value === "string" && /\.xlsx\b/i.test(value)) {
+    found.push(`${path}=${value}`);
+  }
+  return found;
+}
+
+function withoutKey<Value extends object>(value: Value, key: string) {
+  return Object.fromEntries(Object.entries(value).filter(([entryKey]) => entryKey !== key));
+}

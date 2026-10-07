@@ -8,6 +8,12 @@ import {
   withoutWorkbookImportProvenance,
   type PlayerFacingScenarioParticipant,
 } from "../campaign/playerFacingScenarioParticipant";
+import {
+  armorComponentKey,
+  resolveEffectiveItemTemplate,
+  type ItemMechanicalOverride,
+} from "../equipment/itemOverrides";
+import type { EquipmentTemplate } from "../equipment/types";
 import * as domain from "../index";
 import {
   scenarioParticipantCombatContextSchema,
@@ -459,14 +465,159 @@ describe("#502 player-facing types: additive construction", () => {
   });
 
   /**
-   * Completeness (QA F1): the strip matched one of the three names the equipment domain gives its
-   * import provenance. The provenance fields are derived here from the domain's own schemas — every
-   * exported zod schema is walked, and a field whose schema has the shape of an import record
-   * (`workbook`, `sheet`, `sourceRange` and `sourceColumns`, which only `Imported…SourceMetadata`
-   * schemas have) is one — so a provenance field added under any name is found, and the strip must
-   * remove it. Rules-source citations such as the movement burden's `provenance` lack that shape.
+   * QA run 2, F-A and F-B: an armor component's identity (`armorComponentKey`) is derived from the
+   * `sourceMetadata` the strip removes, so an override revealed to the holder no longer found its
+   * component, and resolving the effective template threw "This Equipment input cannot be
+   * overridden." on the player combat page. The component a revealed override targets now keeps
+   * that identity as `componentKey`, and no other component carries one (rulings 2026-10-07).
    */
-  it("removes every import-provenance field the domain's schemas declare, whatever it is named", () => {
+  it("keeps an armor component's identity only where a revealed override targets it, and the override resolves (#517 F-A, F-B)", () => {
+    const componentSource = (finishedRow: number) => ({
+      finishedRow,
+      rawRows: { [String(finishedRow)]: { A: "SECRET_RAW_ROW" } },
+      sheet: "Armor",
+      sourceColumns: { name: "A" },
+      sourceRange: `A${finishedRow}:P${finishedRow}`,
+      workbook: "SECRET_WORKBOOK.xlsx",
+    });
+    const storedJerkin = {
+      category: "armor",
+      componentProfiles: [
+        {
+          encumbranceFactor: 1,
+          locationValues: { chest: 2 },
+          name: "Jerkin",
+          sourceMetadata: componentSource(5),
+        },
+        {
+          encumbranceFactor: 0.25,
+          locationValues: { frontArm: 1 },
+          name: "Gauntlets",
+          sourceMetadata: componentSource(6),
+        },
+        // A component that already carries an identity no revealed override targets (none is
+        // stored today) does not pass it on either.
+        {
+          componentKey: "SECRET_CARRIED_IDENTITY",
+          encumbranceFactor: 0.5,
+          locationValues: { frontFoot: 1 },
+          name: "Boots",
+          sourceMetadata: componentSource(7),
+        },
+      ],
+      id: "armor-template-jerkin",
+      name: "Leather Jerkin",
+      sourceMetadata: componentSource(5),
+    };
+    const revealedKey = armorComponentKey(storedJerkin.componentProfiles[0]!);
+    const gmOnlyKey = armorComponentKey(storedJerkin.componentProfiles[1]!);
+    expect(revealedKey).toBe("SECRET_WORKBOOK.xlsx:Armor:5");
+    const overrides: ItemMechanicalOverride[] = [
+      {
+        componentKey: revealedKey,
+        kind: "armor",
+        property: "encumbranceFactor",
+        value: 0.5,
+        visibility: "revealed",
+      },
+      {
+        componentKey: gmOnlyKey,
+        kind: "armor",
+        property: "frontArm",
+        value: 3,
+        visibility: "gm_only",
+      },
+    ];
+    const item = {
+      displayName: "Leather jerkin",
+      id: "item-jerkin",
+      mechanicalOverrides: overrides,
+      templateId: "armor-template-jerkin",
+    };
+    const stored = storedParticipantWithPrivateMaterial();
+    const withEquipment = scenarioParticipantSchema.parse({
+      ...stored,
+      snapshot: {
+        ...stored.snapshot,
+        equipmentState: {
+          itemsById: { "item-jerkin": item },
+          templates: { templatesById: { "armor-template-jerkin": storedJerkin } },
+        },
+      },
+    });
+    const storedBefore = structuredClone(withEquipment);
+
+    const player = buildPlayerFacingScenarioParticipant(withEquipment);
+
+    const equipment = player.snapshot.equipmentState as {
+      itemsById: Record<string, typeof item>;
+      templates: { templatesById: Record<string, EquipmentTemplate> };
+    };
+    expect(equipment.templates.templatesById["armor-template-jerkin"]).toEqual({
+      category: "armor",
+      componentProfiles: [
+        {
+          componentKey: revealedKey,
+          encumbranceFactor: 1,
+          locationValues: { chest: 2 },
+          name: "Jerkin",
+        },
+        { encumbranceFactor: 0.25, locationValues: { frontArm: 1 }, name: "Gauntlets" },
+        { encumbranceFactor: 0.5, locationValues: { frontFoot: 1 }, name: "Boots" },
+      ],
+      id: "armor-template-jerkin",
+      name: "Leather Jerkin",
+    });
+    const playerItem = equipment.itemsById["item-jerkin"]!;
+    expect(playerItem.mechanicalOverrides).toEqual([overrides[0]]);
+    // The only identity strings the player receives are those its revealed overrides carry.
+    const serialized = JSON.stringify(player);
+    expect(serialized.match(/SECRET_WORKBOOK\.xlsx:Armor:\d+/g)).toEqual([
+      revealedKey,
+      revealedKey,
+    ]);
+    expect(serialized).not.toContain(gmOnlyKey);
+    expect(serialized).not.toContain("SECRET_CARRIED_IDENTITY");
+    expect(serialized).not.toContain("SECRET_RAW_ROW");
+    expect(keysAnywhere(player).has("sourceMetadata")).toBe(false);
+
+    // The revealed override resolves on the player's snapshot, as it does for the GM.
+    const playerEffective = resolveEffectiveItemTemplate(
+      playerItem,
+      equipment.templates.templatesById,
+    );
+    const gmEffective = resolveEffectiveItemTemplate(
+      { ...item, mechanicalOverrides: [overrides[0]!] },
+      { "armor-template-jerkin": storedJerkin as unknown as EquipmentTemplate },
+    );
+    if (playerEffective?.category !== "armor" || gmEffective?.category !== "armor") {
+      throw new Error("Expected effective armor templates.");
+    }
+    expect(playerEffective.componentProfiles?.[0]?.encumbranceFactor).toBe(0.5);
+    expect(playerEffective.encumbranceFactor).toBe(1.25);
+    expect(playerEffective.encumbranceFactor).toBe(gmEffective.encumbranceFactor);
+
+    // The stored participant, which the GM path reads, is unchanged: no identity added.
+    expect(withEquipment).toEqual(storedBefore);
+  });
+
+  /**
+   * The import records the domain's schemas declare today, found by shape, each removed by the
+   * snapshot strip (QA run 1, F1). What this proves, and no more (QA run 2, F-C):
+   *
+   * - every exported zod schema is walked, and a field counts as an import record when its own
+   *   schema, after `optional` and `nullable`, is an object with `workbook`, `sheet`, `sourceRange`
+   *   and `sourceColumns`, which only the three `Imported…SourceMetadata` schemas have;
+   * - the field names found are pinned exactly, so a new field of that kind fails here, whatever its
+   *   name, and the strip must remove every field found.
+   *
+   * It does NOT find an import record inside an array, record, union, default or lazy schema, a
+   * provenance object of another shape, or provenance encoded in a string: QA run 2 showed six such
+   * variants stay green. The carriers of those kinds today have tests of their own: the armor
+   * component identity (above) and the missile `weaponDmbRoll`
+   * (`playerFacingCombatRoundParticipant.test.ts`, `combatHistoryProjection.test.ts`).
+   */
+  it("pins the import-record fields the domain's schemas declare directly, and removes each one", () => {
     const provenanceFields = new Set<string>();
     const seen = new Set<z.ZodTypeAny>();
     const isImportRecord = (schema: z.ZodTypeAny): boolean => {
@@ -516,15 +667,13 @@ describe("#502 player-facing types: additive construction", () => {
       if (exported instanceof z.ZodType) walk(exported);
     }
 
-    // Non-vacuous: the walk reaches every import record declared today.
-    expect([...provenanceFields].sort()).toEqual(
-      expect.arrayContaining([
-        "defensiveSourceMetadata",
-        "offensiveSourceMetadata",
-        "sourceMetadata",
-        "weaponModeSourceMetadata",
-      ]),
-    );
+    // Non-vacuous and exact: the fields that hold an import record directly today.
+    expect([...provenanceFields].sort()).toEqual([
+      "defensiveSourceMetadata",
+      "offensiveSourceMetadata",
+      "sourceMetadata",
+      "weaponModeSourceMetadata",
+    ]);
     const importRecord = {
       rawRow: { A: "x" },
       row: 1,

@@ -34,6 +34,10 @@ import {
 } from "./combatModifierLifecycle";
 import { getCombatEffectEffectiveStatus, type CombatEffect } from "./combatEffects";
 import { getCombatCriticalBleedEffectiveRate } from "./combatCriticalRuntime";
+import {
+  ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS,
+  withoutAttackResultWorkbookImportProvenance,
+} from "./playerFacingCombatRoundParticipant";
 
 export type CombatHistoryViewer =
   | { kind: "gm" }
@@ -599,18 +603,22 @@ function hasFacts(facts: Record<string, unknown>): boolean {
 }
 
 /**
- * An event fact bucket as a player sees it: without `weaponModeSourceMetadata`, the attack mode's
- * workbook import provenance, which is not player-facing (#517, ruling E2). The GM's facts keep it.
+ * An event fact bucket as a player sees it: without the attack-result fields that carry workbook
+ * import provenance (`ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`: the attack mode's
+ * `weaponModeSourceMetadata` and the missile `weaponDmbRoll`), which are not player-facing (#517,
+ * ruling E2). The GM's facts keep them.
  */
 function playerFacingEventFacts<Facts extends Record<string, unknown>>(
   facts: Facts,
   viewer: CombatHistoryViewer,
 ): Facts {
-  if (viewer.kind === "gm" || !Object.hasOwn(facts, "weaponModeSourceMetadata")) {
+  if (
+    viewer.kind === "gm" ||
+    !ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS.some((field) => Object.hasOwn(facts, field))
+  ) {
     return facts;
   }
-  const { weaponModeSourceMetadata: _workbookProvenance, ...playerFacts } = facts;
-  return playerFacts as Facts;
+  return withoutAttackResultWorkbookImportProvenance(facts) as Facts;
 }
 
 function isVisible(input: { participantId: string; viewer: CombatHistoryViewer }): boolean {

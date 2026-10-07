@@ -69,8 +69,13 @@ export function itemOverrideKey(entry: ItemMechanicalOverride): string {
   return `input:${entry.property}`;
 }
 
-/** Source identity survives component reordering; duplicate identities are not editable. */
+/**
+ * Source identity survives component reordering; duplicate identities are not editable. A component
+ * that carries its identity explicitly (`componentKey`, set where its `sourceMetadata` was removed)
+ * keeps it, so an override stored against the source identity still finds it.
+ */
 export function armorComponentKey(component: ArmorComponentProfile): string {
+  if (component.componentKey) return component.componentKey;
   const source = component.sourceMetadata;
   return source
     ? `${source.workbook}:${source.sheet}:${source.finishedRow}`

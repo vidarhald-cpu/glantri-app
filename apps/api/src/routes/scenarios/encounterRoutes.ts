@@ -300,6 +300,7 @@ import {
   playerFacingEncounterParticipantSchema,
   playerFacingOffensiveParryContestSchema,
   playerFacingRoleplayStateSchema,
+  withoutAttackResultWorkbookImportProvenance,
   type CombatRoundCommandType,
   type PlayerFacingCombatRoundCommand,
   type PlayerFacingCombatRoundParticipant,
@@ -6479,18 +6480,14 @@ export function buildPlayerSafeCombatRoundCommandForUser(
 }
 
 /**
- * The player's own attack, as the roll-attack response returns it to them: without the attack
- * mode's workbook import provenance, which is not player-facing (#517, ruling E2). The GM's
- * response keeps it.
+ * The player's own attack, as the roll-attack response returns it to them: without the attack-result
+ * fields that carry workbook import provenance (`weaponModeSourceMetadata`, `weaponDmbRoll`), which
+ * are not player-facing (#517, ruling E2). The GM's response keeps them.
  */
-function withoutWeaponModeSourceMetadata<Attack extends { weaponModeSourceMetadata?: unknown }>(
+function playerOwnAttackWithoutWorkbookImportProvenance<Attack extends object>(
   attack: Attack | undefined,
-): Omit<Attack, "weaponModeSourceMetadata"> | undefined {
-  if (!attack) {
-    return undefined;
-  }
-  const { weaponModeSourceMetadata: _workbookProvenance, ...playerAttack } = attack;
-  return playerAttack;
+) {
+  return attack && withoutAttackResultWorkbookImportProvenance(attack);
 }
 
 const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
@@ -17448,11 +17445,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         attackResult:
-          access.mode === "gm" ? attackResult : withoutWeaponModeSourceMetadata(attackResult),
+          access.mode === "gm"
+            ? attackResult
+            : playerOwnAttackWithoutWorkbookImportProvenance(attackResult),
         pendingMissileAttack:
           access.mode === "gm"
             ? pendingMissileAttack
-            : withoutWeaponModeSourceMetadata(pendingMissileAttack),
+            : playerOwnAttackWithoutWorkbookImportProvenance(pendingMissileAttack),
         command:
           access.mode === "gm" || !attackCommand
             ? attackCommand

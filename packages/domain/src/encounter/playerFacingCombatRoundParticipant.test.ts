@@ -15,13 +15,16 @@ import {
 } from "./combatModifierLifecycle";
 import { buildCanonicalCombatModifierReviewFromDraft } from "./combatModifierReviewProjection";
 import {
+  combatRoundAttackRollResultSchema,
   combatRoundParticipantStateSchema,
   combatRoundStateSchema,
   type CombatRoundDeclaration,
   type CombatRoundParticipantState,
 } from "./combatRoundManager";
 import {
+  ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS,
   buildPlayerFacingCombatRoundParticipant,
+  withoutAttackResultWorkbookImportProvenance,
   playerFacingCombatRoundAttackOpportunitySchema,
   playerFacingCombatRoundAttackRollResultSchema,
   playerFacingCombatRoundCombatExperienceResultSchema,
@@ -225,6 +228,17 @@ function attackRollResult(input: { opportunityId: string; phase: "phase1" | "pha
     rolledByUserId: "SECRET_ATTACK_ROLLER",
     tableResult: "C",
     weaponCriticalCode: "S",
+    weaponDmb: 7,
+    // A missile DMB roll as production stored it on 17-18 August 2026: its `provenance` is the
+    // workbook sheet, row and formula.
+    weaponDmbRoll: {
+      diceCount: 2,
+      diceSides: 6,
+      flatModifier: 1,
+      provenance: "SECRET_DMB_SHEET:12:2d6+1",
+      rolls: [3, 3],
+      total: 7,
+    },
     weaponModeSourceMetadata: {
       rawRow: { A: "SECRET_RAW_ROW_CELL" },
       row: 12,
@@ -475,23 +489,46 @@ describe("#507 player-facing round-state participant: additive construction", ()
     );
   });
 
-  it("omits the attack mode's workbook import provenance although it is populated (ruling E2)", () => {
+  it("omits the attack result's workbook import provenance although it is populated (ruling E2)", () => {
     const stored = storedRoundParticipant();
-    expect(stored.attackResults.phase1?.weaponModeSourceMetadata).toBeDefined();
-    expect(
-      stored.attackResultsByOpportunity?.["opportunity-1"]?.weaponModeSourceMetadata,
-    ).toBeDefined();
+    for (const result of [
+      stored.attackResults.phase1,
+      stored.attackResultsByOpportunity?.["opportunity-1"],
+    ]) {
+      expect(result?.weaponModeSourceMetadata).toBeDefined();
+      expect(result?.weaponDmbRoll?.provenance).toBe("SECRET_DMB_SHEET:12:2d6+1");
+    }
 
     const participant = buildPlayerFacingCombatRoundParticipant({ participant: stored });
 
-    expect(Object.keys(playerFacingCombatRoundAttackRollResultSchema.unwrap().shape)).not.toContain(
+    const named = Object.keys(playerFacingCombatRoundAttackRollResultSchema.unwrap().shape);
+    expect(named).not.toContain("weaponModeSourceMetadata");
+    expect(named).not.toContain("weaponDmbRoll");
+    for (const result of [
+      participant.attackResults.phase1,
+      participant.attackResultsByOpportunity?.["opportunity-1"],
+    ]) {
+      expect(result).not.toHaveProperty("weaponModeSourceMetadata");
+      expect(result).not.toHaveProperty("weaponDmbRoll");
+      // The DMB value itself stays, and the result is still one the stored schema accepts, which
+      // the server and the client parse a player's round state with: the whole roll is omitted
+      // because that schema requires the roll's `provenance`.
+      expect(result?.weaponDmb).toBe(7);
+      expect(() => combatRoundAttackRollResultSchema.parse(result)).not.toThrow();
+    }
+    expect(JSON.stringify(participant)).not.toMatch(/SECRET_(RAW_ROW_CELL|WORKBOOK|DMB_SHEET)/);
+  });
+
+  it("removes exactly the attack result's import-provenance fields from player output outside the schema", () => {
+    const stored = attackRollResult({ opportunityId: "opportunity-1", phase: "phase1" });
+    const { weaponDmbRoll: _dmbRoll, weaponModeSourceMetadata: _modeSource, ...rest } = stored;
+
+    expect([...ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS].sort()).toEqual([
+      "weaponDmbRoll",
       "weaponModeSourceMetadata",
-    );
-    expect(participant.attackResults.phase1).not.toHaveProperty("weaponModeSourceMetadata");
-    expect(participant.attackResultsByOpportunity?.["opportunity-1"]).not.toHaveProperty(
-      "weaponModeSourceMetadata",
-    );
-    expect(JSON.stringify(participant)).not.toMatch(/SECRET_(RAW_ROW_CELL|WORKBOOK)/);
+    ]);
+    expect(withoutAttackResultWorkbookImportProvenance(stored)).toEqual(rest);
+    expect(withoutAttackResultWorkbookImportProvenance(rest)).toEqual(rest);
   });
 
   it("drops the canonical lifecycle and correction history from every combat and phase context", () => {
@@ -531,7 +568,10 @@ describe("#507 player-facing round-state participant: additive construction", ()
       withoutIdentity(stored.combatExperience!, "rolledByUserId"),
     );
     const withoutRollerAndProvenance = (result: Record<string, unknown>) =>
-      withoutIdentity(withoutIdentity(result, "rolledByUserId"), "weaponModeSourceMetadata");
+      withoutIdentity(
+        withoutIdentity(withoutIdentity(result, "rolledByUserId"), "weaponModeSourceMetadata"),
+        "weaponDmbRoll",
+      );
     expect(participant.attackResults.phase1).toEqual(
       withoutRollerAndProvenance(stored.attackResults.phase1!),
     );

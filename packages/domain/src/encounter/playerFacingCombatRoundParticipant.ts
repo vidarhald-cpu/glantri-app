@@ -20,7 +20,6 @@ import {
   playerFacingCombatRoundFeintDeclarationSchema,
   playerFacingCombatRoundInitiativeResultSchema,
   playerFacingCombatRoundWeaponDmbFormulaSchema,
-  playerFacingCombatRoundWeaponDmbRollSchema,
   playerFacingMissileWeaponProfileSchema,
   playerFacingMovementIntentSchema,
   playerFacingScenarioParticipantSecondaryActionContextSchema,
@@ -61,9 +60,42 @@ import {
  * level.
  */
 /**
+ * The attack-result fields that carry workbook import provenance, which is not player-facing
+ * gameplay data (control-plane ruling E2, #517):
+ *
+ * - `weaponModeSourceMetadata`, the attack mode's import record;
+ * - `weaponDmbRoll`, the missile DMB roll, whose `provenance` is `"<sheet>:<row>:<formula>"`. The
+ *   whole roll is omitted, not only its `provenance`: the stored schema requires `provenance`, and
+ *   the server and the client parse a player's round state with it (ruling 2026-10-07). The DMB
+ *   value itself stays in `weaponDmb`, which that schema requires to equal the roll's total.
+ *
+ * The player-facing attack result names neither. Player output that carries an attack result's
+ * fields outside that schema removes both with `withoutAttackResultWorkbookImportProvenance`.
+ */
+export const ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS = [
+  "weaponDmbRoll",
+  "weaponModeSourceMetadata",
+] as const;
+
+/**
+ * An attack result, or an event fact bucket copied from one, without
+ * `ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`: for player output that is not parsed through
+ * the player-facing attack result — the combat history's event facts and the roll-attack response.
+ */
+export function withoutAttackResultWorkbookImportProvenance<Attack extends object>(
+  attack: Attack,
+): Omit<Attack, (typeof ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS)[number]> {
+  const {
+    weaponDmbRoll: _dmbRollProvenance,
+    weaponModeSourceMetadata: _modeProvenance,
+    ...playerAttack
+  } = attack as Attack & { weaponDmbRoll?: unknown; weaponModeSourceMetadata?: unknown };
+  return playerAttack;
+}
+
+/**
  * An attack result as a player receives it: everything but the roller's account identity and
- * `weaponModeSourceMetadata`, the attack mode's workbook import provenance — not player-facing
- * gameplay data (control-plane ruling E2, 2026-10-06, #517); nothing on the player path read it.
+ * `ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`; nothing on the player path read either.
  */
 export const playerFacingCombatRoundAttackRollResultSchema = playerFacingObject(
   "PlayerFacingCombatRoundAttackRollResult",
@@ -98,7 +130,6 @@ export const playerFacingCombatRoundAttackRollResultSchema = playerFacingObject(
     weaponCriticalCode: LEAF,
     weaponDamageClass: LEAF,
     weaponDmb: LEAF,
-    weaponDmbRoll: playerFacingCombatRoundWeaponDmbRollSchema.optional(),
     weaponDmbFormula: playerFacingCombatRoundWeaponDmbFormulaSchema.nullable().optional(),
     weaponDmbRaw: LEAF,
     weaponModeInitiative: LEAF,

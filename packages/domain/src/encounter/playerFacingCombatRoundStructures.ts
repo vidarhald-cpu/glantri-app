@@ -1845,20 +1845,6 @@ export const playerFacingCombatAttackPhaseDefensivePenaltySchema = playerFacingO
   },
 );
 
-export const playerFacingCombatRoundWeaponDmbRollSchema = playerFacingObject(
-  "PlayerFacingCombatRoundWeaponDmbRoll",
-  combatRoundAttackRollResultSchema.innerType().innerType().shape.weaponDmbRoll.unwrap(),
-  {
-    diceCount: LEAF,
-    diceSides: LEAF,
-    flatModifier: LEAF,
-    gmStrengthModifier: LEAF,
-    provenance: LEAF,
-    rolls: LEAF,
-    total: LEAF,
-  },
-);
-
 export const playerFacingCombatRoundWeaponDmbFormulaSchema = playerFacingObject(
   "PlayerFacingCombatRoundWeaponDmbFormula",
   combatRoundAttackRollResultSchema

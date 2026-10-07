@@ -10,7 +10,9 @@ import {
 } from "../encounter/combatEffects";
 import { buildPlayerFacing, LEAF, playerFacingObject } from "../encounter/playerFacingSchema";
 import { revealableEquipmentState } from "../equipment/itemFacts";
+import { armorComponentKey } from "../equipment/itemOverrides";
 import { canonicalizeLegacyEquipmentSnapshotItems } from "../equipment/schemas";
+import type { ArmorComponentProfile } from "../equipment/types";
 import {
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
@@ -44,8 +46,10 @@ import {
  *   sanitizer for a snapshot reaching its controlling player, after its legacy items are given the
  *   facts and notes their `specialProperties` became on the canonical item
  *   (`canonicalizeLegacyEquipmentSnapshotItems`). Legacy information the canonical item reveals to
- *   its holder is therefore kept; only what is not revealed is removed. Its workbook import
- *   provenance is then removed as well (`withoutWorkbookImportProvenance`, #517 ruling E2).
+ *   its holder is therefore kept; only what is not revealed is removed. Its import records are
+ *   then removed as well (`withoutWorkbookImportProvenance`, #517 ruling E2), and an armor
+ *   component a revealed override targets keeps its identity
+ *   (`withArmorComponentIdentityOnlyWhereRevealed`).
  *
  * Sub-structures that carry none of that material reuse their canonical field schemas, as the
  * precedent does for the Character build and combat context.
@@ -327,22 +331,26 @@ function buildPlayerFacingCombatEffectsState(
 }
 
 /**
- * Whether a field holds workbook import provenance. Every such field in the domain is named
- * `sourceMetadata` or ends in `SourceMetadata`, after the `Imported…SourceMetadata` schema that
- * types it: `sourceMetadata` on weapon templates and attack modes (`ImportedWeaponSourceMetadata`)
- * and on armor templates and component profiles (`ImportedArmorSourceMetadata`), a shield
- * template's `offensiveSourceMetadata` and `defensiveSourceMetadata` (`ImportedShieldSourceMetadata`),
- * and a round-state attack's `weaponModeSourceMetadata`. A test derives the provenance fields from
- * the domain's schemas by shape and fails if one is ever named otherwise.
+ * Whether a field holds an import record (`Imported…SourceMetadata`), by name. The fields that hold
+ * one today are all named `sourceMetadata` or end in `SourceMetadata`: `sourceMetadata` on weapon
+ * templates and attack modes (`ImportedWeaponSourceMetadata`) and on armor templates and component
+ * profiles (`ImportedArmorSourceMetadata`), a shield template's `offensiveSourceMetadata` and
+ * `defensiveSourceMetadata` (`ImportedShieldSourceMetadata`), and a round-state attack's
+ * `weaponModeSourceMetadata`. Tests pin exactly those carriers. A field named otherwise is not
+ * matched: no test proves that every future provenance field will be named this way.
+ *
+ * Import provenance in other forms is handled where it is carried, not here: the missile
+ * `weaponDmbRoll` (`ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`) and an armor component's
+ * identity (`withArmorComponentIdentityOnlyWhereRevealed`).
  */
 function isWorkbookImportProvenanceKey(key: string): boolean {
   return key === "sourceMetadata" || key.endsWith("SourceMetadata");
 }
 
 /**
- * A captured equipment snapshot without its workbook import provenance, which is not player-facing
- * (#517, ruling E2): every field `isWorkbookImportProvenanceKey` names is removed, at any depth.
- * Nothing else is — a mode's `provenance` kind (`imported`, `manual` or `derived`) is kept, as are
+ * A captured equipment snapshot without its import records, which are not player-facing (#517,
+ * ruling E2): every field `isWorkbookImportProvenanceKey` names is removed, at any depth. Nothing
+ * else is — a mode's `provenance` kind (`imported`, `manual` or `derived`) is kept, as are
  * rules-source citations and authored notes (ruling E2, Decision 3).
  */
 export function withoutWorkbookImportProvenance(value: unknown): unknown {
@@ -357,6 +365,67 @@ export function withoutWorkbookImportProvenance(value: unknown): unknown {
       isWorkbookImportProvenanceKey(key) ? [] : [[key, withoutWorkbookImportProvenance(entry)]],
     ),
   );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * The armor component identities (`componentKey`) the overrides in an equipment snapshot target,
+ * counting only overrides revealed to the holder.
+ */
+function revealedArmorComponentKeys(equipmentState: unknown): ReadonlySet<string> {
+  const items = isRecord(equipmentState) ? equipmentState.itemsById : undefined;
+  if (!isRecord(items)) return new Set();
+  return new Set(
+    Object.values(items).flatMap((item) =>
+      isRecord(item) && Array.isArray(item.mechanicalOverrides)
+        ? item.mechanicalOverrides.flatMap((entry) =>
+            isRecord(entry) &&
+            entry.kind === "armor" &&
+            entry.visibility === "revealed" &&
+            typeof entry.componentKey === "string"
+              ? [entry.componentKey]
+              : [],
+          )
+        : [],
+    ),
+  );
+}
+
+/**
+ * An equipment snapshot in which an armor template's component profile carries its identity
+ * (`componentKey`, from `armorComponentKey`) exactly when an override revealed to the holder targets
+ * it, and otherwise not at all (#517 F-A, rulings 2026-10-07).
+ *
+ * `withoutWorkbookImportProvenance` removes a component's `sourceMetadata`, which its identity is
+ * derived from, so without this a revealed override would no longer find its component and the
+ * effective template would not resolve. The identity is the same string the GM resolves and the
+ * override stores: no stored key changes and no second key space exists. It is an opaque identifier
+ * the player's override needs, not a source to show the player. Every other component carries
+ * none, so the player receives no identity string that its revealed overrides do not already carry.
+ */
+function withArmorComponentIdentityOnlyWhereRevealed(equipmentState: unknown): unknown {
+  const revealed = revealedArmorComponentKeys(equipmentState);
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit);
+    if (!isRecord(value)) return value;
+    const record = Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, visit(entry)]),
+    );
+    if (record.category !== "armor" || !Array.isArray(record.componentProfiles)) return record;
+    return {
+      ...record,
+      componentProfiles: record.componentProfiles.map((component: unknown) => {
+        if (!isRecord(component)) return component;
+        const identity = armorComponentKey(component as unknown as ArmorComponentProfile);
+        const { componentKey: _carriedIdentity, ...profile } = component;
+        return revealed.has(identity) ? { ...profile, componentKey: identity } : profile;
+      }),
+    };
+  };
+  return visit(equipmentState);
 }
 
 /**
@@ -389,8 +458,10 @@ export function buildPlayerFacingScenarioParticipant(
       equipmentProjection: participant.snapshot.equipmentProjection,
       entity: participant.snapshot.entity,
       equipmentState: withoutWorkbookImportProvenance(
-        revealableEquipmentState(
-          canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+        withArmorComponentIdentityOnlyWhereRevealed(
+          revealableEquipmentState(
+            canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+          ),
         ),
       ),
       retainedCharacterRevision: participant.snapshot.retainedCharacterRevision,
