@@ -21,9 +21,13 @@ import { encounterSessionSchema, type EncounterSession } from "./session";
  * `gmPrivateClosingNote` is not one of them, the round state is the player-facing round state
  * (`playerFacingCombatRoundState`), and the action log, item references, encounter participants and
  * roleplay state are player-facing structures (`playerFacingCombatRoundStructures`). A field added
- * to `encounterSessionSchema` or to anything nested in it therefore changes nothing a player can
- * see. Every level is branded, so a stored encounter, or any stored value inside one, is not
- * assignable to it.
+ * to `encounterSessionSchema` or to anything nested in it is therefore not carried by this type,
+ * and does not reach a player through it: the `encounter` of a player response. Player output
+ * built from the stored encounter without this type is not covered by that claim. The combat
+ * history's event fact buckets are open: they copy some round-state structures whole, such as a
+ * declaration's movement intent and phase contexts, and give them to the involved player, a field
+ * added to them included; they are privacy Tier 4's (#528). Every level is branded, so a stored
+ * encounter, or any stored value inside one, is not assignable to it.
  */
 export const playerFacingEncounterSessionSchema = playerFacingObject(
   "PlayerFacingEncounterSession",

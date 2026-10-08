@@ -28839,9 +28839,10 @@ function secretValuePaths(value: unknown, path = "", found: string[] = []): stri
 }
 
 /**
- * No player response carries a named key or a SECRET value. Until #517 (Tier 3) the combat-declaration
- * response was the one exception: R2, the viewer's own combat context as the per-viewer projection
- * produced it, pinned path by path. Tier 3 removed R2, so every converted boundary is held to nothing.
+ * The player response it is given carries no named key or SECRET value. Until #517 (Tier 3) the
+ * combat-declaration response was the one exception: R2, the viewer's own combat context as the
+ * per-viewer projection produced it, pinned path by path. Tier 3 removed R2, so every converted
+ * boundary is held to nothing.
  * The paths are compared as a sorted list without de-duplication, so a repeated path still counts
  * (Tier 1 finding F1).
  */
@@ -31705,7 +31706,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     },
   });
 
-  describeTier2Case({
+  const missileRollAttackCase: Tier2Case = {
     active: true,
     arrange: async (viewer) => {
       // A missile attack is the only kind for which the route returns the attacker's participant,
@@ -31853,6 +31854,34 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       submittingUser: true,
     },
     workbookProvenance: true,
+  };
+  describeTier2Case(missileRollAttackCase);
+
+  /**
+   * The GM's side of the pending missile attack (#517 floor QA run 3, F-3). The case above proves the
+   * player receives it without its workbook import provenance; this proves the GM receives it as the
+   * round recorded it, provenance included. The case's own GM check cannot: the GM's stored encounter
+   * and participant carry provenance too, so it still passes with this one removed.
+   */
+  it("returns the GM's pending missile attack as the round recorded it, workbook import provenance included", async () => {
+    const legacy = (await runTier2Case(missileRollAttackCase, mocks.adminUser)).response;
+    expect(legacy.statusCode, legacy.body).toBe(200);
+    const { command, pendingMissileAttack } = legacy.json();
+    expect(pendingMissileAttack.weaponModeSourceMetadata).toMatchObject({
+      row: expect.any(Number),
+      sheet: expect.any(String),
+    });
+    expect(pendingMissileAttack).toEqual(command.facts.pendingMissileAttack);
+
+    const active = (
+      await runTier2Case(missileRollAttackCase, mocks.adminUser, ACTIVE_RESPONSE_HEADERS)
+    ).response;
+    expect(active.statusCode, active.body).toBe(200);
+    const activePending = active.json().mutationPresentation.pendingMissileAttack;
+    expect(activePending.weaponModeSourceMetadata).toEqual(
+      pendingMissileAttack.weaponModeSourceMetadata,
+    );
+    expect(Object.keys(activePending).sort()).toEqual(Object.keys(pendingMissileAttack).sort());
   });
 
   describeTier2Case({
@@ -33304,9 +33333,12 @@ describe("#517 privacy hardening Tier 3", () => {
    * Proof obligation 2, at the route: Tier 2's floor QA added a field to the movement intent schema
    * and one to the initiative result schema, populated both, and saw them in a player's
    * `GET /encounters/:encounterId`. Repeated here exactly: the GM's response carries both, the
-   * viewer's projection without the allow-list carries both, and no player response does.
+   * viewer's projection without the allow-list carries both, and the player's response, legacy and
+   * `active-v1`, carries neither. This read is the whole of the proof. The combat history still
+   * gives the declaring player a field added to the movement intent, through its open event fact
+   * buckets (privacy Tier 4, #528).
    */
-  it("does not deliver fields added to the movement intent and initiative result schemas", async () => {
+  it("does not deliver fields added to the movement intent and initiative result schemas in a player's encounter read", async () => {
     const withAddedFields = (state: CombatRoundState): CombatRoundState => ({
       ...state,
       participants: state.participants.map((participant) => ({

@@ -341,7 +341,9 @@ describe("#517 player-facing encounter: whole-path", () => {
 });
 
 describe("#517 Tier 2 floor QA's experiment: fields added to the movement intent and initiative result", () => {
-  it("reached a player through the Tier 2 types and reaches none now", () => {
+  // This proves the player-facing round-state participant only. The combat history's open event
+  // fact buckets still give the declaring player a field added to the movement intent (Tier 4, #528).
+  it("were carried by the Tier 2 round-state participant and are not carried by the Tier 3 one", () => {
     const restoreMovement = addFieldInPlace(
       (movementIntentSchema as unknown as z.ZodEffects<z.AnyZodObject>).innerType(),
       "qaMoveSecret",

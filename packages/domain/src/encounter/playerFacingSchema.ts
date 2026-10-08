@@ -3,11 +3,13 @@ import { z } from "zod";
 /**
  * The construction kit for player-facing schemas, Forgejo issue #517 (privacy hardening, Tier 3).
  *
- * A player-facing schema names every field a player receives, at every level. Tier 1 and Tier 2
- * enumerated the top levels and reused the internal schema of each nested structure, so a field added
- * to such a nested schema reached players (Tier 2 floor QA, F1). Here a player-facing object reuses an
- * internal field schema only when that field cannot hold an object, so it cannot gain a field; a
- * field that can is given its own player-facing schema, enumerated the same way, all the way down.
+ * A player-facing schema names every field a player receives through it, at every level; it says
+ * nothing about player output built without one, such as the combat history's open event fact
+ * buckets (privacy Tier 4, #528). Tier 1 and Tier 2 enumerated the top levels and reused the
+ * internal schema of each nested structure, so a field added to such a nested schema reached players
+ * (Tier 2 floor QA, F1). Here a player-facing object reuses an internal field schema only when that
+ * field cannot hold an object, so it cannot gain a field; a field that can is given its own
+ * player-facing schema, enumerated the same way, all the way down.
  *
  * Both halves are enforced, not documented:
  *

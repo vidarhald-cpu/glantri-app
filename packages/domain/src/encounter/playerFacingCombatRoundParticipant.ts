@@ -51,10 +51,22 @@ import {
  * results, attack opportunities, the Combat Experience result, the defensive penalties, the feint,
  * intent, movement intent and secondary-action context, the initiatives and the Combat Experience
  * schedule — is a player-facing schema naming its own fields, checked when the module loads. A
- * field added to the stored participant, its declaration or any structure below them therefore
- * changes nothing a player sees. Attack results and the Combat Experience result never carry
- * `rolledByUserId`, attack opportunities never carry `cancelledByUserId`. Combat and phase contexts
- * are `playerFacingCombatContextSchema`, without the canonical lifecycle and correction history (R1).
+ * field added to the stored participant, its declaration or any structure below them is therefore
+ * not carried by these types, and does not reach a player through the player-facing round state
+ * they make up (`playerFacingCombatRoundState`): the `combatRoundState` of a player's encounter
+ * response and the `activeCombatState` of a player's `active-v1` response.
+ *
+ * That is the whole of the claim. Player output built from the same stored structures without
+ * these types is not covered by it. The combat history's event fact buckets are open: a
+ * declaration event's `involvedOutcome` copies the declaration's movement intent, phase contexts
+ * and secondary-action context whole and gives them to the declaring player, a field added to
+ * them included. Those buckets are privacy Tier 4's (#528).
+ *
+ * In these types, attack results and the Combat Experience result never carry `rolledByUserId`,
+ * and attack opportunities never carry `cancelledByUserId`. Combat and phase contexts are
+ * `playerFacingCombatContextSchema`, so these types carry them without the canonical lifecycle and
+ * correction history (R1); the combat history's `involvedOutcome` can still give both to the
+ * declaring player (#528).
  *
  * Every player-facing object is branded, so a stored value is not assignable to these types at any
  * level.

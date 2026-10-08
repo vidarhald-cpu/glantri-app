@@ -59,10 +59,14 @@ import {
  * participants against. The type is branded so a stored participant is not assignable to it.
  */
 /**
- * A combat-context modifier entry and the combat context as a player receives them. Both are built
- * with the Tier 3 construction kit (#517, `playerFacingSchema.ts`) because the round state carries
- * them in declarations: every field is a leaf reused from the canonical schema or a player-facing
- * schema, so a field added to the canonical entry or context reaches no player.
+ * A combat-context modifier entry and the combat context as the player-facing types carry them:
+ * the player-facing Scenario participant's combat state and the round state's declarations. Both
+ * are built with the Tier 3 construction kit (#517, `playerFacingSchema.ts`) because the round
+ * state carries them in declarations: every field is a leaf reused from the canonical schema or a
+ * player-facing schema, so a field added to the canonical entry or context is not carried by them.
+ * Player output that does not use them is not covered: for example, a declaration event's open
+ * `involvedOutcome` in the combat history gives the declaring player its phase contexts whole, a
+ * field added to an entry or a context included (privacy Tier 4, #528).
  */
 export const playerFacingCombatModifierEntrySchema = playerFacingObject(
   "PlayerFacingCombatModifierEntry",
