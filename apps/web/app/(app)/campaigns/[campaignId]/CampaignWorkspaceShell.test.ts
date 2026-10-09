@@ -57,8 +57,8 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     const source = readSource();
 
     expect(source).toContain('aria-label="Current Scenario and Encounter"');
-    expect(source).toContain("Choose the current Scenario you want to continue.");
-    expect(source).toContain("Continue the current Scenario and its active Encounters.");
+    expect(source).not.toContain("Choose the current Scenario you want to continue.");
+    expect(source).not.toContain("Continue the current Scenario and its active Encounters.");
     expect(source).toContain("Open Scenario");
     expect(source).toContain("Open Encounter");
     expect(source).toContain("Open Combat");

@@ -25,7 +25,7 @@ export default function WorkspaceParticipantInspectionHeader({
   onSelectParticipantId,
   screenName,
   selectedCandidate,
-  selectorLabel = "Select character to inspect",
+  selectorLabel = "Character",
 }: WorkspaceParticipantInspectionHeaderProps) {
   const selectedIndex = selectedCandidate
     ? candidates.findIndex((candidate) => candidate.id === selectedCandidate.id)
