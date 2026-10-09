@@ -24,15 +24,6 @@ const peopleFilters = [
   { id: "npcs", label: "NPCs" },
 ] as const;
 
-const cardStyle = {
-  background: "#fff",
-  border: "1px solid #ddd7c9",
-  borderRadius: 10,
-  display: "grid",
-  gap: "0.35rem",
-  padding: "0.75rem",
-} as const;
-
 /**
  * The player Situation body: three narrow People/Items/Artifacts selector
  * rails, a dominant Inspector, and full-width Activity below (Player Play V1
@@ -127,11 +118,15 @@ export function ScenarioSituationView({
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       {session.encounters.length ? (
-        <section aria-labelledby="situation-encounters-heading" style={cardStyle}>
-          <h2 id="situation-encounters-heading" style={{ fontSize: "1rem", margin: 0 }}>
+        <section aria-labelledby="situation-encounters-heading" className="glantri-panel">
+          <h2
+            className="glantri-section-heading"
+            id="situation-encounters-heading"
+            style={{ margin: 0 }}
+          >
             Encounters
           </h2>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          <div className="glantri-actions">
             {session.encounters.map((encounter) => (
               <span key={encounter.id} style={{ display: "flex", gap: "0.35rem" }}>
                 <span>{encounter.title}</span>
@@ -158,11 +153,17 @@ export function ScenarioSituationView({
           </div>
         </section>
       ) : (
-        <section aria-labelledby="situation-encounters-heading" style={cardStyle}>
-          <h2 id="situation-encounters-heading" style={{ fontSize: "1rem", margin: 0 }}>
+        <section aria-labelledby="situation-encounters-heading" className="glantri-panel">
+          <h2
+            className="glantri-section-heading"
+            id="situation-encounters-heading"
+            style={{ margin: 0 }}
+          >
             Encounters
           </h2>
-          <p style={{ margin: 0 }}>No Encounter is available to you right now.</p>
+          <p className="glantri-helper-text" style={{ margin: 0 }}>
+            No Encounter is available to you right now.
+          </p>
         </section>
       )}
 
@@ -174,7 +175,7 @@ export function ScenarioSituationView({
           gridTemplateColumns: "minmax(13rem, 17rem) minmax(0, 3fr)",
         }}
       >
-        <div style={{ display: "grid", gap: "0.75rem" }}>
+        <div style={{ display: "grid", gap: "var(--glantri-space-md)" }}>
           <SituationRail<PeopleFilterId>
             emptyMessage="No visible participants are present."
             filters={{
