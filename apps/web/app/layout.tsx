@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "@/styles/glantri-baseline.css";
 import { SessionUserProvider } from "@/lib/auth/SessionUserContext";
 import { AppHeader } from "@/lib/layout/AppHeader";
 
 export const metadata: Metadata = {
   title: "Glantri",
-  description: "Web-first RPG app scaffold with offline-first architecture"
+  description: "Web-first RPG app scaffold with offline-first architecture",
 };
 
 type RootLayoutProps = {
