@@ -26,16 +26,8 @@ import {
   saveCampaignMap,
 } from "@/lib/api/mapClient";
 
-const panelStyle = {
-  border: "1px solid #d9ddd8",
-  borderRadius: 12,
-  display: "grid",
-  gap: "0.75rem",
-  minWidth: 0,
-  padding: "1rem",
-} as const;
-
-const fieldStyle = { display: "grid", gap: "0.25rem", minWidth: 0 } as const;
+/** Grid children must be allowed to shrink; no Alpha primitive covers this. */
+const minWidthZero = { minWidth: 0 } as const;
 
 function roleLabel(role: CampaignMapRole): string {
   if (role === "world_region") return "World or region";
@@ -114,7 +106,11 @@ function MapCanvas({
   const aspectRatio = naturalAspectRatio ?? DEFAULT_CANVAS_ASPECT_RATIO;
 
   return (
-    <section style={{ ...panelStyle, padding: "0.75rem" }} aria-label={`${map.name} Map canvas`}>
+    <section
+      aria-label={`${map.name} Map canvas`}
+      className="glantri-panel"
+      style={{ ...minWidthZero, padding: "var(--glantri-space-md)" }}
+    >
       <div
         onClick={(event) => {
           if (!isGameMaster || !onReposition || !selectedMarkerId) return;
@@ -375,12 +371,12 @@ export function MapWorkspace({
 
   return (
     <section style={{ display: "grid", gap: "1rem", minWidth: 0 }}>
-      <header style={{ ...panelStyle, background: "#f6f5ef" }}>
+      <header className="glantri-panel glantri-panel--muted" style={minWidthZero}>
         <h1 style={{ margin: 0 }}>Maps</h1>
-        <p style={{ margin: 0 }}>
+        <p className="glantri-helper-text" style={{ margin: 0 }}>
           Explore places, organize spatial notes and follow links between Maps.
         </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+        <div className="glantri-actions">
           {maps.map((map) => (
             <button
               aria-pressed={map.id === selectedMapId}
@@ -428,9 +424,10 @@ export function MapWorkspace({
                 setBusy(false);
               }
             }}
-            style={{ alignItems: "end", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
+            className="glantri-actions"
+            style={{ alignItems: "end" }}
           >
-            <label style={{ ...fieldStyle, flex: "1 1 15rem" }}>
+            <label className="glantri-field-label" style={{ ...minWidthZero, flex: "1 1 15rem" }}>
               New Map name
               <input
                 disabled={busy}
@@ -447,7 +444,11 @@ export function MapWorkspace({
       </header>
 
       {error ? (
-        <section role="alert" style={{ ...panelStyle, borderColor: "#a74343" }}>
+        <section
+          className="glantri-panel"
+          role="alert"
+          style={{ ...minWidthZero, borderColor: "#a74343" }}
+        >
           {error}
           {draft && loadedMap ? (
             <button onClick={() => void openMap(loadedMap.id)} type="button">
@@ -462,19 +463,20 @@ export function MapWorkspace({
       {!loading && displayMap ? (
         <>
           <section
+            className="glantri-panel"
             style={{
-              ...panelStyle,
+              ...minWidthZero,
               gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 16rem), 1fr))",
             }}
           >
-            <div style={fieldStyle}>
+            <div className="glantri-field-label" style={minWidthZero}>
               <strong>{displayMap.name}</strong>
               <span>{roleLabel(displayMap.role)}</span>
               <span>{displayMap.description || "No description yet."}</span>
             </div>
             {draft ? (
               <>
-                <label style={fieldStyle}>
+                <label className="glantri-field-label" style={minWidthZero}>
                   Map name
                   <input
                     maxLength={160}
@@ -482,7 +484,7 @@ export function MapWorkspace({
                     value={draft.name}
                   />
                 </label>
-                <label style={fieldStyle}>
+                <label className="glantri-field-label" style={minWidthZero}>
                   Role
                   <select
                     onChange={(event) =>
@@ -495,7 +497,7 @@ export function MapWorkspace({
                     <option value="tactical">Tactical reference</option>
                   </select>
                 </label>
-                <label style={fieldStyle}>
+                <label className="glantri-field-label" style={minWidthZero}>
                   Player access
                   <select
                     onChange={(event) =>
@@ -507,7 +509,7 @@ export function MapWorkspace({
                     <option value="players">Shared with players</option>
                   </select>
                 </label>
-                <label style={fieldStyle}>
+                <label className="glantri-field-label" style={minWidthZero}>
                   Background
                   <select
                     onChange={(event) =>
@@ -523,7 +525,10 @@ export function MapWorkspace({
                     ))}
                   </select>
                 </label>
-                <label style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <label
+                  className="glantri-field-label"
+                  style={{ ...minWidthZero, gridColumn: "1 / -1" }}
+                >
                   Description
                   <textarea
                     maxLength={4000}
@@ -567,11 +572,17 @@ export function MapWorkspace({
                 gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 20rem), 1fr))",
               }}
             >
-              <section style={panelStyle}>
-                <h2 style={{ margin: 0 }}>Layers</h2>
+              <section className="glantri-panel" style={minWidthZero}>
+                <h2 className="glantri-section-heading" style={{ margin: 0 }}>
+                  Layers
+                </h2>
                 {draft.layers.map((layer, index) => (
-                  <div key={layer.id} style={{ ...panelStyle, padding: "0.75rem" }}>
-                    <label style={fieldStyle}>
+                  <div
+                    className="glantri-panel glantri-panel--muted glantri-panel--inner"
+                    key={layer.id}
+                    style={minWidthZero}
+                  >
+                    <label className="glantri-field-label" style={minWidthZero}>
                       Layer name
                       <input
                         maxLength={160}
@@ -588,7 +599,7 @@ export function MapWorkspace({
                         value={layer.name}
                       />
                     </label>
-                    <label style={fieldStyle}>
+                    <label className="glantri-field-label" style={minWidthZero}>
                       Layer visibility
                       <select
                         onChange={(event) =>
@@ -610,7 +621,7 @@ export function MapWorkspace({
                         <option value="player_visible">Player visible</option>
                       </select>
                     </label>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                    <div className="glantri-actions">
                       <button
                         disabled={index === 0}
                         onClick={() => {
@@ -679,8 +690,10 @@ export function MapWorkspace({
                 </button>
               </section>
 
-              <section style={panelStyle}>
-                <h2 style={{ margin: 0 }}>Markers</h2>
+              <section className="glantri-panel" style={minWidthZero}>
+                <h2 className="glantri-section-heading" style={{ margin: 0 }}>
+                  Markers
+                </h2>
                 {draft.layers.length === 0 ? (
                   <p>Add a Layer before placing markers.</p>
                 ) : (
@@ -766,8 +779,10 @@ export function MapWorkspace({
               </section>
             </section>
           ) : (
-            <section style={panelStyle}>
-              <h2 style={{ margin: 0 }}>Visible places</h2>
+            <section className="glantri-panel" style={minWidthZero}>
+              <h2 className="glantri-section-heading" style={{ margin: 0 }}>
+                Visible places
+              </h2>
               {displayMap.layers.reduce((count, layer) => count + layer.markers.length, 0) === 0 &&
               (!("revealedMarkers" in displayMap) || displayMap.revealedMarkers.length === 0) ? (
                 <p>No places have been revealed on this Map.</p>
@@ -837,7 +852,7 @@ function MarkerEditor({
 
   return (
     <div style={{ display: "grid", gap: "0.75rem" }}>
-      <label style={fieldStyle}>
+      <label className="glantri-field-label" style={minWidthZero}>
         Marker label
         <input
           maxLength={160}
@@ -845,7 +860,7 @@ function MarkerEditor({
           value={marker.label}
         />
       </label>
-      <label style={fieldStyle}>
+      <label className="glantri-field-label" style={minWidthZero}>
         Kind
         <select
           onChange={(event) => setKind(event.target.value as CampaignMapMarkerKind)}
@@ -856,7 +871,7 @@ function MarkerEditor({
           <option value="map_link">Map link</option>
         </select>
       </label>
-      <label style={fieldStyle}>
+      <label className="glantri-field-label" style={minWidthZero}>
         Layer
         <select onChange={(event) => onMoveLayer(event.target.value)} value={selectedLayerId}>
           {draft.layers.map((layer) => (
@@ -866,7 +881,7 @@ function MarkerEditor({
           ))}
         </select>
       </label>
-      <label style={fieldStyle}>
+      <label className="glantri-field-label" style={minWidthZero}>
         Visibility
         <select
           onChange={(event) =>
@@ -879,7 +894,7 @@ function MarkerEditor({
           <option value="player_visible">Player visible</option>
         </select>
       </label>
-      <label style={fieldStyle}>
+      <label className="glantri-field-label" style={minWidthZero}>
         Symbol or short mark
         <input
           maxLength={40}
@@ -887,7 +902,7 @@ function MarkerEditor({
           value={marker.presentation}
         />
       </label>
-      <label style={fieldStyle}>
+      <label className="glantri-field-label" style={minWidthZero}>
         Description
         <textarea
           maxLength={4000}
@@ -897,7 +912,7 @@ function MarkerEditor({
         />
       </label>
       {marker.kind === "entity_reference" ? (
-        <label style={fieldStyle}>
+        <label className="glantri-field-label" style={minWidthZero}>
           Character or creature
           <select
             onChange={(event) => {
@@ -927,7 +942,7 @@ function MarkerEditor({
       ) : null}
       {marker.kind === "map_link" ? (
         <>
-          <label style={fieldStyle}>
+          <label className="glantri-field-label" style={minWidthZero}>
             Destination Map
             <select
               onChange={(event) =>
@@ -955,7 +970,7 @@ function MarkerEditor({
         </>
       ) : null}
       <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "1fr 1fr" }}>
-        <label style={fieldStyle}>
+        <label className="glantri-field-label" style={minWidthZero}>
           Horizontal position
           <input
             max={1}
@@ -966,7 +981,7 @@ function MarkerEditor({
             value={marker.x}
           />
         </label>
-        <label style={fieldStyle}>
+        <label className="glantri-field-label" style={minWidthZero}>
           Vertical position
           <input
             max={1}
@@ -978,7 +993,7 @@ function MarkerEditor({
           />
         </label>
       </div>
-      <div aria-label="Move marker" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+      <div aria-label="Move marker" className="glantri-actions">
         <button
           onClick={() => onChange({ ...marker, x: Math.max(0, marker.x - 0.05) })}
           type="button"
