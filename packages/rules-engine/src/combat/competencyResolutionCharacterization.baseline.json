@@ -1,0 +1,429 @@
+{
+  "virtual-weapon-template-kick|mode-1": {
+    "dmb": 11,
+    "initiative": 0,
+    "ob": 27
+  },
+  "virtual-weapon-template-kick|template-initiative": 0,
+  "virtual-weapon-template-punch|mode-1": {
+    "dmb": 7,
+    "initiative": 0,
+    "ob": 30
+  },
+  "virtual-weapon-template-punch|template-initiative": 0,
+  "weapon-template-1-h-javelin|mode-1": {
+    "dmb": 5,
+    "initiative": 9,
+    "ob": 27
+  },
+  "weapon-template-1-h-javelin|mode-2": {
+    "dmb": 7,
+    "initiative": 9,
+    "ob": 23
+  },
+  "weapon-template-1-h-javelin|mode-3": {
+    "dmb": 7,
+    "initiative": 2,
+    "ob": 33
+  },
+  "weapon-template-1-h-javelin|template-initiative": 9,
+  "weapon-template-1-h-spear|mode-1": {
+    "dmb": 6,
+    "initiative": 9,
+    "ob": 27
+  },
+  "weapon-template-1-h-spear|mode-2": {
+    "dmb": 7,
+    "initiative": 9,
+    "ob": 23
+  },
+  "weapon-template-1-h-spear|template-initiative": 9,
+  "weapon-template-2-h-javelin|mode-1": {
+    "dmb": 8,
+    "initiative": 9,
+    "ob": 27
+  },
+  "weapon-template-2-h-javelin|mode-2": {
+    "dmb": 9,
+    "initiative": 9,
+    "ob": 23
+  },
+  "weapon-template-2-h-javelin|template-initiative": 9,
+  "weapon-template-ballista|mode-1": {
+    "dmb": "4d8+1",
+    "initiative": -1,
+    "ob": 17
+  },
+  "weapon-template-ballista|template-initiative": -1,
+  "weapon-template-battle-axe|mode-1": {
+    "dmb": 15,
+    "initiative": 4,
+    "ob": 19
+  },
+  "weapon-template-battle-axe|template-initiative": 4,
+  "weapon-template-bow|mode-1": {
+    "dmb": "2d6",
+    "initiative": 2,
+    "ob": 14
+  },
+  "weapon-template-bow|template-initiative": 2,
+  "weapon-template-broad-sword|mode-1": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-broad-sword|mode-2": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-broad-sword|template-initiative": 4,
+  "weapon-template-club|mode-1": {
+    "dmb": 7,
+    "initiative": 3,
+    "ob": 13
+  },
+  "weapon-template-club|template-initiative": 3,
+  "weapon-template-composite-bow|mode-1": {
+    "dmb": "2d6+4",
+    "initiative": 1,
+    "ob": 13
+  },
+  "weapon-template-composite-bow|template-initiative": 1,
+  "weapon-template-crossbow|mode-1": {
+    "dmb": "2d8+1",
+    "initiative": 5,
+    "ob": 17
+  },
+  "weapon-template-crossbow|template-initiative": 5,
+  "weapon-template-cutlass|mode-1": {
+    "dmb": 11,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-cutlass|mode-2": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 12
+  },
+  "weapon-template-cutlass|template-initiative": 4,
+  "weapon-template-dagger|mode-1": {
+    "dmb": 4,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-dagger|mode-2": {
+    "dmb": 3,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-dagger|mode-3": {
+    "dmb": 4,
+    "initiative": 3,
+    "ob": 30
+  },
+  "weapon-template-dagger|template-initiative": 4,
+  "weapon-template-dirk|mode-1": {
+    "dmb": 6,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-dirk|mode-2": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-dirk|template-initiative": 4,
+  "weapon-template-falchion|mode-1": {
+    "dmb": 7,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-falchion|mode-2": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-falchion|template-initiative": 4,
+  "weapon-template-fencing-sword|mode-1": {
+    "dmb": 7,
+    "initiative": 6,
+    "ob": 20
+  },
+  "weapon-template-fencing-sword|mode-2": {
+    "dmb": 5,
+    "initiative": 6,
+    "ob": 20
+  },
+  "weapon-template-fencing-sword|template-initiative": 6,
+  "weapon-template-footmans-pick|mode-1": {
+    "dmb": 12,
+    "initiative": 2,
+    "ob": 13
+  },
+  "weapon-template-footmans-pick|template-initiative": 2,
+  "weapon-template-great-sword|mode-1": {
+    "dmb": 13,
+    "initiative": 6,
+    "ob": 20
+  },
+  "weapon-template-great-sword|mode-2": {
+    "dmb": 12,
+    "initiative": 6,
+    "ob": 17
+  },
+  "weapon-template-great-sword|template-initiative": 6,
+  "weapon-template-halberd|mode-1": {
+    "dmb": 15,
+    "initiative": 6,
+    "ob": 23
+  },
+  "weapon-template-halberd|mode-2": {
+    "dmb": 11,
+    "initiative": 6,
+    "ob": 25
+  },
+  "weapon-template-halberd|template-initiative": 6,
+  "weapon-template-hand-axe|mode-1": {
+    "dmb": 11,
+    "initiative": 2,
+    "ob": 14
+  },
+  "weapon-template-hand-axe|mode-3": {
+    "dmb": 10,
+    "initiative": 0,
+    "ob": 25
+  },
+  "weapon-template-hand-axe|template-initiative": 2,
+  "weapon-template-hand-crossbow|mode-1": {
+    "dmb": "1d8",
+    "initiative": 6,
+    "ob": 16
+  },
+  "weapon-template-hand-crossbow|template-initiative": 6,
+  "weapon-template-hatchet|mode-1": {
+    "dmb": 7,
+    "initiative": 2,
+    "ob": 14
+  },
+  "weapon-template-hatchet|mode-3": {
+    "dmb": 7,
+    "initiative": 3,
+    "ob": 28
+  },
+  "weapon-template-hatchet|template-initiative": 2,
+  "weapon-template-heavy-crossbow|mode-1": {
+    "dmb": "3d8+1",
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-heavy-crossbow|template-initiative": 4,
+  "weapon-template-heavy-mace|mode-1": {
+    "dmb": 12,
+    "initiative": 2,
+    "ob": 13
+  },
+  "weapon-template-heavy-mace|template-initiative": 2,
+  "weapon-template-horsemans-pick|mode-1": {
+    "dmb": 9,
+    "initiative": 2,
+    "ob": 13
+  },
+  "weapon-template-horsemans-pick|template-initiative": 2,
+  "weapon-template-knife|mode-1": {
+    "dmb": 3,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-knife|mode-2": {
+    "dmb": 4,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-knife|mode-3": {
+    "dmb": 3,
+    "initiative": 3,
+    "ob": 30
+  },
+  "weapon-template-knife|template-initiative": 4,
+  "weapon-template-lance|mode-1": {
+    "dmb": 19,
+    "initiative": 6,
+    "ob": 20
+  },
+  "weapon-template-lance|mode-2": {
+    "dmb": 12,
+    "initiative": 6,
+    "ob": 20
+  },
+  "weapon-template-lance|template-initiative": 6,
+  "weapon-template-long-bow|mode-1": {
+    "dmb": "3d6+4",
+    "initiative": -1,
+    "ob": 23
+  },
+  "weapon-template-long-bow|template-initiative": -1,
+  "weapon-template-longsword|mode-1": {
+    "dmb": 9,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-longsword|mode-2": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-longsword|template-initiative": 4,
+  "weapon-template-mace|mode-1": {
+    "dmb": 9,
+    "initiative": 3,
+    "ob": 13
+  },
+  "weapon-template-mace|template-initiative": 3,
+  "weapon-template-main-gauche|mode-1": {
+    "dmb": 5,
+    "initiative": 5,
+    "ob": 18
+  },
+  "weapon-template-main-gauche|mode-2": {
+    "dmb": 4,
+    "initiative": 5,
+    "ob": 18
+  },
+  "weapon-template-main-gauche|template-initiative": 5,
+  "weapon-template-maul|mode-1": {
+    "dmb": 17,
+    "initiative": 2,
+    "ob": 17
+  },
+  "weapon-template-maul|template-initiative": 2,
+  "weapon-template-mini-crossbow|mode-1": {
+    "dmb": "1d4",
+    "initiative": 1,
+    "ob": 13
+  },
+  "weapon-template-mini-crossbow|template-initiative": 1,
+  "weapon-template-morning-star|mode-1": {
+    "dmb": 12,
+    "initiative": 2,
+    "ob": 13
+  },
+  "weapon-template-morning-star|template-initiative": 2,
+  "weapon-template-pole-axe|mode-1": {
+    "dmb": 16,
+    "initiative": 6,
+    "ob": 23
+  },
+  "weapon-template-pole-axe|template-initiative": 6,
+  "weapon-template-quarterstaff|mode-1": {
+    "dmb": 6,
+    "initiative": 10,
+    "ob": 27
+  },
+  "weapon-template-quarterstaff|mode-2": {
+    "dmb": 5,
+    "initiative": 10,
+    "ob": 27
+  },
+  "weapon-template-quarterstaff|template-initiative": 10,
+  "weapon-template-rapier|mode-1": {
+    "dmb": 5,
+    "initiative": 7,
+    "ob": 20
+  },
+  "weapon-template-rapier|mode-2": {
+    "dmb": 3,
+    "initiative": 7,
+    "ob": 20
+  },
+  "weapon-template-rapier|template-initiative": 7,
+  "weapon-template-sabre|mode-1": {
+    "dmb": 7,
+    "initiative": 6,
+    "ob": 20
+  },
+  "weapon-template-sabre|mode-2": {
+    "dmb": 8,
+    "initiative": 6,
+    "ob": 17
+  },
+  "weapon-template-sabre|template-initiative": 6,
+  "weapon-template-scimitar|mode-1": {
+    "dmb": 7,
+    "initiative": 5,
+    "ob": 17
+  },
+  "weapon-template-scimitar|mode-2": {
+    "dmb": 8,
+    "initiative": 5,
+    "ob": 14
+  },
+  "weapon-template-scimitar|template-initiative": 5,
+  "weapon-template-short-sword|mode-1": {
+    "dmb": 6,
+    "initiative": 4,
+    "ob": 16
+  },
+  "weapon-template-short-sword|mode-2": {
+    "dmb": 8,
+    "initiative": 4,
+    "ob": 14
+  },
+  "weapon-template-short-sword|template-initiative": 4,
+  "weapon-template-shuriken|mode-1": {
+    "dmb": 5,
+    "initiative": 4,
+    "ob": 28
+  },
+  "weapon-template-shuriken|template-initiative": 1,
+  "weapon-template-sling|mode-1": {
+    "dmb": "2d6",
+    "initiative": -1,
+    "ob": 25
+  },
+  "weapon-template-sling|template-initiative": -1,
+  "weapon-template-spear|mode-1": {
+    "dmb": 10,
+    "initiative": 9,
+    "ob": 27
+  },
+  "weapon-template-spear|mode-2": {
+    "dmb": 12,
+    "initiative": 9,
+    "ob": 23
+  },
+  "weapon-template-spear|mode-3": {
+    "dmb": 10,
+    "initiative": 1,
+    "ob": 30
+  },
+  "weapon-template-spear|template-initiative": 9,
+  "weapon-template-swordbreaker|mode-1": {
+    "dmb": 5,
+    "initiative": 5,
+    "ob": 18
+  },
+  "weapon-template-swordbreaker|mode-2": {
+    "dmb": 4,
+    "initiative": 5,
+    "ob": 18
+  },
+  "weapon-template-swordbreaker|template-initiative": 5,
+  "weapon-template-t-th-dagger|mode-1": {
+    "dmb": 4,
+    "initiative": 4,
+    "ob": 33
+  },
+  "weapon-template-t-th-dagger|template-initiative": 1,
+  "weapon-template-wood-axe|mode-1": {
+    "dmb": 9,
+    "initiative": 2,
+    "ob": 14
+  },
+  "weapon-template-wood-axe|mode-3": {
+    "dmb": 8,
+    "initiative": 2,
+    "ob": 28
+  },
+  "weapon-template-wood-axe|template-initiative": 2
+}

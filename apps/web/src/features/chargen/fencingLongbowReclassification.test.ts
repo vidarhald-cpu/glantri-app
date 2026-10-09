@@ -25,9 +25,9 @@ import {
   buildCombatStateCharacterInputs,
   createChargenProgression,
   finalizeChargenDraft,
-  getWeaponSkillXp,
+  resolveAttackModeCompetency,
 } from "@glantri/rules-engine";
-import weaponTemplates from "@glantri/content/data/weaponTemplates.json";
+import { weaponTemplates as liveWeaponTemplates } from "@glantri/content/equipment";
 import { characterPayload } from "../../../e2e/character-fixture";
 import {
   buildTargetRuntimeContent,
@@ -163,15 +163,15 @@ describe("#389 — Fencing and Longbow are base combat Skills", () => {
     expect(draftView.specializations.some((row) => row.specializationId === "longbow")).toBe(false);
   });
 
-  it("resolves combatSkillXpByName for Fencing and Longbow and changes no ordinary weapon template", () => {
-    const templates = weaponTemplates as unknown as {
+  it("resolves Fencing and Longbow through each mode's competencyRef and changes no ordinary weapon template", () => {
+    /* Layer: the LIVE `weaponTemplates` export of `@glantri/content/equipment` (competencyRef
+       authored by #512 P1.2), not the imported `weaponTemplates.json`, which carries no refs. */
+    const templates = liveWeaponTemplates as unknown as {
+      attackModes?: { attackType?: string | null; competencyRef?: string | null }[];
       id: string;
       name: string;
       weaponSkill?: string | null;
     }[];
-    /* `combatSkillXpByName` is built only from the sheet's draft-view Skills and the weapon's
-       `weaponSkill` is looked up by DISPLAY NAME, so activation reaches exactly the templates already
-       authored "Fencing" or "Longbow" and nothing else. */
     const authored = templates.filter((row) =>
       ["Fencing", "Longbow"].includes(row.weaponSkill ?? ""),
     );
@@ -184,24 +184,29 @@ describe("#389 — Fencing and Longbow are base combat Skills", () => {
       "Longbow",
     ]);
 
+    /* `skillId` is the catalogue SkillDefinition id, the key a mode's competencyRef resolves by. */
     const characterInputs = buildCombatStateCharacterInputs({
       adjustedStats: { con: 10, dex: 10, siz: 10, str: 10 },
       draftView: {
         skills: [
-          { name: "Fencing", effectiveSkillNumber: 7 },
-          { name: "Longbow", effectiveSkillNumber: 5 },
-          { name: "1-h edged", effectiveSkillNumber: 3 },
-          { name: "Bow", effectiveSkillNumber: 4 },
+          { effectiveSkillNumber: 7, name: "Fencing", skillId: "fencing" },
+          { effectiveSkillNumber: 5, name: "Longbow", skillId: "longbow" },
+          { effectiveSkillNumber: 3, name: "1-h edged", skillId: "one_handed_edged" },
+          { effectiveSkillNumber: 4, name: "Bow", skillId: "bow" },
         ],
       },
     } as unknown as Parameters<typeof buildCombatStateCharacterInputs>[0]);
 
-    expect(characterInputs.combatSkillXpByName["Fencing"]).toBe(7);
-    expect(characterInputs.combatSkillXpByName["Longbow"]).toBe(5);
+    expect(characterInputs.combatSkillXpByCompetencyId["fencing"]).toBe(7);
+    expect(characterInputs.combatSkillXpByCompetencyId["longbow"]).toBe(5);
     for (const template of authored)
-      expect(getWeaponSkillXp(template as never, characterInputs)).toBe(
-        template.weaponSkill === "Fencing" ? 7 : 5,
-      );
+      for (const mode of template.attackModes ?? [])
+        expect(
+          resolveAttackModeCompetency({ attackMode: mode as never, characterInputs }),
+        ).toMatchObject({
+          skillXp: template.weaponSkill === "Fencing" ? 7 : 5,
+          status: "resolved",
+        });
 
     // Ordinary one-handed edged and bow templates keep resolving to their own competence.
     for (const [weaponSkill, expected] of [
@@ -211,7 +216,13 @@ describe("#389 — Fencing and Longbow are base combat Skills", () => {
       const ordinary = templates.filter((row) => row.weaponSkill === weaponSkill);
       expect(ordinary.length).toBeGreaterThan(0);
       for (const template of ordinary)
-        expect(getWeaponSkillXp(template as never, characterInputs)).toBe(expected);
+        /* A thrown mode attacks with its own competency (Throwing), not the weapon's. */
+        for (const mode of (template.attackModes ?? []).filter(
+          (candidate) => candidate.attackType !== "thrown",
+        ))
+          expect(
+            resolveAttackModeCompetency({ attackMode: mode as never, characterInputs }),
+          ).toMatchObject({ skillXp: expected, status: "resolved" });
     }
   });
 

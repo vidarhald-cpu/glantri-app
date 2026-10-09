@@ -1,4 +1,7 @@
-import type { WeaponTemplate } from "@glantri/domain";
+import { parseCompetencyId, type WeaponTemplate } from "@glantri/domain";
+
+/** The workbook rows name `Brawling`; its catalogue competency id is `brawling`. */
+const brawlingCompetencyId = parseCompetencyId("brawling");
 
 export const punchTemplate: WeaponTemplate = {
   id: "virtual-weapon-template-punch",
@@ -18,6 +21,7 @@ export const punchTemplate: WeaponTemplate = {
   attackModes: [
     {
       id: "mode-1",
+      competencyRef: brawlingCompetencyId,
       label: "Strike",
       damageClass: "blunt",
       ob: 1,
@@ -102,6 +106,7 @@ export const kickTemplate: WeaponTemplate = {
   attackModes: [
     {
       id: "mode-1",
+      competencyRef: brawlingCompetencyId,
       label: "Strike",
       damageClass: "blunt",
       ob: 0,

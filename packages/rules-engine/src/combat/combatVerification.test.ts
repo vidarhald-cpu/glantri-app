@@ -4,7 +4,7 @@ import type {
   CharacterLoadout,
   EquipmentItem,
   EquipmentTemplate,
-  StorageLocation
+  StorageLocation,
 } from "@glantri/domain";
 import { equipmentTemplates } from "@glantri/content/equipment";
 import { defaultCombatAllocationState } from "./combatAllocationState";
@@ -59,7 +59,7 @@ const baseLocations: StorageLocation[] = [
     parentLocationId: null,
     isMobile: true,
     isAccessibleInEncounter: true,
-    notes: null
+    notes: null,
   },
   {
     id: `${verificationCharacterId}:loc-person`,
@@ -70,7 +70,7 @@ const baseLocations: StorageLocation[] = [
     parentLocationId: null,
     isMobile: true,
     isAccessibleInEncounter: true,
-    notes: null
+    notes: null,
   },
   {
     id: `${verificationCharacterId}:loc-backpack`,
@@ -81,7 +81,7 @@ const baseLocations: StorageLocation[] = [
     parentLocationId: null,
     isMobile: true,
     isAccessibleInEncounter: true,
-    notes: null
+    notes: null,
   },
   {
     id: `${verificationCharacterId}:loc-home`,
@@ -92,8 +92,8 @@ const baseLocations: StorageLocation[] = [
     parentLocationId: null,
     isMobile: false,
     isAccessibleInEncounter: false,
-    notes: null
-  }
+    notes: null,
+  },
 ];
 
 const combatVerificationCases: CombatVerificationCase[] = [
@@ -102,12 +102,12 @@ const combatVerificationCases: CombatVerificationCase[] = [
     actorSlot: "primary",
     loadout: {
       primaryWeaponTemplateId: "weapon-template-longsword",
-      shieldTemplateId: "shield-template-medium-shield"
+      shieldTemplateId: "shield-template-medium-shield",
     },
     skills: {
       "1-h edged": 37,
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 14,
@@ -115,27 +115,27 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: 1,
       dmb: 9,
       parry: 8,
-      encumbrance: 20
+      encumbrance: 20,
     },
     notes:
       "Workbook-faithful melee OB/DMB with Long sword mode-1 and merged Medium shield defensive values from the Shields tab.",
     skillXp: {
       "1-h edged": 15,
       Brawling: 9,
-      Parry: 13
+      Parry: 13,
     },
-    strength: 17
+    strength: 17,
   },
   {
     name: "Hand axe strike",
     actorSlot: "primary",
     loadout: {
-      primaryWeaponTemplateId: "weapon-template-hand-axe"
+      primaryWeaponTemplateId: "weapon-template-hand-axe",
     },
     skills: {
       "1-h conc./axe": 28,
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 13,
@@ -143,26 +143,27 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: 2,
       dmb: 10,
       parry: 5,
-      encumbrance: 7
+      encumbrance: 7,
     },
-    notes: "Workbook-faithful strike-main conc./axe case using Hand axe mode-1 with skill XP 15 and Str GM 3.",
+    notes:
+      "Workbook-faithful strike-main conc./axe case using Hand axe mode-1 with skill XP 15 and Str GM 3.",
     skillXp: {
       "1-h conc./axe": 15,
       Brawling: 9,
-      Parry: 13
+      Parry: 13,
     },
-    strength: 17
+    strength: 17,
   },
   {
     name: "2-h Spear thrust",
     actorSlot: "primary",
     loadout: {
-      primaryWeaponTemplateId: "weapon-template-spear"
+      primaryWeaponTemplateId: "weapon-template-spear",
     },
     skills: {
       Polearms: 28,
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 16,
@@ -170,26 +171,27 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: 1,
       dmb: 9,
       parry: 9,
-      encumbrance: 8
+      encumbrance: 8,
     },
-    notes: "Workbook-faithful thrust-main polearm case using 2-h Spear mode-1 with skill XP 15 and Str GM 3.",
+    notes:
+      "Workbook-faithful thrust-main polearm case using 2-h Spear mode-1 with skill XP 15 and Str GM 3.",
     skillXp: {
       Polearms: 15,
       Brawling: 9,
-      Parry: 13
+      Parry: 13,
     },
-    strength: 17
+    strength: 17,
   },
   {
     name: "Short bow missile",
     actorSlot: "missile",
     loadout: {
-      missileWeaponTemplateId: "weapon-template-bow"
+      missileWeaponTemplateId: "weapon-template-bow",
     },
     skills: {
       Bow: 28,
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 20,
@@ -197,20 +199,21 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: 2,
       dmb: "2d6",
       parry: "—",
-      encumbrance: 5
+      encumbrance: 5,
     },
-    notes: "Workbook Weapon2 row 14 short bow preserves dice DMB instead of collapsing it to a number."
+    notes:
+      "Workbook Weapon2 row 14 short bow preserves dice DMB instead of collapsing it to a number.",
   },
   {
     name: "Composite bow formula DMB",
     actorSlot: "missile",
     loadout: {
-      missileWeaponTemplateId: "weapon-template-composite-bow"
+      missileWeaponTemplateId: "weapon-template-composite-bow",
     },
     skills: {
       Bow: 30,
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 19,
@@ -218,9 +221,9 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: 1,
       dmb: "2d6",
       parry: "—",
-      encumbrance: 8
+      encumbrance: 8,
     },
-    notes: "Workbook Weapon2 row 15 keeps the GMstr-based DMB expression explicit."
+    notes: "Workbook Weapon2 row 15 keeps the GMstr-based DMB expression explicit.",
   },
   {
     name: "Unarmed / brawling baseline",
@@ -228,7 +231,7 @@ const combatVerificationCases: CombatVerificationCase[] = [
     loadout: {},
     skills: {
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 11,
@@ -236,21 +239,21 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: 2,
       dmb: "—",
       parry: 7,
-      encumbrance: 0
+      encumbrance: 0,
     },
     notes:
-      "Workbook Weapon1 row 40 Punch is surfaced through the standard melee workbook path, using Brawling effectiveSkillNumber as the combat XP input."
+      "Workbook Weapon1 row 40 Punch is surfaced through the standard melee workbook path, using Brawling effectiveSkillNumber as the combat XP input.",
   },
   {
     name: "Ballista ammo-linked encumbrance",
     actorSlot: "missile",
     loadout: {
-      missileWeaponTemplateId: "weapon-template-ballista"
+      missileWeaponTemplateId: "weapon-template-ballista",
     },
     skills: {
       Crossbow: 25,
       Brawling: 18,
-      Parry: 12
+      Parry: 12,
     },
     expected: {
       ob: 28,
@@ -258,12 +261,12 @@ const combatVerificationCases: CombatVerificationCase[] = [
       dm: "—",
       dmb: "4d8+1 (formula)",
       parry: "—",
-      encumbrance: 40
+      encumbrance: 40,
     },
     isExpectedMismatch: true,
     notes:
-      "Workbook Weapon2 row 30 encumbrance is source text 20+20, while current personal encumbrance totals still use compatibility base 20 and preserve the ammo-linked note separately."
-  }
+      "Workbook Weapon2 row 30 encumbrance is source text 20+20, while current personal encumbrance totals still use compatibility base 20 and preserve the ammo-linked note separately.",
+  },
 ];
 
 function indexById<T extends { id: string }>(items: T[]): Record<string, T> {
@@ -288,7 +291,7 @@ function createItem(input: {
     quality: "standard",
     storageAssignment: {
       locationId: `${verificationCharacterId}:loc-equipped`,
-      carryMode: "equipped"
+      carryMode: "equipped",
     },
     conditionState: "intact",
     durabilityCurrent: null,
@@ -300,9 +303,27 @@ function createItem(input: {
     isEquipped: true,
     isFavorite: null,
     acquiredFrom: null,
-    statusTags: null
+    statusTags: null,
   };
 }
+
+// The workbook names its skills; the combat inputs resolve a mode's competencyRef by catalogue id.
+// Independent literals, so a wrong id in the authored content cannot be mirrored here.
+const competencyIdBySkillName: Record<string, string> = {
+  "1-h conc./axe": "one_handed_concussion_axe",
+  "1-h edged": "one_handed_edged",
+  "2-h conc./axe": "two_handed_concussion_axe",
+  "2-h edged": "two_handed_edged",
+  Bow: "bow",
+  Brawling: "brawling",
+  Crossbow: "crossbow",
+  Fencing: "fencing",
+  Lance: "lance",
+  Longbow: "longbow",
+  Polearms: "polearms",
+  Sling: "sling",
+  Throwing: "throwing",
+};
 
 function buildCharacterInputs(
   skills: Record<string, number>,
@@ -317,6 +338,11 @@ function buildCharacterInputs(
     dodgeCombatSkillXp: dodgeXp,
     parryCombatSkillXp: (skillXp ?? {}).Parry ?? skills.Parry ?? null,
     brawlingCombatSkillXp: (skillXp ?? {}).Brawling ?? skills.Brawling ?? null,
+    combatSkillXpByCompetencyId: Object.fromEntries(
+      Object.entries(skillXp ?? skills).flatMap(([name, xp]) =>
+        competencyIdBySkillName[name] ? [[competencyIdBySkillName[name], xp]] : [],
+      ),
+    ),
     combatSkillXpByName: {
       ...(skillXp ?? skills),
       Dodge: dodgeXp,
@@ -324,7 +350,7 @@ function buildCharacterInputs(
     size: 13,
     sizeGm: 1,
     strengthGm: Math.trunc((strength - 11) / 2),
-    strength
+    strength,
   };
 }
 
@@ -342,14 +368,14 @@ function buildEquipmentState(testCase: CombatVerificationCase): EquipmentState {
     activeMissileWeaponItemId: null,
     activeAmmoItemIds: [],
     quickAccessItemIds: [],
-    notes: null
+    notes: null,
   };
 
   if (testCase.armorTemplateId) {
     const armor = createItem({
       category: "armor",
       id: "armor-item-verification",
-      templateId: testCase.armorTemplateId
+      templateId: testCase.armorTemplateId,
     });
     armor.material = "leather";
     items.push(armor);
@@ -360,7 +386,7 @@ function buildEquipmentState(testCase: CombatVerificationCase): EquipmentState {
     const primary = createItem({
       category: "weapon",
       id: "weapon-item-primary",
-      templateId: testCase.loadout.primaryWeaponTemplateId
+      templateId: testCase.loadout.primaryWeaponTemplateId,
     });
     items.push(primary);
     activeLoadout.activePrimaryWeaponItemId = primary.id;
@@ -370,7 +396,7 @@ function buildEquipmentState(testCase: CombatVerificationCase): EquipmentState {
     const missile = createItem({
       category: "weapon",
       id: "weapon-item-missile",
-      templateId: testCase.loadout.missileWeaponTemplateId
+      templateId: testCase.loadout.missileWeaponTemplateId,
     });
     items.push(missile);
     activeLoadout.activeMissileWeaponItemId = missile.id;
@@ -380,7 +406,7 @@ function buildEquipmentState(testCase: CombatVerificationCase): EquipmentState {
     const shield = createItem({
       category: "shield",
       id: "shield-item-ready",
-      templateId: testCase.loadout.shieldTemplateId
+      templateId: testCase.loadout.shieldTemplateId,
     });
     shield.material = "wood";
     items.push(shield);
@@ -389,26 +415,26 @@ function buildEquipmentState(testCase: CombatVerificationCase): EquipmentState {
 
   return {
     templates: {
-      templatesById: indexById<EquipmentTemplate>(equipmentTemplates)
+      templatesById: indexById<EquipmentTemplate>(equipmentTemplates),
     },
     itemsById: indexById(items),
     locationsById: indexById(structuredClone(baseLocations)),
     activeLoadoutByCharacterId: {
-      [verificationCharacterId]: activeLoadout
-    }
+      [verificationCharacterId]: activeLoadout,
+    },
   };
 }
 
 function extractActualValues(
   testCase: CombatVerificationCase,
-  snapshot: ReturnType<typeof deriveCombatStateSnapshot>
+  snapshot: ReturnType<typeof deriveCombatStateSnapshot>,
 ): VerificationActual {
   const row = snapshot.weaponRows.find((candidate) =>
     testCase.actorSlot === "primary"
       ? candidate.slotLabel === "Primary weapon"
       : testCase.actorSlot === "missile"
         ? candidate.slotLabel === "Missile weapon"
-        : candidate.slotLabel === "Brawling"
+        : candidate.slotLabel === "Brawling",
   );
 
   return {
@@ -418,27 +444,27 @@ function extractActualValues(
     dmb: row?.dmb1 ?? "—",
     parry: row?.parry ?? "—",
     encumbrance: snapshot.personalEncumbrance,
-    loadNotes: snapshot.loadNotes
+    loadNotes: snapshot.loadNotes,
   };
 }
 
 function buildMismatchMessage(
   testCase: CombatVerificationCase,
   expected: VerificationExpected,
-  actual: VerificationActual
+  actual: VerificationActual,
 ): string {
   const mismatches = Object.entries(expected)
     .filter(([key, value]) => actual[key as keyof VerificationExpected] !== value)
     .map(
       ([key, value]) =>
-        `${key}: expected ${JSON.stringify(value)}, actual ${JSON.stringify(actual[key as keyof VerificationActual])}`
+        `${key}: expected ${JSON.stringify(value)}, actual ${JSON.stringify(actual[key as keyof VerificationActual])}`,
     );
 
   return [
     `Spreadsheet verification failed for ${testCase.name}.`,
     `Notes: ${testCase.notes}`,
     ...mismatches,
-    `Load notes: ${actual.loadNotes}`
+    `Load notes: ${actual.loadNotes}`,
   ].join("\n");
 }
 
@@ -449,20 +475,20 @@ describe("combat verification against Themistogenes spreadsheet", () => {
         buildEquipmentState(testCase),
         verificationCharacterId,
         buildCharacterInputs(testCase.skills, testCase.skillXp, testCase.strength),
-        testCase.allocation ?? defaultCombatAllocationState
+        testCase.allocation ?? defaultCombatAllocationState,
       );
       const actual = extractActualValues(testCase, snapshot);
 
       expect(actual, buildMismatchMessage(testCase, testCase.expected, actual)).toEqual({
         ...testCase.expected,
-        loadNotes: actual.loadNotes
+        loadNotes: actual.loadNotes,
       });
     });
   }
 
   it.fails("documents the current ballista ammo-linked encumbrance mismatch explicitly", () => {
     const testCase = combatVerificationCases.find(
-      (entry) => entry.name === "Ballista ammo-linked encumbrance"
+      (entry) => entry.name === "Ballista ammo-linked encumbrance",
     );
 
     if (!testCase) {
@@ -473,13 +499,13 @@ describe("combat verification against Themistogenes spreadsheet", () => {
       buildEquipmentState(testCase),
       verificationCharacterId,
       buildCharacterInputs(testCase.skills, testCase.skillXp, testCase.strength),
-      testCase.allocation ?? defaultCombatAllocationState
+      testCase.allocation ?? defaultCombatAllocationState,
     );
     const actual = extractActualValues(testCase, snapshot);
 
     expect(actual, buildMismatchMessage(testCase, testCase.expected, actual)).toEqual({
       ...testCase.expected,
-      loadNotes: actual.loadNotes
+      loadNotes: actual.loadNotes,
     });
   });
 });

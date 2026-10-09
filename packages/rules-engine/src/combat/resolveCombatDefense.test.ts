@@ -32,6 +32,7 @@ describe("canonical combat defense composition", () => {
     const result = resolveCombatDefenseCalculation({
       characterInputs: {
         brawlingCombatSkillXp: null,
+        combatSkillXpByCompetencyId: { dodge: 8 },
         combatSkillXpByName: { Dodge: 8 },
         constitution: 12,
         dexterity: 15,
