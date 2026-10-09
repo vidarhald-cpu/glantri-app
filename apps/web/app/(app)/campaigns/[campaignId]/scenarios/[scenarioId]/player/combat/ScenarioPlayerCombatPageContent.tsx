@@ -5245,6 +5245,7 @@ export default function ScenarioPlayerCombatPageContent({
                       acceptEncounterSession(nextEncounter);
                     }}
                     participantId={selectedRoundParticipant.participantId}
+                    readOnly={readOnlyInspection}
                   />
                 ) : undefined
               }

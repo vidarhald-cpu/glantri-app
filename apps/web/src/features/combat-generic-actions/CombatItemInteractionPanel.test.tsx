@@ -332,3 +332,174 @@ describe("CombatItemInteractionPanel — pending Item action state (Forgejo #409
     expect(screen.getByRole("button", { name: "Silver dagger: Drop" })).toBeDisabled();
   });
 });
+
+/**
+ * Forgejo #509 F2 — the GM's Combat inspection surface is read-only, and the Item controls are
+ * injected outside `controlsDisabled`, so the panel must carry its own, independent read-only
+ * reason. These tests exercise the real panel (the shell's harness stubs the page entirely).
+ */
+describe("CombatItemInteractionPanel — read-only inspection (Forgejo #509 F2)", () => {
+  const heldDagger = {
+    category: "weapon" as const,
+    id: "item-dagger",
+    label: "Silver dagger",
+    operations: ["draw", "drop", "pass", "use"] as Array<"draw" | "drop" | "pass" | "use">,
+    revision: "2026-08-16T09:59:00.000Z",
+    state: "held" as const,
+    templateId: "weapon-dagger",
+  };
+
+  beforeEach(() => {
+    vi.mocked(updateCombatItemInteractionOnServer).mockReset();
+    vi.mocked(updateCombatItemInteractionOnServer).mockResolvedValue(encounter);
+    vi.mocked(loadCombatItemInteractionOptions).mockResolvedValue({
+      actors: [
+        {
+          characterId: "character-1",
+          items: [heldDagger],
+          label: "Aster",
+          participantId: "participant-1",
+        },
+      ],
+      disarmTargets: [],
+      presentItems: [],
+      recipients: [
+        { label: "Aster", participantId: "participant-1" },
+        { label: "Bram", participantId: "participant-2" },
+      ],
+    });
+  });
+
+  it("renders every Item operation inert while readOnly, so the GM cannot act as the player", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+        readOnly
+      />,
+    );
+
+    await screen.findByText("Silver dagger");
+    // Satisfy the Pass and Use preconditions so only readOnly can be what disables the buttons.
+    fireEvent.change(screen.getByLabelText("Pass Silver dagger to"), {
+      target: { value: "participant-2" },
+    });
+    fireEvent.change(screen.getByLabelText("How will you use Silver dagger?"), {
+      target: { value: "Cut the rope" },
+    });
+    for (const label of ["Draw / ready", "Drop", "Pass / give", "Use / interact"]) {
+      const button = screen.getByRole("button", { name: `Silver dagger: ${label}` });
+      expect(button).toBeDisabled();
+      fireEvent.click(button);
+    }
+    expect(updateCombatItemInteractionOnServer).not.toHaveBeenCalled();
+  });
+
+  it("refuses the server update itself while readOnly, even if a stale button is clicked", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+        readOnly
+      />,
+    );
+
+    const draw = await screen.findByRole("button", { name: "Silver dagger: Draw / ready" });
+    // Simulate a direct dispatch that bypasses the disabled button: React never delivers a click
+    // to a disabled button, so invoke the element's own React onClick handler directly. Only the
+    // handler-level guard can refuse this.
+    expect(draw).toBeDisabled();
+    const reactPropsKey = Object.keys(draw).find((key) => key.startsWith("__reactProps"));
+    const props = (draw as unknown as Record<string, { onClick: () => void }>)[reactPropsKey ?? ""];
+    expect(props?.onClick).toBeTypeOf("function");
+    props?.onClick();
+    await Promise.resolve();
+
+    expect(updateCombatItemInteractionOnServer).not.toHaveBeenCalled();
+  });
+
+  it("explains that Items are inspect-only while readOnly", async () => {
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+        readOnly
+      />,
+    );
+    await screen.findByText("Silver dagger");
+    expect(screen.getByText(/read-only/i)).toBeInTheDocument();
+  });
+
+  it("leaves the player's own Item controls live when readOnly is false or omitted", async () => {
+    const onEncounterUpdated = vi.fn();
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm={false}
+        onEncounterUpdated={onEncounterUpdated}
+        participantId="participant-1"
+        readOnly={false}
+      />,
+    );
+
+    const draw = await screen.findByRole("button", { name: "Silver dagger: Draw / ready" });
+    expect(draw).toBeEnabled();
+    fireEvent.click(draw);
+    await waitFor(() => expect(updateCombatItemInteractionOnServer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onEncounterUpdated).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/read-only/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the one-live-Item-action disabled state independent of readOnly", async () => {
+    const live: CombatGenericAction = {
+      createdAt: "2026-08-16T09:30:00.000Z",
+      duration: { kind: "gm_decided" },
+      id: "action-live",
+      intent: "Draw / ready Silver dagger",
+      itemInteraction: {
+        itemId: "item-dagger",
+        itemLabel: "Silver dagger",
+        itemRevision: "2026-08-16T09:59:00.000Z",
+        operation: "draw",
+        stateAtDeclaration: "stowed",
+        visibleToParticipantIds: ["participant-1"],
+      },
+      lastUpdatedAt: "2026-08-16T09:30:00.000Z",
+      ownerParticipantId: "participant-1",
+      preset: "item_interaction",
+      progress: { completedRounds: 0 },
+      reference: {
+        itemId: "item-dagger",
+        kind: "item",
+        label: "Silver dagger",
+        ownerParticipantId: "participant-1",
+      },
+      status: "declared",
+    };
+    const withLive = {
+      ...encounter,
+      combatRoundState: { genericActions: [live] },
+    } as unknown as EncounterSession;
+    for (const readOnly of [false, true]) {
+      const { unmount } = render(
+        <CombatItemInteractionPanel
+          encounter={withLive}
+          isGm={false}
+          onEncounterUpdated={vi.fn()}
+          participantId="participant-1"
+          readOnly={readOnly}
+        />,
+      );
+      expect(
+        await screen.findByRole("button", { name: "Silver dagger: Draw / ready" }),
+      ).toBeDisabled();
+      unmount();
+    }
+  });
+});
