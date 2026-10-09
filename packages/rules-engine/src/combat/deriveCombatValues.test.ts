@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { defaultCombatAllocationState } from "./combatAllocationState";
 import {
-  COMBAT_COMPETENCY_REFUSED,
   canUseWorkbookMeleeCalculation,
   getDerivedDmbValue,
   getDerivedInitiativeValue,
@@ -13,7 +12,6 @@ import {
   getWorkbookOneItemDefensePair,
   getWorkbookShieldRowParry,
   getWorkbookWeaponRowParry,
-  isCombatCompetencyRefusal,
   resolveAttackModeCompetency,
 } from "./deriveCombatValues";
 import type { CombatStateCharacterInputs } from "./characterInputs";
