@@ -214,4 +214,101 @@ describe("read-only player modifier panel durations", () => {
       ].filter((field) => read.has(field)),
     );
   });
+
+  it("never shows a unit-less number, which could be misread as part of the modifier value", () => {
+    // A damage review stores its round count as the bare text "3".
+    const { container } = renderPlayerPanel({
+      effects: [playerEffect({ description: "Bleeding", duration: "3", id: "bleeding" })],
+    });
+
+    expect(rowText(container, "Bleeding")).not.toMatch(/3/);
+    for (const bare of ["3", " 12 ", "+3", "2.5"]) {
+      expect(
+        formatEntryDuration({
+          entry: contextEntry({ id: "bare", sourceEffectId: "bare-effect" }),
+          roundNumber: 3,
+          sourceEffect: { duration: bare, id: "bare-effect" },
+        }),
+      ).toBeUndefined();
+    }
+    // The same figure with its unit, and an absolute expiry beside a bare number, still show.
+    expect(
+      formatEntryDuration({
+        entry: contextEntry({ id: "unit", sourceEffectId: "unit-effect" }),
+        roundNumber: 3,
+        sourceEffect: { duration: "3 rounds", id: "unit-effect" },
+      }),
+    ).toBe("3 rounds");
+    expect(
+      formatEntryDuration({
+        entry: contextEntry({ expiresAtRound: 7, id: "bare-expiry", sourceEffectId: "e" }),
+        roundNumber: 3,
+        sourceEffect: { duration: "3", id: "e" },
+      }),
+    ).toBe("Through round 7");
+  });
+
+  describe("guards that keep a stale or foreign duration off a player's row", () => {
+    const entry = contextEntry({ id: "guarded", sourceEffectId: "guarded-effect" });
+    const ticked = { duration: "3 rounds", id: "guarded-effect" };
+
+    it("control: an unguarded effect shows its ticked round count", () => {
+      expect(formatEntryDuration({ entry, roundNumber: 3, sourceEffect: ticked })).toBe("3 rounds");
+    });
+
+    it("shows nothing for an effect with critical runtime state, whose text is not ticked", () => {
+      expect(
+        formatEntryDuration({
+          entry,
+          roundNumber: 3,
+          sourceEffect: { ...ticked, criticalRuntime: { kind: "stunned" } },
+        }),
+      ).toBeUndefined();
+    });
+
+    it("shows nothing for an effect that is not combat-wide, whose text is not ticked", () => {
+      expect(
+        formatEntryDuration({
+          entry,
+          roundNumber: 3,
+          sourceEffect: { ...ticked, combatWide: false },
+        }),
+      ).toBeUndefined();
+      // `combatWide: true` and absent are both combat-wide and stay ticked.
+      expect(
+        formatEntryDuration({
+          entry,
+          roundNumber: 3,
+          sourceEffect: { ...ticked, combatWide: true },
+        }),
+      ).toBe("3 rounds");
+    });
+
+    it("never falls back to the creation-time durationRounds total when the source effect states none", () => {
+      const withTotal = contextEntry({
+        durationRounds: 4,
+        id: "guarded-total",
+        sourceEffectId: "guarded-effect",
+      });
+      for (const sourceEffect of [
+        { id: "guarded-effect" },
+        { duration: "   ", id: "guarded-effect" },
+        { duration: "until rested", id: "guarded-effect", initiativePhase: "phase1" },
+      ]) {
+        const label = formatEntryDuration({ entry: withTotal, roundNumber: 3, sourceEffect });
+        expect(label ?? "").not.toMatch(/4/);
+      }
+      expect(
+        formatEntryDuration({
+          entry: withTotal,
+          roundNumber: 3,
+          sourceEffect: { id: "guarded-effect" },
+        }),
+      ).toBeUndefined();
+      // Where the source effect does state a count, that count wins over the total.
+      expect(formatEntryDuration({ entry: withTotal, roundNumber: 3, sourceEffect: ticked })).toBe(
+        "3 rounds",
+      );
+    });
+  });
 });

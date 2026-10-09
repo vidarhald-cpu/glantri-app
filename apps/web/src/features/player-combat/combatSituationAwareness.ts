@@ -328,6 +328,13 @@ export interface EntryDurationSourceEffect {
 const ROUND_COUNT_DURATION_PATTERN = /\b(\d+)\s*(?:r|rnd|round|rounds)\b/i;
 
 /**
+ * A duration text that is only a number, such as the `"3"` a damage review stores from its round
+ * count. Its unit is not written, and beside a signed modifier value it can read as part of that
+ * value, so it is never shown.
+ */
+const UNITLESS_NUMBER_DURATION_PATTERN = /^[+-]?\d+(?:[.,]\d+)?$/;
+
+/**
  * A player-facing duration for one modifier row, built only from fields the player already
  * receives, or `undefined` when no duration is genuinely known. A missing chip is always
  * preferred to a guessed one.
@@ -341,6 +348,7 @@ const ROUND_COUNT_DURATION_PATTERN = /\b(\d+)\s*(?:r|rnd|round|rounds)\b/i;
  * - an entry that carries a canonical lifecycle (the canonical `formatDuration` owns those);
  * - the `durationRounds` entry field alone: for entries it is the total at creation and is not
  *   counted down, so it cannot say what remains;
+ * - a duration text that is only a number: with no unit it is misreadable beside a modifier value;
  * - the duration text of a phase-scoped effect or one with critical runtime state: the Round End
  *   review does not tick that text, so it can be stale.
  */
@@ -371,7 +379,8 @@ export function formatEntryDuration(input: {
     const count = Number.parseInt(rounds[1], 10);
     if (count > 0) return `${count} ${count === 1 ? "round" : "rounds"}`;
   }
-  return expiry() ?? (text || undefined);
+  const verbatim = text && !UNITLESS_NUMBER_DURATION_PATTERN.test(text) ? text : undefined;
+  return expiry() ?? verbatim;
 }
 
 export function buildEntryDurationLabels(input: {
