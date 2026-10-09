@@ -58,6 +58,7 @@ import {
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   buildCombatSituationAwarenessModel,
+  buildEntryDurationLabels,
   INCOMPLETE_BREAKDOWN_LABEL,
   type CombatSituationContext,
   type CombatSituationDisplayRow,
@@ -68,6 +69,8 @@ export interface PlayerCombatModifierBucketView {
   bucketKey: ScenarioCombatModifierBucket;
   characterStateEntries?: PlayerCombatModifierDisplayEntry[];
   derivedEntries?: PlayerCombatModifierDisplayEntry[];
+  /** Known durations by entry id; set only when the caller opts in to duration presentation. */
+  durationLabels?: Record<string, string>;
   entries: ScenarioCombatModifierEntry[];
   fatigueTotal?: number;
   label: string;
@@ -805,6 +808,8 @@ export function buildPlayerCombatModifierRows(input: {
   currentRound?: number;
   encounterId?: string;
   includeAllPhases?: boolean;
+  /** Opt in to per-row duration labels. Only the player's own live view sets this. */
+  includeEntryDurations?: boolean;
   liveModifiers?: EncounterLiveCombatModifierSummary;
   ownerParticipantId?: string;
   phaseKey?: EncounterCombatPhaseKey;
@@ -923,10 +928,20 @@ export function buildPlayerCombatModifierRows(input: {
         .reduce((total, contribution) => total + contribution.value, 0),
   };
 
+  const durationLabelsFor = (entries: readonly ScenarioCombatModifierEntry[]) =>
+    input.includeEntryDurations
+      ? buildEntryDurationLabels({
+          combatEffects: input.combatEffects?.effects,
+          entries,
+          roundNumber: input.currentRound,
+        })
+      : undefined;
+
   return [
     {
       bucketKey: "general",
       derivedEntries: legacyGeneralEntries,
+      durationLabels: durationLabelsFor(displayModifierBuckets.general),
       entries: displayModifierBuckets.general,
       label: "General/Fatigue",
       locked: true,
@@ -934,12 +949,14 @@ export function buildPlayerCombatModifierRows(input: {
     },
     {
       bucketKey: "situation_initiative",
+      durationLabels: durationLabelsFor(displayModifierBuckets.situationInitiative),
       entries: displayModifierBuckets.situationInitiative,
       label: "Initiative",
       total: totals.initiative,
     },
     {
       bucketKey: "situation_ob_skill",
+      durationLabels: durationLabelsFor(displayModifierBuckets.situationObSkill),
       entries: displayModifierBuckets.situationObSkill,
       derivedEntries: derivedEntriesByBucket.get("skill_ob"),
       label: "Skill/OB",
@@ -947,6 +964,7 @@ export function buildPlayerCombatModifierRows(input: {
     },
     {
       bucketKey: "situation_db",
+      durationLabels: durationLabelsFor(displayModifierBuckets.situationDb),
       entries: displayModifierBuckets.situationDb,
       derivedEntries: derivedEntriesByBucket.get("db_parry"),
       label: "DB/Parry",

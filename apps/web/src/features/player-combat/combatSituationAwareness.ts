@@ -20,6 +20,8 @@ export type CombatSituationLifecycleEffect =
 export interface CombatSituationModifierRowInput {
   application?: ScenarioCombatModifierEntry["application"];
   canonicalLifecycle?: CombatSituationLifecycleEffect;
+  /** Duration known from player-visible entry fields; used only when no canonical lifecycle is present. */
+  durationLabel?: string;
   id: string;
   scopeLabel?: string;
   sourceLabel?: string;
@@ -29,6 +31,8 @@ export interface CombatSituationModifierRowInput {
 export interface CombatSituationModifierBucketInput {
   bucketKey: ScenarioCombatModifierBucket;
   derivedEntries?: readonly CombatSituationModifierRowInput[];
+  /** Duration labels by entry id, from `buildEntryDurationLabels`. Absent entries have no known duration. */
+  durationLabels?: Readonly<Record<string, string>>;
   entries: readonly ScenarioCombatModifierEntry[];
   label: string;
   total: number;
@@ -307,6 +311,93 @@ export function formatDuration(effect: CombatSituationLifecycleEffect): string |
   }
 }
 
+/**
+ * The subset of a Combat effect that duration presentation reads. Every field is already carried
+ * by the player-facing Combat effect; the canonical lifecycle is read only to defer to it.
+ */
+export interface EntryDurationSourceEffect {
+  canonicalLifecycle?: unknown;
+  combatWide?: boolean;
+  criticalRuntime?: unknown;
+  duration?: string;
+  id: string;
+  initiativePhase?: string;
+}
+
+/** The round-count pattern the Round End review itself ticks down on `CombatEffect.duration`. */
+const ROUND_COUNT_DURATION_PATTERN = /\b(\d+)\s*(?:r|rnd|round|rounds)\b/i;
+
+/**
+ * A duration text that is only a number, such as the `"3"` a damage review stores from its round
+ * count. Its unit is not written, and beside a signed modifier value it can read as part of that
+ * value, so it is never shown.
+ */
+const UNITLESS_NUMBER_DURATION_PATTERN = /^[+-]?\d+(?:[.,]\d+)?$/;
+
+/**
+ * A player-facing duration for one modifier row, built only from fields the player already
+ * receives, or `undefined` when no duration is genuinely known. A missing chip is always
+ * preferred to a guessed one.
+ *
+ * Precedence mirrors the Round End review: a bounded round count in the effect's `duration`
+ * text (which that review ticks down each round) comes first, then the absolute
+ * `expiresAtRound` (active through that round, inclusive), then any other authored duration text
+ * verbatim.
+ *
+ * Deliberately unknown, and so `undefined`:
+ * - an entry that carries a canonical lifecycle (the canonical `formatDuration` owns those);
+ * - the `durationRounds` entry field alone: for entries it is the total at creation and is not
+ *   counted down, so it cannot say what remains;
+ * - a duration text that is only a number: with no unit it is misreadable beside a modifier value;
+ * - the duration text of a phase-scoped effect or one with critical runtime state: the Round End
+ *   review does not tick that text, so it can be stale.
+ */
+export function formatEntryDuration(input: {
+  entry: ScenarioCombatModifierEntry;
+  roundNumber?: number;
+  sourceEffect?: EntryDurationSourceEffect;
+}): string | undefined {
+  const { entry, roundNumber, sourceEffect } = input;
+  if (entry.canonicalLifecycle || sourceEffect?.canonicalLifecycle) return undefined;
+
+  const expiry = (): string | undefined => {
+    const expiresAtRound = entry.expiresAtRound;
+    if (expiresAtRound === undefined) return undefined;
+    if (roundNumber !== undefined && expiresAtRound < roundNumber) return undefined;
+    return roundNumber === expiresAtRound ? "Ends this round" : `Through round ${expiresAtRound}`;
+  };
+
+  if (!sourceEffect) return expiry();
+
+  const textIsTicked =
+    sourceEffect.initiativePhase === undefined &&
+    sourceEffect.combatWide !== false &&
+    sourceEffect.criticalRuntime === undefined;
+  const text = textIsTicked ? sourceEffect.duration?.trim() : undefined;
+  const rounds = text ? ROUND_COUNT_DURATION_PATTERN.exec(text) : null;
+  if (rounds?.[1]) {
+    const count = Number.parseInt(rounds[1], 10);
+    if (count > 0) return `${count} ${count === 1 ? "round" : "rounds"}`;
+  }
+  const verbatim = text && !UNITLESS_NUMBER_DURATION_PATTERN.test(text) ? text : undefined;
+  return expiry() ?? verbatim;
+}
+
+export function buildEntryDurationLabels(input: {
+  combatEffects?: readonly EntryDurationSourceEffect[];
+  entries: readonly ScenarioCombatModifierEntry[];
+  roundNumber?: number;
+}): Record<string, string> {
+  const effectsById = new Map((input.combatEffects ?? []).map((effect) => [effect.id, effect]));
+  const labels: Record<string, string> = {};
+  for (const entry of input.entries) {
+    const sourceEffect = entry.sourceEffectId ? effectsById.get(entry.sourceEffectId) : undefined;
+    const label = formatEntryDuration({ entry, roundNumber: input.roundNumber, sourceEffect });
+    if (label) labels[entry.id] = label;
+  }
+  return labels;
+}
+
 function categoryBucket(
   effect: CombatSituationLifecycleEffect,
 ): ScenarioCombatModifierBucket | undefined {
@@ -384,7 +475,7 @@ function calculationEntry(input: {
 }): CombatSituationDisplayRow {
   const effect = input.entry.canonicalLifecycle;
   return {
-    durationLabel: effect ? formatDuration(effect) : undefined,
+    durationLabel: effect ? formatDuration(effect) : input.entry.durationLabel,
     id: effect?.id ?? input.entry.id,
     label: effect?.publicLabel ?? input.entry.sourceLabel ?? "Combat modifier",
     scopeLabel: opponentScope(effect, input.context) ?? input.entry.scopeLabel,
@@ -443,6 +534,7 @@ export function buildCombatSituationAwarenessModel(input: {
           {
             application: entry.application,
             canonicalLifecycle,
+            durationLabel: bucket.durationLabels?.[entry.id],
             id: entry.id,
             scopeLabel:
               entry.sourcePhase === "phase1"
