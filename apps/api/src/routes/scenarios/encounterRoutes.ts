@@ -6869,10 +6869,10 @@ function buildPlayerFacingEncounterParticipantsForUser(input: {
  * The player-facing encounter of every player response (#502 Tier 1; every player read and mutation
  * since #507 Tier 2). Since #517 (Tier 3) this is the per-viewer player projection itself, not a
  * wrapper around one: every value is built from the player-facing schemas
- * (`playerFacingEncounterSessionSchema`), so nothing reaches the player through this encounter that
- * a player-facing type does not name, at any level, and the result is not assignable from a stored
- * encounter. Other player output is not covered: the combat history is built without it, and its
- * open event fact buckets are privacy Tier 4's (#528).
+ * (`playerFacingEncounterSessionSchema`), so this encounter carries only what those schemas name,
+ * and the result is not assignable from a stored encounter. It does not close the open containers
+ * it carries — the `facts` record on a round-state command — and the combat history is built
+ * without this type at all. Both are privacy Tier 4's (#528).
  */
 export function buildPlayerFacingEncounterForUser(input: {
   encounter: EncounterSession;

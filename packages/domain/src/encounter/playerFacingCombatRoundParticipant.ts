@@ -50,11 +50,14 @@ import {
  * only when that schema holds no object (`LEAF`, checked at compile time); every structure — attack
  * results, attack opportunities, the Combat Experience result, the defensive penalties, the feint,
  * intent, movement intent and secondary-action context, the initiatives and the Combat Experience
- * schedule — is a player-facing schema naming its own fields, checked when the module loads. A
- * field added to the stored participant, its declaration or any structure below them is therefore
- * not carried by these types, and does not reach a player through the player-facing round state
- * they make up (`playerFacingCombatRoundState`): the `combatRoundState` of a player's encounter
- * response and the `activeCombatState` of a player's `active-v1` response.
+ * schedule — is a player-facing schema naming its own fields, checked when the module loads. So
+ * these types inherit nothing automatically from the stored participant, its declaration or any
+ * structure below them: such a field is carried only if a player-facing schema names it. They make
+ * up the player-facing round state (`playerFacingCombatRoundState`) — the `combatRoundState` of a
+ * player's encounter response and the `activeCombatState` of a player's `active-v1` response.
+ *
+ * They do not close the open `facts` record on a round-state command, which is privacy Tier 4's
+ * (#528).
  *
  * That is the whole of the claim. Player output built from the same stored structures without
  * these types is not covered by it. The combat history's event fact buckets are open: a
