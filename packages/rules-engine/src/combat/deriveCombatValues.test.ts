@@ -112,6 +112,58 @@ describe("resolveAttackModeCompetency", () => {
   });
 });
 
+describe("competency and thrown use come from the attack mode itself (#512 P1.3)", () => {
+  const alloc = defaultCombatAllocationState;
+  const inputsWith = (byId: Record<string, number>) =>
+    makeCharacterInputs({ combatSkillXpByCompetencyId: byId, dexterityGm: 3, strengthGm: 3 });
+  const template = { handlingClass: "one_handed", initiative: 1 } as never;
+  const ob = (mode: object, byId: Record<string, number>) =>
+    getDerivedObValue({
+      allocationInputs: alloc,
+      armorTemplate: null,
+      characterInputs: inputsWith(byId),
+      mode: mode as never,
+      template,
+    });
+
+  it("a thrown mode attacks with ITS competencyRef, not a fixed Throwing skill", () => {
+    const thrownSling = { attackType: "thrown", competencyRef: "sling", ob: 2 };
+    const reference = ob(thrownSling, { sling: 30, throwing: 4 });
+    expect(typeof reference).toBe("number");
+    expect(ob(thrownSling, { sling: 30, throwing: 90 })).toBe(reference);
+    expect(ob(thrownSling, { sling: 12, throwing: 4 })).not.toBe(reference);
+  });
+
+  it("a thrown mode whose competency the character lacks yields no OB, never another skill", () => {
+    expect(ob({ attackType: "thrown", competencyRef: "sling", ob: 2 }, { throwing: 40 })).toBe("—");
+  });
+
+  it("thrown use is the authored attackType: a melee mode that references Throwing is not thrown", () => {
+    const melee = { attackType: "melee", competencyRef: "throwing", initiative: 1, ob: 2 };
+    const sameSkillAsEdged = { ...melee, competencyRef: "one_handed_edged" };
+    const byId = { one_handed_edged: 15, throwing: 15 };
+    expect(ob(melee, byId)).toBe(ob(sameSkillAsEdged, byId));
+    // Workbook melee initiative (dex GM 3, skill 15, weapon 1 -> 5), not the thrown 1 + dex GM = 4.
+    expect(
+      getDerivedInitiativeValue({
+        attackMode: melee as never,
+        characterInputs: inputsWith(byId),
+        template,
+      }),
+    ).toBe(5);
+  });
+
+  it("a thrown mode on another competency still takes the thrown initiative (initiative + dex GM)", () => {
+    expect(
+      getDerivedInitiativeValue({
+        attackMode: { attackType: "thrown", competencyRef: "sling", initiative: 1 } as never,
+        characterInputs: inputsWith({ sling: 15 }),
+        template,
+      }),
+    ).toBe(4);
+  });
+});
+
 describe("getGripSummary", () => {
   const sword = { handlingClass: "one_handed" } as never;
   const twoHander = { handlingClass: "two_handed" } as never;

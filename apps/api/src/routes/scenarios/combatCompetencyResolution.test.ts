@@ -340,3 +340,33 @@ describe("initiative of a bow in the throwing slot", () => {
     expect(resolve("throwing", 30)).toEqual(resolve("throwing", 3));
   });
 });
+
+describe("initiative of a melee mode declared from the throwing slot", () => {
+  it("is the melee initiative, identical to the one from a non-throwing slot", () => {
+    const dagger = template("Dagger");
+    const resolve = (slot: "primary" | "throwing") =>
+      resolveCanonicalCombatInitiativeBase({
+        opportunity: opportunity({ attackModeId: "mode-1", slot, template: dagger }),
+        participant: buildParticipant({
+          skills: { one_handed_edged: 40, throwing: 4 },
+          template: dagger,
+        }),
+      });
+    expect(resolve("throwing").completeness).toBe("complete");
+    expect(resolve("throwing")).toEqual(resolve("primary"));
+  });
+
+  it("is the thrown initiative for a thrown mode, whichever slot declares it", () => {
+    const dagger = template("Dagger");
+    const resolve = (slot: "primary" | "throwing") =>
+      resolveCanonicalCombatInitiativeBase({
+        opportunity: opportunity({ attackModeId: "mode-3", slot, template: dagger }),
+        participant: buildParticipant({
+          skills: { one_handed_edged: 40, throwing: 4 },
+          template: dagger,
+        }),
+      });
+    expect(resolve("primary").completeness).toBe("complete");
+    expect(resolve("primary")).toEqual(resolve("throwing"));
+  });
+});
