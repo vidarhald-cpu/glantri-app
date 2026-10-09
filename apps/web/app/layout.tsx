@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import "@/styles/glantri-baseline.css";
 import { SessionUserProvider } from "@/lib/auth/SessionUserContext";
 import { AppHeader } from "@/lib/layout/AppHeader";
 
