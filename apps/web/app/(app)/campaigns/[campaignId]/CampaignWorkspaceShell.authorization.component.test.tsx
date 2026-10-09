@@ -355,6 +355,7 @@ function primeActionView(input: {
   encounterStatus?: EncounterSessionSummary["status"];
   perspective: "gm" | "player";
   scenarioStatus?: Scenario["status"];
+  tab?: "player-combat" | "player-skill-rolls";
 }) {
   vi.resetAllMocks();
   localStorage.clear();
@@ -386,7 +387,7 @@ function primeActionView(input: {
 
   mocks.currentUser = input.perspective === "gm" ? gmUser : actionPlayer;
   mocks.searchParams = new URLSearchParams(
-    "tab=player-skill-rolls&scenarioId=scenario-private&encounterId=encounter-private",
+    `tab=${input.tab ?? "player-skill-rolls"}&scenarioId=scenario-private&encounterId=encounter-private`,
   );
   mocks.loadAccess.mockResolvedValue({
     accessMode: input.perspective,
@@ -468,5 +469,15 @@ describe("Campaign Action composition by perspective and encounter state", () =>
     expect(roleplay).toHaveAttribute("data-read-only", "true");
     expect(roleplay).toHaveAttribute("data-inspection-id", actionParticipant.id);
     expect(roleplay).toHaveAttribute("data-tab", "player-skill-rolls");
+  });
+
+  it("keeps the GM inspection header and Combat surface read-only", async () => {
+    primeActionView({ encounterStatus: "active", perspective: "gm", tab: "player-combat" });
+    render(<CampaignWorkspaceShell campaignId="campaign-1" />);
+
+    expect(await screen.findByTestId("participant-header")).toHaveTextContent("Player combat");
+    const combat = await screen.findByTestId("combat-surface");
+    expect(combat).toHaveAttribute("data-read-only", "true");
+    expect(combat).toHaveAttribute("data-tab", "player-combat");
   });
 });
