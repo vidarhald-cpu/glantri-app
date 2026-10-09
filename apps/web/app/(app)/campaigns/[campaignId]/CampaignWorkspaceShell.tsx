@@ -1753,6 +1753,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   encounterTitle={selectedActiveEncounter.title}
                   key={`${selectedActiveEncounter.id}:${selectedGmInspectableCandidate.id}`}
                   participantId={selectedGmInspectableCandidate.id}
+                  readOnlyInspection
                   scenarioId={workspaceState.activeScenarioId}
                   showParticipantSelector={false}
                   showWorkspaceHeader={false}
