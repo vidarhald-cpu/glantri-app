@@ -56,6 +56,13 @@ export interface CombatItemInteractionPanelProps {
   isGm: boolean;
   onEncounterUpdated: (encounter: EncounterSession) => void;
   participantId?: string;
+  /**
+   * Forgejo #509 F2 — an independent, additional reason for the panel to be inert: the GM is
+   * inspecting a player's Combat surface and must not act as that player. This panel is injected
+   * outside the surface's `controlsDisabled`, so it carries the guard itself. It gates both the
+   * controls and the server update, and never replaces the canonical one-live-Item-action state.
+   */
+  readOnly?: boolean;
 }
 
 export function CombatItemInteractionPanel({
@@ -63,6 +70,7 @@ export function CombatItemInteractionPanel({
   isGm,
   onEncounterUpdated,
   participantId,
+  readOnly = false,
 }: CombatItemInteractionPanelProps) {
   const [options, setOptions] = useState<CombatItemInteractionOptions>();
   const [recipientByItemId, setRecipientByItemId] = useState<Record<string, string>>({});
@@ -123,7 +131,8 @@ export function CombatItemInteractionPanel({
     item: CombatItemInteractionOption,
     operation: CombatItemInteractionOperation,
   ) {
-    if (!participantId) return;
+    // Read-only inspection: the write path itself refuses, not only the buttons.
+    if (readOnly || !participantId) return;
     const recipientParticipantId = operation === "pass" ? recipientByItemId[item.id] : undefined;
     if (operation === "pass" && !recipientParticipantId) {
       setFeedback("Choose who receives this Item.");
@@ -171,6 +180,9 @@ export function CombatItemInteractionPanel({
         Choose an Item in context. The GM reviews the timing, and an accepted change is saved to
         this Combat and the Character’s current equipment.
       </div>
+      {readOnly ? (
+        <div role="status">Inspection is read-only: Item actions cannot be declared from here.</div>
+      ) : null}
       {actor?.unsupportedReason ? <div role="status">{actor.unsupportedReason}</div> : null}
       {liveDeclaration?.itemInteraction ? (
         <div role="status">
@@ -253,6 +265,7 @@ export function CombatItemInteractionPanel({
                     aria-label={`${item.label}: ${operationLabels[operation]}`}
                     disabled={
                       busy ||
+                      readOnly ||
                       Boolean(liveDeclaration) ||
                       (operation === "pass" && !recipientByItemId[item.id]) ||
                       (operation === "use" && !detailByItemId[item.id]?.trim())
