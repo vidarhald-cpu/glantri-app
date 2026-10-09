@@ -29430,15 +29430,9 @@ function getCombatRoundLatestEventForCommand(input: {
       });
       return {
         commandId: command.id,
-        details:
-          [
-            pending.weaponModeRange ? `Range ${pending.weaponModeRange}` : undefined,
-            pending.weaponModeSourceMetadata
-              ? `${pending.weaponModeSourceMetadata.sheet} row ${pending.weaponModeSourceMetadata.row}`
-              : undefined,
-          ]
-            .filter((value): value is string => Boolean(value))
-            .join(" · ") || undefined,
+        // No workbook import provenance: every viewer, players included, receives this summary
+        // (#517, ruling E2).
+        details: pending.weaponModeRange ? `Range ${pending.weaponModeRange}` : undefined,
         phase: command.phase,
         resultId: pending.id,
         roundNumber: command.roundNumber,

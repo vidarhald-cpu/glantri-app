@@ -394,6 +394,12 @@ export const ArmorComponentProfileSchema = z.object({
   criticalModifierByArea: ArmorLocationValuesSchema.nullable().optional(),
   criticalModifierGeneral: z.number().nullable().optional(),
   sourceMetadata: ImportedArmorSourceMetadataSchema.nullable().optional(),
+  /**
+   * The component's identity (`armorComponentKey`), carried explicitly where its `sourceMetadata`
+   * has been removed. Derived, never stored: content, captured snapshots and stored overrides do
+   * not carry it. An opaque identifier only, not a source to show anyone (#517).
+   */
+  componentKey: z.string().min(1).optional(),
 });
 
 export const WeaponAttackModeManualOverrideSchema = z.object({

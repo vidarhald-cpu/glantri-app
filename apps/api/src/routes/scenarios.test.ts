@@ -64,7 +64,10 @@ import {
   scenarioParticipantSchema,
   type CombatProgressionBoundaryKind,
   type CombatDefenseSnapshot,
+  combatRoundInitiativeResultSchema,
+  movementIntentSchema,
   type CombatRoundState,
+  type MovementIntent,
   type CombatEffectsState,
   type EncounterSession,
   type ScenarioParticipant,
@@ -75,12 +78,20 @@ import {
   undoLatestCombatRoundCommand,
   openCombatRoundDisarmAfterContact,
   buildOffensiveParryAttemptId,
-  buildPlayerFacingEncounterSession,
   playerFacingCombatRoundCommandSchema,
-  playerFacingCombatRoundParticipantSchema,
+  playerFacingCombatRoundStateSchema,
+  playerFacingEncounterSessionSchema,
   playerFacingScenarioParticipantSchema,
+  activeCombatMutationResponseSchema,
+  armorComponentKey,
+  resolveEffectiveItemTemplate,
+  type ArmorTemplate,
 } from "@glantri/domain";
-import { weaponTemplates } from "@glantri/content/equipment";
+import {
+  equipmentTemplatesById,
+  shieldTemplates,
+  weaponTemplates,
+} from "@glantri/content/equipment";
 
 const mocks = vi.hoisted(() => {
   class CampaignCharacterAlreadyRosteredError extends Error {
@@ -284,7 +295,51 @@ vi.mock("../lib/sessionAuth", () => ({
 }));
 
 import { scenariosRoutes } from "./scenarios";
-import { buildPlayerSafeEncounterForUser } from "./scenarios/encounterRoutes";
+import { buildRequestedCombatMutationResponse } from "./scenarios/combatMutationResponse";
+import { buildPlayerFacingEncounterForUser } from "./scenarios/encounterRoutes";
+
+/**
+ * #517 (privacy hardening Tier 3) test seam: the allow-list switch. Switched on, `buildPlayerFacing`
+ * returns what the per-viewer projection selected, field overrides applied, without parsing it
+ * through its player-facing schema — exactly the value the deny-list projection Tier 3 replaced
+ * returned. Tests use it to show which private material a fixture puts in front of a viewer (the
+ * positive control) and that every absence test fails without the allow-list (the mutation). Off,
+ * it is the real function. Production code has no such switch.
+ */
+const allowList = vi.hoisted(() => ({ disabled: false }));
+vi.mock("../../../../packages/domain/src/encounter/playerFacingSchema", async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import("../../../../packages/domain/src/encounter/playerFacingSchema")
+    >();
+  return {
+    ...actual,
+    buildPlayerFacing: ((schema, source, overrides = {}) =>
+      allowList.disabled
+        ? { ...source, ...overrides }
+        : actual.buildPlayerFacing(schema, source, overrides)) as typeof actual.buildPlayerFacing,
+  };
+});
+
+/** What `build` returns with the allow-list switched off: the per-viewer selection alone. */
+function withoutTheAllowList<Value>(build: () => Value): Value {
+  allowList.disabled = true;
+  try {
+    return build();
+  } finally {
+    allowList.disabled = false;
+  }
+}
+
+/** `withoutTheAllowList` for a request: the switch stays off until the response has been built. */
+async function withoutTheAllowListAsync<Value>(build: () => Promise<Value>): Promise<Value> {
+  allowList.disabled = true;
+  try {
+    return await build();
+  } finally {
+    allowList.disabled = false;
+  }
+}
 
 function emptyModifierBuckets() {
   return {
@@ -7810,7 +7865,28 @@ describe("scenarios route contract", () => {
       encounterId: "encounter-1",
       facts: {
         gmReview: { privateNote: "secret override" },
-        involvedOutcome: { outcome: "hit" },
+        // Workbook import provenance is not player-facing (#517 ruling E2): neither the attack
+        // mode's import record nor the missile DMB roll, whose `provenance` names the sheet and row.
+        involvedOutcome: {
+          outcome: "hit",
+          weaponDmb: 4,
+          weaponDmbRoll: {
+            diceCount: 1,
+            diceSides: 6,
+            flatModifier: 0,
+            provenance: "Weapon2:17:1d6",
+            rolls: [4],
+            total: 4,
+          },
+          weaponModeSourceMetadata: {
+            rawRow: { A: "T. Javelin" },
+            row: 17,
+            sheet: "Weapon2",
+            sourceColumns: { name: "A" },
+            sourceRange: "A17:K17",
+            workbook: "Themistogenes 1.07.xlsx",
+          },
+        },
         publicOutcome: {},
         resultPresentation: {
           conciseOutcome: { label: "Attack resolved" },
@@ -7924,6 +8000,15 @@ describe("scenarios route contract", () => {
     });
     const serialized = JSON.stringify(response.json());
     expect(serialized).not.toContain("secret override");
+    expect(serialized).not.toContain("weaponModeSourceMetadata");
+    expect(serialized).not.toContain("A17:K17");
+    expect(serialized).not.toContain("weaponDmbRoll");
+    expect(serialized).not.toContain("Weapon2:17");
+    expect(workbookImportProvenancePaths(response.json())).toEqual([]);
+    expect(response.json().history.activeRound.events[0].facts.involvedOutcome).toEqual({
+      outcome: "hit",
+      weaponDmb: 4,
+    });
     expect(serialized).not.toContain("rollD20");
     expect(serialized).not.toContain("encounter-participant-hidden");
     expect(serialized).not.toContain("diagnostics");
@@ -7946,7 +8031,26 @@ describe("scenarios route contract", () => {
             encounterId: "encounter-1",
             facts: {
               gmReview: { privateNote: "GM fact" },
-              involvedOutcome: { outcome: "hit" },
+              involvedOutcome: {
+                outcome: "hit",
+                weaponDmb: 4,
+                weaponDmbRoll: {
+                  diceCount: 1,
+                  diceSides: 6,
+                  flatModifier: 0,
+                  provenance: "Weapon2:17:1d6",
+                  rolls: [4],
+                  total: 4,
+                },
+                weaponModeSourceMetadata: {
+                  rawRow: { A: "T. Javelin" },
+                  row: 17,
+                  sheet: "Weapon2",
+                  sourceColumns: { name: "A" },
+                  sourceRange: "A17:K17",
+                  workbook: "Themistogenes 1.07.xlsx",
+                },
+              },
               publicOutcome: {},
               rollerPrivate: { rollD20: 18 },
             },
@@ -7984,6 +8088,10 @@ describe("scenarios route contract", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json().history.activeRound.events[0].facts).toMatchObject({
       gmReview: { privateNote: "GM fact" },
+      involvedOutcome: {
+        weaponDmbRoll: { provenance: "Weapon2:17:1d6", total: 4 },
+        weaponModeSourceMetadata: { row: 17, sheet: "Weapon2" },
+      },
       privateCalculation: { rollD20: 18 },
     });
     expect(response.json().history.progression).toBeDefined();
@@ -28379,7 +28487,7 @@ describe("scenarios route contract", () => {
    * Forgejo issue #340, acceptance criteria 2 and 3. The GM drives `roll_combat_task` — not only
    * the player — and the resolve carries the audience the GM chose. The privacy assertion is made
    * on the **API payload** the player is served, through the same
-   * `buildPlayerSafeEncounterForUser` projection the encounter routes serialize with, not on the
+   * `buildPlayerFacingEncounterForUser` projection the encounter routes serialize with, not on the
    * DOM. No privacy projection is changed here; the resolve only supplies the existing
    * `visibleToParticipantIds` input.
    */
@@ -28457,7 +28565,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     // The non-entitled viewer receives no row at all in the payload the API serves them.
-    const nonEntitled = buildPlayerSafeEncounterForUser({
+    const nonEntitled = buildPlayerFacingEncounterForUser({
       encounter: resolved,
       scenarioParticipants: participants,
       userId: mocks.playerUser.id,
@@ -28504,7 +28612,7 @@ describe("scenarios route contract", () => {
     expect(resolve.statusCode, resolve.body).toBe(200);
     await app.close();
 
-    const entitled = buildPlayerSafeEncounterForUser({
+    const entitled = buildPlayerFacingEncounterForUser({
       encounter: mutable.encounter,
       scenarioParticipants: participants,
       userId: mocks.playerUser.id,
@@ -28591,7 +28699,7 @@ describe("scenarios route contract", () => {
 
     // P3 — absent from the payload a non-entitled player is served, at the same projection the
     // encounter routes serialize with.
-    const nonEntitled = buildPlayerSafeEncounterForUser({
+    const nonEntitled = buildPlayerFacingEncounterForUser({
       encounter: mutable.encounter,
       scenarioParticipants: participants,
       userId: mocks.playerUser.id,
@@ -28730,67 +28838,17 @@ function secretValuePaths(value: unknown, path = "", found: string[] = []): stri
   return found;
 }
 
-function uniqueSorted(paths: readonly string[]): string[] {
-  return [...new Set(paths)].sort();
-}
-
-type PinnedResidual = { keys: readonly string[]; secrets: readonly string[] };
-
-/** Every other converted boundary: R2 does not extend to it, so nothing may remain. */
-const NO_RESIDUAL: PinnedResidual = { keys: [], secrets: [] };
-
 /**
- * R2 (control-plane rulings 2026-10-04): the residual accepted as Tier 3's debt is the combat context
- * of the viewer's own round-state declaration in the combat-declaration response — that route only.
- * The projection passes it through with each modifier entry's canonical lifecycle and correction
- * history. These are its exact paths in these fixtures, relative to that combat context: the private
- * entry of the participant's stored modifier buckets, which a player's declaration preserves, and the
- * phase-penalty row the combat-declaration route generates.
- *
- * A player response must carry exactly its pinned paths and nothing else. A named key or a SECRET
- * value anywhere else fails — in a phase context, in another participant's declaration, at another
- * entry of the same bucket, or at another key of the same entry.
+ * The player response it is given carries no named key or SECRET value. Until #517 (Tier 3) the
+ * combat-declaration response was the one exception: R2, the viewer's own combat context as the
+ * per-viewer projection produced it, pinned path by path. Tier 3 removed R2, so every converted
+ * boundary is held to nothing.
+ * The paths are compared as a sorted list without de-duplication, so a repeated path still counts
+ * (Tier 1 finding F1).
  */
-const R2_PRIVATE_ENTRY: PinnedResidual = {
-  keys: [
-    "modifierBuckets.general[private-row].canonicalLifecycle",
-    "modifierBuckets.general[private-row].canonicalLifecycle.privateDiagnostic",
-    "modifierBuckets.general[private-row].canonicalTransitions",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].privateDiagnostic",
-  ],
-  secrets: [
-    "modifierBuckets.general[private-row].canonicalLifecycle.privateDiagnostic.code",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.reasonCode",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
-    "modifierBuckets.general[private-row].canonicalTransitions[private-transition].privateDiagnostic.code",
-  ],
-};
-const R2_GENERATED_DECLARATION_ROW: PinnedResidual = {
-  keys: [
-    "modifierBuckets.situationDb[generated:attack-phase-penalty:round:1:participant:encounter-participant-1:phase1:attack_1:db-parry].canonicalLifecycle",
-    "modifierBuckets.situationDb[generated:attack-phase-penalty:round:1:participant:encounter-participant-1:phase1:attack_1:db-parry].canonicalTransitions",
-  ],
-  secrets: [],
-};
-
-/** The pinned residual under the viewer's own declaration, at one response root. */
-function pinnedR2Residual(
-  root: "activeCombatState" | "encounter.combatRoundState",
-  ...parts: PinnedResidual[]
-): PinnedResidual {
-  const at = (path: string) =>
-    `${root}.participants[encounter-participant-1].declaration.combatContext.${path}`;
-  return {
-    keys: uniqueSorted(parts.flatMap((part) => part.keys.map(at))),
-    secrets: uniqueSorted(parts.flatMap((part) => part.secrets.map(at))),
-  };
-}
-
-/** The response's named keys and SECRET values are exactly the pinned residual. */
-function expectPlayerBodyPrivateMaterial(body: unknown, pinned: PinnedResidual) {
-  expect(uniqueSorted(privateKeyPaths(body)), "named keys").toEqual([...pinned.keys]);
-  expect(uniqueSorted(secretValuePaths(body)), "SECRET values").toEqual([...pinned.secrets]);
+function expectNoPrivateMaterialInPlayerBody(body: unknown) {
+  expect([...privateKeyPaths(body)].sort(), "named keys").toEqual([]);
+  expect([...secretValuePaths(body)].sort(), "SECRET values").toEqual([]);
 }
 
 /**
@@ -29164,14 +29222,9 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
-      expectPlayerBodyPrivateMaterial(
-        body,
-        pinnedR2Residual(
-          "encounter.combatRoundState",
-          R2_PRIVATE_ENTRY,
-          R2_GENERATED_DECLARATION_ROW,
-        ),
-      );
+      // R2 is removed (#517 Tier 3): the viewer's own combat context is rebuilt like every other.
+      expectNoPrivateMaterialInPlayerBody(body);
+      expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
       expect(privateKeyPaths(body.participant)).toEqual([]);
       expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
       expect(body.encounter).not.toHaveProperty("gmPrivateClosingNote");
@@ -29196,10 +29249,8 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(body.version).toBe(1);
-      expectPlayerBodyPrivateMaterial(
-        body,
-        pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY, R2_GENERATED_DECLARATION_ROW),
-      );
+      expectNoPrivateMaterialInPlayerBody(body);
+      expectOwnDeclarationCombatContextKept(body.activeCombatState);
       expect(privateKeyPaths(body.updatedParticipants)).toEqual([]);
       expect(privateKeyPaths(body.activeCombatState.commands)).toEqual([]);
       expect(body).not.toHaveProperty("deterministicAdvance");
@@ -29277,7 +29328,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         expect(response.statusCode, response.body).toBe(200);
         const body = response.json();
         expect(Object.keys(body).sort()).toEqual(["command", "encounter", "participant"]);
-        expectPlayerBodyPrivateMaterial(body, NO_RESIDUAL);
+        expectNoPrivateMaterialInPlayerBody(body);
         expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
         expect(privateKeyPaths(body.participant)).toEqual([]);
         expect(privateKeyPaths(body.command)).toEqual([]);
@@ -29317,7 +29368,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         await app.close();
 
         expect(response.statusCode, response.body).toBe(200);
-        expectPlayerBodyPrivateMaterial(response.json(), NO_RESIDUAL);
+        expectNoPrivateMaterialInPlayerBody(response.json());
         expectOwnDeclarationCombatContextKept(response.json().activeCombatState);
         expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
       });
@@ -29423,7 +29474,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(Object.keys(body).sort()).toEqual(["encounter", "participant"]);
-      expectPlayerBodyPrivateMaterial(body, NO_RESIDUAL);
+      expectNoPrivateMaterialInPlayerBody(body);
       expectOwnDeclarationCombatContextKept(body.encounter.combatRoundState);
       expect(privateKeyPaths(body.participant)).toEqual([]);
       expect(privateKeyPaths(body.encounter.combatRoundState.commands)).toEqual([]);
@@ -29437,7 +29488,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       await app.close();
 
       expect(response.statusCode, response.body).toBe(200);
-      expectPlayerBodyPrivateMaterial(response.json(), NO_RESIDUAL);
+      expectNoPrivateMaterialInPlayerBody(response.json());
       expectOwnDeclarationCombatContextKept(response.json().activeCombatState);
       expect(privateKeyPaths(response.json().updatedParticipants)).toEqual([]);
     });
@@ -29641,7 +29692,7 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
         expect(fromReceived.response.statusCode, fromReceived.response.body).toBe(200);
         expect(fromReceived.written).toEqual(fromStored.written);
         // What is kept is the GM's: the correction record and the declaring user.
-        expect(uniqueSorted(privateKeyPaths(fromReceived.written))).toEqual([
+        expect([...privateKeyPaths(fromReceived.written)].sort()).toEqual([
           "combat.combatContext.modifierBuckets.general[private-row].canonicalLifecycle",
           "combat.combatContext.modifierBuckets.general[private-row].canonicalLifecycle.privateDiagnostic",
           "combat.combatContext.modifierBuckets.general[private-row].canonicalTransitions",
@@ -29837,84 +29888,27 @@ function keysOutsidePlayerType(value: unknown, schema: PlayerTypeSchema, path: s
   return [];
 }
 
-/** The top-level fields of the player-facing encounter, read off its only builder. */
-const PLAYER_ENCOUNTER_FIELDS = Object.keys(
-  buildPlayerFacingEncounterSession({
-    projectedEncounter: makeCombatEncounter() as unknown as EncounterSession,
-  }),
-);
-
 /**
- * The round-state fields other than `participants` and `commands`: still the per-viewer projection's
- * own values until Tier 3 types them. Named here, so a new round-state field fails until it is.
+ * The keys of a player encounter, or of the round state an `active-v1` response carries, outside the
+ * player-facing types. Since #517 (Tier 3) these name every field at every level, so the walk covers
+ * the whole encounter: round-state participants, declarations and commands as in Tier 2, and every
+ * other round-state structure, the encounter participants, action log, item references and roleplay
+ * state. It stops only at command `facts`, Tier 4's open record.
  */
-const TIER3_ROUND_STATE_FIELDS = [
-  "activeParticipantId",
-  "adjustDistanceProposals",
-  "breakOffProposals",
-  "combatExperienceDifficulty",
-  "continuedContacts",
-  "currentCursor",
-  "currentStep",
-  "defenseSnapshots",
-  "disarmAttempts",
-  "disarmUnbalancedConditions",
-  "distanceState",
-  "encounterId",
-  "engagements",
-  "events",
-  "feintProposals",
-  "genericActions",
-  "gmBacktrackHold",
-  "missileReadiness",
-  "observationAttempts",
-  "observationRelationships",
-  "offensiveParryContests",
-  "phaseResolutionCursor",
-  "phaseResolutionResults",
-  "phaseResolutionStatuses",
-  "roundEndReview",
-  "roundNumber",
-  "rounds",
-  "selectedParticipantId",
-  "selectedStep",
-  "stepSnapshots",
-  "unbalancedConditions",
-];
-
-function roundStateKeysOutsidePlayerTypes(state: Record<string, unknown>, path: string): string[] {
-  return Object.entries(state).flatMap(([key, nested]) => {
-    if (nested === undefined) return [];
-    if (key === "participants") {
-      return (nested as unknown[]).flatMap((participant) =>
-        keysOutsidePlayerType(
-          participant,
-          playerFacingCombatRoundParticipantSchema as unknown as PlayerTypeSchema,
-          arrayEntryPath(`${path}.participants`, participant),
-        ),
-      );
-    }
-    if (key === "commands") {
-      return (nested as unknown[]).flatMap((command) =>
-        keysOutsidePlayerType(
-          command,
-          playerFacingCombatRoundCommandSchema as unknown as PlayerTypeSchema,
-          arrayEntryPath(`${path}.commands`, command),
-        ),
-      );
-    }
-    return TIER3_ROUND_STATE_FIELDS.includes(key) ? [] : [`${path}.${key}`];
-  });
+function encounterKeysOutsidePlayerTypes(encounter: Record<string, unknown>, path: string) {
+  return keysOutsidePlayerType(
+    encounter,
+    playerFacingEncounterSessionSchema as unknown as PlayerTypeSchema,
+    path,
+  );
 }
 
-function encounterKeysOutsidePlayerTypes(encounter: Record<string, unknown>, path: string) {
-  return Object.entries(encounter).flatMap(([key, nested]) => {
-    if (nested === undefined) return [];
-    if (!PLAYER_ENCOUNTER_FIELDS.includes(key)) return [`${path}.${key}`];
-    return key === "combatRoundState"
-      ? roundStateKeysOutsidePlayerTypes(nested as Record<string, unknown>, `${path}.${key}`)
-      : [];
-  });
+function roundStateKeysOutsidePlayerTypes(state: Record<string, unknown>, path: string): string[] {
+  return keysOutsidePlayerType(
+    state,
+    playerFacingCombatRoundStateSchema as unknown as PlayerTypeSchema,
+    path,
+  );
 }
 
 /**
@@ -30015,7 +30009,7 @@ function tier2CombatExperience(roundNumber: number) {
  */
 function withTier2PrivateRoundState(
   state: CombatRoundState,
-  options: { contexts?: boolean; declarations?: boolean } = {},
+  options: { declarations?: boolean } = {},
 ): CombatRoundState {
   const declared: CombatRoundState = options.declarations
     ? {
@@ -30034,10 +30028,7 @@ function withTier2PrivateRoundState(
         ),
       }
     : state;
-  // `contexts: false` leaves the combat and phase contexts as stored: the combat-declaration
-  // route's own context is Tier 1's pinned R2 location, which Tier 1's tests own.
-  const withContexts =
-    options.contexts === false ? declared : withPrivateDeclarationMaterial(declared);
+  const withContexts = withPrivateDeclarationMaterial(declared);
   const participantIds = withContexts.participants.map((participant) => participant.participantId);
   const rolledBy = <Result extends object>(result: Result) => ({
     ...result,
@@ -30107,7 +30098,7 @@ function withTier2PrivateRoundState(
 
 function withTier2PrivateEncounter<Encounter extends Record<string, unknown>>(
   encounter: Encounter,
-  options: { contexts?: boolean; declarations?: boolean } = {},
+  options: { declarations?: boolean } = {},
 ): Encounter {
   return encounter.combatRoundState
     ? {
@@ -30144,6 +30135,63 @@ const TIER2_NONE = {
 } as const;
 
 /**
+ * An import record, by shape: only the `Imported…SourceMetadata` schemas carry `workbook`, `sheet`,
+ * `sourceRange` and `sourceColumns` together (rules-source citations do not).
+ */
+function isImportRecord(value: unknown): boolean {
+  return (
+    Boolean(value) &&
+    typeof value === "object" &&
+    ["workbook", "sheet", "sourceRange", "sourceColumns"].every((key) => key in (value as object))
+  );
+}
+
+/**
+ * Where workbook import provenance, which is not player-facing (#517 ruling E2), sits in a
+ * response. At any depth, array elements included, it finds:
+ *
+ * - every populated field named `sourceMetadata` or `…SourceMetadata` (a weapon or armor
+ *   template's, an attack mode's, an armor component's, a shield's `offensiveSourceMetadata` and
+ *   `defensiveSourceMetadata`, a round-state attack's `weaponModeSourceMetadata`);
+ * - any other value with the shape of an import record;
+ * - every populated `weaponDmbRoll`, the missile DMB roll whose `provenance` names the workbook sheet
+ *   and row, and which players do not receive at all;
+ * - a latest combat event summary that names a workbook row.
+ *
+ * It does not find provenance in any other form, such as an object of another shape or coordinates
+ * inside a string. The armor component identity (`componentKey`), whose string embeds them, is the
+ * ruled exception and is asserted exactly where it is exercised.
+ */
+function workbookImportProvenancePaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (isImportRecord(entry)) found.push(`${path}[]`);
+      else workbookImportProvenancePaths(entry, `${path}[]`, found);
+    }
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      const nestedPath = path ? `${path}.${key}` : key;
+      if (
+        key === "sourceMetadata" ||
+        key.endsWith("SourceMetadata") ||
+        key === "weaponDmbRoll" ||
+        isImportRecord(nested)
+      ) {
+        if (nested != null) found.push(nestedPath);
+      } else if (
+        key === "latestEvent" &&
+        /\brow \d+/.test(String((nested as { details?: unknown } | undefined)?.details ?? ""))
+      ) {
+        found.push(`${nestedPath}.details`);
+      } else {
+        workbookImportProvenancePaths(nested, nestedPath, found);
+      }
+    }
+  }
+  return found;
+}
+
+/**
  * The GM correction history as the GM reads it (#507 proof obligation 6): the `gmOverride` of every
  * canonical transition a payload carries, wherever it sits.
  */
@@ -30169,21 +30217,24 @@ const TIER2_GM_CORRECTION_RECORD = expect.objectContaining({
 });
 
 /**
- * Positive control. The per-viewer projection — the player-facing builders' input — carries exactly
- * this fixture's populated private material for this viewer, so the player response's lack of it
- * is the work of the player-facing types and not of an empty fixture (the #487 failure mode).
+ * Positive control. With the allow-list switched off, the per-viewer projection returns what the
+ * deny-list projection Tier 3 replaced returned — and that carries exactly this fixture's populated
+ * private material for this viewer, so the player response's lack of it is the work of the
+ * player-facing types and not of an empty fixture (the #487 failure mode).
  */
 function expectTier2MaterialReachesThePlayerBuilders(input: {
   encounter: EncounterSession;
   expected: Partial<Record<keyof typeof TIER2_NONE, true>>;
   scenarioParticipants: ScenarioParticipant[];
 }) {
-  const projected = buildPlayerSafeEncounterForUser({
-    encounter: input.encounter,
-    scenarioParticipants: input.scenarioParticipants,
-    userId: mocks.playerUser.id,
-  });
-  expect(tier2PrivateMaterial(projected.combatRoundState?.participants)).toEqual({
+  const selected = withoutTheAllowList(() =>
+    buildPlayerFacingEncounterForUser({
+      encounter: input.encounter,
+      scenarioParticipants: input.scenarioParticipants,
+      userId: mocks.playerUser.id,
+    }),
+  );
+  expect(tier2PrivateMaterial(selected.combatRoundState?.participants)).toEqual({
     ...TIER2_NONE,
     ...input.expected,
   });
@@ -30219,34 +30270,30 @@ type Tier2Case = {
   arrange: (viewer: Tier2Viewer) => Promise<Tier2Subject>;
   /** The exact top-level keys of the GM's legacy response, where they prove the path taken. */
   gmKeys?: readonly string[];
-  /** Populate the combat and phase contexts too (default); `false` for Tier 1's R2 route. */
-  injectContexts?: boolean;
   /** Account-identity paths a player response may carry, each explained where it is listed. */
   identityPaths?: { active?: readonly string[]; legacy?: readonly string[] };
   inject?: "load" | "save";
   name: string;
   /** The exact top-level keys of the player's legacy response. */
   playerKeys: readonly string[];
-  /** Keys outside the player-facing types a player response may carry: only the ruled R2. */
-  residualKeys?: { active?: readonly string[]; legacy?: readonly string[] };
-  /**
-   * Private material the player response still carries: only combat-declaration's ruled R2
-   * residual (the viewer's own combat context, pinned path by path by Tier 1's tests).
-   */
-  playerMaterial?: Tier2Material;
   /** Exactly the Tier 2 material this fixture populates where the player's projection reads it. */
   populated: Tier2Material;
   /** SECRET values a player response may carry, each explained where it is listed. */
   secretPaths?: { active?: readonly string[]; legacy?: readonly string[] };
+  /**
+   * The fixture carries workbook import provenance where the route reads it, and the GM's
+   * response must keep it (#517 ruling E2's positive control).
+   */
+  workbookProvenance?: true;
 };
 
-function withTier2Material(mode: "load" | "save", options: { contexts?: boolean } = {}) {
+function withTier2Material(mode: "load" | "save") {
   const seen: EncounterSession[] = [];
   if (mode === "load") {
     const load = mocks.encounterService.getEncounterById.getMockImplementation();
     if (!load) throw new Error("The case must mock getEncounterById.");
     mocks.encounterService.getEncounterById.mockImplementation(async (...args: unknown[]) => {
-      const encounter = withTier2PrivateEncounter(await load(...args), options);
+      const encounter = withTier2PrivateEncounter(await load(...args));
       seen.push(encounter);
       return encounter;
     });
@@ -30255,7 +30302,7 @@ function withTier2Material(mode: "load" | "save", options: { contexts?: boolean 
       mocks.encounterService.listEncountersByScenario.mockImplementation(
         async (...args: unknown[]) =>
           ((await list(...args)) as EncounterSession[]).map((stored) => {
-            const encounter = withTier2PrivateEncounter(stored, options);
+            const encounter = withTier2PrivateEncounter(stored);
             seen.push(encounter);
             return encounter;
           }),
@@ -30266,10 +30313,7 @@ function withTier2Material(mode: "load" | "save", options: { contexts?: boolean 
     if (!save) throw new Error("The case must mock updateEncounter.");
     mocks.encounterService.updateEncounter.mockImplementation(
       async (update: { session: EncounterSession }) => {
-        const session = withTier2PrivateEncounter(update.session, {
-          ...options,
-          declarations: true,
-        });
+        const session = withTier2PrivateEncounter(update.session, { declarations: true });
         seen.push(session);
         return save({ ...update, session });
       },
@@ -30286,9 +30330,7 @@ function withTier2Material(mode: "load" | "save", options: { contexts?: boolean 
 
 async function runTier2Case(testCase: Tier2Case, viewer: Tier2Viewer, headers = {}) {
   const subject = await testCase.arrange(viewer);
-  const material = withTier2Material(testCase.inject ?? "save", {
-    contexts: testCase.injectContexts,
-  });
+  const material = withTier2Material(testCase.inject ?? "save");
   mocks.requireAuthenticatedUser.mockResolvedValue(viewer);
   try {
     const response = await subject.app.inject({ ...subject.request, headers });
@@ -30328,17 +30370,16 @@ function describeTier2Case(testCase: Tier2Case) {
       expect(response.statusCode, response.body).toBe(200);
       const body = response.json();
       expect(sortedPaths(Object.keys(body))).toEqual(sortedPaths(testCase.playerKeys));
-      expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual(
-        sortedPaths(testCase.residualKeys?.legacy ?? []),
-      );
+      expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual([]);
       expect(sortedPaths(accountIdentityPaths(body))).toEqual(
         sortedPaths(testCase.identityPaths?.legacy ?? []),
       );
       expect(sortedPaths(secretValuePaths(body))).toEqual(
         sortedPaths(testCase.secretPaths?.legacy ?? []),
       );
-      expect(tier2PrivateMaterial(body)).toEqual({ ...TIER2_NONE, ...testCase.playerMaterial });
+      expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
       expect(JSON.stringify(body)).not.toContain("submittedByUserId");
+      expect(workbookImportProvenancePaths(body)).toEqual([]);
       expectTier2MaterialReachesThePlayerBuilders({
         encounter: encounter!,
         expected: testCase.populated,
@@ -30357,17 +30398,16 @@ function describeTier2Case(testCase: Tier2Case) {
         expect(response.statusCode, response.body).toBe(200);
         const body = response.json();
         expect(body.version).toBe(1);
-        expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual(
-          sortedPaths(testCase.residualKeys?.active ?? []),
-        );
+        expect(sortedPaths(playerResponseKeysOutsidePlayerTypes(body))).toEqual([]);
         expect(sortedPaths(accountIdentityPaths(body))).toEqual(
           sortedPaths(testCase.identityPaths?.active ?? []),
         );
         expect(sortedPaths(secretValuePaths(body))).toEqual(
           sortedPaths(testCase.secretPaths?.active ?? []),
         );
-        expect(tier2PrivateMaterial(body)).toEqual({ ...TIER2_NONE, ...testCase.playerMaterial });
+        expect(tier2PrivateMaterial(body)).toEqual(TIER2_NONE);
         expect(JSON.stringify(body)).not.toContain("submittedByUserId");
+        expect(workbookImportProvenancePaths(body)).toEqual([]);
       });
     }
 
@@ -30381,6 +30421,9 @@ function describeTier2Case(testCase: Tier2Case) {
       }
       if (testCase.gmKeys) {
         expect(sortedPaths(Object.keys(response.json()))).toEqual(sortedPaths(testCase.gmKeys));
+      }
+      if (testCase.workbookProvenance) {
+        expect(workbookImportProvenancePaths(response.json())).not.toEqual([]);
       }
     });
   });
@@ -30619,13 +30662,12 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // The viewer's own distance-control roll, in the round-end review (Tier 3's round state) and
-      // in the facts of its command (Tier 4's facts allow-lists).
+      // The viewer's own distance-control roll in the facts of its command (Tier 4's facts
+      // allow-lists). The round-end review's copy is a player-facing structure without it (#517).
       active: [
         ...OWN_PARTICIPANT_CONTROLLER.active,
         "activeCombatState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.nextProposal.participantA.result.rolledByUserId",
         "activeCombatState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.rolledParticipantRoll.rolledByUserId",
-        "activeCombatState.roundEndReview.proposedDistances[round-end:1:distance:encounter-participant-1::encounter-participant-2].participantA.result.rolledByUserId",
       ],
       legacy: [
         ...OWN_PARTICIPANT_CONTROLLER.legacy,
@@ -30633,7 +30675,6 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         "command.facts.rolledParticipantRoll.rolledByUserId",
         "encounter.combatRoundState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.nextProposal.participantA.result.rolledByUserId",
         "encounter.combatRoundState.commands[combat-command:1:1:roll_round_end_distance_control:encounter-participant-1:<time>].facts.rolledParticipantRoll.rolledByUserId",
-        "encounter.combatRoundState.roundEndReview.proposedDistances[round-end:1:distance:encounter-participant-1::encounter-participant-2].participantA.result.rolledByUserId",
       ],
     },
     name: "POST /encounters/:encounterId/combat-round/roll-distance-control",
@@ -30711,15 +30752,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // The viewer's own health roll, in the round-end review (Tier 3's round state).
-      active: [
-        ...OWN_PARTICIPANT_CONTROLLER.active,
-        "activeCombatState.roundEndReview.participantReviews.encounter-participant-1.proposedHealthRolls[round-end:10:encounter-participant-1:external-bleed:player-bleed:health].result.rolledByUserId",
-      ],
-      legacy: [
-        ...OWN_PARTICIPANT_CONTROLLER.legacy,
-        "encounter.combatRoundState.roundEndReview.participantReviews.encounter-participant-1.proposedHealthRolls[round-end:10:encounter-participant-1:external-bleed:player-bleed:health].result.rolledByUserId",
-      ],
+      // The viewer's own participant's controller. The round-end review's health roll is a
+      // player-facing structure without its roller (#517).
+      active: [...OWN_PARTICIPANT_CONTROLLER.active],
+      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy],
     },
     name: "POST /encounters/:encounterId/combat-round/roll-health-check",
     playerKeys: ["command", "encounter", "participant"],
@@ -30757,20 +30793,9 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // Phase resolution results are Tier 3's round state, not a round-state participant; Tier 1
-      // recorded `damageResult.createdByUserId` among their unruled nested locations.
-      active: [
-        "activeCombatState.phaseResolutionResults[].criticalRoll.rolledByUserId",
-        "activeCombatState.phaseResolutionResults[].damageResult.createdByUserId",
-        "activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.phaseResolutionResults[].criticalRoll.rolledByUserId",
-        "encounter.combatRoundState.phaseResolutionResults[].damageResult.createdByUserId",
-        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-    },
+    // Phase resolution results are player-facing structures (#517): the critical and hit-location
+    // rollers and `damageResult.createdByUserId` — one of Tier 1's unruled nested locations — are
+    // not part of them, so no account identity remains.
     name: "POST /encounters/:encounterId/combat-round/roll-critical",
     playerKeys: ["encounter"],
     populated: {
@@ -30836,17 +30861,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // Phase resolution results: Tier 3's round state (see roll-critical).
-      active: [
-        "activeCombatState.phaseResolutionResults[].damageResult.createdByUserId",
-        "activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.phaseResolutionResults[].damageResult.createdByUserId",
-        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-    },
+    // Phase resolution results are player-facing structures (see roll-critical).
     name: "POST /encounters/:encounterId/combat-round/resolve-phase-damage",
     playerKeys: ["commandEnvelope", "encounter"],
     populated: {
@@ -30902,16 +30917,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     arrange: (viewer) => arrangeContinuedContactMaintenance(viewer, false),
     gmKeys: ["command", "commandEnvelope", "encounter", "roll"],
     identityPaths: {
-      // The viewer's own maintenance roll: in the round-end review (Tier 3's round state) and as
-      // the route's `roll` presentation, which is not a participant or encounter sibling.
-      active: [
-        "activeCombatState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "mutationPresentation.roll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "roll.rolledByUserId",
-      ],
+      // The viewer's own maintenance roll as the route's `roll` presentation, which is not part of
+      // the encounter. The round-end review's copy is a player-facing structure without it (#517).
+      active: ["mutationPresentation.roll.rolledByUserId"],
+      legacy: ["roll.rolledByUserId"],
     },
 
     name: "POST /encounters/:encounterId/combat-round/roll-continued-contact-maintenance (contest open)",
@@ -30931,16 +30940,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     // does not, because it is not theirs.
     gmKeys: ["command", "commandEnvelope", "encounter", "participant", "roll"],
     identityPaths: {
-      // The viewer's own maintenance roll: in the round-end review (Tier 3's round state) and as
-      // the route's `roll` presentation, which is not a participant or encounter sibling.
-      active: [
-        "activeCombatState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "mutationPresentation.roll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.roundEndReview.continuedContactMaintenanceContests[round-end:3:continued-contact:continued-contact-maintenance-1:maintenance].controllerRoll.rolledByUserId",
-        "roll.rolledByUserId",
-      ],
+      // The viewer's own maintenance roll as the route's `roll` presentation, which is not part of
+      // the encounter. The round-end review's copy is a player-facing structure without it (#517).
+      active: ["mutationPresentation.roll.rolledByUserId"],
+      legacy: ["roll.rolledByUserId"],
     },
 
     name: "POST /encounters/:encounterId/combat-round/roll-continued-contact-maintenance (escaped: the other player's participant changed)",
@@ -31418,12 +31421,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // The viewer's own Dodge roll, on the Adjust Distance proposal (Tier 3's round state).
-      legacy: [
-        "encounter.combatRoundState.adjustDistanceProposals[distance-proposal].attackerRoll.rolledByUserId",
-      ],
-    },
+    // The Adjust Distance proposal is a player-facing structure without its roller (#517).
     name: "POST /encounters/:encounterId/combat-round/roll-adjust-distance",
     playerKeys: ["encounter"],
     populated: {
@@ -31708,7 +31706,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     },
   });
 
-  describeTier2Case({
+  const missileRollAttackCase: Tier2Case = {
     active: true,
     arrange: async (viewer) => {
       // A missile attack is the only kind for which the route returns the attacker's participant,
@@ -31855,6 +31853,35 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       correctionRecord: true,
       submittingUser: true,
     },
+    workbookProvenance: true,
+  };
+  describeTier2Case(missileRollAttackCase);
+
+  /**
+   * The GM's side of the pending missile attack (#517 floor QA run 3, F-3). The case above proves the
+   * player receives it without its workbook import provenance; this proves the GM receives it as the
+   * round recorded it, provenance included. The case's own GM check cannot: the GM's stored encounter
+   * and participant carry provenance too, so it still passes with this one removed.
+   */
+  it("returns the GM's pending missile attack as the round recorded it, workbook import provenance included", async () => {
+    const legacy = (await runTier2Case(missileRollAttackCase, mocks.adminUser)).response;
+    expect(legacy.statusCode, legacy.body).toBe(200);
+    const { command, pendingMissileAttack } = legacy.json();
+    expect(pendingMissileAttack.weaponModeSourceMetadata).toMatchObject({
+      row: expect.any(Number),
+      sheet: expect.any(String),
+    });
+    expect(pendingMissileAttack).toEqual(command.facts.pendingMissileAttack);
+
+    const active = (
+      await runTier2Case(missileRollAttackCase, mocks.adminUser, ACTIVE_RESPONSE_HEADERS)
+    ).response;
+    expect(active.statusCode, active.body).toBe(200);
+    const activePending = active.json().mutationPresentation.pendingMissileAttack;
+    expect(activePending.weaponModeSourceMetadata).toEqual(
+      pendingMissileAttack.weaponModeSourceMetadata,
+    );
+    expect(Object.keys(activePending).sort()).toEqual(Object.keys(pendingMissileAttack).sort());
   });
 
   describeTier2Case({
@@ -32060,13 +32087,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // Phase resolution results: Tier 3's round state (see roll-critical).
-      active: ["activeCombatState.phaseResolutionResults[].hitLocationRoll.rolledByUserId"],
-      legacy: [
-        "encounter.combatRoundState.phaseResolutionResults[].hitLocationRoll.rolledByUserId",
-      ],
-    },
+    // Phase resolution results are player-facing structures (see roll-critical).
     name: "POST /encounters/:encounterId/combat-round/roll-hit-location",
     playerKeys: ["encounter"],
     populated: {
@@ -32242,46 +32263,20 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // R2 (ruled, Tier 3 removes it): the viewer's own combat context, with its correction
-      // record's `gmOverride.userId`. Plus the viewer's own participant's controller.
-      active: [
-        ...OWN_PARTICIPANT_CONTROLLER.active,
-        "activeCombatState.participants[encounter-participant-1].declaration.combatContext.modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
-      ],
-      legacy: [
-        ...OWN_PARTICIPANT_CONTROLLER.legacy,
-        "encounter.combatRoundState.participants[encounter-participant-1].declaration.combatContext.modifierBuckets.general[private-row].canonicalTransitions[private-transition].gmOverride.userId",
-      ],
+      // The viewer's own participant's controller. R2 — the viewer's own combat context with its
+      // correction record's `gmOverride.userId` — is removed (#517 Tier 3).
+      active: [...OWN_PARTICIPANT_CONTROLLER.active],
+      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy],
     },
-    injectContexts: false,
     name: "POST /encounters/:encounterId/combat-declaration",
     playerKeys: ["encounter", "participant"],
-    playerMaterial: { correctionRecord: true },
-    // The correction record reaches the builders through the viewer's own combat context:
-    // the R2 location, which the player response keeps as ruled (`playerMaterial`).
     populated: {
       cancellingUser: true,
       combatExperienceRoller: true,
       correctionRecord: true,
       submittingUser: true,
     },
-    // R2 as Tier 1 pins it: the two modifier entries of the viewer's own combat context keep their
-    // lifecycle and correction history. Nothing else may fall outside the player-facing types.
-    residualKeys: {
-      active: tier2R2ResidualKeys("activeCombatState"),
-      legacy: tier2R2ResidualKeys("encounter.combatRoundState"),
-    },
-    secretPaths: {
-      active: pinnedR2Residual("activeCombatState", R2_PRIVATE_ENTRY).secrets,
-      legacy: pinnedR2Residual("encounter.combatRoundState", R2_PRIVATE_ENTRY).secrets,
-    },
   });
-
-  function tier2R2ResidualKeys(root: "activeCombatState" | "encounter.combatRoundState") {
-    return pinnedR2Residual(root, R2_PRIVATE_ENTRY, R2_GENERATED_DECLARATION_ROW).keys.filter(
-      (path) => /\.(canonicalLifecycle|canonicalTransitions)$/.test(path),
-    );
-  }
 
   function arrangeTier1PhaseAttack(viewer: Tier2Viewer, route: string) {
     return async () => {
@@ -32536,12 +32531,7 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // The viewer's own Feint roll, on the Feint proposal (Tier 3's round state).
-      legacy: [
-        "encounter.combatRoundState.feintProposals[combat-feint:round:1:attacker:encounter-participant-1].attackerRoll.rolledByUserId",
-      ],
-    },
+    // The Feint proposal is a player-facing structure without its roller (#517).
     name: "POST /encounters/:encounterId/combat-round/roll-feint",
     playerKeys: ["encounter"],
     populated: {
@@ -32834,16 +32824,10 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     identityPaths: {
-      // The viewer's own Brawling roll: on the contest (Tier 3's round state) and as the route's
-      // `roll` presentation, which is not a participant or encounter sibling.
-      active: [
-        "activeCombatState.offensiveParryContests[1:opportunity:opportunity:1:parry:offensive-parry:brawling].initiatorRoll.rolledByUserId",
-        "mutationPresentation.roll.rolledByUserId",
-      ],
-      legacy: [
-        "encounter.combatRoundState.offensiveParryContests[1:opportunity:opportunity:1:parry:offensive-parry:brawling].initiatorRoll.rolledByUserId",
-        "roll.rolledByUserId",
-      ],
+      // The viewer's own Brawling roll as the route's `roll` presentation, which is not part of the
+      // encounter. The contest's copy is a player-facing structure without it (#517).
+      active: ["mutationPresentation.roll.rolledByUserId"],
+      legacy: ["roll.rolledByUserId"],
     },
     name: "POST /encounters/:encounterId/combat-round/roll-offensive-parry-brawling",
     playerKeys: ["command", "encounter", "roll"],
@@ -33008,11 +32992,14 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       const route = declaredPhaseScenario(mocks.playerUser);
       const spy = withSchemaThatKeepsTheFutureField();
       try {
-        const projected = buildPlayerSafeEncounterForUser({
-          encounter: route.encounter as unknown as EncounterSession,
-          scenarioParticipants: route.participants,
-          userId: mocks.playerUser.id,
-        });
+        // Control: the viewer's projection without the allow-list (#517 Tier 3) carries it.
+        const projected = withoutTheAllowList(() =>
+          buildPlayerFacingEncounterForUser({
+            encounter: route.encounter as unknown as EncounterSession,
+            scenarioParticipants: route.participants,
+            userId: mocks.playerUser.id,
+          }),
+        );
         expect(JSON.stringify(projected.combatRoundState?.participants)).toContain(
           "SECRET_FUTURE_DECLARATION",
         );
@@ -33191,3 +33178,748 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
     });
   });
 });
+
+// ===== Forgejo #517, privacy hardening Tier 3 ===================================================
+
+describe("#517 privacy hardening Tier 3", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+    mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
+    mocks.requireAdminUser.mockResolvedValue(mocks.adminUser);
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+  });
+
+  /**
+   * The route scan finds what its comment says it finds, including the forms no player response
+   * carries today, so a player-side `[]` from it means something (QA run 2, F-C: its array branch
+   * used to miss an array of import records). It finds nothing else.
+   */
+  it("has a route scan that finds import provenance in every form it claims", () => {
+    const importRecord = {
+      rawRow: { A: "x" },
+      row: 1,
+      sheet: "Weapon2",
+      sourceColumns: { name: "A" },
+      sourceRange: "A1:K1",
+      workbook: "Workbook.xlsx",
+    };
+    expect(
+      workbookImportProvenancePaths({
+        attack: { weaponDmbRoll: { provenance: "Weapon2:1:1d6", total: 4 } },
+        commandEnvelope: { latestEvent: { details: "Range 3.0 · Weapon2 row 14" } },
+        history: [importRecord, { kept: true }],
+        nested: [{ elsewhere: importRecord }],
+        template: { offensiveSourceMetadata: importRecord, sourceMetadata: importRecord },
+      }).sort(),
+    ).toEqual([
+      "attack.weaponDmbRoll",
+      "commandEnvelope.latestEvent.details",
+      "history[]",
+      "nested[].elsewhere",
+      "template.offensiveSourceMetadata",
+      "template.sourceMetadata",
+    ]);
+    expect(
+      workbookImportProvenancePaths({
+        // Kept by ruling: a mode's provenance kind, a rules-source citation, the armor component
+        // identity carve-out, and a latest event without a workbook row.
+        attackModes: [{ provenance: "imported" }],
+        commandEnvelope: { latestEvent: { details: "Range 3.0" } },
+        componentProfiles: [{ componentKey: "Themistogenes 1.07.xlsx:Armor:5", name: "Jerkin" }],
+        movementBurden: { provenance: { sourceRange: "Calculations!L39:S42", workbook: "W.xlsx" } },
+        sourceMetadata: null,
+      }),
+    ).toEqual([]);
+  });
+
+  /**
+   * T3.3, Tier 2 finding F2 (derived at source: passing a player's submitted phase contexts through
+   * unchanged failed 0 of 805 api tests). A player receives its phase contexts without the canonical
+   * lifecycle and correction history, so the phase contexts it submits lack them; the route must
+   * store the participant's own modifier buckets — the GM's correction record included — and never
+   * the submitted ones. The GM's submission is stored as sent, which shows the route does store what
+   * it is given.
+   */
+  describe("a declaration's phase contexts keep the server's modifier buckets", () => {
+    async function declareWithForgedPhaseContext(user: typeof mocks.playerUser) {
+      setupCombatDeclarationRoute({
+        participant: withPrivateParticipantMaterial(makeCombatScenarioParticipant()),
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const forgedBuckets = {
+        ...emptyModifierBuckets(),
+        general: [{ id: "submitted-row", scope: "until", value: 50 }],
+      };
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementId: "hold",
+          phaseContexts: {
+            phase1: { modifierBuckets: forgedBuckets, targetParticipantId: "encounter-target-1" },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      const saved = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0] as
+        | { session: EncounterSession }
+        | undefined;
+      const declaration = saved?.session.combatRoundState?.participants.find(
+        (participant) => participant.participantId === "encounter-participant-1",
+      )?.declaration;
+      return declaration?.phaseContexts?.phase1?.modifierBuckets.general ?? [];
+    }
+
+    it("stores the participant's own buckets, with the GM correction record, for a player", async () => {
+      const general = await declareWithForgedPhaseContext(mocks.playerUser);
+
+      expect(general.map((entry) => entry.id)).toEqual(["private-row"]);
+      expect(gmCorrectionRecords(general)).toContainEqual(TIER2_GM_CORRECTION_RECORD);
+    });
+
+    it("stores the GM's submitted buckets as sent", async () => {
+      const general = await declareWithForgedPhaseContext(mocks.adminUser);
+
+      expect(general.map((entry) => entry.id)).toEqual(["submitted-row"]);
+    });
+  });
+
+  /** `GET /encounters/encounter-1` in the declared phase-attack fixture, its state adjusted. */
+  async function readPhaseEncounter(
+    user: typeof mocks.playerUser,
+    adjust: (state: CombatRoundState) => CombatRoundState,
+    headers: Record<string, string> = {},
+  ) {
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+    setupCombatDeclarationRoute({
+      combatExperienceResolved: false,
+      encounter: { ...fixture.encounter, combatRoundState: adjust(fixture.roundState) },
+      participants: fixture.participants,
+      user,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({ headers, method: "GET", url: "/encounters/encounter-1" });
+    await app.close();
+    expect(response.statusCode, response.body).toBe(200);
+    return response.body;
+  }
+
+  /** Simulates adding an optional field to an internal schema, everywhere that schema is used. */
+  function addFieldInPlace(object: unknown, key: string): () => void {
+    const schema = object as { _cached: unknown; _def: { shape: () => Record<string, unknown> } };
+    const original = schema._def.shape;
+    // A string field, as Tier 2's floor QA added (the command id schema is a non-empty string).
+    schema._def.shape = () => ({
+      ...original(),
+      [key]: combatRoundCommandSchema.shape.id.optional(),
+    });
+    schema._cached = null;
+    return () => {
+      schema._def.shape = original;
+      schema._cached = null;
+    };
+  }
+
+  /**
+   * Proof obligation 2, at the route: Tier 2's floor QA added a field to the movement intent schema
+   * and one to the initiative result schema, populated both, and saw them in a player's
+   * `GET /encounters/:encounterId`. Repeated here exactly: the GM's response carries both, the
+   * viewer's projection without the allow-list carries both, and the player's response, legacy and
+   * `active-v1`, carries neither. This read is the whole of the proof. The combat history still
+   * gives the declaring player a field added to the movement intent, through its open event fact
+   * buckets (privacy Tier 4, #528).
+   */
+  it("does not deliver fields added to the movement intent and initiative result schemas in a player's encounter read", async () => {
+    const withAddedFields = (state: CombatRoundState): CombatRoundState => ({
+      ...state,
+      participants: state.participants.map((participant) => ({
+        ...participant,
+        declaration: participant.declaration && {
+          ...participant.declaration,
+          movementIntent: {
+            distancePreferences: [],
+            mode: "hold_position",
+            qaMoveSecret: "SECRET_QA_MOVE",
+          } as MovementIntent,
+        },
+        initiatives: {
+          ...participant.initiatives,
+          phase1: participant.initiatives.phase1 && {
+            ...participant.initiatives.phase1,
+            qaInitSecret: "SECRET_QA_INIT",
+          },
+        },
+      })),
+    });
+    const restores = [
+      addFieldInPlace(
+        (movementIntentSchema as unknown as { innerType: () => unknown }).innerType(),
+        "qaMoveSecret",
+      ),
+      addFieldInPlace(combatRoundInitiativeResultSchema, "qaInitSecret"),
+    ];
+    try {
+      const gm = await readPhaseEncounter(mocks.adminUser, withAddedFields);
+      expect(gm).toContain("SECRET_QA_MOVE");
+      expect(gm).toContain("SECRET_QA_INIT");
+
+      const unfiltered = await withoutTheAllowListAsync(() =>
+        readPhaseEncounter(mocks.playerUser, withAddedFields),
+      );
+      expect(unfiltered).toContain("SECRET_QA_MOVE");
+      expect(unfiltered).toContain("SECRET_QA_INIT");
+
+      for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+        const player = await readPhaseEncounter(mocks.playerUser, withAddedFields, headers);
+        expect(player).not.toContain("SECRET_QA");
+        expect(playerResponseKeysOutsidePlayerTypes(JSON.parse(player))).toEqual([]);
+      }
+    } finally {
+      for (const restore of restores.reverse()) restore();
+    }
+  });
+
+  /**
+   * The per-viewer rule for another participant's visible declaration — no notes, intent, movement
+   * intent or observed target — which the round-state participant builder applies from the
+   * projection's overrides. The viewer's own declaration keeps them; the GM sees both.
+   */
+  it("shows another participant's declaration without its notes, intent, movement or observed target", async () => {
+    const withDeclarationDetail = (state: CombatRoundState): CombatRoundState => ({
+      ...state,
+      participants: state.participants.map((participant) => ({
+        ...participant,
+        declaration: participant.declaration && {
+          ...participant.declaration,
+          additionalActionNotes: `NOTE_${participant.participantId}`,
+          intent: { facing: "forward", primaryAction: { actionId: "double_attack" } },
+          movementIntent: {
+            distancePreferences: [
+              {
+                desiredDistance: 1,
+                notes: `MOVE_${participant.participantId}`,
+                source: "player_declared",
+                targetParticipantId: "encounter-participant-1",
+              },
+            ],
+            mode: "set_distance_preferences",
+          },
+          secondaryActionContext: {
+            action: "observe_opponent",
+            targetParticipantId: "encounter-participant-1",
+          },
+          secondaryActionId: "observe_opponent",
+        },
+      })) as CombatRoundState["participants"],
+    });
+    const declarationOf = (body: string, participantId: string) =>
+      (
+        JSON.parse(body).encounter.combatRoundState.participants as Array<{
+          declaration?: Record<string, unknown>;
+          participantId: string;
+        }>
+      ).find((participant) => participant.participantId === participantId)?.declaration;
+
+    const gm = await readPhaseEncounter(mocks.adminUser, withDeclarationDetail);
+    expect(declarationOf(gm, "encounter-participant-2")).toMatchObject({
+      additionalActionNotes: "NOTE_encounter-participant-2",
+      secondaryActionId: "observe_opponent",
+    });
+
+    const player = await readPhaseEncounter(mocks.playerUser, withDeclarationDetail);
+    const own = declarationOf(player, "encounter-participant-1");
+    const other = declarationOf(player, "encounter-participant-2");
+    expect(own).toMatchObject({
+      additionalActionNotes: "NOTE_encounter-participant-1",
+      intent: { primaryAction: { actionId: "double_attack" } },
+      movementIntent: { mode: "set_distance_preferences" },
+      secondaryActionId: "observe_opponent",
+    });
+    expect(other).toMatchObject({ actionId: "double_attack" });
+    for (const hidden of [
+      "additionalActionNotes",
+      "intent",
+      "movementIntent",
+      "secondaryActionContext",
+      "secondaryActionId",
+    ]) {
+      expect(other, hidden).not.toHaveProperty(hidden);
+    }
+    expect(player).not.toContain("NOTE_encounter-participant-2");
+    expect(player).not.toContain("MOVE_encounter-participant-2");
+  });
+
+  /**
+   * Tier 1's unruled nested locations: continued contacts and unbalanced conditions carried their
+   * canonical lifecycle and GM correction history to every player who could see them — including
+   * the correction record of another player's participant. They are player-facing structures now,
+   * and neither is part of them.
+   */
+  it("delivers continued contacts and unbalanced conditions without lifecycle or correction history", async () => {
+    const { lifecycle, transition } = privateCanonicalLifecycle("participant-2");
+    const withPrivateConditions = (state: CombatRoundState): CombatRoundState => ({
+      ...state,
+      continuedContacts: [
+        {
+          affectedParticipantId: "encounter-participant-2",
+          brawlingContestResultId: "brawling-result",
+          canonicalLifecycle: lifecycle,
+          canonicalTransitions: [transition],
+          controllerParticipantId: "encounter-participant-1",
+          establishedPhase: "phase1",
+          establishedRound: state.roundNumber,
+          id: "private-contact",
+          sourceActionId: "offensive_parry",
+          sourceAttackResultId: "attack-result",
+          sourceDeclarationId: "declaration",
+          sourceOpportunityId: "opportunity",
+          sourceParryResultId: "parry-result",
+          status: "active",
+        },
+      ],
+      unbalancedConditions: [
+        {
+          affectedParticipantId: "encounter-participant-2",
+          canonicalLifecycle: lifecycle,
+          canonicalTransitions: [transition],
+          establishedRound: state.roundNumber,
+          id: "private-unbalanced",
+          modifierValue: -2,
+          sourceActionId: "offensive_parry",
+          sourceContinuedContactId: "private-contact",
+          status: "active",
+        },
+      ],
+    });
+
+    const gm = JSON.parse(await readPhaseEncounter(mocks.adminUser, withPrivateConditions));
+    expect(gmCorrectionRecords(gm.encounter.combatRoundState.continuedContacts)).toContainEqual(
+      TIER2_GM_CORRECTION_RECORD,
+    );
+    expect(gmCorrectionRecords(gm.encounter.combatRoundState.unbalancedConditions)).toContainEqual(
+      TIER2_GM_CORRECTION_RECORD,
+    );
+    const unfiltered = JSON.parse(
+      await withoutTheAllowListAsync(() =>
+        readPhaseEncounter(mocks.playerUser, withPrivateConditions),
+      ),
+    );
+    expect(gmCorrectionRecords(unfiltered)).toContainEqual(TIER2_GM_CORRECTION_RECORD);
+
+    for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+      const body = JSON.parse(
+        await readPhaseEncounter(mocks.playerUser, withPrivateConditions, headers),
+      );
+      const state = body.encounter?.combatRoundState ?? body.activeCombatState;
+      expect(state.continuedContacts.map((contact: { id: string }) => contact.id)).toEqual([
+        "private-contact",
+      ]);
+      expect(state.unbalancedConditions.map((condition: { id: string }) => condition.id)).toEqual([
+        "private-unbalanced",
+      ]);
+      expect([...privateKeyPaths(body)].sort()).toEqual([]);
+      expect([...secretValuePaths(body)].sort()).toEqual([]);
+      expect(playerResponseKeysOutsidePlayerTypes(body)).toEqual([]);
+    }
+  });
+
+  /**
+   * Ruling E2: the attack mode's workbook import provenance is not player-facing. The roll-attack
+   * response returns the attacker's own attack result; the player receives it without the
+   * provenance, the GM with it. (The Tier 2 boundary walk covers the pending missile attack, the
+   * equipment snapshot and the latest-event summary on every Tier 2 route.)
+   */
+  it("returns a player's own attack without its workbook import provenance; the GM keeps it", async () => {
+    async function rollThrownDagger(user: typeof mocks.playerUser, headers = {}) {
+      const baseState = makeOpenPhase1AttackRoundState({ snapshotWeaponName: "Dagger" });
+      const itemId = "item-character-1-weapon-template-dagger";
+      const source = {
+        attackModeId: "mode-3",
+        itemId,
+        sourceKind: "weapon" as const,
+        weaponInstanceId: itemId,
+        weaponSourceId: `weapon:${itemId}`,
+        weaponSourceSlot: "throwing" as const,
+        weaponTemplateId: "weapon-template-dagger",
+      };
+      const attackerSnapshot = makeCanonicalCombatCalculationSnapshot({
+        characterId: "character-1",
+        displayName: "The Gladiator",
+      });
+      attackerSnapshot.build.progression.skills.push({
+        category: "secondary",
+        categoryId: "combat",
+        groupId: "basic_missile_training",
+        secondaryRanks: 8,
+        skillId: "throwing",
+      });
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: {
+            ...baseState,
+            participants: baseState.participants.map((participant, index) =>
+              index === 0
+                ? {
+                    ...participant,
+                    declaration: {
+                      ...participant.declaration,
+                      attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                        actionId: "attack_parry",
+                        participantId: "encounter-participant-1",
+                        phaseContexts: {
+                          phase1: testCombatPhaseContext("encounter-participant-2"),
+                        },
+                        roundNumber: 1,
+                        sources: { phase1: source },
+                      }),
+                    },
+                  }
+                : participant,
+            ),
+          },
+          participants: makeTwoCombatEncounterParticipants(),
+        },
+        participants: [
+          { characterId: "character-1", id: "participant-1", snapshot: attackerSnapshot },
+          { controlledByUserId: "other-player", id: "participant-2" },
+        ],
+        user,
+      });
+      mocks.combatItemInteractionService.commitThrownWeaponAttack.mockImplementation(
+        async (input: { session: EncounterSession }) => ({ encounter: input.session }),
+      );
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        headers,
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          attackIndex: 1,
+          attackModeId: "mode-3",
+          declarationId: "round:1:participant:encounter-participant-1:declaration",
+          defenderScenarioParticipantId: "participant-2",
+          opportunityId: "round:1:participant:encounter-participant-1:phase1:attack_1",
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+          weaponSourceId: `weapon:${itemId}`,
+          weaponSourceSlot: "throwing",
+          weaponTemplateId: "weapon-template-dagger",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const gm = await rollThrownDagger(mocks.adminUser);
+    expect(gm.attackResult.weaponModeSourceMetadata).toMatchObject({
+      row: expect.any(Number),
+      sheet: expect.any(String),
+    });
+
+    for (const headers of [{}, ACTIVE_RESPONSE_HEADERS]) {
+      const body = await rollThrownDagger(mocks.playerUser, headers);
+      const attack = body.attackResult ?? body.mutationPresentation?.attackResult;
+      expect(attack).toMatchObject({
+        attackModeId: "mode-3",
+        weaponName: gm.attackResult.weaponName,
+      });
+      expect(workbookImportProvenancePaths(body)).toEqual([]);
+    }
+  });
+
+  /**
+   * QA F1: a shield template carries its import provenance as `offensiveSourceMetadata` and
+   * `defensiveSourceMetadata`, not `sourceMetadata`. Reproduced on the combat-declaration route
+   * with the content's own shield templates in the declaring participant's equipment snapshot.
+   */
+  it("returns the declaring player's snapshot without shield import provenance; the GM keeps it", async () => {
+    const templatesById = Object.fromEntries(
+      shieldTemplates.map((template) => [template.id, template]),
+    );
+    const shieldProvenanceCount = shieldTemplates.filter(
+      (template) => template.offensiveSourceMetadata || template.defensiveSourceMetadata,
+    ).length;
+    expect(shieldProvenanceCount).toBeGreaterThan(0);
+
+    async function declare(user: typeof mocks.playerUser) {
+      setupCombatDeclarationRoute({
+        participant: makeCombatScenarioParticipant({
+          snapshot: {
+            displayName: "The Gladiator",
+            equipmentState: { itemsById: {}, templates: { templatesById } },
+          },
+        }),
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          movementId: "hold",
+          phaseContexts: {
+            phase1: {
+              modifierBuckets: emptyModifierBuckets(),
+              targetParticipantId: "encounter-target-1",
+            },
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const gm = await declare(mocks.adminUser);
+    const gmShieldPaths = workbookImportProvenancePaths(gm).filter((path) =>
+      /(offensive|defensive)SourceMetadata$/.test(path),
+    );
+    expect(gmShieldPaths.length).toBeGreaterThanOrEqual(shieldProvenanceCount);
+
+    const player = await declare(mocks.playerUser);
+    const playerTemplates = player.participant.snapshot.equipmentState.templates.templatesById;
+    expect(Object.keys(playerTemplates).sort()).toEqual(Object.keys(templatesById).sort());
+    expect(workbookImportProvenancePaths(player)).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("Weapon1!A37:Q37");
+  });
+
+  /**
+   * QA run 2, F-A and F-B, reproduced with the QA's override on the content's own catalogue: a GM
+   * override of a Leather Jerkin component, revealed to its holder. The player's snapshot keeps that
+   * component's identity, so the override resolves where it used to throw (and the player combat page
+   * died); no import record reaches the player, and the identity string appears only on the override
+   * and on the one component it targets. The GM receives the snapshot as stored.
+   */
+  it("returns a revealed armor override that still resolves, with the component identity only where it targets (#517 F-A, F-B)", async () => {
+    const jerkin = equipmentTemplatesById["armor-template-leather-jerkin"] as ArmorTemplate;
+    const [revealedKey, gmOnlyKey] = jerkin.componentProfiles!.map(armorComponentKey);
+    expect([revealedKey, gmOnlyKey]).toEqual([
+      "Themistogenes 1.07.xlsx:Armor:5",
+      "Themistogenes 1.07.xlsx:Armor:6",
+    ]);
+    const revealedOverride = {
+      componentKey: revealedKey!,
+      kind: "armor" as const,
+      property: "encumbranceFactor" as const,
+      value: 0.5,
+      visibility: "revealed" as const,
+    };
+    const equipmentState = {
+      itemsById: {
+        "item-jerkin": {
+          displayName: "Leather jerkin",
+          id: "item-jerkin",
+          mechanicalOverrides: [
+            revealedOverride,
+            {
+              componentKey: gmOnlyKey!,
+              kind: "armor" as const,
+              property: "frontArm" as const,
+              value: 3,
+              visibility: "gm_only" as const,
+            },
+          ],
+          templateId: jerkin.id,
+        },
+      },
+      templates: { templatesById: equipmentTemplatesById },
+    };
+    const stored = {
+      ...makeCombatScenarioParticipant({ snapshot: { displayName: "Hero", equipmentState } }),
+      characterId: "character-1",
+    } as unknown as ScenarioParticipant;
+
+    async function loadOwnParticipant(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      mocks.scenarioService.getScenarioById.mockResolvedValue({
+        campaignId: "campaign-1",
+        id: "scenario-1",
+        kind: "combat",
+        name: "Bridge Ambush",
+        status: "live",
+      });
+      mocks.campaignService.getCampaignById.mockResolvedValue({
+        gmUserId: "gm-1",
+        id: "campaign-1",
+        name: "Border Trouble",
+        status: "active",
+      });
+      mocks.requireAuthenticatedUser.mockResolvedValue(user);
+      mocks.scenarioService.listScenarioParticipants.mockResolvedValue([
+        { ...stored, controlledByUserId: user.id },
+      ]);
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "GET",
+        url: "/scenarios/scenario-1/my-participant",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const player = await loadOwnParticipant(mocks.playerUser);
+    const playerEquipment = player.participant.snapshot.equipmentState;
+    expect(workbookImportProvenancePaths(player)).toEqual([]);
+    expect(playerEquipment.itemsById["item-jerkin"].mechanicalOverrides).toEqual([
+      revealedOverride,
+    ]);
+    // Every workbook-named string the player receives: the override's identity, and the same
+    // identity on the one component it targets, in the whole catalogue.
+    expect(workbookNamedStringPaths(player)).toEqual([
+      `participant.snapshot.equipmentState.itemsById.item-jerkin.mechanicalOverrides[].componentKey=${revealedKey}`,
+      `participant.snapshot.equipmentState.templates.templatesById.${jerkin.id}.componentProfiles[].componentKey=${revealedKey}`,
+    ]);
+    expect(playerEquipment.templates.templatesById[jerkin.id].componentProfiles[0]).toEqual({
+      ...withoutKey(jerkin.componentProfiles![0]!, "sourceMetadata"),
+      componentKey: revealedKey,
+    });
+    // The revealed override resolves on the player's snapshot, exactly as the player page does it.
+    const effective = resolveEffectiveItemTemplate(
+      playerEquipment.itemsById["item-jerkin"],
+      playerEquipment.templates.templatesById,
+    ) as ArmorTemplate;
+    expect(effective.componentProfiles?.[0]?.encumbranceFactor).toBe(0.5);
+    expect(effective.encumbranceFactor).toBe(
+      (
+        resolveEffectiveItemTemplate(
+          { ...equipmentState.itemsById["item-jerkin"], mechanicalOverrides: [revealedOverride] },
+          equipmentTemplatesById,
+        ) as ArmorTemplate
+      ).encumbranceFactor,
+    );
+
+    const gm = await loadOwnParticipant(mocks.adminUser);
+    expect(gm.participant.snapshot.equipmentState).toEqual(
+      JSON.parse(JSON.stringify(equipmentState)),
+    );
+    const gmComponent =
+      gm.participant.snapshot.equipmentState.templates.templatesById[jerkin.id]
+        .componentProfiles[0];
+    expect(gmComponent.sourceMetadata).toMatchObject({ finishedRow: 5, sheet: "Armor" });
+    expect(gmComponent).not.toHaveProperty("componentKey");
+  });
+
+  /**
+   * QA run 2, F-D: the missile DMB roll's `provenance` names the workbook sheet and row. The roll is
+   * omitted for players as a whole (ruling 2026-10-07): the stored schema requires `provenance`, and
+   * the `active-v1` response parses a player's round state with it, on the server and in the client.
+   * The DMB value stays in `weaponDmb`. The GM keeps the roll.
+   */
+  it("returns a player's round state without a stored missile DMB roll, still valid for the active response; the GM keeps it (#517 F-D)", async () => {
+    const baseState = makeOpenPhase1AttackRoundState();
+    const dmbRoll = {
+      diceCount: 1,
+      diceSides: 6,
+      flatModifier: 1,
+      provenance: "Weapon2:17:1d6+1",
+      rolls: [3],
+      total: 4,
+    };
+    const encounter = makeCombatEncounter({
+      combatRoundState: {
+        ...baseState,
+        participants: baseState.participants.map((participant, index) =>
+          index === 0
+            ? {
+                ...participant,
+                attackResults: {
+                  phase1: {
+                    actionId: "attack_parry",
+                    attackerParticipantId: "encounter-participant-1",
+                    defenderDb: 10,
+                    defenderParryModifier: 0,
+                    defenderParticipantId: "encounter-participant-2",
+                    grazing: false,
+                    hit: true,
+                    kind: "attackRoll",
+                    lookupTotal: 14,
+                    marginOverMissThreshold: 4,
+                    ob: 10,
+                    openEndedD10s: [],
+                    phase: "phase1",
+                    rollD20: 14,
+                    rollTotal: 14,
+                    rolledAt: "2026-01-01T00:01:00.000Z",
+                    tableResult: "C",
+                    weaponDmb: 4,
+                    weaponDmbRoll: dmbRoll,
+                    weaponName: "Javelin",
+                  },
+                },
+              }
+            : participant,
+        ),
+      },
+      participants: makeTwoCombatEncounterParticipants(),
+    });
+
+    async function loadEncounter(user: typeof mocks.playerUser | typeof mocks.adminUser) {
+      setupCombatDeclarationRoute({
+        encounter,
+        participants: [
+          { controlledByUserId: "player-1", id: "participant-1" },
+          { controlledByUserId: "other-player", id: "participant-2" },
+        ],
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json();
+    }
+
+    const gm = await loadEncounter(mocks.adminUser);
+    expect(
+      gm.encounter.combatRoundState.participants[0].attackResults.phase1.weaponDmbRoll,
+    ).toEqual(dmbRoll);
+
+    const player = await loadEncounter(mocks.playerUser);
+    const playerAttack = player.encounter.combatRoundState.participants[0].attackResults.phase1;
+    expect(playerAttack).toMatchObject({ weaponDmb: 4, weaponName: "Javelin" });
+    expect(playerAttack).not.toHaveProperty("weaponDmbRoll");
+    expect(workbookImportProvenancePaths(player)).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("Weapon2:17");
+    // The active response parses the player's round state with the stored schema, and the client
+    // parses that response again: both still accept it.
+    const active = buildRequestedCombatMutationResponse({
+      activeResponseRequested: true,
+      payload: { encounter: player.encounter },
+    }) as { activeCombatState: CombatRoundState };
+    expect(activeCombatMutationResponseSchema.parse(active)).toBeDefined();
+    expect(active.activeCombatState.participants[0]?.attackResults.phase1?.weaponDmb).toBe(4);
+    expect(JSON.stringify(active)).not.toContain("weaponDmbRoll");
+  });
+});
+
+/** Every string anywhere in `value` that names a workbook (`….xlsx`), as `path=value`. */
+function workbookNamedStringPaths(value: unknown, path = "", found: string[] = []): string[] {
+  if (Array.isArray(value)) {
+    for (const entry of value) workbookNamedStringPaths(entry, `${path}[]`, found);
+  } else if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      workbookNamedStringPaths(nested, path ? `${path}.${key}` : key, found);
+    }
+  } else if (typeof value === "string" && /\.xlsx\b/i.test(value)) {
+    found.push(`${path}=${value}`);
+  }
+  return found;
+}
+
+function withoutKey<Value extends object>(value: Value, key: string) {
+  return Object.fromEntries(Object.entries(value).filter(([entryKey]) => entryKey !== key));
+}

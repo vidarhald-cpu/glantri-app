@@ -198,6 +198,63 @@ describe("effective Item inputs", () => {
       ),
     ).toBe(false);
   });
+  it("keeps a component's source identity where it is carried explicitly without its source (#517)", () => {
+    const source = (finishedRow: number) => ({
+      finishedRow,
+      rawRows: {},
+      sheet: "Armor",
+      sourceColumns: {},
+      sourceRange: `A${finishedRow}:P${finishedRow}`,
+      workbook: "Workbook.xlsx",
+    });
+    const vest = { name: "Vest", encumbranceFactor: 1, locationValues: { chest: 3 } };
+    const sleeves = { name: "Sleeves", encumbranceFactor: 2, locationValues: { frontArm: 2 } };
+    const withSource: ArmorTemplate = {
+      ...weapon,
+      id: "armor",
+      category: "armor",
+      sourceMetadata: undefined,
+      componentProfiles: [
+        { ...vest, sourceMetadata: source(5) },
+        { ...sleeves, sourceMetadata: source(6) },
+      ],
+      movementFactor: 1,
+    };
+    const override: ItemMechanicalOverride = {
+      kind: "armor",
+      componentKey: armorComponentKey(withSource.componentProfiles![0]),
+      property: "chest",
+      value: 9,
+      visibility: "revealed",
+    };
+    expect(override.componentKey).toBe("Workbook.xlsx:Armor:5");
+    // Without its source a component falls back to its name, which the stored override never names.
+    const withoutSource: ArmorTemplate = { ...withSource, componentProfiles: [vest, sleeves] };
+    expect(() =>
+      resolveEffectiveItemTemplate(
+        { templateId: "armor", mechanicalOverrides: [override] },
+        { armor: withoutSource },
+      ),
+    ).toThrow("This Equipment input cannot be overridden.");
+    // Carried explicitly, the same identity still binds the stored override.
+    const withIdentity: ArmorTemplate = {
+      ...withSource,
+      componentProfiles: [{ ...vest, componentKey: override.componentKey! }, sleeves],
+    };
+    expect(armorComponentKey(withIdentity.componentProfiles![0])).toBe(override.componentKey);
+    expect(
+      (
+        resolveEffectiveItemTemplate(
+          { templateId: "armor", mechanicalOverrides: [override] },
+          { armor: withIdentity },
+        ) as ArmorTemplate
+      ).componentProfiles?.[0]?.locationValues?.chest,
+    ).toBe(9);
+    // The carried identity is the one used, whatever else the component holds.
+    expect(armorComponentKey({ ...vest, componentKey: "carried", sourceMetadata: source(9) })).toBe(
+      "carried",
+    );
+  });
   it("uses the physical ENC source with established quantity/material/quality/carry factors and preserves legacy override semantics", () => {
     const carried: EquipmentItem = {
       id: "i",

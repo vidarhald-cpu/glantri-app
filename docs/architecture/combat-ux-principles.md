@@ -40,6 +40,37 @@ GM Combat, GM Player Combat, and Player Combat must show the same tracker order.
 subsystem should process participants in an order that differs from the visible
 tracker unless an explicit combat rule requires it.
 
+## Table-facing Combat
+
+Glantri is a tabletop/board game played by people sitting together and talking. The
+application supports the shared flow of play; it is not primarily a private workflow
+application.
+
+In Combat, every participant should be able to understand at a glance:
+
+- whose turn/moment it is;
+- who is expected to act or roll now;
+- which declared action the GM is currently resolving;
+- what phase/stage that action is in;
+- what just resolved and what comes next.
+
+This is the reason for the Timeline, Declaration, phase/detail, modifier, Current
+Action, Results and History structures. Treat those as product-preservation
+constraints, not accidental legacy UI.
+
+Do not merge, collapse, relocate or subordinate them merely for architectural/code
+consistency.
+
+New equipment/readiness controls must integrate into this shared-current-state model
+without obscuring the current actor or current resolved action.
+
+Design Combat Controls and equipment actions around table awareness first: everyone
+should know what is happening now and who, if anyone, needs to do something next.
+
+The mechanics of the shared view are in [Shared conversation model](#shared-conversation-model),
+[Tracker as the combat board](#tracker-as-the-combat-board) and
+[GM/Player parity](#gmplayer-parity); this section records why they exist.
+
 ## Stable layout
 
 The combat workspace keeps a stable three-column by two-row arrangement:

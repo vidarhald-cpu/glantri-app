@@ -225,6 +225,8 @@ export interface ArmorComponentProfile {
   criticalModifierByArea?: ArmorLocationValues | null;
   criticalModifierGeneral?: number | null;
   sourceMetadata?: ImportedArmorSourceMetadata | null;
+  /** Derived identity, carried where `sourceMetadata` was removed; never stored (`armorComponentKey`). */
+  componentKey?: string;
 }
 
 export interface ImportedArmorSourceMetadata {
