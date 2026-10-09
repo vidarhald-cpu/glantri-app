@@ -1,0 +1,96 @@
+/*
+ * Glantri Alpha shared visual baseline (#538, Lane A).
+ *
+ * HARD RULE: every value below is extracted from an existing Combat or Chargen
+ * treatment and carries a "cite:" comment naming the file:line it came from.
+ * A value that cannot be cited does not belong here.
+ * (glantriBaseline.test.ts enforces this: it opens each cited line and checks
+ * the value is really there.)
+ *
+ *   C = apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx
+ *   G = apps/web/src/features/chargen/ChargenWizardExperience.module.css
+ *
+ * Additive by construction:
+ *  - tokens are --glantri-* custom properties (nothing consumes them until opted in);
+ *  - classes are .glantri-* and opt-in; there are NO element selectors;
+ *  - every class selector is wrapped in :where(), giving specificity 0, so any
+ *    CSS module rule or inline style always wins regardless of stylesheet order.
+ *
+ * Deliberately NOT covered (no Combat/Chargen convention exists): buttons and
+ * form inputs. Combat's buttons/inputs are unstyled browser defaults; Chargen
+ * styles only one-off pill toggles and one search input. Not inventing one.
+ */
+
+:root {
+  /* Panel levels. Drift #fbfaf7 (C:414, 1 use) vs #fbfaf5 (G:42, 21 uses) resolved to #fbfaf5. */
+  --glantri-surface-raised: #fbfaf5; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:42 */
+  --glantri-surface-muted: #f6f5ef; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:33 */
+
+  /* Border */
+  --glantri-border: 1px solid #d9ddd8; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:415 */
+  --glantri-border-subtle: 1px solid #e7e2d7; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:77 */
+
+  /* Radius */
+  --glantri-radius-panel: 12px; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:35 */
+  --glantri-radius-inner: 10px; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:78 */
+
+  /* Spacing steps */
+  --glantri-space-2xs: 0.2rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:522 */
+  --glantri-space-xs: 0.35rem; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:152 */
+  --glantri-space-sm: 0.5rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:517 */
+  --glantri-space-md: 0.75rem; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:37 */
+  --glantri-space-lg: 1rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:418 */
+  --glantri-space-xl: 1.5rem; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:4 */
+
+  /* Text */
+  --glantri-text-muted: #5e5a50; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:510 */
+  --glantri-font-size-heading: 0.9rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:506 */
+  --glantri-font-size-helper: 0.85rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:511 */
+}
+
+/* Panel: C panelStyle :413-420 == G .cardLight :41-48 (raised level). */
+:where(.glantri-panel) {
+  background: var(--glantri-surface-raised);
+  border: var(--glantri-border);
+  border-radius: var(--glantri-radius-panel);
+  display: grid;
+  gap: var(--glantri-space-lg);
+  padding: var(--glantri-space-lg);
+}
+
+/* Darker panel level: G .card :32-39 (muted background, 0.75rem gap). */
+:where(.glantri-panel--muted) {
+  background: var(--glantri-surface-muted);
+  gap: var(--glantri-space-md);
+}
+
+/* Nested panel: G .innerCard :75-82 (subtle border, 10px radius, 0.75rem gap). */
+:where(.glantri-panel--inner) {
+  border: var(--glantri-border-subtle);
+  border-radius: var(--glantri-radius-inner);
+  gap: var(--glantri-space-md);
+}
+
+/* Section heading: C combatDamageReviewSectionHeadingStyle :505-507. */
+:where(.glantri-section-heading) {
+  font-size: var(--glantri-font-size-heading);
+}
+
+/* Helper text: C combatDamageReviewHelperTextStyle :509-512 (== G .mutedSm :180-183). */
+:where(.glantri-helper-text) {
+  color: var(--glantri-text-muted);
+  font-size: var(--glantri-font-size-helper);
+}
+
+/* Field label (label wrapping a control): C compactFieldLabelStyle :520-523. */
+:where(.glantri-field-label) {
+  display: grid;
+  gap: var(--glantri-space-2xs);
+}
+
+/* Wrapping action/nav row: C inspectorNavStyle :514-518 (== G .flexWrap05 :110-114). */
+:where(.glantri-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glantri-space-sm);
+}
