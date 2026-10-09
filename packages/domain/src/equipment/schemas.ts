@@ -2,6 +2,7 @@ import type { EquipmentItemBinding } from "./types";
 import { ItemMechanicalOverridesSchema } from "./itemOverrides";
 import { z } from "zod";
 
+import { CompetencyIdSchema } from "./attackModeReference";
 import { createEmptyEquipmentItemFacts, migrateLegacySpecialProperties } from "./itemFacts";
 
 export const EquipmentCategorySchema = z.enum(["weapon", "shield", "armor", "gear", "valuables"]);
@@ -257,10 +258,42 @@ export const ImportedWeaponSourceMetadataSchema = z.object({
   rawRow: z.record(z.string()),
 });
 
+/**
+ * One structural requirement entry on an attack mode. Deliberately inert: this slice defines the
+ * shape only. Nothing evaluates, enforces or interprets `kind` or `parameters`, and no
+ * minimum-Strength or any other prerequisite semantics exist yet. A later slice may narrow this
+ * to a discriminated union once real requirement kinds are ruled.
+ */
+export const WeaponAttackModeRequirementEntrySchema = z.object({
+  kind: z.string().min(1),
+  parameters: z.record(z.unknown()).optional(),
+});
+
+/**
+ * Structural container for per-mode requirements. Every member is optional; an absent or empty
+ * requirements object means "nothing declared", not "nothing required by the rules".
+ */
+export const WeaponAttackModeRequirementsSchema = z.object({
+  /**
+   * Mode-level hand requirement, reusing the template-level vocabulary because the programme
+   * intends `WeaponHandlingClass` to become mode-specific. Structure only: no behaviour reads it
+   * until the Phase 2 hand-occupancy work.
+   */
+  handRequirement: WeaponHandlingClassSchema.nullable().optional(),
+  entries: z.array(WeaponAttackModeRequirementEntrySchema).optional(),
+});
+
 export const WeaponAttackModeSchema = z.object({
   id: z.string(),
   attackType: WeaponAttackModeTypeSchema.nullable().optional(),
   label: z.string().nullable().optional(),
+  /**
+   * Stable identity of the competency this mode attacks with. Absent means "not authored" and is a
+   * valid state (a later slice must refuse such a mode explicitly rather than fall back to a name).
+   */
+  competencyRef: CompetencyIdSchema.nullable().optional(),
+  /** Structural, inert per-mode requirements. See `WeaponAttackModeRequirementsSchema`. */
+  requirements: WeaponAttackModeRequirementsSchema.nullable().optional(),
   order: z.number().int().nonnegative().nullable().optional(),
   canonicalMeleeMode: CanonicalMeleeModeSchema.nullable().optional(),
   allowsRepeatedRoundAttack: z.boolean().nullable().optional(),
@@ -729,3 +762,7 @@ export type EquipmentItemInput = z.input<typeof EquipmentItemSchema>;
 export type CanonicalEquipmentItemInput = z.input<typeof CanonicalEquipmentItemSchema>;
 export type StorageLocationInput = z.input<typeof StorageLocationSchema>;
 export type CharacterLoadoutInput = z.input<typeof CharacterLoadoutSchema>;
+export type WeaponAttackModeRequirementEntry = z.infer<
+  typeof WeaponAttackModeRequirementEntrySchema
+>;
+export type WeaponAttackModeRequirements = z.infer<typeof WeaponAttackModeRequirementsSchema>;

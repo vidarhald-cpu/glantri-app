@@ -1,4 +1,6 @@
+import type { CompetencyId } from "./attackModeReference";
 import type { ItemMechanicalOverride } from "./itemOverrides";
+import type { WeaponAttackModeRequirements } from "./schemas";
 export type EquipmentCategory = "weapon" | "shield" | "armor" | "gear" | "valuables";
 
 export type SpecificityType = "generic" | "specific";
@@ -117,6 +119,10 @@ export interface WeaponAttackMode {
   /** Explicit delivery family; live declarations must not infer thrown use from a missing melee mode. */
   attackType?: WeaponAttackModeType | null;
   label?: string | null;
+  /** Stable competency identity for this mode; absent is valid and means "not authored". */
+  competencyRef?: CompetencyId | null;
+  /** Structural, inert per-mode requirements; nothing evaluates them. */
+  requirements?: WeaponAttackModeRequirements | null;
   /** Canonical display/default resolution order; legacy data falls back to array order. */
   order?: number | null;
   canonicalMeleeMode?: CanonicalMeleeMode | null;
