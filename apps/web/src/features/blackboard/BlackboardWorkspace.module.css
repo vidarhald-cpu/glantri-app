@@ -13,16 +13,6 @@
 }
 
 .intro,
-.panel,
-.detail,
-.composer {
-  background: #fff;
-  border: 1px solid #d9ddd8;
-  border-radius: 12px;
-  padding: 1rem;
-}
-
-.intro,
 .headingRow,
 .detailHeader,
 .actionRow,
@@ -50,7 +40,6 @@
 
 .intro p,
 .muted {
-  color: #5e5a50;
   margin: 0.25rem 0 0;
 }
 
@@ -80,14 +69,27 @@
   color: var(--board-ink);
   display: grid;
   gap: 0.45rem;
+  height: var(--pin-height);
   overflow: auto;
   padding: 0.8rem;
   position: absolute;
+  width: var(--pin-width);
 }
 
 .pin button,
 .catalogueButton {
   text-align: left;
+}
+
+.dragHandle {
+  cursor: grab;
+  font-size: 0.78rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.dragHandle:active {
+  cursor: grabbing;
 }
 
 .pinTitle {
@@ -140,11 +142,6 @@
   gap: 0.7rem;
   grid-template-columns: minmax(12rem, 1fr) minmax(9rem, auto) minmax(10rem, auto) auto;
   margin-bottom: 1rem;
-}
-
-.searchForm label {
-  display: grid;
-  gap: 0.3rem;
 }
 
 .searchForm input,
@@ -234,12 +231,6 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.fields label,
-.fullField {
-  display: grid;
-  gap: 0.3rem;
-}
-
 .fullField {
   grid-column: 1 / -1;
 }
@@ -275,10 +266,14 @@
     min-height: auto;
   }
 
+  .dragHandle {
+    display: none;
+  }
+
   .pin {
-    height: auto !important;
+    height: auto;
     position: static;
-    width: auto !important;
+    width: auto;
   }
 
   .workspaceGrid {

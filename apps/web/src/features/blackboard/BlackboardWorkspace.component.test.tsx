@@ -353,6 +353,25 @@ describe("BlackboardWorkspace", () => {
     expect(screen.getByRole("button", { name: "Remove this entry" })).toBeVisible();
   });
 
+  it("arranges a pin by arrow button or by drag through the same move request", async () => {
+    const user = userEvent.setup();
+    mocks.moveBlackboardEntry.mockResolvedValue(structuredClone(board));
+    render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster={false} />);
+    await screen.findByRole("heading", { name: "Blackboard" });
+
+    await user.click(screen.getByRole("button", { name: "Move right" }));
+    await waitFor(() => expect(mocks.moveBlackboardEntry).toHaveBeenCalledTimes(1));
+    expect(mocks.moveBlackboardEntry.mock.calls[0]![0]).toMatchObject({ x: 40, y: 0 });
+
+    const handle = screen.getByTitle(/Drag to arrange/);
+    fireEvent.pointerDown(handle, { button: 0, clientX: 100, clientY: 100, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientX: 150, clientY: 130, pointerId: 1 });
+    fireEvent.pointerUp(handle, { clientX: 150, clientY: 130, pointerId: 1 });
+    await waitFor(() => expect(mocks.moveBlackboardEntry).toHaveBeenCalledTimes(2));
+    expect(mocks.moveBlackboardEntry.mock.calls[1]![0]).toMatchObject({ x: 50, y: 30 });
+    expect(screen.getByRole("button", { name: "Move left" })).toBeVisible();
+  });
+
   it("keeps GM-approved recap controls hidden from players", async () => {
     const user = userEvent.setup();
 
