@@ -743,4 +743,18 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(rollHandler).toContain("setCombatActionError(");
     expect(catchHandler).not.toContain("setError(");
   });
+
+  it("opts the live player modifier rows in to duration labels, and no other surface does", () => {
+    const rowsCall = readSource().match(/buildPlayerCombatModifierRows\(\{[\s\S]*?\}\),/);
+
+    expect(rowsCall?.[0]).toContain("includeEntryDurations: true");
+    for (const other of [
+      "../../../../../../../../src/features/combat-round-manager/CombatRoundManagerPanel.tsx",
+      "../../../../../../../../src/features/combat-history/components/PlayerCombatHistoryInspector.tsx",
+    ]) {
+      expect(readFileSync(join(dirname(sourcePath), other), "utf8")).not.toContain(
+        "includeEntryDurations",
+      );
+    }
+  });
 });

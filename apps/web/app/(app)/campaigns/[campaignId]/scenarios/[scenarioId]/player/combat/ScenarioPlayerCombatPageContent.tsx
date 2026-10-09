@@ -2630,6 +2630,7 @@ export default function ScenarioPlayerCombatPageContent({
         currentInitiativeGroupId,
         currentRound: combatRoundState?.roundNumber,
         encounterId: scenarioId,
+        includeEntryDurations: true,
         liveModifiers: liveCombatModifiers,
         ownerParticipantId: selectedParticipant?.id,
         phaseKey: currentModifierPhase,
