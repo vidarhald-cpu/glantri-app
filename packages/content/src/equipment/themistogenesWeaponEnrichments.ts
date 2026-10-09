@@ -8,12 +8,40 @@ import {
   getCanonicalMeleeModeFromAttackLabel,
   getCanonicalMeleeModeFromCrit,
   getCanonicalMeleeModeLabel,
+  parseCompetencyId,
 } from "@glantri/domain";
+
+/** #512 approval provenance for a Product-Owner-ratified workbook erratum. */
+export interface WeaponCritErratumApproval {
+  /** Forgejo issue that carries the ratification. */
+  issue: number;
+  /** Human-readable pointer to the ruling, for example the issue comment that records it. */
+  ruling: string;
+}
+
+/**
+ * A reviewable, Product-Owner-approved correction of a source crit code (rung 1 of the mode-style
+ * precedence: erratum, then explicit label, then crit-derived fallback).
+ *
+ * The correction is applied to the crit INPUT. `canonicalMeleeMode` is then derived from the
+ * corrected crit by the single existing derivation, so the severity-family letter is preserved and
+ * no special case exists in the derivation. Only the secondary (`mode-2`) crit is supported: it is
+ * the only mode whose style is carried by the crit code alone.
+ *
+ * `original` is verified against the observed source value; a mismatch throws, so a stale
+ * erratum can never silently apply or silently do nothing.
+ */
+export interface WeaponCritErratum {
+  original: string;
+  corrected: string;
+  approval: WeaponCritErratumApproval;
+}
 
 export interface WeaponAttackModeEnrichment {
   allowsRepeatedRoundAttack?: boolean;
   label?: string | null;
   note?: string | null;
+  critErratum?: WeaponCritErratum;
 }
 
 export interface WeaponTemplateEnrichment {
@@ -231,6 +259,105 @@ for (const [id, sourceRow] of [
   };
 }
 
+const critErratumApproval: WeaponCritErratumApproval = {
+  issue: 512,
+  ruling:
+    "Product Owner mode-2 errata, ratified under #512 (melee mode-style precedence ruling, 2026-10-06, issue comment 12816).",
+};
+
+/** The complete set of ratified source-crit errata. Exactly two, both mode-2, both preserving severity `D`. */
+export const themistogenesCritErrata: ReadonlyArray<{
+  templateId: string;
+  modeId: "mode-2";
+  erratum: WeaponCritErratum;
+}> = [
+  {
+    templateId: "weapon-template-dagger",
+    modeId: "mode-2",
+    erratum: { original: "DP", corrected: "DS", approval: critErratumApproval },
+  },
+  {
+    templateId: "weapon-template-quarterstaff",
+    modeId: "mode-2",
+    erratum: { original: "DC", corrected: "DP", approval: critErratumApproval },
+  },
+];
+
+for (const { templateId, modeId, erratum } of themistogenesCritErrata) {
+  const current = themistogenesWeaponEnrichments[templateId] ?? {};
+  themistogenesWeaponEnrichments[templateId] = {
+    ...current,
+    attackModes: {
+      ...current.attackModes,
+      [modeId]: {
+        ...current.attackModes?.[modeId],
+        critErratum: erratum,
+        note: `Approved source-crit erratum ${erratum.original} -> ${erratum.corrected} (#${erratum.approval.issue}).`,
+      },
+    },
+  };
+}
+
+/**
+ * Catalogue competency ids (NOT display names) per workbook weapon skill. The keys are the
+ * workbook `weaponSkill` strings used only to address a row; every VALUE is the stable catalogue
+ * `id` (`canonicalContent` skill ids). Firearms is deliberately absent: no Firearms competency
+ * exists in this phase and there is no name-string fallback, so those modes stay unresolved.
+ */
+export const themistogenesWeaponSkillCompetencyIds: Readonly<Record<string, string>> = {
+  "1-h conc./axe": "one_handed_concussion_axe",
+  "1-h edged": "one_handed_edged",
+  "2-h conc./axe": "two_handed_concussion_axe",
+  "2-h edged": "two_handed_edged",
+  Bow: "bow",
+  Crossbow: "crossbow",
+  Fencing: "fencing",
+  Lance: "lance",
+  Longbow: "longbow",
+  Polearms: "polearms",
+  Sling: "sling",
+  Throwing: "throwing",
+};
+
+/** Workbook weapon skills that intentionally carry no competency reference (refusal-path fixtures). */
+export const themistogenesUnresolvedWeaponSkills: ReadonlyArray<string> = ["Firearms"];
+
+function resolveWeaponSkillCompetencyId(skill: string | null | undefined) {
+  if (skill != null && Object.hasOwn(themistogenesWeaponSkillCompetencyIds, skill)) {
+    return parseCompetencyId(themistogenesWeaponSkillCompetencyIds[skill]);
+  }
+  if (skill != null && themistogenesUnresolvedWeaponSkills.includes(skill)) {
+    return null;
+  }
+  throw new Error(
+    `Weapon skill "${skill}" has no competency id authored and is not a declared unresolved skill.`,
+  );
+}
+
+function getSecondaryCritErratum(template: WeaponTemplate): WeaponCritErratum | null {
+  const enrichment = themistogenesWeaponEnrichments[template.id];
+  if (enrichment?.attackModes?.["mode-1"]?.critErratum) {
+    throw new Error(`${template.id}: crit errata are only supported on mode-2.`);
+  }
+  return enrichment?.attackModes?.["mode-2"]?.critErratum ?? null;
+}
+
+function applyCritErratum(
+  location: string,
+  observed: string | null | undefined,
+  erratum: WeaponCritErratum,
+): string {
+  if (observed !== erratum.original) {
+    throw new Error(
+      `${location}: erratum expects source crit "${erratum.original}" but observed "${observed}".`,
+    );
+  }
+  if (erratum.corrected[0] !== erratum.original[0]) {
+    throw new Error(`${location}: erratum must preserve the severity-family letter.`);
+  }
+  return erratum.corrected;
+}
+
 function resolveWarningCategory(warning: string): string {
   if (warning.includes("no explicit secondary attack label column")) {
     return "missing_secondary_attack_label";
@@ -290,7 +417,13 @@ function applyCanonicalWeaponOneMeleeMapping(
   const primaryModeFamily =
     getCanonicalMeleeModeFromAttackLabel(primaryAttackLabel) ??
     getCanonicalMeleeModeFromCrit(template.crit1);
-  const secondaryCrit = getRawSourceValue(template, "crit2") ?? template.crit2 ?? null;
+  const secondaryCritErratum = getSecondaryCritErratum(template);
+  const observedSecondaryCrit = getRawSourceValue(template, "crit2") ?? template.crit2 ?? null;
+  // The workbook raw cell (`rawRow[sourceColumns.crit2]`) wins over `template.crit2`, so the
+  // erratum must intercept this resolved value; overriding `template.crit2` alone would be a no-op.
+  const secondaryCrit = secondaryCritErratum
+    ? applyCritErratum(`${template.id} crit2`, observedSecondaryCrit, secondaryCritErratum)
+    : observedSecondaryCrit;
   const secondaryModeFamily = getCanonicalMeleeModeFromCrit(secondaryCrit);
   const secondCrit = getRawSourceValue(template, "secondCrit") ?? template.secondCrit ?? null;
   const hasSecondaryMode = hasWeaponOneSecondaryModeSignal(template);
@@ -317,6 +450,11 @@ function applyCanonicalWeaponOneMeleeMapping(
       nextModes.push({
         ...mode,
         label: getCanonicalMeleeModeLabel(secondaryModeFamily) ?? mode.label,
+        ...(secondaryCritErratum
+          ? {
+              crit: applyCritErratum(`${template.id} mode-2 crit`, mode.crit, secondaryCritErratum),
+            }
+          : {}),
         canonicalMeleeMode:
           secondaryModeFamily ??
           getCanonicalMeleeModeFromAttackLabel(mode.label) ??
@@ -373,6 +511,11 @@ function applyAttackModeEnrichment(
       fields.push("label");
     }
 
+    if (modeEnrichment.critErratum) {
+      // Already applied to the crit input upstream; recorded here so it is visible in provenance.
+      fields.push("crit");
+    }
+
     if (fields.length > 0) {
       overrides.push({
         modeId: mode.id,
@@ -425,8 +568,10 @@ export function applyThemistogenesWeaponEnrichments(templates: WeaponTemplate[])
       canonicallyMappedTemplate.attackModes,
       enrichment,
     );
+    const competencyRef = resolveWeaponSkillCompetencyId(template.weaponSkill);
     const orderedAttackModes = attackModes?.map((mode, index) => ({
       ...mode,
+      ...(mode.competencyRef == null && competencyRef != null ? { competencyRef } : {}),
       attackType:
         mode.attackType ??
         (canonicallyMappedTemplate.handlingClass === "thrown"
@@ -470,8 +615,13 @@ export function applyThemistogenesWeaponEnrichments(templates: WeaponTemplate[])
     const primaryMode = orderedAttackModes?.find((mode) => mode.id === "mode-1");
     const secondaryMode = orderedAttackModes?.find((mode) => mode.id === "mode-2");
 
+    const secondaryCritErratum = getSecondaryCritErratum(template);
+
     return {
       ...template,
+      ...(secondaryCritErratum
+        ? { crit2: applyCritErratum(`${template.id} crit2`, template.crit2, secondaryCritErratum) }
+        : {}),
       attackModes: orderedAttackModes,
       disarmCapability: enrichment?.disarmCapability ?? template.disarmCapability ?? "none",
       disarmControlOverride:
