@@ -77,6 +77,12 @@ const characterInputs: CombatStateCharacterInputs = {
     Dodge: 15,
     Parry: 13,
   },
+  combatSkillXpByCompetencyId: {
+    one_handed_edged: 15,
+    brawling: 9,
+    dodge: 15,
+    parry: 13,
+  },
   constitution: 11,
   dexterity: 11,
   dexterityGm: 0,

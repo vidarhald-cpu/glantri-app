@@ -2,18 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { defaultCombatAllocationState } from "./combatAllocationState";
 import {
+  COMBAT_COMPETENCY_REFUSED,
   canUseWorkbookMeleeCalculation,
   getDerivedDmbValue,
   getDerivedInitiativeValue,
   getDerivedObValue,
   getDmbValue,
   getGripSummary,
-  getSkillXpByName,
-  getWeaponSkillXp,
   getWorkbookCombinedRowParry,
   getWorkbookOneItemDefensePair,
   getWorkbookShieldRowParry,
   getWorkbookWeaponRowParry,
+  isCombatCompetencyRefusal,
+  resolveAttackModeCompetency,
 } from "./deriveCombatValues";
 import type { CombatStateCharacterInputs } from "./characterInputs";
 
@@ -22,6 +23,7 @@ function makeCharacterInputs(
 ): CombatStateCharacterInputs {
   return {
     brawlingCombatSkillXp: null,
+    combatSkillXpByCompetencyId: {},
     combatSkillXpByName: {},
     constitution: null,
     dexterity: null,
@@ -57,53 +59,56 @@ describe("canUseWorkbookMeleeCalculation", () => {
   );
 });
 
-describe("getWeaponSkillXp", () => {
-  it("returns null for null template", () => {
-    expect(getWeaponSkillXp(null, makeCharacterInputs())).toBeNull();
+describe("resolveAttackModeCompetency", () => {
+  it("refuses a mode with no competencyRef rather than falling back to any skill", () => {
+    const characterInputs = makeCharacterInputs({
+      combatSkillXpByCompetencyId: { throwing: 9 },
+      combatSkillXpByName: { Throwing: 9, Sword: 5 },
+    });
+
+    for (const attackMode of [{}, { competencyRef: null }, null, undefined]) {
+      expect(
+        resolveAttackModeCompetency({ attackMode: attackMode as never, characterInputs }),
+      ).toEqual({
+        reason: "no_competency_reference",
+        status: "refused",
+      });
+    }
   });
 
-  it("returns null when characterInputs are undefined", () => {
-    expect(getWeaponSkillXp({ weaponSkill: "Sword" } as never, undefined)).toBeNull();
-  });
-
-  it("returns null when template has no weaponSkill", () => {
+  it("resolves the referenced catalogue id through the id-keyed map", () => {
     expect(
-      getWeaponSkillXp({} as never, makeCharacterInputs({ combatSkillXpByName: { Sword: 5 } })),
-    ).toBeNull();
+      resolveAttackModeCompetency({
+        attackMode: { competencyRef: "one_handed_edged" } as never,
+        characterInputs: makeCharacterInputs({
+          combatSkillXpByCompetencyId: { one_handed_edged: 15 },
+        }),
+      }),
+    ).toEqual({ competencyId: "one_handed_edged", skillXp: 15, status: "resolved" });
   });
 
-  it("returns xp value by weapon skill name", () => {
+  it("does not read the name-keyed map: a display name never resolves a competency id", () => {
     expect(
-      getWeaponSkillXp(
-        { weaponSkill: "Scimitar" } as never,
-        makeCharacterInputs({ combatSkillXpByName: { Scimitar: 15 } }),
-      ),
-    ).toBe(15);
+      resolveAttackModeCompetency({
+        attackMode: { competencyRef: "one_handed_edged" } as never,
+        characterInputs: makeCharacterInputs({ combatSkillXpByName: { "1-h edged": 15 } }),
+      }),
+    ).toEqual({ competencyId: "one_handed_edged", skillXp: null, status: "resolved" });
   });
 
-  it("returns null when skill is not in combatSkillXpByName", () => {
+  it("resolves to a null skillXp, not a refusal, when the character lacks the competency", () => {
     expect(
-      getWeaponSkillXp(
-        { weaponSkill: "Greatsword" } as never,
-        makeCharacterInputs({ combatSkillXpByName: { Sword: 5 } }),
-      ),
-    ).toBeNull();
-  });
-});
-
-describe("getSkillXpByName", () => {
-  it("returns null for null skillName", () => {
-    expect(getSkillXpByName(null, makeCharacterInputs())).toBeNull();
-  });
-
-  it("returns null when characterInputs are undefined", () => {
-    expect(getSkillXpByName("Throwing", undefined)).toBeNull();
-  });
-
-  it("returns xp for a known skill", () => {
+      resolveAttackModeCompetency({
+        attackMode: { competencyRef: "bow" } as never,
+        characterInputs: makeCharacterInputs({ combatSkillXpByCompetencyId: { sling: 4 } }),
+      }),
+    ).toEqual({ competencyId: "bow", skillXp: null, status: "resolved" });
     expect(
-      getSkillXpByName("Throwing", makeCharacterInputs({ combatSkillXpByName: { Throwing: 7 } })),
-    ).toBe(7);
+      resolveAttackModeCompetency({
+        attackMode: { competencyRef: "bow" } as never,
+        characterInputs: undefined,
+      }),
+    ).toEqual({ competencyId: "bow", skillXp: null, status: "resolved" });
   });
 });
 
@@ -255,10 +260,11 @@ describe("getDerivedInitiativeValue · workbook golden values", () => {
   it("Themistogenes 1.07.xlsx → Calculations!I19: melee initiative dex-gm 3, skill 15, weapon-init 1 → 5", () => {
     expect(
       getDerivedInitiativeValue({
+        attackMode: { competencyRef: "sword" } as never,
         template: { handlingClass: "one_handed", initiative: 1, weaponSkill: "Sword" } as never,
         characterInputs: makeCharacterInputs({
           dexterityGm: 3,
-          combatSkillXpByName: { Sword: 15 },
+          combatSkillXpByCompetencyId: { sword: 15 },
         }),
       }),
     ).toBe(5);
@@ -267,18 +273,19 @@ describe("getDerivedInitiativeValue · workbook golden values", () => {
   it("missile weapon uses initiative + dexterityGm directly", () => {
     expect(
       getDerivedInitiativeValue({
+        attackMode: { attackType: "missile", competencyRef: "bow" } as never,
         template: { handlingClass: "missile", initiative: 2 } as never,
         characterInputs: makeCharacterInputs({ dexterityGm: 3 }),
       }),
     ).toBe(5);
   });
 
-  it("treatAsThrownUse uses initiative + dexterityGm directly", () => {
+  it("a thrown attack type uses initiative + dexterityGm directly", () => {
     expect(
       getDerivedInitiativeValue({
+        attackMode: { attackType: "thrown", competencyRef: "throwing" } as never,
         template: { handlingClass: "one_handed", initiative: 2 } as never,
         characterInputs: makeCharacterInputs({ dexterityGm: 3 }),
-        treatAsThrownUse: true,
       }),
     ).toBe(5);
   });
@@ -286,13 +293,12 @@ describe("getDerivedInitiativeValue · workbook golden values", () => {
   it("uses the explicit thrown-mode initiative instead of the base melee initiative", () => {
     expect(
       getDerivedInitiativeValue({
-        attackMode: { initiative: -2 },
+        attackMode: { attackType: "thrown", competencyRef: "throwing", initiative: -2 } as never,
         template: { handlingClass: "two_handed", initiative: 1 } as never,
         characterInputs: makeCharacterInputs({
-          combatSkillXpByName: { Polearm: 20, Throwing: 4 },
+          combatSkillXpByCompetencyId: { polearms: 20, throwing: 4 },
           dexterityGm: 3,
         }),
-        treatAsThrownUse: true,
       }),
     ).toBe(1);
   });
@@ -320,9 +326,9 @@ describe("getDerivedObValue · workbook golden values", () => {
         characterInputs: makeCharacterInputs({
           dexterityGm: 3,
           strengthGm: 3,
-          combatSkillXpByName: { Scimitar: 15 },
+          combatSkillXpByCompetencyId: { scimitar: 15 },
         }),
-        mode: { ob: 3 } as never,
+        mode: { competencyRef: "scimitar", ob: 3 } as never,
         template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
       }),
     ).toBe(16);
@@ -333,7 +339,7 @@ describe("getDerivedObValue · workbook golden values", () => {
       getDerivedObValue({
         allocationInputs: alloc,
         armorTemplate: null,
-        mode: { ob: 3 } as never,
+        mode: { competencyRef: "sword", ob: 3 } as never,
         template: { handlingClass: "one_handed", weaponSkill: "Sword" } as never,
       }),
     ).toBe(3);
@@ -350,9 +356,9 @@ describe("getDerivedObValue · workbook golden values", () => {
       characterInputs: makeCharacterInputs({
         dexterityGm: 3,
         strengthGm: 3,
-        combatSkillXpByName: { Scimitar: 15 },
+        combatSkillXpByCompetencyId: { scimitar: 15 },
       }),
-      mode: { ob: 3 } as never,
+      mode: { competencyRef: "scimitar", ob: 3 } as never,
       template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
     });
     expect(result).toBe(21);
@@ -363,9 +369,9 @@ describe("getDerivedObValue · workbook golden values", () => {
       handlingClass: "one_handed",
       weaponSkill: "1-h edged",
     } as never;
-    const slashMode = { ob: 2 } as never;
+    const slashMode = { competencyRef: "one_handed_edged", ob: 2 } as never;
     const characterInputs = makeCharacterInputs({
-      combatSkillXpByName: { "1-h edged": 9 },
+      combatSkillXpByCompetencyId: { one_handed_edged: 9 },
       dexterityGm: 2,
       strengthGm: 4,
     });
@@ -401,7 +407,7 @@ describe("getDerivedObValue · workbook golden values", () => {
           situationalModifiers: { ...alloc.situationalModifiers, attack: 1 },
         },
         armorTemplate: null,
-        mode: { ob: 0 } as never,
+        mode: { competencyRef: "brawling", ob: 0 } as never,
         template: { handlingClass: "one_handed", weaponSkill: "Kick" } as never,
       }),
     ).toBe(1);
@@ -413,7 +419,7 @@ describe("getDerivedObValue · workbook golden values", () => {
           situationalModifiers: { ...alloc.situationalModifiers, attack: -1 },
         },
         armorTemplate: null,
-        mode: { ob: 0 } as never,
+        mode: { competencyRef: "brawling", ob: 0 } as never,
         template: { handlingClass: "one_handed", weaponSkill: "Kick" } as never,
       }),
     ).toBe(-1);
@@ -432,9 +438,9 @@ describe("getDerivedDmbValue · workbook golden values", () => {
         characterInputs: makeCharacterInputs({
           dexterityGm: 3,
           strengthGm: 3,
-          combatSkillXpByName: { Scimitar: 15 },
+          combatSkillXpByCompetencyId: { scimitar: 15 },
         }),
-        mode: { ob: 3, dmb: 3 } as never,
+        mode: { competencyRef: "scimitar", ob: 3, dmb: 3 } as never,
         template: { handlingClass: "one_handed", weaponSkill: "Scimitar" } as never,
       }),
     ).toBe(6);
@@ -445,9 +451,8 @@ describe("getDerivedDmbValue · workbook golden values", () => {
       getDerivedDmbValue({
         armorTemplate: null,
         characterInputs: makeCharacterInputs({ strengthGm: 3 }),
-        mode: { dmb: 4 } as never,
+        mode: { attackType: "thrown", competencyRef: "throwing", dmb: 4 } as never,
         template: { handlingClass: "one_handed" } as never,
-        treatAsThrownUse: true,
       }),
     ).toBe(7);
   });

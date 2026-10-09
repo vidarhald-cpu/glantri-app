@@ -304,6 +304,24 @@ function createItem(input: {
   };
 }
 
+// The workbook names its skills; the combat inputs resolve a mode's competencyRef by catalogue id.
+// Independent literals, so a wrong id in the authored content cannot be mirrored here.
+const competencyIdBySkillName: Record<string, string> = {
+  "1-h conc./axe": "one_handed_concussion_axe",
+  "1-h edged": "one_handed_edged",
+  "2-h conc./axe": "two_handed_concussion_axe",
+  "2-h edged": "two_handed_edged",
+  Bow: "bow",
+  Brawling: "brawling",
+  Crossbow: "crossbow",
+  Fencing: "fencing",
+  Lance: "lance",
+  Longbow: "longbow",
+  Polearms: "polearms",
+  Sling: "sling",
+  Throwing: "throwing",
+};
+
 function buildCharacterInputs(
   skills: Record<string, number>,
   skillXp?: Record<string, number>,
@@ -317,6 +335,11 @@ function buildCharacterInputs(
     dodgeCombatSkillXp: dodgeXp,
     parryCombatSkillXp: (skillXp ?? {}).Parry ?? skills.Parry ?? null,
     brawlingCombatSkillXp: (skillXp ?? {}).Brawling ?? skills.Brawling ?? null,
+    combatSkillXpByCompetencyId: Object.fromEntries(
+      Object.entries(skillXp ?? skills).flatMap(([name, xp]) =>
+        competencyIdBySkillName[name] ? [[competencyIdBySkillName[name], xp]] : [],
+      ),
+    ),
     combatSkillXpByName: {
       ...(skillXp ?? skills),
       Dodge: dodgeXp,

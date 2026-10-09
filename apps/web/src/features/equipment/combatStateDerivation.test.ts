@@ -218,6 +218,12 @@ const sampleCharacterInputs = {
     Dodge: 15,
     Parry: 13,
   },
+  combatSkillXpByCompetencyId: {
+    one_handed_edged: 15,
+    brawling: 9,
+    dodge: 15,
+    parry: 13,
+  },
   dodgeCombatSkillXp: 15,
   size: 13,
   sizeGm: 1,
@@ -540,6 +546,10 @@ describe("combatStateDerivation", () => {
         ...sampleCharacterInputs.combatSkillXpByName,
         "1-h edged": 9,
       },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        one_handed_edged: 9,
+      },
       dexterityGm: 2,
       strengthGm: 4,
     };
@@ -673,6 +683,11 @@ describe("combatStateDerivation", () => {
         "1-h edged": 15,
         Brawling: 9,
         Parry: 13,
+      },
+      combatSkillXpByCompetencyId: {
+        one_handed_edged: 15,
+        brawling: 9,
+        parry: 13,
       },
       dodgeCombatSkillXp: null,
     });
@@ -835,7 +850,7 @@ describe("combatStateDerivation", () => {
             primaryRanks: 2,
             requiresLiteracy: "no",
             secondaryRanks: 0,
-            skillId: "skill-1h-edged",
+            skillId: "one_handed_edged",
             skillKey: "skill-1h-edged",
             specificSkillLevel: 2,
             totalSkill: 6,
@@ -876,6 +891,10 @@ describe("combatStateDerivation", () => {
         ...sampleCharacterInputs.combatSkillXpByName,
         "1-h edged": inputs.combatSkillXpByName["1-h edged"],
       },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        one_handed_edged: inputs.combatSkillXpByCompetencyId["one_handed_edged"],
+      },
     });
 
     expect(inputs.combatSkillXpByName["1-h edged"]).toBe(6);
@@ -892,6 +911,11 @@ describe("combatStateDerivation", () => {
         "1-h edged": 6,
         Brawling: 6,
       },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        one_handed_edged: 6,
+        brawling: 6,
+      },
     });
 
     expect(getRowBySlotLabel(snapshot, "Primary weapon")?.initiative).toBe(1);
@@ -906,6 +930,10 @@ describe("combatStateDerivation", () => {
       combatSkillXpByName: {
         ...sampleCharacterInputs.combatSkillXpByName,
         Parry: 11,
+      },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        parry: 11,
       },
     });
 
@@ -932,6 +960,10 @@ describe("combatStateDerivation", () => {
       combatSkillXpByName: {
         ...sampleCharacterInputs.combatSkillXpByName,
         Parry: 11,
+      },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        parry: 11,
       },
     });
 
@@ -963,6 +995,10 @@ describe("combatStateDerivation", () => {
         ...sampleCharacterInputs.combatSkillXpByName,
         Bow: 6,
       },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        bow: 6,
+      },
     });
 
     expect(getRowBySlotLabel(snapshot, "Missile weapon")?.ob1).toBe(7);
@@ -990,6 +1026,10 @@ describe("combatStateDerivation", () => {
         ...sampleCharacterInputs.combatSkillXpByName,
         Bow: 3,
       },
+      combatSkillXpByCompetencyId: {
+        ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+        bow: 3,
+      },
       dexterity: 13,
       dexterityGm: 1,
     });
@@ -1011,6 +1051,10 @@ describe("combatStateDerivation", () => {
         combatSkillXpByName: {
           ...sampleCharacterInputs.combatSkillXpByName,
           Throwing: 4,
+        },
+        combatSkillXpByCompetencyId: {
+          ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+          throwing: 4,
         },
       },
       undefined,
@@ -1047,6 +1091,11 @@ describe("combatStateDerivation", () => {
           ...sampleCharacterInputs.combatSkillXpByName,
           "1-h edged": 21,
           Throwing: 4,
+        },
+        combatSkillXpByCompetencyId: {
+          ...sampleCharacterInputs.combatSkillXpByCompetencyId,
+          one_handed_edged: 21,
+          throwing: 4,
         },
       },
       undefined,

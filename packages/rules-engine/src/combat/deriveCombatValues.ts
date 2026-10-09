@@ -1,3 +1,4 @@
+import { isThrownWeaponAttackMode } from "@glantri/domain";
 import type {
   ArmorTemplate,
   ShieldTemplate,
@@ -24,6 +25,43 @@ import type { CombatAllocationState } from "./combatAllocationState";
 import type { CombatStateCharacterInputs } from "./characterInputs";
 
 export type DerivedCombatValue = string | number;
+
+/**
+ * Returned in place of a derived value when the attack mode carries no `competencyRef`. It is a
+ * deliberate, non-numeric refusal: callers must not read it as a missing skill, a zero, or a
+ * reason to fall back to a skill name (Forgejo #512 P1.3).
+ */
+export const COMBAT_COMPETENCY_REFUSED = "Refused: no competency reference";
+
+export function isCombatCompetencyRefusal(value: unknown): boolean {
+  return value === COMBAT_COMPETENCY_REFUSED;
+}
+
+export type AttackModeCompetencyResolution =
+  | { competencyId: string; skillXp: number | null; status: "resolved" }
+  | { reason: "no_competency_reference"; status: "refused" };
+
+/**
+ * Resolves the competency an attack mode attacks with from the mode's authored `competencyRef`
+ * (a catalogue id), through the id-keyed skill XP map. A mode without a reference is REFUSED: there
+ * is deliberately no fallback to the template's `weaponSkill` name or to any fixed skill.
+ * `skillXp` is `null` only when the character does not hold the referenced competency.
+ */
+export function resolveAttackModeCompetency(input: {
+  attackMode: Pick<WeaponAttackMode, "competencyRef"> | null | undefined;
+  characterInputs: CombatStateCharacterInputs | undefined;
+}): AttackModeCompetencyResolution {
+  const competencyId = input.attackMode?.competencyRef;
+  if (!competencyId) {
+    return { reason: "no_competency_reference", status: "refused" };
+  }
+
+  return {
+    competencyId,
+    skillXp: input.characterInputs?.combatSkillXpByCompetencyId[competencyId] ?? null,
+    status: "resolved",
+  };
+}
 
 function getAttackRawModifiers(allocationInputs: CombatAllocationState): WorkbookRawModifier[] {
   const attackModifier = allocationInputs.situationalModifiers.attack;
@@ -104,26 +142,11 @@ function formatDmbFormula(
   }
 }
 
-export function getWeaponSkillXp(
-  template: WeaponTemplate | null,
-  characterInputs: CombatStateCharacterInputs | undefined,
-): number | null {
-  if (!template?.weaponSkill || !characterInputs) {
-    return null;
-  }
+/** A template-level call names no mode, so its competency comes from the template's first mode. */
+function getDefaultAttackMode(template: WeaponTemplate): WeaponAttackMode | null {
+  const modes = template.attackModes ?? [];
 
-  return characterInputs.combatSkillXpByName[template.weaponSkill] ?? null;
-}
-
-export function getSkillXpByName(
-  skillName: string | null | undefined,
-  characterInputs: CombatStateCharacterInputs | undefined,
-): number | null {
-  if (!skillName || !characterInputs) {
-    return null;
-  }
-
-  return characterInputs.combatSkillXpByName[skillName] ?? null;
+  return modes.find((mode) => mode.id === "mode-1") ?? modes[0] ?? null;
 }
 
 export function canUseWorkbookMeleeCalculation(template: WeaponTemplate | null): boolean {
@@ -193,21 +216,35 @@ export function getDmbValue(
 }
 
 export function getDerivedInitiativeValue(input: {
-  attackMode?: Pick<WeaponAttackMode, "initiative"> | null;
+  attackMode?: Pick<WeaponAttackMode, "attackType" | "competencyRef" | "initiative"> | null;
   characterInputs?: CombatStateCharacterInputs;
   template: WeaponTemplate | null;
-  treatAsThrownUse?: boolean;
 }): DerivedCombatValue {
   if (!input.template) {
     return "—";
   }
 
-  const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
+  // Thrown use is the mode's authored attack type, never the slot the weapon is displayed in.
+  const treatAsThrownUse = isThrownWeaponAttackMode(input.attackMode ?? undefined);
+  const competencyMode = input.attackMode ?? getDefaultAttackMode(input.template);
+  let skillXp: number | null = null;
+  // A weapon with no mode at all has no competency to resolve and no attack to make; a mode that
+  // exists but names no competency is refused.
+  if (competencyMode) {
+    const competency = resolveAttackModeCompetency({
+      attackMode: competencyMode,
+      characterInputs: input.characterInputs,
+    });
+    if (competency.status === "refused") {
+      return COMBAT_COMPETENCY_REFUSED;
+    }
+    skillXp = competency.skillXp;
+  }
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   const weaponInitiative = input.attackMode?.initiative ?? input.template.initiative;
 
   if (
-    !input.treatAsThrownUse &&
+    !treatAsThrownUse &&
     canUseWorkbookMeleeCalculation(input.template) &&
     skillXp != null &&
     dexterityGm != null &&
@@ -225,7 +262,7 @@ export function getDerivedInitiativeValue(input: {
     }
   }
 
-  if (input.template.handlingClass === "missile" || input.treatAsThrownUse) {
+  if (input.template.handlingClass === "missile" || treatAsThrownUse) {
     return (weaponInitiative ?? 0) + (input.characterInputs?.dexterityGm ?? 0);
   }
 
@@ -238,21 +275,26 @@ export function getDerivedObValue(input: {
   characterInputs?: CombatStateCharacterInputs;
   mode: WeaponAttackMode | null;
   template: WeaponTemplate | null;
-  treatAsThrownUse?: boolean;
 }): DerivedCombatValue {
   if (!input.mode) {
     return "—";
   }
 
+  // Thrown use is the mode's authored attack type, never the slot the weapon is displayed in.
+  const treatAsThrownUse = isThrownWeaponAttackMode(input.mode);
+  const competency = resolveAttackModeCompetency({
+    attackMode: input.mode,
+    characterInputs: input.characterInputs,
+  });
+  if (competency.status === "refused") {
+    return COMBAT_COMPETENCY_REFUSED;
+  }
   const attackRawModifiers = getAttackRawModifiers(input.allocationInputs);
-  const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
-  const missileOrThrownSkillXp = input.treatAsThrownUse
-    ? getSkillXpByName("Throwing", input.characterInputs)
-    : skillXp;
+  const skillXp = competency.skillXp;
   const strengthGm = input.characterInputs?.strengthGm ?? null;
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   if (
-    !input.treatAsThrownUse &&
+    !treatAsThrownUse &&
     canUseWorkbookMeleeCalculation(input.template) &&
     skillXp != null &&
     strengthGm != null &&
@@ -273,15 +315,12 @@ export function getDerivedObValue(input: {
     }
   }
 
-  if (
-    (input.template?.handlingClass === "missile" || input.treatAsThrownUse) &&
-    missileOrThrownSkillXp != null
-  ) {
+  if ((input.template?.handlingClass === "missile" || treatAsThrownUse) && skillXp != null) {
     const projectileOb = calculateWorkbookProjectileOb({
       armorActivityModifier: input.armorTemplate?.armorActivityModifier ?? 0,
       dexterityGm: dexterityGm ?? 0,
       rawModifiers: attackRawModifiers,
-      skillXp: missileOrThrownSkillXp,
+      skillXp: skillXp,
       weaponOb: input.mode.ob ?? 0,
     });
 
@@ -290,7 +329,7 @@ export function getDerivedObValue(input: {
     }
   }
 
-  if (input.treatAsThrownUse) {
+  if (treatAsThrownUse) {
     return "—";
   }
 
@@ -314,17 +353,25 @@ export function getDerivedDmbValue(input: {
   characterInputs?: CombatStateCharacterInputs;
   mode: WeaponAttackMode | null;
   template: WeaponTemplate | null;
-  treatAsThrownUse?: boolean;
 }): DerivedCombatValue {
   if (!input.mode) {
     return "—";
   }
 
-  const skillXp = getWeaponSkillXp(input.template, input.characterInputs);
+  // Thrown use is the mode's authored attack type, never the slot the weapon is displayed in.
+  const treatAsThrownUse = isThrownWeaponAttackMode(input.mode);
+  const competency = resolveAttackModeCompetency({
+    attackMode: input.mode,
+    characterInputs: input.characterInputs,
+  });
+  if (competency.status === "refused") {
+    return COMBAT_COMPETENCY_REFUSED;
+  }
+  const skillXp = competency.skillXp;
   const strengthGm = input.characterInputs?.strengthGm ?? null;
   const dexterityGm = input.characterInputs?.dexterityGm ?? null;
   if (
-    !input.treatAsThrownUse &&
+    !treatAsThrownUse &&
     canUseWorkbookMeleeCalculation(input.template) &&
     skillXp != null &&
     strengthGm != null &&
@@ -346,7 +393,7 @@ export function getDerivedDmbValue(input: {
     }
   }
 
-  if (input.treatAsThrownUse) {
+  if (treatAsThrownUse) {
     if (input.mode.dmb != null && strengthGm != null) {
       return strengthGm + input.mode.dmb;
     }

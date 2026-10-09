@@ -414,14 +414,12 @@ function buildThrowingWeaponRow(input: {
     characterInputs: input.characterInputs,
     mode,
     template: input.template,
-    treatAsThrownUse: true,
   });
   const thrownDmb = getDerivedDmbValue({
     armorTemplate: input.armorTemplate,
     characterInputs: input.characterInputs,
     mode,
     template: input.template,
-    treatAsThrownUse: true,
   });
 
   return {
@@ -439,7 +437,6 @@ function buildThrowingWeaponRow(input: {
           attackMode: mode,
           characterInputs: input.characterInputs,
           template: input.template,
-          treatAsThrownUse: true,
         }),
         isPrimaryAttack: true,
         label: String(getAttackLabel(mode)),
@@ -460,7 +457,6 @@ function buildThrowingWeaponRow(input: {
       attackMode: mode,
       characterInputs: input.characterInputs,
       template: input.template,
-      treatAsThrownUse: true,
     }),
     ob1: thrownOb,
     dmb1: thrownDmb,
