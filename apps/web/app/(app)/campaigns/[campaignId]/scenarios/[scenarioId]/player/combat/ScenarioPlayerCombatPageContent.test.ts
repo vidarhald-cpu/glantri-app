@@ -45,6 +45,20 @@ describe("ScenarioPlayerCombatPageContent", () => {
   });
 
   /**
+   * Forgejo #509 F2 — the Item panel is injected outside `controlsDisabled`, so the GM's read-only
+   * inspection must reach it as its own prop. (Behaviour is covered against the real panel in
+   * `CombatItemInteractionPanel.test.tsx`; this pins the wiring, as the page is not mountable here.)
+   */
+  it("wires GM read-only inspection into the Item interaction panel", () => {
+    const source = readSource();
+    const start = source.indexOf("<CombatItemInteractionPanel");
+    const end = source.indexOf("/>", start);
+
+    expect(start).toBeGreaterThan(-1);
+    expect(source.slice(start, end)).toContain("readOnly={readOnlyInspection}");
+  });
+
+  /**
    * A3, Forgejo issue #335 — Combat Panel Contract §12.15. The retired
    * `GenericCombatActionPanel` carried the declaration intent for this surface's GM branch. The
    * §12.4 destination for intent text is the Action Selector, and that wiring is what survives
