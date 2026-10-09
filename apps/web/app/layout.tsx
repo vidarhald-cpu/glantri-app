@@ -7,7 +7,7 @@ import { AppHeader } from "@/lib/layout/AppHeader";
 
 export const metadata: Metadata = {
   title: "Glantri",
-  description: "Web-first RPG app scaffold with offline-first architecture"
+  description: "Web-first RPG app scaffold with offline-first architecture",
 };
 
 type RootLayoutProps = {
