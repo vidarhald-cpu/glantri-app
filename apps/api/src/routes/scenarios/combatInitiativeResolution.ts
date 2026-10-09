@@ -19,6 +19,7 @@ import {
   buildCharacterSheetSummary,
   buildCombatStateCharacterInputs,
   getDerivedInitiativeValue,
+  isCombatCompetencyRefusal,
 } from "@glantri/rules-engine";
 
 import { resolveCanonicalParticipantCalculationContext } from "./combatParticipantCalculationResolution";
@@ -87,12 +88,22 @@ export function resolveCanonicalCombatInitiativeBase(input: {
   if (missingFacts.size > 0 || !template) {
     return { completeness: "partial", missingFacts: [...missingFacts].sort() };
   }
+  const attackMode = template.attackModes?.find((mode) => mode.id === opportunity?.attackModeId);
+  // The competency comes from the declared mode, so an undeclared or unknown mode must not be
+  // answered with some other mode of the weapon.
+  if (!attackMode) {
+    return { completeness: "partial", missingFacts: ["attack_mode"] };
+  }
   const initiative = getDerivedInitiativeValue({
-    attackMode: template.attackModes?.find((mode) => mode.id === opportunity?.attackModeId),
+    attackMode,
     characterInputs,
     template,
-    treatAsThrownUse: opportunity?.weaponSourceSlot === "throwing",
   });
+  // A mode with no authored competency reference is refused outright: it is neither guessed from
+  // the weapon's skill name nor resolved as a missing skill (#512 P1.3).
+  if (isCombatCompetencyRefusal(initiative)) {
+    return { completeness: "partial", missingFacts: ["attack_mode_competency"] };
+  }
   if (typeof initiative !== "number" || !Number.isInteger(initiative)) {
     return { completeness: "partial", missingFacts: ["initiative_calculation"] };
   }

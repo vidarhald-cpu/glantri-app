@@ -11,7 +11,10 @@ import type {
   StorageLocation,
 } from "@glantri/domain";
 import { equipmentTemplates } from "@glantri/content/equipment";
-import { defaultCombatAllocationState, type CombatStateCharacterInputs } from "@glantri/rules-engine";
+import {
+  defaultCombatAllocationState,
+  type CombatStateCharacterInputs,
+} from "@glantri/rules-engine";
 import { buildCombatStatePanelModel } from "./combatStatePanel";
 import { getInventoryRows, getPersonalEncumbranceSummary } from "./equipmentSelectors";
 import type { EquipmentFeatureState } from "./types";
@@ -186,6 +189,9 @@ const characterInputs: CombatStateCharacterInputs = {
   combatSkillXpByName: {
     Throwing: 4,
   },
+  combatSkillXpByCompetencyId: {
+    throwing: 4,
+  },
   dodgeCombatSkillXp: null,
   parryCombatSkillXp: null,
   brawlingCombatSkillXp: null,
@@ -226,7 +232,9 @@ describe("combatStatePanel throwing row reliability", () => {
     const source = readFileSync(join(featurePath, "loadoutModule.tsx"), "utf8");
 
     expect(source).toContain('label: "Max HP"');
-    expect(source).toContain("calculateCharacterGeneralHitpoints(input.characterContext.record.build)");
+    expect(source).toContain(
+      "calculateCharacterGeneralHitpoints(input.characterContext.record.build)",
+    );
     expect(source).toContain('label: "Distraction lvl"');
     expect(source).toContain("input.characterContext.record.build.profile.distractionLevel");
   });
@@ -237,11 +245,11 @@ describe("combatStatePanel throwing row reliability", () => {
     expect(source).toContain("liveCombatModifiers?: EncounterLiveCombatModifierSummary");
     expect(source).toContain("calculateWorkbookPercentageAdjustmentTrace");
     expect(source).toContain("input.liveCombatModifiers");
-    expect(source).toContain('Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}');
-    expect(source).toContain("attack: liveObSkillRaw");
     expect(source).toContain(
-      "const liveObSkillRaw = input.liveCombatModifiers?.obSkillRaw ?? 0;",
+      'Modified by: ${input.liveCombatModifiers.modifierNoteLabels.join(", ")}',
     );
+    expect(source).toContain("attack: liveObSkillRaw");
+    expect(source).toContain("const liveObSkillRaw = input.liveCombatModifiers?.obSkillRaw ?? 0;");
     expect(source).toContain('{ label: "OB/Skill", value: liveObSkillRaw }');
     expect(source).not.toContain(
       "(input.liveCombatModifiers?.generalFatigueRaw ?? 0) +\n    (input.liveCombatModifiers?.obSkillRaw ?? 0)",
@@ -307,6 +315,14 @@ describe("combatStatePanel throwing row reliability", () => {
           Dodge: 15,
           Parry: 11,
         },
+        combatSkillXpByCompetencyId: {
+          ...characterInputs.combatSkillXpByCompetencyId,
+          one_handed_edged: 15,
+          bow: 6,
+          brawling: 9,
+          dodge: 15,
+          parry: 11,
+        },
         dodgeCombatSkillXp: 15,
         parryCombatSkillXp: 11,
       },
@@ -357,6 +373,14 @@ describe("combatStatePanel throwing row reliability", () => {
           Dodge: 15,
           Parry: 11,
         },
+        combatSkillXpByCompetencyId: {
+          ...characterInputs.combatSkillXpByCompetencyId,
+          one_handed_edged: 15,
+          bow: 6,
+          brawling: 9,
+          dodge: 15,
+          parry: 11,
+        },
         dodgeCombatSkillXp: 15,
         parryCombatSkillXp: 11,
       },
@@ -364,9 +388,7 @@ describe("combatStatePanel throwing row reliability", () => {
       daggerItem.id,
     );
 
-    const encumbranceRow = model.capabilityRows.find(
-      (row) => row.label === "Enc/count/lvl",
-    )?.value;
+    const encumbranceRow = model.capabilityRows.find((row) => row.label === "Enc/count/lvl")?.value;
 
     expect(typeof encumbranceRow).toBe("string");
     const [encPart, countPart] = String(encumbranceRow).split(" / ");

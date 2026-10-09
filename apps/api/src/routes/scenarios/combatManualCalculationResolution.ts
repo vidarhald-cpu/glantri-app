@@ -12,6 +12,7 @@ import {
   defaultCombatAllocationState,
   getDerivedObValue,
   getWorkbookCombinedRowParry,
+  isCombatCompetencyRefusal,
   getWorkbookShieldRowParry,
   getWorkbookWeaponRowParry,
 } from "@glantri/rules-engine";
@@ -81,7 +82,6 @@ function resolveOpportunityWeapon(input: {
         ReturnType<typeof resolveCanonicalParticipantCalculationContext>,
         { completeness: "complete" }
       >;
-      treatAsThrownUse: boolean;
       weaponTemplate: WeaponTemplate;
     }
   | IncompleteCanonicalManualCalculation {
@@ -140,7 +140,6 @@ function resolveOpportunityWeapon(input: {
     armorTemplate: context.armorTemplate,
     attackMode,
     context,
-    treatAsThrownUse: opportunity.weaponSourceSlot === "throwing",
     weaponTemplate: parsedTemplate.data,
   };
 }
@@ -161,7 +160,6 @@ export function resolveCanonicalAttackOffense(input: {
     characterInputs: weapon.context.characterInputs,
     mode: weapon.attackMode,
     template: weapon.weaponTemplate,
-    treatAsThrownUse: weapon.treatAsThrownUse,
   });
   const preOpponentOb = getDerivedObValue({
     allocationInputs: {
@@ -175,8 +173,16 @@ export function resolveCanonicalAttackOffense(input: {
     characterInputs: weapon.context.characterInputs,
     mode: weapon.attackMode,
     template: weapon.weaponTemplate,
-    treatAsThrownUse: weapon.treatAsThrownUse,
   });
+  // A mode with no authored competency reference is refused outright: it is neither guessed from
+  // the weapon's skill name nor resolved as a missing skill (#512 P1.3).
+  if (isCombatCompetencyRefusal(baseOb) || isCombatCompetencyRefusal(preOpponentOb)) {
+    return incomplete({
+      missingFacts: ["attack_mode_competency"],
+      participantId: input.participant.id,
+      sourceSnapshotId: weapon.context.sourceSnapshotId,
+    });
+  }
   if (typeof baseOb !== "number" || typeof preOpponentOb !== "number") {
     return incomplete({
       missingFacts: ["attack_offense"],
