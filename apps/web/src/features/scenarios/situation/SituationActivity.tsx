@@ -34,11 +34,8 @@ const eventTypeLabels: Record<ScenarioObjectiveHistoryEventType, string> = {
  */
 export function SituationActivity({ session }: { session: ScenarioSessionView }) {
   return (
-    <section
-      aria-labelledby="situation-activity-heading"
-      style={{ display: "grid", gap: "0.5rem" }}
-    >
-      <h2 id="situation-activity-heading" style={{ margin: 0 }}>
+    <section aria-labelledby="situation-activity-heading" className="glantri-panel">
+      <h2 className="glantri-section-heading" id="situation-activity-heading" style={{ margin: 0 }}>
         Activity
       </h2>
       {session.history.length ? (
@@ -47,24 +44,24 @@ export function SituationActivity({ session }: { session: ScenarioSessionView })
             <li
               key={event.id}
               style={{
-                borderBottom: "1px solid #ece8dc",
+                borderBottom: "var(--glantri-border-subtle)",
                 display: "grid",
                 gap: "0.1rem",
                 padding: "0.35rem 0",
               }}
             >
-              <div style={{ color: "#5e5a50", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                <time dateTime={event.createdAt} style={{ fontSize: "0.8rem" }}>
-                  {new Date(event.createdAt).toLocaleString()}
-                </time>
-                <span style={{ fontSize: "0.8rem" }}>{eventTypeLabels[event.type]}</span>
+              <div className="glantri-actions glantri-helper-text">
+                <time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString()}</time>
+                <span>{eventTypeLabels[event.type]}</span>
               </div>
               <span>{event.summary}</span>
             </li>
           ))}
         </ol>
       ) : (
-        <p style={{ margin: 0 }}>No objective Scenario history has been recorded yet.</p>
+        <p className="glantri-helper-text" style={{ margin: 0 }}>
+          No objective Scenario history has been recorded yet.
+        </p>
       )}
     </section>
   );

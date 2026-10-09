@@ -16,15 +16,6 @@ export interface SituationRailFilter<TFilterId extends string> {
   label: string;
 }
 
-const railStyle = {
-  background: "#fff",
-  border: "1px solid #ddd7c9",
-  borderRadius: 10,
-  display: "grid",
-  gap: "0.4rem",
-  padding: "0.6rem",
-} as const;
-
 const rowButtonStyle = {
   background: "none",
   border: 0,
@@ -80,11 +71,11 @@ export function SituationRail<TFilterId extends string>({
   }, [query, rows]);
 
   return (
-    <section aria-labelledby={headingId} style={railStyle}>
-      <h3 id={headingId} style={{ fontSize: "0.95rem", margin: 0 }}>
+    <section aria-labelledby={headingId} className="glantri-panel glantri-panel--muted">
+      <h3 className="glantri-section-heading" id={headingId} style={{ margin: 0 }}>
         {title}
       </h3>
-      <label htmlFor={searchId} style={{ fontSize: "0.8rem" }}>
+      <label className="glantri-helper-text" htmlFor={searchId}>
         {searchLabel}
       </label>
       <input
@@ -94,18 +85,14 @@ export function SituationRail<TFilterId extends string>({
         value={query}
       />
       {filters ? (
-        <div
-          aria-label={filters.label}
-          role="group"
-          style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem" }}
-        >
+        <div aria-label={filters.label} className="glantri-actions" role="group">
           {filters.options.map((option) => (
             <button
               aria-pressed={filters.activeId === option.id}
               key={option.id}
               onClick={() => filters.onChange(option.id)}
               style={{
-                border: "1px solid #ddd7c9",
+                border: "var(--glantri-border-subtle)",
                 borderRadius: 999,
                 cursor: "pointer",
                 fontSize: "0.8rem",
@@ -133,15 +120,15 @@ export function SituationRail<TFilterId extends string>({
                 type="button"
               >
                 <span style={{ fontWeight: 600 }}>{row.label}</span>
-                {row.cue ? (
-                  <span style={{ color: "#5e5a50", fontSize: "0.8rem" }}>{row.cue}</span>
-                ) : null}
+                {row.cue ? <span className="glantri-helper-text">{row.cue}</span> : null}
               </button>
             </li>
           ))}
         </ul>
       ) : (
-        <p style={{ color: "#5e5a50", fontSize: "0.85rem", margin: 0 }}>{emptyMessage}</p>
+        <p className="glantri-helper-text" style={{ margin: 0 }}>
+          {emptyMessage}
+        </p>
       )}
     </section>
   );
