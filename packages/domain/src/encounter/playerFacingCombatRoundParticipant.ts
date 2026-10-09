@@ -1,156 +1,235 @@
 import { z } from "zod";
 
-import {
-  buildPlayerFacingCombatContext,
-  playerFacingCombatContextSchema,
-} from "../campaign/playerFacingScenarioParticipant";
+import { playerFacingCombatContextSchema } from "../campaign/playerFacingScenarioParticipant";
 import {
   combatRoundAttackOpportunitySchema,
+  combatRoundAttackResultsSchema,
   combatRoundAttackRollResultSchema,
   combatRoundCombatExperienceResultSchema,
   combatRoundDeclarationSchema,
+  combatRoundInitiativesSchema,
   combatRoundParticipantStateSchema,
-  type CombatRoundAttackOpportunity,
-  type CombatRoundAttackRollResult,
-  type CombatRoundCombatExperienceResult,
+  combatRoundPhaseContextsSchema,
   type CombatRoundDeclaration,
   type CombatRoundParticipantState,
 } from "./combatRoundManager";
+import {
+  playerFacingCombatAttackPhaseDefensivePenaltySchema,
+  playerFacingCombatDeclarationIntentSchema,
+  playerFacingCombatRoundCombatExperienceDueSchema,
+  playerFacingCombatRoundFeintDeclarationSchema,
+  playerFacingCombatRoundInitiativeResultSchema,
+  playerFacingCombatRoundWeaponDmbFormulaSchema,
+  playerFacingMissileWeaponProfileSchema,
+  playerFacingMovementIntentSchema,
+  playerFacingScenarioParticipantSecondaryActionContextSchema,
+} from "./playerFacingCombatRoundStructures";
+import {
+  buildPlayerFacing,
+  LEAF,
+  playerFacingObject,
+  type PlayerFacingOverrides,
+} from "./playerFacingSchema";
 
 /**
  * The player-facing round-state participant and declaration, Forgejo issue #507 (privacy
- * hardening, Tier 2).
+ * hardening, Tier 2), made whole-path in #517 (Tier 3).
  *
- * The round state a player receives still comes from the per-viewer projection, which decides
- * which participants, declarations and attack results the viewer may see. That projection spreads
- * the stored participant and declaration, so before Tier 2 every field of either — and any field
- * added to either later, such as the `submittedByUserId` account identity — reached players. These
- * types rebuild both from named fields instead.
+ * The per-viewer projection decides which participants, declarations and attack results the viewer
+ * may see; these types decide which fields carry it. Before Tier 2 the projection spread the stored
+ * participant and declaration, so every field of either — and any field added to either later, such
+ * as the `submittedByUserId` account identity — reached players.
  *
  * Every field is here because a player consumer needs it: the player combat page, the domain
  * functions it runs over the round state it receives (`initializeCombatRoundState` and the helpers
  * it calls), or the schemas both the server and the client parse a player's round state with
  * (`activeCombatRoundStateSchema` for the `active-v1` response, `combatRoundStateSchema` in those
- * domain helpers), which require some fields. Each field names its consumer. A field nothing on the
- * player path reads is not here, so a field added to an internal type changes nothing a player sees.
+ * domain helpers), which require some fields. Each field names its consumer.
  *
- * Nested structures follow the Tier 1 precedent (`playerFacingScenarioParticipant`): those carrying
- * an actor identity are enumerated one level further down and never carry it — attack results and
- * the Combat Experience result (`rolledByUserId`) and attack opportunities (`cancelledByUserId`);
- * the others reuse their canonical field schemas, which carry no private material. Combat and phase
- * contexts are `playerFacingCombatContextSchema`, without the canonical lifecycle and correction
- * history.
+ * Every level is enumerated (Tier 3, `playerFacingSchema.ts`). A field reuses its canonical schema
+ * only when that schema holds no object (`LEAF`, checked at compile time); every structure — attack
+ * results, attack opportunities, the Combat Experience result, the defensive penalties, the feint,
+ * intent, movement intent and secondary-action context, the initiatives and the Combat Experience
+ * schedule — is a player-facing schema naming its own fields, checked when the module loads. So
+ * these types inherit nothing automatically from the stored participant, its declaration or any
+ * structure below them: such a field is carried only if a player-facing schema names it. They make
+ * up the player-facing round state (`playerFacingCombatRoundState`) — the `combatRoundState` of a
+ * player's encounter response and the `activeCombatState` of a player's `active-v1` response.
  *
- * Both types are branded, so a stored participant or declaration is not assignable to them.
+ * They do not close the open `facts` record on a round-state command, which is privacy Tier 4's
+ * (#528).
+ *
+ * That is the whole of the claim. Player output built from the same stored structures without
+ * these types is not covered by it. The combat history's event fact buckets are open: a
+ * declaration event's `involvedOutcome` copies the declaration's movement intent, phase contexts
+ * and secondary-action context whole and gives them to the declaring player, a field added to
+ * them included. Those buckets are privacy Tier 4's (#528).
+ *
+ * In these types, attack results and the Combat Experience result never carry `rolledByUserId`,
+ * and attack opportunities never carry `cancelledByUserId`. Combat and phase contexts are
+ * `playerFacingCombatContextSchema`, so these types carry them without the canonical lifecycle and
+ * correction history (R1); the combat history's `involvedOutcome` can still give both to the
+ * declaring player (#528).
+ *
+ * Every player-facing object is branded, so a stored value is not assignable to these types at any
+ * level.
  */
-const attackRollShape = combatRoundAttackRollResultSchema.innerType().innerType().shape;
+/**
+ * The attack-result fields that carry workbook import provenance, which is not player-facing
+ * gameplay data (control-plane ruling E2, #517):
+ *
+ * - `weaponModeSourceMetadata`, the attack mode's import record;
+ * - `weaponDmbRoll`, the missile DMB roll, whose `provenance` is `"<sheet>:<row>:<formula>"`. The
+ *   whole roll is omitted, not only its `provenance`: the stored schema requires `provenance`, and
+ *   the server and the client parse a player's round state with it (ruling 2026-10-07). The DMB
+ *   value itself stays in `weaponDmb`, which that schema requires to equal the roll's total.
+ *
+ * The player-facing attack result names neither. Player output that carries an attack result's
+ * fields outside that schema removes both with `withoutAttackResultWorkbookImportProvenance`.
+ */
+export const ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS = [
+  "weaponDmbRoll",
+  "weaponModeSourceMetadata",
+] as const;
 
-/** An attack result as a player receives it: everything but the roller's account identity. */
-export const playerFacingCombatRoundAttackRollResultSchema = z.object({
-  actionId: attackRollShape.actionId,
-  attackIndex: attackRollShape.attackIndex,
-  attackModeId: attackRollShape.attackModeId,
-  attackType: attackRollShape.attackType,
-  attackOpportunityId: attackRollShape.attackOpportunityId,
-  attackSlot: attackRollShape.attackSlot,
-  attackPhaseDefensivePenalty: attackRollShape.attackPhaseDefensivePenalty,
-  attackerParticipantId: attackRollShape.attackerParticipantId,
-  declarationId: attackRollShape.declarationId,
-  defenderParticipantId: attackRollShape.defenderParticipantId,
-  defenderDb: attackRollShape.defenderDb,
-  defenderParryModifier: attackRollShape.defenderParryModifier,
-  grazing: attackRollShape.grazing,
-  hit: attackRollShape.hit,
-  kind: attackRollShape.kind,
-  lookupTotal: attackRollShape.lookupTotal,
-  marginOverMissThreshold: attackRollShape.marginOverMissThreshold,
-  ob: attackRollShape.ob,
-  openEndedD10s: attackRollShape.openEndedD10s,
-  phase: attackRollShape.phase,
-  roll: attackRollShape.roll,
-  rollD20: attackRollShape.rollD20,
-  rollTotal: attackRollShape.rollTotal,
-  rolledAt: attackRollShape.rolledAt,
-  tableResult: attackRollShape.tableResult,
-  weaponArmorClass: attackRollShape.weaponArmorClass,
-  weaponCriticalCode: attackRollShape.weaponCriticalCode,
-  weaponDamageClass: attackRollShape.weaponDamageClass,
-  weaponDmb: attackRollShape.weaponDmb,
-  weaponDmbRoll: attackRollShape.weaponDmbRoll,
-  weaponDmbFormula: attackRollShape.weaponDmbFormula,
-  weaponDmbRaw: attackRollShape.weaponDmbRaw,
-  weaponModeInitiative: attackRollShape.weaponModeInitiative,
-  weaponModeRange: attackRollShape.weaponModeRange,
-  weaponModeSourceMetadata: attackRollShape.weaponModeSourceMetadata,
-  weaponInstanceId: attackRollShape.weaponInstanceId,
-  weaponName: attackRollShape.weaponName,
-  weaponSecondaryCriticalCode: attackRollShape.weaponSecondaryCriticalCode,
-  weaponSourceId: attackRollShape.weaponSourceId,
-  weaponSourceSlot: attackRollShape.weaponSourceSlot,
-  weaponTemplateId: attackRollShape.weaponTemplateId,
-});
+/**
+ * An attack result, or an event fact bucket copied from one, without
+ * `ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`: for player output that is not parsed through
+ * the player-facing attack result — the combat history's event facts and the roll-attack response.
+ */
+export function withoutAttackResultWorkbookImportProvenance<Attack extends object>(
+  attack: Attack,
+): Omit<Attack, (typeof ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS)[number]> {
+  const {
+    weaponDmbRoll: _dmbRollProvenance,
+    weaponModeSourceMetadata: _modeProvenance,
+    ...playerAttack
+  } = attack as Attack & { weaponDmbRoll?: unknown; weaponModeSourceMetadata?: unknown };
+  return playerAttack;
+}
+
+/**
+ * An attack result as a player receives it: everything but the roller's account identity and
+ * `ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`; nothing on the player path read either.
+ */
+export const playerFacingCombatRoundAttackRollResultSchema = playerFacingObject(
+  "PlayerFacingCombatRoundAttackRollResult",
+  combatRoundAttackRollResultSchema.innerType().innerType(),
+  {
+    actionId: LEAF,
+    attackIndex: LEAF,
+    attackModeId: LEAF,
+    attackType: LEAF,
+    attackOpportunityId: LEAF,
+    attackSlot: LEAF,
+    attackPhaseDefensivePenalty: playerFacingCombatAttackPhaseDefensivePenaltySchema.optional(),
+    attackerParticipantId: LEAF,
+    declarationId: LEAF,
+    defenderParticipantId: LEAF,
+    defenderDb: LEAF,
+    defenderParryModifier: LEAF,
+    grazing: LEAF,
+    hit: LEAF,
+    kind: LEAF,
+    lookupTotal: LEAF,
+    marginOverMissThreshold: LEAF,
+    ob: LEAF,
+    openEndedD10s: LEAF,
+    phase: LEAF,
+    roll: LEAF,
+    rollD20: LEAF,
+    rollTotal: LEAF,
+    rolledAt: LEAF,
+    tableResult: LEAF,
+    weaponArmorClass: LEAF,
+    weaponCriticalCode: LEAF,
+    weaponDamageClass: LEAF,
+    weaponDmb: LEAF,
+    weaponDmbFormula: playerFacingCombatRoundWeaponDmbFormulaSchema.nullable().optional(),
+    weaponDmbRaw: LEAF,
+    weaponModeInitiative: LEAF,
+    weaponModeRange: LEAF,
+    weaponInstanceId: LEAF,
+    weaponName: LEAF,
+    weaponSecondaryCriticalCode: LEAF,
+    weaponSourceId: LEAF,
+    weaponSourceSlot: LEAF,
+    weaponTemplateId: LEAF,
+  },
+);
 export type PlayerFacingCombatRoundAttackRollResult = z.infer<
   typeof playerFacingCombatRoundAttackRollResultSchema
 >;
 
-const combatExperienceShape = combatRoundCombatExperienceResultSchema.shape;
-
 /** A Combat Experience result as a player receives it: everything but the roller's account. */
-export const playerFacingCombatRoundCombatExperienceResultSchema = z.object({
-  difficultyShift: combatExperienceShape.difficultyShift,
-  durationRounds: combatExperienceShape.durationRounds,
-  effectiveTableTotal: combatExperienceShape.effectiveTableTotal,
-  label: combatExperienceShape.label,
-  modifierValue: combatExperienceShape.modifierValue,
-  needsEffectRow: combatExperienceShape.needsEffectRow,
-  note: combatExperienceShape.note,
-  resultBand: combatExperienceShape.resultBand,
-  difficulty: combatExperienceShape.difficulty,
-  finalTotal: combatExperienceShape.finalTotal,
-  noRollRequired: combatExperienceShape.noRollRequired,
-  openEndedD10s: combatExperienceShape.openEndedD10s,
-  rolledAt: combatExperienceShape.rolledAt,
-  rollD20: combatExperienceShape.rollD20,
-  rollTotal: combatExperienceShape.rollTotal,
-  roundNumber: combatExperienceShape.roundNumber,
-  skillTotal: combatExperienceShape.skillTotal,
-  skillTotalSource: combatExperienceShape.skillTotalSource,
-  skillTotalWarning: combatExperienceShape.skillTotalWarning,
-  trigger: combatExperienceShape.trigger,
-});
+export const playerFacingCombatRoundCombatExperienceResultSchema = playerFacingObject(
+  "PlayerFacingCombatRoundCombatExperienceResult",
+  combatRoundCombatExperienceResultSchema,
+  {
+    difficultyShift: LEAF,
+    durationRounds: LEAF,
+    effectiveTableTotal: LEAF,
+    label: LEAF,
+    modifierValue: LEAF,
+    needsEffectRow: LEAF,
+    note: LEAF,
+    resultBand: LEAF,
+    difficulty: LEAF,
+    finalTotal: LEAF,
+    noRollRequired: LEAF,
+    openEndedD10s: LEAF,
+    rolledAt: LEAF,
+    rollD20: LEAF,
+    rollTotal: LEAF,
+    roundNumber: LEAF,
+    skillTotal: LEAF,
+    skillTotalSource: LEAF,
+    skillTotalWarning: LEAF,
+    trigger: LEAF,
+  },
+);
 export type PlayerFacingCombatRoundCombatExperienceResult = z.infer<
   typeof playerFacingCombatRoundCombatExperienceResultSchema
 >;
 
-const attackOpportunityShape = combatRoundAttackOpportunitySchema.shape;
-
 /** A declared attack opportunity as a player receives it: everything but who cancelled it. */
-export const playerFacingCombatRoundAttackOpportunitySchema = z.object({
-  actionId: attackOpportunityShape.actionId,
-  attackType: attackOpportunityShape.attackType,
-  attackIndex: attackOpportunityShape.attackIndex,
-  attackModeId: attackOpportunityShape.attackModeId,
-  cancelledAt: attackOpportunityShape.cancelledAt,
-  declarationId: attackOpportunityShape.declarationId,
-  id: attackOpportunityShape.id,
-  itemId: attackOpportunityShape.itemId,
-  missileProfile: attackOpportunityShape.missileProfile,
-  origin: attackOpportunityShape.origin,
-  phase: attackOpportunityShape.phase,
-  slot: attackOpportunityShape.slot,
-  sourceKind: attackOpportunityShape.sourceKind,
-  status: attackOpportunityShape.status,
-  targetParticipantId: attackOpportunityShape.targetParticipantId,
-  weaponInstanceId: attackOpportunityShape.weaponInstanceId,
-  weaponSourceId: attackOpportunityShape.weaponSourceId,
-  weaponSourceSlot: attackOpportunityShape.weaponSourceSlot,
-  weaponTemplateId: attackOpportunityShape.weaponTemplateId,
-});
+export const playerFacingCombatRoundAttackOpportunitySchema = playerFacingObject(
+  "PlayerFacingCombatRoundAttackOpportunity",
+  combatRoundAttackOpportunitySchema,
+  {
+    actionId: LEAF,
+    attackType: LEAF,
+    attackIndex: LEAF,
+    attackModeId: LEAF,
+    cancelledAt: LEAF,
+    declarationId: LEAF,
+    id: LEAF,
+    itemId: LEAF,
+    missileProfile: playerFacingMissileWeaponProfileSchema.optional(),
+    origin: LEAF,
+    phase: LEAF,
+    slot: LEAF,
+    sourceKind: LEAF,
+    status: LEAF,
+    targetParticipantId: LEAF,
+    weaponInstanceId: LEAF,
+    weaponSourceId: LEAF,
+    weaponSourceSlot: LEAF,
+    weaponTemplateId: LEAF,
+  },
+);
 export type PlayerFacingCombatRoundAttackOpportunity = z.infer<
   typeof playerFacingCombatRoundAttackOpportunitySchema
 >;
 
-const declarationShape = combatRoundDeclarationSchema.shape;
+const playerFacingCombatRoundPhaseContextsSchema = playerFacingObject(
+  "PlayerFacingCombatRoundPhaseContexts",
+  combatRoundPhaseContextsSchema,
+  {
+    phase1: playerFacingCombatContextSchema.optional(),
+    phase2: playerFacingCombatContextSchema.optional(),
+  },
+);
 
 /**
  * The round-state declaration as a player receives it. Consumers are on the player path: the player
@@ -160,297 +239,161 @@ const declarationShape = combatRoundDeclarationSchema.shape;
  * - `submittedByUserId` — the submitting account's id, which is the GM's when the GM declared for
  *   the participant. Nothing outside the routes that write it reads it; actor identities are not
  *   player-facing (Tier 1, `playerFacingScenarioParticipant`).
- * - `disarm` — the per-viewer projection removes it from every declaration a player can see
- *   (`sanitizePlayerSafeDisarmDeclaration`, and the whole declaration of another participant who
- *   declared a disarm), so players never receive it; the page's draft read of it gets `undefined`.
+ * - `disarm` — players never received it: the per-viewer projection removed it from the viewer's
+ *   own declaration and hides another participant's disarm declaration whole; the page's draft read
+ *   of it gets `undefined`.
  * - `adjustDistance` — no player consumer: its only reader on a player's state is the server's
  *   `nextTask` derivation (`buildManeuverAdapter`), and no client reads `nextTask`.
  * - `secondaryActions` — no player consumer: it repeats `secondaryActionContext`, which every writer
  *   stores alongside it and the only reader (`getCombatRoundObservationDeclaration`, server
  *   `nextTask` derivation) falls back to.
  */
-const playerFacingCombatRoundDeclarationShapeSchema = z.object({
-  /** The page's declaration draft and target validation; `getCombatRoundPhaseAttackCandidates`. */
-  actionId: declarationShape.actionId,
-  /** `getCombatRoundOffensiveParryAttemptIdentity` (page → `getPlayerCombatCurrentRollAction`). */
-  id: declarationShape.id,
-  /** The page's declaration draft (`buildPlayerCombatDeclarationDraft`). */
-  additionalActionNotes: declarationShape.additionalActionNotes,
-  /** The page's attack and missile panels; `getCombatRoundPhaseAttackCandidates`. */
-  attackOpportunities: z.array(playerFacingCombatRoundAttackOpportunitySchema).optional(),
-  /** `projectCombatActionGeneratedModifiers`, which the page calls. */
-  attackPhaseDefensivePenalties: declarationShape.attackPhaseDefensivePenalties,
-  /** The page's declaration draft and stored-declaration validation (`selectedOpponentId`). */
-  combatContext: playerFacingCombatContextSchema.optional(),
-  /** The page's feint method draft; `synchronizeCombatRoundFeintDeclarationTarget`. */
-  feint: declarationShape.feint,
-  /** The page's declaration draft (`hasCombatRoundDeclarationAction`). */
-  intent: declarationShape.intent,
-  /** The page's declaration draft. */
-  movementId: declarationShape.movementId,
-  /** The page's declaration draft and target validation; `sanitizeCombatRoundDeclarationTargets`. */
-  movementIntent: declarationShape.movementIntent,
-  /** The page's phase contexts draft; `getCombatRoundPhaseAttackBackOutOpportunity`. */
-  phaseContexts: z
-    .object({
-      phase1: playerFacingCombatContextSchema.optional(),
-      phase2: playerFacingCombatContextSchema.optional(),
-    })
-    .optional(),
-  /** Required by the round-state schemas; `getCombatRoundOffensiveParryAttemptIdentity`. */
-  roundNumber: declarationShape.roundNumber,
-  /** The page's declaration draft and target validation. */
-  secondaryActionContext: declarationShape.secondaryActionContext,
-  /** The page's declaration draft and target validation; `getCombatRoundPhaseAttackCandidates`. */
-  secondaryActionId: declarationShape.secondaryActionId,
-  /** The page's declaration draft key (`buildPlayerCombatDeclarationDraftKey`). */
-  submittedAt: declarationShape.submittedAt,
-  /** Required by the round-state schemas both the server and the client parse. */
-  submittedBy: declarationShape.submittedBy,
-});
-export const playerFacingCombatRoundDeclarationSchema =
-  playerFacingCombatRoundDeclarationShapeSchema.brand<"PlayerFacingCombatRoundDeclaration">();
+export const playerFacingCombatRoundDeclarationSchema = playerFacingObject(
+  "PlayerFacingCombatRoundDeclaration",
+  combatRoundDeclarationSchema,
+  {
+    /** The page's declaration draft and target validation; `getCombatRoundPhaseAttackCandidates`. */
+    actionId: LEAF,
+    /** `getCombatRoundOffensiveParryAttemptIdentity` (page → `getPlayerCombatCurrentRollAction`). */
+    id: LEAF,
+    /** The page's declaration draft (`buildPlayerCombatDeclarationDraft`). */
+    additionalActionNotes: LEAF,
+    /** The page's attack and missile panels; `getCombatRoundPhaseAttackCandidates`. */
+    attackOpportunities: z.array(playerFacingCombatRoundAttackOpportunitySchema).optional(),
+    /** `projectCombatActionGeneratedModifiers`, which the page calls. */
+    attackPhaseDefensivePenalties: z
+      .array(playerFacingCombatAttackPhaseDefensivePenaltySchema)
+      .optional(),
+    /** The page's declaration draft and stored-declaration validation (`selectedOpponentId`). */
+    combatContext: playerFacingCombatContextSchema.optional(),
+    /** The page's feint method draft; `synchronizeCombatRoundFeintDeclarationTarget`. */
+    feint: playerFacingCombatRoundFeintDeclarationSchema.optional(),
+    /** The page's declaration draft (`hasCombatRoundDeclarationAction`). */
+    intent: playerFacingCombatDeclarationIntentSchema.optional(),
+    /** The page's declaration draft. */
+    movementId: LEAF,
+    /** The page's declaration draft and target validation; `sanitizeCombatRoundDeclarationTargets`. */
+    movementIntent: playerFacingMovementIntentSchema.optional(),
+    /** The page's phase contexts draft; `getCombatRoundPhaseAttackBackOutOpportunity`. */
+    phaseContexts: playerFacingCombatRoundPhaseContextsSchema.optional(),
+    /** Required by the round-state schemas; `getCombatRoundOffensiveParryAttemptIdentity`. */
+    roundNumber: LEAF,
+    /** The page's declaration draft and target validation. */
+    secondaryActionContext: playerFacingScenarioParticipantSecondaryActionContextSchema.optional(),
+    /** The page's declaration draft and target validation; `getCombatRoundPhaseAttackCandidates`. */
+    secondaryActionId: LEAF,
+    /** The page's declaration draft key (`buildPlayerCombatDeclarationDraftKey`). */
+    submittedAt: LEAF,
+    /** Required by the round-state schemas both the server and the client parse. */
+    submittedBy: LEAF,
+  },
+);
 export type PlayerFacingCombatRoundDeclaration = z.infer<
   typeof playerFacingCombatRoundDeclarationSchema
 >;
 
 const participantShape = combatRoundParticipantStateSchema.shape;
-const initiativesSchema = participantShape.initiatives.removeDefault();
-const stepStatusesSchema = participantShape.stepStatuses.removeDefault();
+
+const playerFacingCombatRoundAttackResultsSchema = playerFacingObject(
+  "PlayerFacingCombatRoundAttackResults",
+  combatRoundAttackResultsSchema,
+  {
+    phase1: playerFacingCombatRoundAttackRollResultSchema.optional(),
+    phase2: playerFacingCombatRoundAttackRollResultSchema.optional(),
+  },
+);
+
+const playerFacingCombatRoundInitiativesSchema = playerFacingObject(
+  "PlayerFacingCombatRoundInitiatives",
+  combatRoundInitiativesSchema,
+  {
+    phase1: playerFacingCombatRoundInitiativeResultSchema.optional(),
+    phase2: playerFacingCombatRoundInitiativeResultSchema.optional(),
+  },
+);
 
 /**
  * The round-state participant as a player receives it. Every field of the stored participant has a
  * player consumer; it is enumerated so that a field added to the stored participant is not.
  */
-const playerFacingCombatRoundParticipantShapeSchema = z.object({
-  /** The page's attack result display. */
-  attackResults: z.object({
-    phase1: playerFacingCombatRoundAttackRollResultSchema.optional(),
-    phase2: playerFacingCombatRoundAttackRollResultSchema.optional(),
-  }),
-  /** `getCombatRoundAttackResultById` (page); step derivation in `initializeCombatRoundState`. */
-  attackResultsByOpportunity: z
-    .record(
-      participantShape.attackResultsByOpportunity.unwrap().keySchema,
-      playerFacingCombatRoundAttackRollResultSchema,
-    )
-    .optional(),
-  /** Target aliases (`getCombatRoundParticipantTargetAliases`); the page's distance lookups. */
-  characterId: participantShape.characterId,
-  /** The page's Combat Experience panel; `isCombatStartExperienceRollRequired`. */
-  combatExperience: playerFacingCombatRoundCombatExperienceResultSchema.optional(),
-  /** `getCombatRoundCombatExperienceDue` (page → `getCombatRoundRequiredCombatExperienceTrigger`). */
-  combatExperienceDue: participantShape.combatExperienceDue,
-  /** The page's stored declaration; the domain helpers above. */
-  declaration: playerFacingCombatRoundDeclarationSchema.optional(),
-  /** The page's initiative display; initiative order in `initializeCombatRoundState`. */
-  initiatives: initiativesSchema,
-  /** Required by the round-state schemas; the page's participant names. */
-  label: participantShape.label,
-  /** Required by the round-state schemas; every lookup of a round participant. */
-  participantId: participantShape.participantId,
-  /** Target aliases; the page's participant matching. */
-  scenarioParticipantId: participantShape.scenarioParticipantId,
-  /** The page's declaration step status; phase completion in `initializeCombatRoundState`. */
-  stepStatuses: stepStatusesSchema,
-});
-export const playerFacingCombatRoundParticipantSchema =
-  playerFacingCombatRoundParticipantShapeSchema.brand<"PlayerFacingCombatRoundParticipant">();
+export const playerFacingCombatRoundParticipantSchema = playerFacingObject(
+  "PlayerFacingCombatRoundParticipant",
+  combatRoundParticipantStateSchema,
+  {
+    /** The page's attack result display. */
+    attackResults: playerFacingCombatRoundAttackResultsSchema,
+    /** `getCombatRoundAttackResultById` (page); step derivation in `initializeCombatRoundState`. */
+    attackResultsByOpportunity: z
+      .record(
+        participantShape.attackResultsByOpportunity.unwrap().keySchema,
+        playerFacingCombatRoundAttackRollResultSchema,
+      )
+      .optional(),
+    /** Target aliases (`getCombatRoundParticipantTargetAliases`); the page's distance lookups. */
+    characterId: LEAF,
+    /** The page's Combat Experience panel; `isCombatStartExperienceRollRequired`. */
+    combatExperience: playerFacingCombatRoundCombatExperienceResultSchema.optional(),
+    /** `getCombatRoundCombatExperienceDue` (page → `getCombatRoundRequiredCombatExperienceTrigger`). */
+    combatExperienceDue: playerFacingCombatRoundCombatExperienceDueSchema.optional(),
+    /** The page's stored declaration; the domain helpers above. */
+    declaration: playerFacingCombatRoundDeclarationSchema.optional(),
+    /** The page's initiative display; initiative order in `initializeCombatRoundState`. */
+    initiatives: playerFacingCombatRoundInitiativesSchema,
+    /** Required by the round-state schemas; the page's participant names. */
+    label: LEAF,
+    /** Required by the round-state schemas; every lookup of a round participant. */
+    participantId: LEAF,
+    /** Target aliases; the page's participant matching. */
+    scenarioParticipantId: LEAF,
+    /**
+     * The page's declaration step status; phase completion in `initializeCombatRoundState`. A record
+     * of enums keyed by step, so it holds no object: reused, and checked as such when the module
+     * loads (the compiler cannot tell an enum-keyed record from an object).
+     */
+    stepStatuses: participantShape.stepStatuses,
+  },
+);
 export type PlayerFacingCombatRoundParticipant = z.infer<
   typeof playerFacingCombatRoundParticipantSchema
 >;
 
-function buildPlayerFacingCombatRoundAttackRollResult(
-  result: CombatRoundAttackRollResult,
-): PlayerFacingCombatRoundAttackRollResult {
-  return playerFacingCombatRoundAttackRollResultSchema.parse({
-    actionId: result.actionId,
-    attackIndex: result.attackIndex,
-    attackModeId: result.attackModeId,
-    attackType: result.attackType,
-    attackOpportunityId: result.attackOpportunityId,
-    attackSlot: result.attackSlot,
-    attackPhaseDefensivePenalty: result.attackPhaseDefensivePenalty,
-    attackerParticipantId: result.attackerParticipantId,
-    declarationId: result.declarationId,
-    defenderParticipantId: result.defenderParticipantId,
-    defenderDb: result.defenderDb,
-    defenderParryModifier: result.defenderParryModifier,
-    grazing: result.grazing,
-    hit: result.hit,
-    kind: result.kind,
-    lookupTotal: result.lookupTotal,
-    marginOverMissThreshold: result.marginOverMissThreshold,
-    ob: result.ob,
-    openEndedD10s: result.openEndedD10s,
-    phase: result.phase,
-    roll: result.roll,
-    rollD20: result.rollD20,
-    rollTotal: result.rollTotal,
-    rolledAt: result.rolledAt,
-    tableResult: result.tableResult,
-    weaponArmorClass: result.weaponArmorClass,
-    weaponCriticalCode: result.weaponCriticalCode,
-    weaponDamageClass: result.weaponDamageClass,
-    weaponDmb: result.weaponDmb,
-    weaponDmbRoll: result.weaponDmbRoll,
-    weaponDmbFormula: result.weaponDmbFormula,
-    weaponDmbRaw: result.weaponDmbRaw,
-    weaponModeInitiative: result.weaponModeInitiative,
-    weaponModeRange: result.weaponModeRange,
-    weaponModeSourceMetadata: result.weaponModeSourceMetadata,
-    weaponInstanceId: result.weaponInstanceId,
-    weaponName: result.weaponName,
-    weaponSecondaryCriticalCode: result.weaponSecondaryCriticalCode,
-    weaponSourceId: result.weaponSourceId,
-    weaponSourceSlot: result.weaponSourceSlot,
-    weaponTemplateId: result.weaponTemplateId,
-  });
-}
-
-function buildPlayerFacingCombatRoundCombatExperienceResult(
-  result: CombatRoundCombatExperienceResult,
-): PlayerFacingCombatRoundCombatExperienceResult {
-  return playerFacingCombatRoundCombatExperienceResultSchema.parse({
-    difficultyShift: result.difficultyShift,
-    durationRounds: result.durationRounds,
-    effectiveTableTotal: result.effectiveTableTotal,
-    label: result.label,
-    modifierValue: result.modifierValue,
-    needsEffectRow: result.needsEffectRow,
-    note: result.note,
-    resultBand: result.resultBand,
-    difficulty: result.difficulty,
-    finalTotal: result.finalTotal,
-    noRollRequired: result.noRollRequired,
-    openEndedD10s: result.openEndedD10s,
-    rolledAt: result.rolledAt,
-    rollD20: result.rollD20,
-    rollTotal: result.rollTotal,
-    roundNumber: result.roundNumber,
-    skillTotal: result.skillTotal,
-    skillTotalSource: result.skillTotalSource,
-    skillTotalWarning: result.skillTotalWarning,
-    trigger: result.trigger,
-  });
-}
-
-function buildPlayerFacingCombatRoundAttackOpportunity(
-  opportunity: CombatRoundAttackOpportunity,
-): PlayerFacingCombatRoundAttackOpportunity {
-  return playerFacingCombatRoundAttackOpportunitySchema.parse({
-    actionId: opportunity.actionId,
-    attackType: opportunity.attackType,
-    attackIndex: opportunity.attackIndex,
-    attackModeId: opportunity.attackModeId,
-    cancelledAt: opportunity.cancelledAt,
-    declarationId: opportunity.declarationId,
-    id: opportunity.id,
-    itemId: opportunity.itemId,
-    missileProfile: opportunity.missileProfile,
-    origin: opportunity.origin,
-    phase: opportunity.phase,
-    slot: opportunity.slot,
-    sourceKind: opportunity.sourceKind,
-    status: opportunity.status,
-    targetParticipantId: opportunity.targetParticipantId,
-    weaponInstanceId: opportunity.weaponInstanceId,
-    weaponSourceId: opportunity.weaponSourceId,
-    weaponSourceSlot: opportunity.weaponSourceSlot,
-    weaponTemplateId: opportunity.weaponTemplateId,
-  });
-}
-
-function buildPlayerFacingCombatRoundDeclaration(input: {
-  declaration: CombatRoundDeclaration;
-  keepCombatContextAsR2Residual: boolean;
-}): PlayerFacingCombatRoundDeclaration {
-  const { declaration } = input;
-  const phaseContexts = declaration.phaseContexts;
-  const value: z.infer<typeof playerFacingCombatRoundDeclarationShapeSchema> = {
-    actionId: declaration.actionId,
-    id: declaration.id,
-    additionalActionNotes: declaration.additionalActionNotes,
-    attackOpportunities: declaration.attackOpportunities?.map(
-      buildPlayerFacingCombatRoundAttackOpportunity,
-    ),
-    attackPhaseDefensivePenalties: declarationShape.attackPhaseDefensivePenalties.parse(
-      declaration.attackPhaseDefensivePenalties,
-    ),
-    // R2 (#502 Tier 1, control-plane rulings 2026-10-04/05): the combat-declaration route returns
-    // the viewer's own declaration's combat context as the per-viewer projection produced it —
-    // accepted debt, pinned path by path in the route tests, removed by Tier 3. Every other combat
-    // context is rebuilt without the lifecycle and correction history.
-    combatContext:
-      declaration.combatContext && !input.keepCombatContextAsR2Residual
-        ? buildPlayerFacingCombatContext(declaration.combatContext)
-        : declaration.combatContext,
-    feint: declarationShape.feint.parse(declaration.feint),
-    intent: declarationShape.intent.parse(declaration.intent),
-    movementId: declaration.movementId,
-    movementIntent: declarationShape.movementIntent.parse(declaration.movementIntent),
-    phaseContexts: phaseContexts && {
-      phase1: phaseContexts.phase1 && buildPlayerFacingCombatContext(phaseContexts.phase1),
-      phase2: phaseContexts.phase2 && buildPlayerFacingCombatContext(phaseContexts.phase2),
-    },
-    roundNumber: declaration.roundNumber,
-    secondaryActionContext: declarationShape.secondaryActionContext.parse(
-      declaration.secondaryActionContext,
-    ),
-    secondaryActionId: declaration.secondaryActionId,
-    submittedAt: declaration.submittedAt,
-    submittedBy: declaration.submittedBy,
-  };
-  return value as PlayerFacingCombatRoundDeclaration;
-}
+/**
+ * Per-viewer values for fields of a visible declaration: what the per-viewer projection shows a
+ * viewer who does not control the participant instead of its notes, intent, movement intent and —
+ * when it observes — the observed target.
+ */
+export type PlayerFacingCombatRoundDeclarationOverrides = PlayerFacingOverrides<
+  typeof playerFacingCombatRoundDeclarationSchema
+>;
 
 /**
- * Builds the round-state participant a player receives from the one the per-viewer projection
- * produced for them. The projection decides what the viewer may see of this participant; this
- * function decides which fields carry it.
+ * Builds the round-state participant a player receives. The per-viewer projection decides what the
+ * viewer may see of this participant — which declaration (`declaration`, `undefined` for none) and
+ * which of its fields (`declarationOverrides`), and which attack results — and this function builds
+ * every field from the player-facing schemas, which decide what can carry it.
  */
 export function buildPlayerFacingCombatRoundParticipant(input: {
-  /** R2: set by the combat-declaration route only, for the viewer's own participants. */
-  keepDeclarationCombatContextAsR2Residual?: true;
+  /** The declaration the viewer may see: the participant's own, or `undefined` for none. */
+  declaration?: CombatRoundDeclaration;
+  /** Fields of that declaration the viewer may not see, set to what the viewer receives instead. */
+  declarationOverrides?: PlayerFacingCombatRoundDeclarationOverrides;
+  /** The attack results the viewer may see, by opportunity; the participant's own by default. */
+  attackResultsByOpportunity?: CombatRoundParticipantState["attackResultsByOpportunity"];
+  /** The phase attack results derived from `attackResultsByOpportunity`, when that is given. */
+  attackResults?: CombatRoundParticipantState["attackResults"];
   participant: CombatRoundParticipantState;
 }): PlayerFacingCombatRoundParticipant {
-  const { participant } = input;
-  const attackResultsByOpportunity = participant.attackResultsByOpportunity;
-  const value: z.infer<typeof playerFacingCombatRoundParticipantShapeSchema> = {
-    attackResults: {
-      phase1:
-        participant.attackResults.phase1 &&
-        buildPlayerFacingCombatRoundAttackRollResult(participant.attackResults.phase1),
-      phase2:
-        participant.attackResults.phase2 &&
-        buildPlayerFacingCombatRoundAttackRollResult(participant.attackResults.phase2),
-    },
+  const declaration = "declaration" in input ? input.declaration : input.participant.declaration;
+  return buildPlayerFacing(playerFacingCombatRoundParticipantSchema, input.participant, {
+    attackResults: input.attackResults ?? input.participant.attackResults,
     attackResultsByOpportunity:
-      attackResultsByOpportunity &&
-      Object.fromEntries(
-        Object.entries(attackResultsByOpportunity).map(([opportunityId, result]) => [
-          opportunityId,
-          buildPlayerFacingCombatRoundAttackRollResult(result),
-        ]),
-      ),
-    characterId: participant.characterId,
-    combatExperience:
-      participant.combatExperience &&
-      buildPlayerFacingCombatRoundCombatExperienceResult(participant.combatExperience),
-    combatExperienceDue: participantShape.combatExperienceDue.parse(
-      participant.combatExperienceDue,
-    ),
+      input.attackResultsByOpportunity ?? input.participant.attackResultsByOpportunity,
     declaration:
-      participant.declaration &&
-      buildPlayerFacingCombatRoundDeclaration({
-        declaration: participant.declaration,
-        keepCombatContextAsR2Residual: input.keepDeclarationCombatContextAsR2Residual === true,
-      }),
-    initiatives: initiativesSchema.parse(participant.initiatives),
-    label: participant.label,
-    participantId: participant.participantId,
-    scenarioParticipantId: participant.scenarioParticipantId,
-    stepStatuses: stepStatusesSchema.parse(participant.stepStatuses),
-  };
-  return value as PlayerFacingCombatRoundParticipant;
+      declaration &&
+      buildPlayerFacing(
+        playerFacingCombatRoundDeclarationSchema,
+        declaration,
+        input.declarationOverrides,
+      ),
+  });
 }

@@ -15,13 +15,16 @@ import {
 } from "./combatModifierLifecycle";
 import { buildCanonicalCombatModifierReviewFromDraft } from "./combatModifierReviewProjection";
 import {
+  combatRoundAttackRollResultSchema,
   combatRoundParticipantStateSchema,
   combatRoundStateSchema,
   type CombatRoundDeclaration,
   type CombatRoundParticipantState,
 } from "./combatRoundManager";
 import {
+  ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS,
   buildPlayerFacingCombatRoundParticipant,
+  withoutAttackResultWorkbookImportProvenance,
   playerFacingCombatRoundAttackOpportunitySchema,
   playerFacingCombatRoundAttackRollResultSchema,
   playerFacingCombatRoundCombatExperienceResultSchema,
@@ -30,7 +33,12 @@ import {
   type PlayerFacingCombatRoundDeclaration,
   type PlayerFacingCombatRoundParticipant,
 } from "./playerFacingCombatRoundParticipant";
-import { buildPlayerFacingEncounterSession } from "./playerFacingEncounterSession";
+import { playerFacingCombatRoundStateSchema } from "./playerFacingCombatRoundState";
+import {
+  buildPlayerFacingEncounterSession,
+  playerFacingEncounterSessionSchema,
+} from "./playerFacingEncounterSession";
+import { buildPlayerFacing } from "./playerFacingSchema";
 import { encounterSessionSchema, type EncounterSession } from "./session";
 
 /**
@@ -220,6 +228,25 @@ function attackRollResult(input: { opportunityId: string; phase: "phase1" | "pha
     rolledByUserId: "SECRET_ATTACK_ROLLER",
     tableResult: "C",
     weaponCriticalCode: "S",
+    weaponDmb: 7,
+    // A missile DMB roll as production stored it on 17-18 August 2026: its `provenance` is the
+    // workbook sheet, row and formula.
+    weaponDmbRoll: {
+      diceCount: 2,
+      diceSides: 6,
+      flatModifier: 1,
+      provenance: "SECRET_DMB_SHEET:12:2d6+1",
+      rolls: [3, 3],
+      total: 7,
+    },
+    weaponModeSourceMetadata: {
+      rawRow: { A: "SECRET_RAW_ROW_CELL" },
+      row: 12,
+      sheet: "Weapon2",
+      sourceColumns: { name: "A" },
+      sourceRange: "A12:Q12",
+      workbook: "SECRET_WORKBOOK.xlsx",
+    },
     weaponName: "Spear",
     weaponSecondaryCriticalCode: "K",
     weaponSourceId: "item-spear",
@@ -462,6 +489,48 @@ describe("#507 player-facing round-state participant: additive construction", ()
     );
   });
 
+  it("omits the attack result's workbook import provenance although it is populated (ruling E2)", () => {
+    const stored = storedRoundParticipant();
+    for (const result of [
+      stored.attackResults.phase1,
+      stored.attackResultsByOpportunity?.["opportunity-1"],
+    ]) {
+      expect(result?.weaponModeSourceMetadata).toBeDefined();
+      expect(result?.weaponDmbRoll?.provenance).toBe("SECRET_DMB_SHEET:12:2d6+1");
+    }
+
+    const participant = buildPlayerFacingCombatRoundParticipant({ participant: stored });
+
+    const named = Object.keys(playerFacingCombatRoundAttackRollResultSchema.unwrap().shape);
+    expect(named).not.toContain("weaponModeSourceMetadata");
+    expect(named).not.toContain("weaponDmbRoll");
+    for (const result of [
+      participant.attackResults.phase1,
+      participant.attackResultsByOpportunity?.["opportunity-1"],
+    ]) {
+      expect(result).not.toHaveProperty("weaponModeSourceMetadata");
+      expect(result).not.toHaveProperty("weaponDmbRoll");
+      // The DMB value itself stays, and the result is still one the stored schema accepts, which
+      // the server and the client parse a player's round state with: the whole roll is omitted
+      // because that schema requires the roll's `provenance`.
+      expect(result?.weaponDmb).toBe(7);
+      expect(() => combatRoundAttackRollResultSchema.parse(result)).not.toThrow();
+    }
+    expect(JSON.stringify(participant)).not.toMatch(/SECRET_(RAW_ROW_CELL|WORKBOOK|DMB_SHEET)/);
+  });
+
+  it("removes exactly the attack result's import-provenance fields from player output outside the schema", () => {
+    const stored = attackRollResult({ opportunityId: "opportunity-1", phase: "phase1" });
+    const { weaponDmbRoll: _dmbRoll, weaponModeSourceMetadata: _modeSource, ...rest } = stored;
+
+    expect([...ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS].sort()).toEqual([
+      "weaponDmbRoll",
+      "weaponModeSourceMetadata",
+    ]);
+    expect(withoutAttackResultWorkbookImportProvenance(stored)).toEqual(rest);
+    expect(withoutAttackResultWorkbookImportProvenance(rest)).toEqual(rest);
+  });
+
   it("drops the canonical lifecycle and correction history from every combat and phase context", () => {
     const declaration = buildPlayerFacingCombatRoundParticipant({
       participant: storedRoundParticipant(),
@@ -498,11 +567,16 @@ describe("#507 player-facing round-state participant: additive construction", ()
     expect(participant.combatExperience).toEqual(
       withoutIdentity(stored.combatExperience!, "rolledByUserId"),
     );
+    const withoutRollerAndProvenance = (result: Record<string, unknown>) =>
+      withoutIdentity(
+        withoutIdentity(withoutIdentity(result, "rolledByUserId"), "weaponModeSourceMetadata"),
+        "weaponDmbRoll",
+      );
     expect(participant.attackResults.phase1).toEqual(
-      withoutIdentity(stored.attackResults.phase1!, "rolledByUserId"),
+      withoutRollerAndProvenance(stored.attackResults.phase1!),
     );
     expect(participant.attackResultsByOpportunity?.["opportunity-1"]).toEqual(
-      withoutIdentity(stored.attackResultsByOpportunity!["opportunity-1"]!, "rolledByUserId"),
+      withoutRollerAndProvenance(stored.attackResultsByOpportunity!["opportunity-1"]!),
     );
 
     const retained = participant.declaration!;
@@ -537,9 +611,12 @@ describe("#507 player-facing round-state participant: additive construction", ()
     });
   });
 
-  it("does not carry a field added to the stored participant, its declaration or a nested result", () => {
+  it("does not carry an unknown key at any level the player-facing types enumerate", () => {
     // A field added to an internal schema survives the parse the projection runs, so the projected
-    // participant the builder receives would carry it. Simulate exactly that at every level.
+    // participant the builder receives would carry it. Simulate that at every level the player-facing
+    // types enumerate. Keys planted inside a reused canonical field schema (`feint`, `intent`,
+    // `movementIntent`, `initiatives`, ...) are only an unknown key to that schema, which strips them;
+    // a field actually added to that schema would be kept, so this test does not cover that case.
     const stored = storedRoundParticipant();
     const declaration = stored.declaration!;
     const withFutureFields = {
@@ -615,23 +692,24 @@ describe("#507 player-facing round-state participant: additive construction", ()
     expect(keysOutsideSchema(participant, playerFacingCombatRoundParticipantSchema)).toEqual([]);
   });
 
-  it("keeps the viewer's own combat context as projected only when the R2 residual is requested", () => {
+  it("rebuilds the combat context of every declaration: the R2 residual is removed (Tier 3)", () => {
     const stored = storedRoundParticipant();
 
-    const residual = buildPlayerFacingCombatRoundParticipant({
-      keepDeclarationCombatContextAsR2Residual: true,
+    const declaration = buildPlayerFacingCombatRoundParticipant({
       participant: stored,
     }).declaration!;
-    const rebuilt = buildPlayerFacingCombatRoundParticipant({ participant: stored }).declaration!;
 
-    expect(residual.combatContext).toBe(stored.declaration!.combatContext);
-    expect(JSON.stringify(residual.combatContext)).toContain("SECRET_GM_OVERRIDE_REASON");
-    // R2 is the combat context alone: the phase contexts and every other field are rebuilt as ever.
-    expect(JSON.stringify({ ...residual, combatContext: undefined })).not.toContain("SECRET");
-    expect(residual).not.toHaveProperty("submittedByUserId");
-    expect(rebuilt.combatContext).toEqual(
+    expect(declaration.combatContext).toEqual(
       buildPlayerFacingCombatContext(stored.declaration!.combatContext!),
     );
+    expect(JSON.stringify(declaration)).not.toContain("SECRET");
+    expect(() =>
+      buildPlayerFacingCombatRoundParticipant({
+        // @ts-expect-error The R2 opt-in no longer exists: no caller can keep a raw combat context.
+        keepDeclarationCombatContextAsR2Residual: true,
+        participant: stored,
+      }),
+    ).not.toThrow();
   });
 
   it("satisfies the round-state schemas the active combat response and the client parse", () => {
@@ -681,8 +759,8 @@ describe("#507 player-facing round-state participant: non-assignability from int
   });
 });
 
-describe("#507 player-facing encounter: round-state participants rebuilt", () => {
-  function projectedEncounter(): EncounterSession {
+describe("#517 player-facing encounter: built from player-facing values only", () => {
+  function storedEncounter(): EncounterSession {
     const participant = storedRoundParticipant();
     return encounterSessionSchema.parse({
       combatRoundState: combatRoundStateSchema.parse({
@@ -693,6 +771,7 @@ describe("#507 player-facing encounter: round-state participants rebuilt", () =>
       }),
       createdAt: "2026-10-05T08:00:00.000Z",
       currentRound: 3,
+      gmPrivateClosingNote: "SECRET_CLOSING_NOTE",
       id: "encounter-1",
       kind: "combat",
       participants: [],
@@ -702,56 +781,50 @@ describe("#507 player-facing encounter: round-state participants rebuilt", () =>
     });
   }
 
-  it("builds every round-state participant through the player-facing participant", () => {
-    const projected = projectedEncounter();
-    const withFutureField = {
-      ...projected,
-      combatRoundState: {
-        ...projected.combatRoundState!,
-        participants: projected.combatRoundState!.participants.map((participant) => ({
-          ...participant,
-          futureParticipantField: "SECRET_FUTURE_PARTICIPANT",
-        })),
+  it("names every field it carries at every level, and carries none of the stored private values", () => {
+    const stored = storedEncounter();
+    const combatRoundState = buildPlayerFacing(
+      playerFacingCombatRoundStateSchema,
+      stored.combatRoundState!,
+      {
+        participants: stored.combatRoundState!.participants.map((participant) =>
+          buildPlayerFacingCombatRoundParticipant({ participant }),
+        ),
       },
-    } as EncounterSession;
+    );
 
-    const encounter = buildPlayerFacingEncounterSession({ projectedEncounter: withFutureField });
-    const [participant] = encounter.combatRoundState!.participants;
+    const encounter = buildPlayerFacingEncounterSession({
+      combatRoundState,
+      encounter: stored,
+      itemReferences: undefined,
+      participants: [],
+      roleplayState: undefined,
+    });
 
-    expect(keysOutsideSchema(participant, playerFacingCombatRoundParticipantSchema)).toEqual([]);
-    expect(JSON.stringify(encounter.combatRoundState!.participants)).not.toContain("SECRET");
-    expect(participant).toEqual(
+    expect(keysOutsideSchema(encounter, playerFacingEncounterSessionSchema)).toEqual([]);
+    expect(JSON.stringify(encounter)).not.toContain("SECRET");
+    expect(encounter.combatRoundState?.participants[0]).toEqual(
       buildPlayerFacingCombatRoundParticipant({
-        participant: projected.combatRoundState!.participants[0]!,
+        participant: stored.combatRoundState!.participants[0]!,
       }),
     );
   });
 
-  it("keeps the R2 residual for the named participants only", () => {
-    const projected = projectedEncounter();
+  it("takes the round state, participants, roleplay state and item list only as player-facing values", () => {
+    const stored = storedEncounter();
 
-    const residual = buildPlayerFacingEncounterSession({
-      keepDeclarationCombatContextAsR2ResidualFor: new Set(["hero"]),
-      projectedEncounter: projected,
-    });
-    const other = buildPlayerFacingEncounterSession({
-      keepDeclarationCombatContextAsR2ResidualFor: new Set(["guard"]),
-      projectedEncounter: projected,
-    });
+    const build = () =>
+      buildPlayerFacingEncounterSession({
+        // @ts-expect-error A stored round state is not a player-facing round state.
+        combatRoundState: stored.combatRoundState,
+        encounter: stored,
+        itemReferences: undefined,
+        // @ts-expect-error Stored encounter participants are not player-facing participants.
+        participants: stored.participants,
+        roleplayState: undefined,
+      });
 
-    expect(residual.combatRoundState!.participants[0]!.declaration!.combatContext).toBe(
-      projected.combatRoundState!.participants[0]!.declaration!.combatContext,
-    );
-    expect(JSON.stringify(other.combatRoundState!.participants)).not.toContain("SECRET");
-  });
-
-  it("leaves every other round-state field as the projection produced it (Tier 3)", () => {
-    const projected = projectedEncounter();
-
-    const encounter = buildPlayerFacingEncounterSession({ projectedEncounter: projected });
-    const { participants: _projectedParticipants, ...projectedRest } = projected.combatRoundState!;
-    const { participants: _playerParticipants, ...playerRest } = encounter.combatRoundState!;
-
-    expect(playerRest).toEqual(projectedRest);
+    // Even forced past the compiler, the values are rebuilt by their player-facing schemas.
+    expect(JSON.stringify(build())).not.toContain("SECRET");
   });
 });

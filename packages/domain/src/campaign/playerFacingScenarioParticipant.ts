@@ -8,8 +8,11 @@ import {
   type CombatEffectEvent,
   type CombatEffectsState,
 } from "../encounter/combatEffects";
+import { buildPlayerFacing, LEAF, playerFacingObject } from "../encounter/playerFacingSchema";
 import { revealableEquipmentState } from "../equipment/itemFacts";
+import { armorComponentKey } from "../equipment/itemOverrides";
 import { canonicalizeLegacyEquipmentSnapshotItems } from "../equipment/schemas";
+import type { ArmorComponentProfile } from "../equipment/types";
 import {
   scenarioCombatModifierEntrySchema,
   scenarioParticipantCombatContextSchema,
@@ -43,7 +46,10 @@ import {
  *   sanitizer for a snapshot reaching its controlling player, after its legacy items are given the
  *   facts and notes their `specialProperties` became on the canonical item
  *   (`canonicalizeLegacyEquipmentSnapshotItems`). Legacy information the canonical item reveals to
- *   its holder is therefore kept; only what is not revealed is removed.
+ *   its holder is therefore kept; only what is not revealed is removed. Its import records are
+ *   then removed as well (`withoutWorkbookImportProvenance`, #517 ruling E2), and an armor
+ *   component a revealed override targets keeps its identity
+ *   (`withArmorComponentIdentityOnlyWhereRevealed`).
  *
  * Sub-structures that carry none of that material reuse their canonical field schemas, as the
  * precedent does for the Character build and combat context.
@@ -52,57 +58,79 @@ import {
  * `scenarioParticipantSchema`, which the active combat mutation response validates its updated
  * participants against. The type is branded so a stored participant is not assignable to it.
  */
-const modifierEntryShape = scenarioCombatModifierEntrySchema.shape;
-
-export const playerFacingCombatModifierEntrySchema = z.object({
-  application: modifierEntryShape.application,
-  combatWide: modifierEntryShape.combatWide,
-  durationRounds: modifierEntryShape.durationRounds,
-  excludedRollPurposes: modifierEntryShape.excludedRollPurposes,
-  expiresAtRound: modifierEntryShape.expiresAtRound,
-  generated: modifierEntryShape.generated,
-  id: modifierEntryShape.id,
-  imported: modifierEntryShape.imported,
-  notes: modifierEntryShape.notes,
-  readOnly: modifierEntryShape.readOnly,
-  resultGroupId: modifierEntryShape.resultGroupId,
-  resultGroupKind: modifierEntryShape.resultGroupKind,
-  persistsAcrossEncounters: modifierEntryShape.persistsAcrossEncounters,
-  scope: modifierEntryShape.scope,
-  sourceActionId: modifierEntryShape.sourceActionId,
-  sourceDuration: modifierEntryShape.sourceDuration,
-  sourceEncounterId: modifierEntryShape.sourceEncounterId,
-  sourceEffectId: modifierEntryShape.sourceEffectId,
-  sourceOpportunityId: modifierEntryShape.sourceOpportunityId,
-  sourcePhase: modifierEntryShape.sourcePhase,
-  sourceProcessId: modifierEntryShape.sourceProcessId,
-  sourceProposalId: modifierEntryShape.sourceProposalId,
-  sourceRoundNumber: modifierEntryShape.sourceRoundNumber,
-  sourceRule: modifierEntryShape.sourceRule,
-  sourceType: modifierEntryShape.sourceType,
-  provisional: modifierEntryShape.provisional,
-  value: modifierEntryShape.value,
-});
+/**
+ * A combat-context modifier entry and the combat context as the player-facing types carry them:
+ * the player-facing Scenario participant's combat state and the round state's declarations. Both
+ * are built with the Tier 3 construction kit (#517, `playerFacingSchema.ts`) because the round
+ * state carries them in declarations: every field is a leaf reused from the canonical schema or a
+ * player-facing schema, so a field added to the canonical entry or context is not carried by them.
+ * Player output that does not use them is not covered: for example, a declaration event's open
+ * `involvedOutcome` in the combat history gives the declaring player its phase contexts whole, a
+ * field added to an entry or a context included (privacy Tier 4, #528).
+ */
+export const playerFacingCombatModifierEntrySchema = playerFacingObject(
+  "PlayerFacingCombatModifierEntry",
+  scenarioCombatModifierEntrySchema,
+  {
+    application: LEAF,
+    combatWide: LEAF,
+    durationRounds: LEAF,
+    excludedRollPurposes: LEAF,
+    expiresAtRound: LEAF,
+    generated: LEAF,
+    id: LEAF,
+    imported: LEAF,
+    notes: LEAF,
+    readOnly: LEAF,
+    resultGroupId: LEAF,
+    resultGroupKind: LEAF,
+    persistsAcrossEncounters: LEAF,
+    scope: LEAF,
+    sourceActionId: LEAF,
+    sourceDuration: LEAF,
+    sourceEncounterId: LEAF,
+    sourceEffectId: LEAF,
+    sourceOpportunityId: LEAF,
+    sourcePhase: LEAF,
+    sourceProcessId: LEAF,
+    sourceProposalId: LEAF,
+    sourceRoundNumber: LEAF,
+    sourceRule: LEAF,
+    sourceType: LEAF,
+    provisional: LEAF,
+    value: LEAF,
+  },
+);
 export type PlayerFacingCombatModifierEntry = z.infer<typeof playerFacingCombatModifierEntrySchema>;
 
 const combatContextShape = scenarioParticipantCombatContextSchema.shape;
 
-export const playerFacingCombatContextSchema = z.object({
-  attackModeId: combatContextShape.attackModeId,
-  incomingAttackSide: combatContextShape.incomingAttackSide,
-  mainHandParryDirection: combatContextShape.mainHandParryDirection,
-  modifierBuckets: z.object({
+const playerFacingCombatModifierBucketsSchema = playerFacingObject(
+  "PlayerFacingCombatModifierBuckets",
+  combatContextShape.modifierBuckets.removeDefault(),
+  {
     general: z.array(playerFacingCombatModifierEntrySchema),
     situationDb: z.array(playerFacingCombatModifierEntrySchema),
     situationInitiative: z.array(playerFacingCombatModifierEntrySchema),
     situationObSkill: z.array(playerFacingCombatModifierEntrySchema),
-  }),
-  offHandParryDirection: combatContextShape.offHandParryDirection,
-  parrySource: combatContextShape.parrySource,
-  selectedOpponentId: combatContextShape.selectedOpponentId,
-  targetLocation: combatContextShape.targetLocation,
-  targetParticipantId: combatContextShape.targetParticipantId,
-});
+  },
+);
+
+export const playerFacingCombatContextSchema = playerFacingObject(
+  "PlayerFacingCombatContext",
+  scenarioParticipantCombatContextSchema,
+  {
+    attackModeId: LEAF,
+    incomingAttackSide: LEAF,
+    mainHandParryDirection: LEAF,
+    modifierBuckets: playerFacingCombatModifierBucketsSchema,
+    offHandParryDirection: LEAF,
+    parrySource: LEAF,
+    selectedOpponentId: LEAF,
+    targetLocation: LEAF,
+    targetParticipantId: LEAF,
+  },
+);
 export type PlayerFacingCombatContext = z.infer<typeof playerFacingCombatContextSchema>;
 
 const combatEffectShape = combatEffectSchema.innerType().shape;
@@ -237,64 +265,11 @@ export const playerFacingScenarioParticipantSchema = z
   .brand<"PlayerFacingScenarioParticipant">();
 export type PlayerFacingScenarioParticipant = z.infer<typeof playerFacingScenarioParticipantSchema>;
 
-function buildPlayerFacingCombatModifierEntry(
-  entry: ScenarioCombatModifierEntry,
-): PlayerFacingCombatModifierEntry {
-  return {
-    application: entry.application,
-    combatWide: entry.combatWide,
-    durationRounds: entry.durationRounds,
-    excludedRollPurposes: entry.excludedRollPurposes,
-    expiresAtRound: entry.expiresAtRound,
-    generated: entry.generated,
-    id: entry.id,
-    imported: entry.imported,
-    notes: entry.notes,
-    readOnly: entry.readOnly,
-    resultGroupId: entry.resultGroupId,
-    resultGroupKind: entry.resultGroupKind,
-    persistsAcrossEncounters: entry.persistsAcrossEncounters,
-    scope: entry.scope,
-    sourceActionId: entry.sourceActionId,
-    sourceDuration: entry.sourceDuration,
-    sourceEncounterId: entry.sourceEncounterId,
-    sourceEffectId: entry.sourceEffectId,
-    sourceOpportunityId: entry.sourceOpportunityId,
-    sourcePhase: entry.sourcePhase,
-    sourceProcessId: entry.sourceProcessId,
-    sourceProposalId: entry.sourceProposalId,
-    sourceRoundNumber: entry.sourceRoundNumber,
-    sourceRule: entry.sourceRule,
-    sourceType: entry.sourceType,
-    provisional: entry.provisional,
-    value: entry.value,
-  };
-}
-
 /** Builds a player combat context from named fields; modifier entries lose their lifecycle. */
 export function buildPlayerFacingCombatContext(
   context: ScenarioParticipantCombatContext,
 ): PlayerFacingCombatContext {
-  return playerFacingCombatContextSchema.parse({
-    attackModeId: context.attackModeId,
-    incomingAttackSide: context.incomingAttackSide,
-    mainHandParryDirection: context.mainHandParryDirection,
-    modifierBuckets: {
-      general: context.modifierBuckets.general.map(buildPlayerFacingCombatModifierEntry),
-      situationDb: context.modifierBuckets.situationDb.map(buildPlayerFacingCombatModifierEntry),
-      situationInitiative: context.modifierBuckets.situationInitiative.map(
-        buildPlayerFacingCombatModifierEntry,
-      ),
-      situationObSkill: context.modifierBuckets.situationObSkill.map(
-        buildPlayerFacingCombatModifierEntry,
-      ),
-    },
-    offHandParryDirection: context.offHandParryDirection,
-    parrySource: context.parrySource,
-    selectedOpponentId: context.selectedOpponentId,
-    targetLocation: context.targetLocation,
-    targetParticipantId: context.targetParticipantId,
-  });
+  return buildPlayerFacing(playerFacingCombatContextSchema, context);
 }
 
 function buildPlayerFacingCombatEffect(effect: CombatEffect): PlayerFacingCombatEffect {
@@ -360,6 +335,104 @@ function buildPlayerFacingCombatEffectsState(
 }
 
 /**
+ * Whether a field holds an import record (`Imported…SourceMetadata`), by name. The fields that hold
+ * one today are all named `sourceMetadata` or end in `SourceMetadata`: `sourceMetadata` on weapon
+ * templates and attack modes (`ImportedWeaponSourceMetadata`) and on armor templates and component
+ * profiles (`ImportedArmorSourceMetadata`), a shield template's `offensiveSourceMetadata` and
+ * `defensiveSourceMetadata` (`ImportedShieldSourceMetadata`), and a round-state attack's
+ * `weaponModeSourceMetadata`. Tests pin exactly those carriers. A field named otherwise is not
+ * matched: no test proves that every future provenance field will be named this way.
+ *
+ * Import provenance in other forms is handled where it is carried, not here: the missile
+ * `weaponDmbRoll` (`ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`) and an armor component's
+ * identity (`withArmorComponentIdentityOnlyWhereRevealed`).
+ */
+function isWorkbookImportProvenanceKey(key: string): boolean {
+  return key === "sourceMetadata" || key.endsWith("SourceMetadata");
+}
+
+/**
+ * A captured equipment snapshot without its import records, which are not player-facing (#517,
+ * ruling E2): every field `isWorkbookImportProvenanceKey` names is removed, at any depth. Nothing
+ * else is — a mode's `provenance` kind (`imported`, `manual` or `derived`) is kept, as are
+ * rules-source citations and authored notes (ruling E2, Decision 3).
+ */
+export function withoutWorkbookImportProvenance(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withoutWorkbookImportProvenance);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entry]) =>
+      isWorkbookImportProvenanceKey(key) ? [] : [[key, withoutWorkbookImportProvenance(entry)]],
+    ),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * The armor component identities (`componentKey`) the overrides in an equipment snapshot target,
+ * counting only overrides revealed to the holder.
+ */
+function revealedArmorComponentKeys(equipmentState: unknown): ReadonlySet<string> {
+  const items = isRecord(equipmentState) ? equipmentState.itemsById : undefined;
+  if (!isRecord(items)) return new Set();
+  return new Set(
+    Object.values(items).flatMap((item) =>
+      isRecord(item) && Array.isArray(item.mechanicalOverrides)
+        ? item.mechanicalOverrides.flatMap((entry) =>
+            isRecord(entry) &&
+            entry.kind === "armor" &&
+            entry.visibility === "revealed" &&
+            typeof entry.componentKey === "string"
+              ? [entry.componentKey]
+              : [],
+          )
+        : [],
+    ),
+  );
+}
+
+/**
+ * An equipment snapshot in which an armor template's component profile carries its identity
+ * (`componentKey`, from `armorComponentKey`) exactly when an override revealed to the holder targets
+ * it, and otherwise not at all (#517 F-A, rulings 2026-10-07).
+ *
+ * `withoutWorkbookImportProvenance` removes a component's `sourceMetadata`, which its identity is
+ * derived from, so without this a revealed override would no longer find its component and the
+ * effective template would not resolve. The identity is the same string the GM resolves and the
+ * override stores: no stored key changes and no second key space exists. It is an opaque identifier
+ * the player's override needs, not a source to show the player. Every other component carries
+ * none, so the player receives no identity string that its revealed overrides do not already carry.
+ */
+function withArmorComponentIdentityOnlyWhereRevealed(equipmentState: unknown): unknown {
+  const revealed = revealedArmorComponentKeys(equipmentState);
+  const visit = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(visit);
+    if (!isRecord(value)) return value;
+    const record = Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, visit(entry)]),
+    );
+    if (record.category !== "armor" || !Array.isArray(record.componentProfiles)) return record;
+    return {
+      ...record,
+      componentProfiles: record.componentProfiles.map((component: unknown) => {
+        if (!isRecord(component)) return component;
+        const identity = armorComponentKey(component as unknown as ArmorComponentProfile);
+        const { componentKey: _carriedIdentity, ...profile } = component;
+        return revealed.has(identity) ? { ...profile, componentKey: identity } : profile;
+      }),
+    };
+  };
+  return visit(equipmentState);
+}
+
+/**
  * The additive projection of a participant for the player who controls it. Callers decide that
  * the viewer controls the participant; this function decides what such a viewer sees.
  */
@@ -388,8 +461,12 @@ export function buildPlayerFacingScenarioParticipant(
       displayName: participant.snapshot.displayName,
       equipmentProjection: participant.snapshot.equipmentProjection,
       entity: participant.snapshot.entity,
-      equipmentState: revealableEquipmentState(
-        canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+      equipmentState: withoutWorkbookImportProvenance(
+        withArmorComponentIdentityOnlyWhereRevealed(
+          revealableEquipmentState(
+            canonicalizeLegacyEquipmentSnapshotItems(participant.snapshot.equipmentState),
+          ),
+        ),
       ),
       retainedCharacterRevision: participant.snapshot.retainedCharacterRevision,
       sheetSummary: participant.snapshot.sheetSummary,

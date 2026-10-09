@@ -489,7 +489,9 @@ describe("pending missile defense boundary", () => {
         { label: "Target", participantId: "target" },
       ]),
     ).toMatchObject({
-      details: "Range 70/210/420 · Weapon2 row 17",
+      // The pending attack carries its mode's workbook import provenance (Weapon2 row 17); the
+      // summary every viewer receives does not (#517, ruling E2).
+      details: "Range 70/210/420",
       shortTitle: "Missile shot committed",
       summaryText: "Round 1, Phase 1: Archer fired at Target; awaiting defense review.",
     });

@@ -89,10 +89,10 @@ describe("combat route canonical-conformance guards", () => {
 
   it("filters canonical attack results before deriving player-safe phase compatibility", () => {
     const sanitizerStart = source.indexOf(
-      "function sanitizePlayerSafeCurrentCombatResultsState(input:",
+      "function buildPlayerFacingRoundParticipantForViewer(input:",
     );
     const sanitizerEnd = source.indexOf(
-      "export function buildPlayerFacingEncounterForUser(input:",
+      "function buildPlayerFacingCombatRoundStateForUser(input:",
       sanitizerStart,
     );
     const sanitizerSource = source.slice(sanitizerStart, sanitizerEnd);
