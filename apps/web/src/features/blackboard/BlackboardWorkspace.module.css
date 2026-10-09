@@ -40,6 +40,7 @@
 
 .intro p,
 .muted {
+  color: var(--glantri-text-muted);
   margin: 0.25rem 0 0;
 }
 
