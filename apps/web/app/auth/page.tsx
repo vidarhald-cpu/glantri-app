@@ -8,7 +8,7 @@ import {
   getBootstrapGameMasterAvailability,
   getCurrentSessionUser,
   loginLocalUser,
-  registerLocalUser
+  registerLocalUser,
 } from "@/lib/api/authClient";
 import { canShowClaimGameMasterAction } from "@/lib/auth/authBootstrap";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -19,7 +19,7 @@ const sectionStyle = {
   borderRadius: 12,
   display: "grid",
   gap: "0.75rem",
-  padding: "1rem"
+  padding: "1rem",
 } as const;
 
 export default function AuthPage() {
@@ -57,7 +57,7 @@ export default function AuthPage() {
       const user = await registerLocalUser({
         displayName: displayName.trim() || undefined,
         email,
-        password
+        password,
       });
       setCurrentUser(user);
       setBootstrapAvailable(await getBootstrapGameMasterAvailability());
@@ -71,7 +71,7 @@ export default function AuthPage() {
     try {
       const user = await loginLocalUser({
         email,
-        password
+        password,
       });
       setCurrentUser(user);
       setBootstrapAvailable(await getBootstrapGameMasterAvailability());
@@ -119,7 +119,9 @@ export default function AuthPage() {
             <div style={{ display: "grid", gap: "0.5rem" }}>
               <div>Email: {currentUser.email}</div>
               <div>Display name: {currentUser.displayName ?? "Not set"}</div>
-              <div>Roles: {currentUser.roles.map((role) => formatAuthRoleLabel(role)).join(", ")}</div>
+              <div>
+                Roles: {currentUser.roles.map((role) => formatAuthRoleLabel(role)).join(", ")}
+              </div>
               {canShowClaimGameMasterAction({ bootstrapAvailable, currentUser }) ? (
                 <div>
                   <button
@@ -131,7 +133,7 @@ export default function AuthPage() {
                       color: "#fffaf0",
                       cursor: claimingBootstrapRole ? "wait" : "pointer",
                       font: "inherit",
-                      padding: "0.6rem 0.9rem"
+                      padding: "0.6rem 0.9rem",
                     }}
                     disabled={claimingBootstrapRole}
                     type="button"
