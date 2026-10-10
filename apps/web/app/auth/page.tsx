@@ -110,10 +110,6 @@ export default function AuthPage() {
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 720, padding: "2rem 1.5rem" }}>
       <h1 style={{ margin: 0 }}>Auth</h1>
-      <p style={{ margin: 0 }}>
-        Local accounts authenticate against the local Fastify service and keep server-backed
-        character persistence separate from the Dexie-first local workflow.
-      </p>
 
       <section style={sectionStyle}>
         <h2 style={{ margin: 0 }}>Current session</h2>
