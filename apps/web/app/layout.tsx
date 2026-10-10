@@ -16,8 +16,14 @@ type RootLayoutProps = {
 
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en">
-      <body style={{ margin: 0, fontFamily: "system-ui, sans-serif" }}>
+    <html lang="en" style={{ colorScheme: "light" }}>
+      <body
+        style={{
+          background: "var(--glantri-surface-muted)",
+          margin: 0,
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
         <SessionUserProvider>
           <AppHeader />
           {children}
