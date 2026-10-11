@@ -113,11 +113,6 @@ export function CurrentScenarioContextPanel({
         </div>
       ) : (
         <>
-          <div>
-            {scenarios.length === 1
-              ? "Continue the current Scenario and its active Encounters."
-              : "Choose the current Scenario you want to continue."}
-          </div>
           <div
             style={{
               display: "grid",
