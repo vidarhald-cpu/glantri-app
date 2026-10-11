@@ -57,4 +57,26 @@ describe("glantri-baseline.css hard rule (#538)", () => {
       expect(body).not.toMatch(/\d+(\.\d+)?(rem|px)/);
     }
   });
+
+  // Alpha is light-only (explicit ruling): no dark theme, no new colour values.
+  describe("Alpha light-only root (layout.tsx)", () => {
+    const layout = readFileSync(path.join(repoRoot, "apps/web/app/layout.tsx"), "utf8");
+
+    it("declares the light colour scheme on <html>", () => {
+      expect(layout).toMatch(/<html[^>]*style=\{\{\s*colorScheme:\s*"light"\s*\}\}/);
+    });
+
+    it("paints the page from the existing surface-muted token on <body>", () => {
+      expect(layout).toContain('background: "var(--glantri-surface-muted)"');
+    });
+
+    it("sets no text colour, adds no literal colour and adds no dark-mode styling", () => {
+      expect(layout).not.toMatch(/\bcolor:/);
+      expect(layout).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(|hsla?\(/i);
+      expect(layout).not.toMatch(/prefers-color-scheme|dark/i);
+      expect(css.replace(/\/\*[\s\S]*?\*\//g, "")).not.toMatch(
+        /prefers-color-scheme|color-scheme|dark/i,
+      );
+    });
+  });
 });
