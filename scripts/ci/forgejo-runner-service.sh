@@ -90,6 +90,7 @@ bootstrap() {
   umask 077
   mkdir -p "$RUNNER_HOME/state"
   cp "$SOURCE_DIR/compose.yaml" "$RUNNER_HOME/compose.yaml"
+  cp "$SOURCE_DIR/dind-daemon.json" "$RUNNER_HOME/dind-daemon.json"
 
   printf 'RUNNER_UID=%s\nRUNNER_GID=%s\n' "$(id -u)" "$(id -g)" >"$RUNNER_HOME/.env"
 
@@ -139,6 +140,7 @@ up() {
   test -s "$RUNNER_HOME/state/runner-config.yml"
   refresh_config
   cp "$SOURCE_DIR/compose.yaml" "$RUNNER_HOME/compose.yaml"
+  cp "$SOURCE_DIR/dind-daemon.json" "$RUNNER_HOME/dind-daemon.json"
   compose up --detach
   wait_for_service
   verify

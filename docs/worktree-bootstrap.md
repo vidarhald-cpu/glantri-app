@@ -110,6 +110,15 @@ Both fresh runs reused all 447 packages with zero downloads. Their generated own
 names, loopback ports, application databases, and test databases were distinct and passed the
 existing PostgreSQL 16 ownership verification.
 
+## Release the worktree once the branch is pushed
+
+Release a delegated worktree as soon as its branch is pushed, not when the lane closes, and check
+host free space with `scripts/ops/disk-guard.sh` before creating or installing into a new one.
+Use `scripts/ops/release-worktree.sh <path> --execute`, which refuses unless the tree is clean and
+HEAD is reachable from the branch on `origin`. Never delete a worktree holding the only copy of
+unpushed work. Thresholds, rationale and the full rule are in
+[Actions cache bound and host disk guardrails](./ci/actions-disk-and-cache.md#5-prompt-worktree-release).
+
 ## Handoff evidence
 
 Record the manifest's coarse phase timings, exact baseline/head, selected Node and pnpm versions,
