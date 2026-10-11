@@ -70,7 +70,9 @@ describe("Campaign workspace current Scenario context", () => {
       />,
     );
 
-    expect(screen.getByText("Choose the current Scenario you want to continue.")).toBeVisible();
+    expect(
+      screen.queryByText("Choose the current Scenario you want to continue."),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("The Library")).toBeVisible();
     expect(screen.getByText("The Courtyard")).toBeVisible();
     expect(screen.queryByText("Waiting outside")).not.toBeInTheDocument();
@@ -100,8 +102,8 @@ describe("Campaign workspace current Scenario context", () => {
     );
 
     expect(
-      screen.getByText("Continue the current Scenario and its active Encounters."),
-    ).toBeVisible();
+      screen.queryByText("Continue the current Scenario and its active Encounters."),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Combat" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-1&encounterId=encounter-1",

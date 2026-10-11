@@ -68,8 +68,9 @@ trust boundary. The persistent DIND volume retains pulled base layers and build
 cache. Capacity one prevents concurrent jobs from inspecting one another
 through that daemon. Each `docker-test` run uses run-specific names and has an
 `always()` teardown for its API/Web containers and tagged images. Forgejo Runner
-removes job, step, service containers, and its job network. Periodically inspect
-and prune only the dedicated DIND cache when disk use warrants it.
+removes job, step, service containers, and its job network. The DIND build cache is bounded by a
+daemon-level ceiling and monitored; see
+[Actions cache bound and host disk guardrails](./actions-disk-and-cache.md).
 
 The Node job image receives the DIND Docker client and CLI plugins through two
 read-only mounts. Forgejo Runner permits only those exact public executable
@@ -112,6 +113,56 @@ and Playwright Chromium, and build both application images. Warm DIND pulls and
 build layers reduce later runtime; pnpm and Playwright downloads are not shared
 across jobs. Record actual cold/warm timings from the proof PR rather than
 replacing them with estimates.
+
+### The job container cannot observe its own resource budget — recorded 2026-10-11
+
+**A job's real budget is 10 CPUs and 6 GiB, and nothing inside the job can see
+either number.** `infra/forgejo-actions/compose.yaml` sets `cpus: 10` and
+`mem_limit: 6g` on `glantri-forgejo-actions-dind`. Job containers are nested
+inside that daemon, so they inherit the cap through the parent cgroup while
+carrying no limit of their own. Measured inside the pinned `node:22-bookworm`
+job image on 2026-10-11:
+
+| Observed inside the job container               | Value        |
+| ----------------------------------------------- | ------------ |
+| `nproc`, `getconf _NPROCESSORS_ONLN`            | 18           |
+| `os.availableParallelism()`, `os.cpus().length` | 18           |
+| `/sys/fs/cgroup/cpu.max`                        | `max 100000` |
+| `/sys/fs/cgroup/memory.max`                     | `max`        |
+| `os.totalmem()`                                 | 7932 MB      |
+
+Every one of those reports the Docker VM, not the budget. Any tool that sizes a
+worker pool, a build parallelism, or a heap limit from them over-subscribes
+before it has run a single test.
+
+The consequence is visible in the live DIND cgroup counters, which are
+cumulative over the daemon's uptime rather than attributable to one run:
+
+| Counter                                          | Reading                                          |
+| ------------------------------------------------ | ------------------------------------------------ |
+| `memory.peak`                                    | 6 442 455 040 bytes — the 6 GiB ceiling, exactly |
+| `memory.events` `max`                            | 11 608 limit hits                                |
+| `memory.events` `oom_kill`                       | 0                                                |
+| `memory.stat` `pgmajfault`                       | 492 517                                          |
+| `memory.stat` `workingset_refault_anon`          | 460 835                                          |
+| `memory.stat` `pgscan_direct` / `pgsteal_direct` | 5 222 350 / 4 502 094                            |
+| `cpu.stat` `nr_throttled` / `nr_periods`         | 6 661 / 60 107 (11.1%)                           |
+| `cpu.stat` `throttled_usec` / `usage_usec`       | 2 549 872 040 / 15 211 810 657 (16.8%)           |
+
+**Nothing is ever killed, so the symptom is a stall rather than a crash.** Work
+is suspended in direct reclaim, or waiting out a throttled quota period, and a
+test whose own budget is wall-clock reports a timeout. That is the mechanism
+behind the second flake class recorded in Forgejo #553, and it is why
+`packages/config/vitest.base.ts` bounds the Vitest fork pool explicitly instead
+of trusting `availableParallelism()`.
+
+**Two remedies at this boundary remain unexecuted, because both are operator
+actions that restart DIND:** giving the job container its own matching cgroup
+limits through the runner's `container.options`, so that tools inside it can
+observe the truth, and raising `mem_limit` if 6 GiB is simply too small for the
+suite. Neither is a Builder action. Until one is taken, a tool added to CI that
+sizes itself from the host is a new instance of this defect rather than a new
+defect.
 
 ## CI service lifecycle and port model
 
@@ -324,10 +375,12 @@ Stop both service containers without deleting registration, token, or cache:
 scripts/ci/forgejo-runner-service.sh down
 ```
 
-Inspect dedicated cache use with
-`docker exec glantri-forgejo-actions-dind docker system df`. If pruning is
-required, first stop or confirm the runner is idle, then prune only through that
-DIND container. Never run host-daemon cleanup as part of runner maintenance.
+Inspect dedicated cache use with `scripts/ops/dind-cache.sh status`. If pruning is
+required, use `scripts/ops/dind-cache.sh prune`, which refuses while a job is active and
+prunes only through the DIND container. Never run host-daemon cleanup as part of runner
+maintenance, and never `docker system prune` or any volume command. Details and the
+volume-safety argument are in
+[Actions cache bound and host disk guardrails](./actions-disk-and-cache.md).
 
 If the token may have been disclosed, stop the runner immediately and have the
 Forgejo repository owner delete that runner registration. Remove the external

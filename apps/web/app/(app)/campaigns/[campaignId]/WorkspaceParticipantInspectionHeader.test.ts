@@ -18,7 +18,8 @@ describe("WorkspaceParticipantInspectionHeader", () => {
 
     expect(source).toContain("{screenName}");
     expect(source).toContain("selectedCandidate?.label");
-    expect(source).toContain("Select character to inspect");
+    expect(source).not.toContain("Select character to inspect");
+    expect(source).toContain('selectorLabel = "Character"');
     expect(source).toContain("Previous");
     expect(source).toContain("Next");
     expect(source).toContain("onSelectParticipantId");

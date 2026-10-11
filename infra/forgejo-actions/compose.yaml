@@ -21,6 +21,8 @@ services:
       start_period: 15s
     volumes:
       - docker-data:/var/lib/docker
+      # Bounded BuildKit cache (issue #557). Read-only; see docs/ci/actions-disk-and-cache.md.
+      - ./dind-daemon.json:/etc/docker/daemon.json:ro
     mem_limit: 6g
     cpus: 10
 

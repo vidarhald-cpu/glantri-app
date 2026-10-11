@@ -13,20 +13,10 @@ export type SituationSelection =
   | { id: string; kind: "item" }
   | { id: string; kind: "person" };
 
-const inspectorStyle = {
-  background: "#fff",
-  border: "1px solid #ddd7c9",
-  borderRadius: 10,
-  display: "grid",
-  gap: "0.6rem",
-  minHeight: "22rem",
-  padding: "1rem",
-} as const;
-
 const previewStyle = {
-  background: "#f6f5ef",
-  border: "1px solid #e4e0d4",
-  borderRadius: 8,
+  background: "var(--glantri-surface-muted)",
+  border: "var(--glantri-border-subtle)",
+  borderRadius: "var(--glantri-radius-inner)",
   display: "block",
   maxHeight: "32rem",
   maxWidth: "100%",
@@ -44,10 +34,10 @@ function InspectorFrame({
   title: string;
 }) {
   return (
-    <section aria-label="Inspector" style={inspectorStyle}>
+    <section aria-label="Inspector" className="glantri-panel" style={{ minHeight: "22rem" }}>
       <div>
         <h3 style={{ margin: 0 }}>{title}</h3>
-        {subtitle ? <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>{subtitle}</div> : null}
+        {subtitle ? <div className="glantri-helper-text">{subtitle}</div> : null}
       </div>
       {children}
     </section>
@@ -105,7 +95,10 @@ export function SituationInspector({
         title={`${participant.displayName}${participant.isControlledByViewer ? " (you)" : ""}`}
       >
         {participant.equipment ? (
-          <div style={{ display: "grid", gap: "0.35rem", justifyItems: "start" }}>
+          <div
+            className="glantri-panel glantri-panel--muted glantri-panel--inner"
+            style={{ justifyItems: "start" }}
+          >
             <strong>Equipment prepared for this Scenario</strong>
             <span>{participant.equipment.message}</span>
             {participant.equipment.canReconcile && onReconcileEquipment ? (
@@ -148,7 +141,7 @@ export function SituationInspector({
       <InspectorFrame subtitle={object.referenceType} title={object.name}>
         {object.description ? <p style={{ margin: 0 }}>{object.description}</p> : null}
         {object.canPickUp && onPickUp && controlledParticipants.length ? (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+          <div className="glantri-actions">
             {controlledParticipants.map((participant) => (
               <button
                 key={participant.id}
