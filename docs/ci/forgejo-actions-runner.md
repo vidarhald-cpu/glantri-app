@@ -113,6 +113,56 @@ build layers reduce later runtime; pnpm and Playwright downloads are not shared
 across jobs. Record actual cold/warm timings from the proof PR rather than
 replacing them with estimates.
 
+### The job container cannot observe its own resource budget — recorded 2026-10-11
+
+**A job's real budget is 10 CPUs and 6 GiB, and nothing inside the job can see
+either number.** `infra/forgejo-actions/compose.yaml` sets `cpus: 10` and
+`mem_limit: 6g` on `glantri-forgejo-actions-dind`. Job containers are nested
+inside that daemon, so they inherit the cap through the parent cgroup while
+carrying no limit of their own. Measured inside the pinned `node:22-bookworm`
+job image on 2026-10-11:
+
+| Observed inside the job container               | Value        |
+| ----------------------------------------------- | ------------ |
+| `nproc`, `getconf _NPROCESSORS_ONLN`            | 18           |
+| `os.availableParallelism()`, `os.cpus().length` | 18           |
+| `/sys/fs/cgroup/cpu.max`                        | `max 100000` |
+| `/sys/fs/cgroup/memory.max`                     | `max`        |
+| `os.totalmem()`                                 | 7932 MB      |
+
+Every one of those reports the Docker VM, not the budget. Any tool that sizes a
+worker pool, a build parallelism, or a heap limit from them over-subscribes
+before it has run a single test.
+
+The consequence is visible in the live DIND cgroup counters, which are
+cumulative over the daemon's uptime rather than attributable to one run:
+
+| Counter                                          | Reading                                          |
+| ------------------------------------------------ | ------------------------------------------------ |
+| `memory.peak`                                    | 6 442 455 040 bytes — the 6 GiB ceiling, exactly |
+| `memory.events` `max`                            | 11 608 limit hits                                |
+| `memory.events` `oom_kill`                       | 0                                                |
+| `memory.stat` `pgmajfault`                       | 492 517                                          |
+| `memory.stat` `workingset_refault_anon`          | 460 835                                          |
+| `memory.stat` `pgscan_direct` / `pgsteal_direct` | 5 222 350 / 4 502 094                            |
+| `cpu.stat` `nr_throttled` / `nr_periods`         | 6 661 / 60 107 (11.1%)                           |
+| `cpu.stat` `throttled_usec` / `usage_usec`       | 2 549 872 040 / 15 211 810 657 (16.8%)           |
+
+**Nothing is ever killed, so the symptom is a stall rather than a crash.** Work
+is suspended in direct reclaim, or waiting out a throttled quota period, and a
+test whose own budget is wall-clock reports a timeout. That is the mechanism
+behind the second flake class recorded in Forgejo #553, and it is why
+`packages/config/vitest.base.ts` bounds the Vitest fork pool explicitly instead
+of trusting `availableParallelism()`.
+
+**Two remedies at this boundary remain unexecuted, because both are operator
+actions that restart DIND:** giving the job container its own matching cgroup
+limits through the runner's `container.options`, so that tools inside it can
+observe the truth, and raising `mem_limit` if 6 GiB is simply too small for the
+suite. Neither is a Builder action. Until one is taken, a tool added to CI that
+sizes itself from the host is a new instance of this defect rather than a new
+defect.
+
 ## CI service lifecycle and port model
 
 `application-docker-test` publishes its API and Web containers on the fixed DIND
