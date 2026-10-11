@@ -2,7 +2,7 @@ import os from "node:os";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CONCURRENT_SUITE_BUDGET, resolveTestWorkers } from "./vitest.base";
+import baseConfig, { CONCURRENT_SUITE_BUDGET, resolveTestWorkers } from "./vitest.base";
 
 // Forgejo #553. Vitest's `forks` pool defaults to `availableParallelism() - 1` workers per
 // suite, and `turbo test` runs several suites at once, so the default aggregate far exceeds
@@ -56,5 +56,18 @@ describe("test worker budget", () => {
 
       expect(resolveTestWorkers()).toBe(Math.floor(18 / CONCURRENT_SUITE_BUDGET));
     }
+  });
+
+  // The examples above exercise `resolveTestWorkers` alone and never the resolved config, so
+  // deleting the two `test:` keys from `vitest.base.ts` left every one of them green (Forgejo
+  // #563). These read the default export that every package's Vitest run actually consumes.
+  describe("resolved base config", () => {
+    it("caps the worker pool at the resolved budget", () => {
+      expect(baseConfig.test?.maxWorkers).toBe(resolveTestWorkers());
+    });
+
+    it("scales up on demand instead of reserving a full-width pool", () => {
+      expect(baseConfig.test?.minWorkers).toBe(1);
+    });
   });
 });
