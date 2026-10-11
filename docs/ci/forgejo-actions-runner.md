@@ -68,8 +68,9 @@ trust boundary. The persistent DIND volume retains pulled base layers and build
 cache. Capacity one prevents concurrent jobs from inspecting one another
 through that daemon. Each `docker-test` run uses run-specific names and has an
 `always()` teardown for its API/Web containers and tagged images. Forgejo Runner
-removes job, step, service containers, and its job network. Periodically inspect
-and prune only the dedicated DIND cache when disk use warrants it.
+removes job, step, service containers, and its job network. The DIND build cache is bounded by a
+daemon-level ceiling and monitored; see
+[Actions cache bound and host disk guardrails](./actions-disk-and-cache.md).
 
 The Node job image receives the DIND Docker client and CLI plugins through two
 read-only mounts. Forgejo Runner permits only those exact public executable
@@ -374,10 +375,12 @@ Stop both service containers without deleting registration, token, or cache:
 scripts/ci/forgejo-runner-service.sh down
 ```
 
-Inspect dedicated cache use with
-`docker exec glantri-forgejo-actions-dind docker system df`. If pruning is
-required, first stop or confirm the runner is idle, then prune only through that
-DIND container. Never run host-daemon cleanup as part of runner maintenance.
+Inspect dedicated cache use with `scripts/ops/dind-cache.sh status`. If pruning is
+required, use `scripts/ops/dind-cache.sh prune`, which refuses while a job is active and
+prunes only through the DIND container. Never run host-daemon cleanup as part of runner
+maintenance, and never `docker system prune` or any volume command. Details and the
+volume-safety argument are in
+[Actions cache bound and host disk guardrails](./actions-disk-and-cache.md).
 
 If the token may have been disclosed, stop the runner immediately and have the
 Forgejo repository owner delete that runner registration. Remove the external
