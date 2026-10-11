@@ -120,17 +120,43 @@ gate**, not an optional extra.
   Obvious implementation defects (overflow, a broken control, unreadable contrast, a panel that will
   not close) may be fixed by the owning Builder within its contract. New aesthetic or layout
   decisions return to the Product Owner with screenshots.
+- **Defect or provisioning failure.** The review must distinguish **product/UI defects** from
+  **artifact-environment provisioning failures**, and record which a Maps failure is. Under the
+  local/dev-style provider ([section 6](#6-environment-prerequisite-artifact-storage)), a Maps
+  background failure in an ordinary development run is a product defect and is not excused as
+  provisioning.
 - **Chargen observations.** While the application is running, the review also records, without
   fixing under that issue, the state of the known Chargen reliability unknowns listed in #544.
 
 ## 6. Environment prerequisite: Artifact storage
 
-Map backgrounds require Artifact storage to be configured in the Alpha environment; without it the
-map background route returns 404 and no styling work can compensate. This is an operator-level check,
-not Builder work.
+Map backgrounds are served from Artifact storage; where storage is not enabled, the map background
+route returns 404 and no styling work can compensate.
+
+**Ruling.** Maps (#540) is approved for the November Alpha using the **local/dev-style artifact
+provider**. The Azure-backed provider is **not** an Alpha prerequisite.
+
+**What that means in practice** (verified at source on 2026-10-12):
+
+- The provider is resolved in `apps/api/src/artifacts/artifactStorageConfig.ts` (lines 38 to 46).
+  When `ARTIFACT_STORAGE_PROVIDER` is unset, it defaults to `local` whenever `NODE_ENV` is not
+  `production`, and in that case storage is **enabled**, with its root defaulting to
+  `glantri-artifacts-local` under the operating system's temporary directory (overridable with
+  `ARTIFACT_LOCAL_ROOT`).
+- The `azure` provider (lines 51 to 58) is enabled only when **both** `ARTIFACT_AZURE_ACCOUNT_URL` and
+  `ARTIFACT_AZURE_CONTAINER` are set; otherwise the resolver returns `{ enabled: false }` (line 62).
+- `apps/api/src/routes/scenarios/mapRoutes.ts` (line 133) is the single storage gate on the map
+  background route: when storage is not enabled it answers 404.
+
+**The consequence runs against the natural assumption.** In an ordinary development run, Maps artifact
+storage enables itself with no environment setup at all. A Maps failure in such a run is therefore a
+**real defect, not a provisioning gap**. "The environment is not provisioned" is an available
+explanation only where storage is genuinely not enabled: `NODE_ENV` is `production`, or a provider has
+been explicitly selected and left incomplete (for example `azure` without both of its settings).
 
 **Maps is not Alpha-ready until a real rendered map confirms that its background loads.** The
-rendered-product review discharges this check.
+rendered-product review discharges this check, and it must distinguish the two kinds of failure
+([section 5](#5-rendered-product-review-a-required-gate)).
 
 ## 7. Alpha, Beta and Later
 
@@ -158,6 +184,15 @@ None of these is part of the Alpha. Do not pull them in without a new control-pl
 - **#536**, shield attack modes that carry no competency reference. `priority/Future`.
 - **#537**, declaration and resolution reading different attack modes for stale scenario snapshots.
   Recorded as a real but low-priority defect; not an Alpha concern.
+- **#547, language competency descriptions.** Accepted by the Product Owner as a **known Alpha
+  limitation** and deferred. It is not an Alpha blocker, and no fix is authorized for Alpha. The
+  runtime projection in `packages/content/src/competencyV2Runtime.ts` (lines 146 and 155) uses a
+  language entry's spoken or written **route label** as its description, and route labels are
+  defined once per Civilization row, so they repeat. **What a reader sees:** language entries on the
+  reader surfaces show a short route label, often identical across several entries, where other
+  competencies show descriptive prose. This is a visible quality limitation, not missing content, and
+  it blocks nothing mechanically. The Product Owner has **not** authorized modifying the catalogue
+  source, so any eventual remedy is a post-Alpha change that requires explicit authorization.
 - **The #521 deferred duration and tick semantics** for player-visible modifier rows.
 - **A GM Situation surface**, and **live GM map sketching (#424)**.
 
