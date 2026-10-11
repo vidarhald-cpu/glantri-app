@@ -44,11 +44,11 @@ fails nothing directly: it re-arms the intermittency.
 Measured on this Mac (18 CPUs) at `62e25e84`, running three full
 `@glantri/web` suites concurrently, nine suite runs per setting:
 
-| Per-suite cap                | `pnpm test` | `pnpm coverage` | `@glantri/web` alone | Web peak RSS | Failures |
-| ---------------------------- | ----------- | --------------- | -------------------- | ------------ | -------- |
-| 17 (Vitest default)          | 63 s        | 35 s            | 11.4 s               | 4943 MB      | 6–8 of 9 |
-| 9 (half)                     | 62 s        | 38 s            | —                    | —            | 0 of 9   |
-| 4 (quarter, now the default) | 65 s        | 64 s            | 24.0 s               | 2083 MB      | 0 of 9   |
+| Per-suite cap                | `pnpm test` | `pnpm coverage` | `@glantri/web` alone | Web peak RSS | Failures                             |
+| ---------------------------- | ----------- | --------------- | -------------------- | ------------ | ------------------------------------ |
+| 17 (Vitest default)          | 63 s        | 35 s            | 11.4 s               | 4943 MB      | 6–8 of 9                             |
+| 9 (half)                     | 62 s        | 38 s            | —                    | —            | 0 of 9                               |
+| 4 (quarter, now the default) | 65 s        | 64 s            | 24.0 s               | 2083 MB      | 0 of 9 (residual remains; see below) |
 
 The quarter is chosen over the half on memory rather than on CPU: a CI job's
 real ceiling is 6 GiB, which the half-width pool approaches again as soon as two
@@ -58,12 +58,37 @@ for the measured limits and for the two operator remedies that remain open.
 
 **The victims are predictable even though they vary.** On a quiet machine the
 slowest single example, `CombatRoundManagerPanel.combatTask.component.test.tsx`
+-> "reaches a canonical handler for all six GM Combat Task commands", takes
+1293 ms against a 5000 ms timeout, a margin of 3.9x. The next takes 719 ms, a
+margin of 7.0x. The tests are not unreasonably tight; the runner removes the
+margin. Raising the timeout on whichever example failed last only moves the
+report to the next-tightest one.
 
-> "reaches a canonical handler for all six GM Combat Task commands", takes
-> 1293 ms against a 5000 ms timeout — a margin of 3.9x. The next takes 719 ms, a
-> margin of 7.0x. The tests are not unreasonably tight; the runner removes the
-> margin. Raising the timeout on whichever example failed last only moves the
-> report to the next-tightest one.
+### The bound reduces the intermittency; it does not eliminate it
+
+"0 of 9" in the table above is the result of that nine-run measurement, not a
+claim that the problem is gone. Across a larger sample, roughly **2 failures in
+30 runs** persist with the bound in place, against **14 in 18** at baseline.
+Independent QA's reproduction found 9 of 9 concurrent suite failures at base and
+0 of 9 at the fixed head, so the bound clearly helps; the residual is smaller,
+not absent.
+
+The surviving failure is
+`MapWorkspace.component.test.tsx` -> "shows 'a wide regional chart' at its own
+proportions". It is the same class with a 5x tighter budget: line 282 is a
+`waitFor` on Vitest's 1000 ms default (not the 5000 ms test timeout), and line
+275 asserts the pre-measurement `16/9` fallback, so the observed 1.7778 is that
+fallback surviving the wait. It is recorded here and deliberately not fixed:
+doing so would mean rewriting an unrelated test or raising a global `waitFor`
+default, which #553 rules out. If you see this failure, it is the known
+residual, not a new defect.
+
+The bound is **relative, not absolute**. It divides the parallelism the job
+container reports, and that number is itself wrong inside the container, so the
+bound shrinks over-subscription by a constant factor rather than capping it. On
+a much larger host the problem returns. It is a compensating mitigation; the
+root-cause remedies are the two unexecuted operator actions in
+[the runner document](ci/forgejo-actions-runner.md#the-job-container-cannot-observe-its-own-resource-budget--recorded-2026-10-11).
 
 ## Database Integration Tests
 
