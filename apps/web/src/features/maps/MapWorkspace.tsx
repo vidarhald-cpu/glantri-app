@@ -389,9 +389,7 @@ export function MapWorkspace({
           ))}
         </div>
         {maps.length === 0 ? (
-          <p>
-            {isGameMaster ? "Create the first Map for this Campaign." : "No Maps are shared yet."}
-          </p>
+          <p>{isGameMaster ? "No maps yet." : "No Maps are shared yet."}</p>
         ) : null}
         {isGameMaster ? (
           <form

@@ -8,7 +8,7 @@ import {
   getBootstrapGameMasterAvailability,
   getCurrentSessionUser,
   loginLocalUser,
-  registerLocalUser
+  registerLocalUser,
 } from "@/lib/api/authClient";
 import { canShowClaimGameMasterAction } from "@/lib/auth/authBootstrap";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -19,7 +19,7 @@ const sectionStyle = {
   borderRadius: 12,
   display: "grid",
   gap: "0.75rem",
-  padding: "1rem"
+  padding: "1rem",
 } as const;
 
 export default function AuthPage() {
@@ -57,7 +57,7 @@ export default function AuthPage() {
       const user = await registerLocalUser({
         displayName: displayName.trim() || undefined,
         email,
-        password
+        password,
       });
       setCurrentUser(user);
       setBootstrapAvailable(await getBootstrapGameMasterAvailability());
@@ -71,7 +71,7 @@ export default function AuthPage() {
     try {
       const user = await loginLocalUser({
         email,
-        password
+        password,
       });
       setCurrentUser(user);
       setBootstrapAvailable(await getBootstrapGameMasterAvailability());
@@ -110,10 +110,6 @@ export default function AuthPage() {
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 720, padding: "2rem 1.5rem" }}>
       <h1 style={{ margin: 0 }}>Auth</h1>
-      <p style={{ margin: 0 }}>
-        Local accounts authenticate against the local Fastify service and keep server-backed
-        character persistence separate from the Dexie-first local workflow.
-      </p>
 
       <section style={sectionStyle}>
         <h2 style={{ margin: 0 }}>Current session</h2>
@@ -123,7 +119,9 @@ export default function AuthPage() {
             <div style={{ display: "grid", gap: "0.5rem" }}>
               <div>Email: {currentUser.email}</div>
               <div>Display name: {currentUser.displayName ?? "Not set"}</div>
-              <div>Roles: {currentUser.roles.map((role) => formatAuthRoleLabel(role)).join(", ")}</div>
+              <div>
+                Roles: {currentUser.roles.map((role) => formatAuthRoleLabel(role)).join(", ")}
+              </div>
               {canShowClaimGameMasterAction({ bootstrapAvailable, currentUser }) ? (
                 <div>
                   <button
@@ -135,7 +133,7 @@ export default function AuthPage() {
                       color: "#fffaf0",
                       cursor: claimingBootstrapRole ? "wait" : "pointer",
                       font: "inherit",
-                      padding: "0.6rem 0.9rem"
+                      padding: "0.6rem 0.9rem",
                     }}
                     disabled={claimingBootstrapRole}
                     type="button"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
 import type {
   ArtifactBlackboardCandidate,
@@ -718,6 +719,46 @@ export function BlackboardWorkspace({
     );
   }
 
+  // Pointer drag reuses move() unchanged: one PATCH on drop, same payload as the arrow buttons.
+  const dragOrigin = useRef<{ x: number; y: number } | null>(null);
+  const [drag, setDrag] = useState<{ dx: number; dy: number; entryId: string } | null>(null);
+
+  function beginDrag(event: ReactPointerEvent<HTMLDivElement>, placement: BlackboardPlacementDto) {
+    if (busy || event.button !== 0) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragOrigin.current = { x: event.clientX, y: event.clientY };
+    setDrag({ dx: 0, dy: 0, entryId: placement.entryId });
+  }
+
+  function dragTo(event: ReactPointerEvent<HTMLDivElement>, placement: BlackboardPlacementDto) {
+    const origin = dragOrigin.current;
+    if (!origin || drag?.entryId !== placement.entryId) return;
+    setDrag({
+      dx: event.clientX - origin.x,
+      dy: event.clientY - origin.y,
+      entryId: placement.entryId,
+    });
+  }
+
+  function endDrag(
+    event: ReactPointerEvent<HTMLDivElement>,
+    placement: BlackboardPlacementDto,
+    commit: boolean,
+  ) {
+    const origin = dragOrigin.current;
+    dragOrigin.current = null;
+    setDrag(null);
+    if (!origin || !commit) return;
+    const dx = event.clientX - origin.x;
+    const dy = event.clientY - origin.y;
+    if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
+    move(
+      placement,
+      Math.max(0, Math.round(placement.x + dx)),
+      Math.max(0, Math.round(placement.y + dy)),
+    );
+  }
+
   function move(placement: BlackboardPlacementDto, x: number, y: number) {
     if (!board) return;
     void runLayout(
@@ -735,7 +776,7 @@ export function BlackboardWorkspace({
 
   if (loading) {
     return (
-      <section aria-busy="true" aria-live="polite" className={styles.panel}>
+      <section aria-busy="true" aria-live="polite" className={`${styles.panel} glantri-panel`}>
         Loading the Campaign Blackboard…
       </section>
     );
@@ -743,7 +784,7 @@ export function BlackboardWorkspace({
 
   if (!board) {
     return (
-      <section className={styles.panel}>
+      <section className={`${styles.panel} glantri-panel`}>
         <div className={styles.error} role="alert">
           {error ?? "The Blackboard is unavailable."}
         </div>
@@ -807,12 +848,12 @@ export function BlackboardWorkspace({
 
   return (
     <section className={styles.workspace} data-presentation={presentation}>
-      <header className={styles.intro}>
+      <header className={`${styles.intro} glantri-panel`}>
         <div>
           <h2>Blackboard</h2>
           <p>Shared clues, documents, maps, images, and approved recaps for this Campaign.</p>
         </div>
-        <div className={styles.actionRow}>
+        <div className={`${styles.actionRow} glantri-actions`}>
           {presentation === "focused" ? (
             <button onClick={onExitFocused} type="button">
               Back to Campaign
@@ -868,14 +909,33 @@ export function BlackboardWorkspace({
             <article
               className={styles.pin}
               key={placement.entryId}
-              style={{
-                height: placement.height,
-                left: placement.x + 16,
-                top: placement.y + 16,
-                width: placement.width,
-                zIndex: placement.layer,
-              }}
+              style={
+                {
+                  "--pin-height": `${placement.height}px`,
+                  "--pin-width": `${placement.width}px`,
+                  left: placement.x + 16,
+                  top: placement.y + 16,
+                  transform:
+                    drag?.entryId === placement.entryId
+                      ? `translate(${drag.dx}px, ${drag.dy}px)`
+                      : undefined,
+                  zIndex: placement.layer,
+                } as CSSProperties
+              }
             >
+              {presentation === "embedded" ? (
+                <div
+                  aria-hidden="true"
+                  className={styles.dragHandle}
+                  onPointerCancel={(event) => endDrag(event, placement, false)}
+                  onPointerDown={(event) => beginDrag(event, placement)}
+                  onPointerMove={(event) => dragTo(event, placement)}
+                  onPointerUp={(event) => endDrag(event, placement, true)}
+                  title="Drag to arrange. The arrow buttons below do the same."
+                >
+                  ⠿ Drag to arrange
+                </div>
+              ) : null}
               <button
                 aria-label={`Open ${entry?.title ?? "removed reference"}`}
                 className={styles.catalogueButton}
@@ -935,9 +995,9 @@ export function BlackboardWorkspace({
       </section>
 
       {composerMode ? (
-        <section className={styles.composer}>
+        <section className={`${styles.composer} glantri-panel`}>
           <div className={styles.headingRow}>
-            <h3 ref={composerHeadingRef} tabIndex={-1}>
+            <h3 className="glantri-section-heading" ref={composerHeadingRef} tabIndex={-1}>
               {composerMode === "create" ? "Share a reference" : "Correct this reference"}
             </h3>
             <button onClick={closeComposer} type="button">
@@ -946,7 +1006,7 @@ export function BlackboardWorkspace({
           </div>
           <div className={styles.fields}>
             {composerMode === "correct" ? (
-              <label>
+              <label className="glantri-field-label">
                 Change
                 <select
                   onChange={(event) =>
@@ -959,7 +1019,7 @@ export function BlackboardWorkspace({
                 </select>
               </label>
             ) : null}
-            <label>
+            <label className="glantri-field-label">
               Kind
               <select
                 disabled={composerMode === "correct"}
@@ -979,7 +1039,7 @@ export function BlackboardWorkspace({
                 {isGameMaster ? <option value="recap">Approved recap</option> : null}
               </select>
             </label>
-            <label>
+            <label className="glantri-field-label">
               Title
               <input
                 maxLength={200}
@@ -992,7 +1052,7 @@ export function BlackboardWorkspace({
             </label>
             {draft.category === "image_map" ? (
               <>
-                <label className={styles.fullField}>
+                <label className={`${styles.fullField} glantri-field-label`}>
                   Shared map or image
                   <select
                     onChange={(event) =>
@@ -1009,7 +1069,7 @@ export function BlackboardWorkspace({
                     ))}
                   </select>
                 </label>
-                <label className={styles.fullField}>
+                <label className={`${styles.fullField} glantri-field-label`}>
                   Caption or context (optional)
                   <textarea
                     maxLength={2000}
@@ -1022,7 +1082,7 @@ export function BlackboardWorkspace({
               </>
             ) : (
               <>
-                <label className={styles.fullField}>
+                <label className={`${styles.fullField} glantri-field-label`}>
                   {draft.category === "clue_fact"
                     ? "Clue or fact"
                     : draft.category === "document_text"
@@ -1038,7 +1098,7 @@ export function BlackboardWorkspace({
                   />
                 </label>
                 {draft.category !== "recap" ? (
-                  <label className={styles.fullField}>
+                  <label className={`${styles.fullField} glantri-field-label`}>
                     Context (optional)
                     <textarea
                       maxLength={2000}
@@ -1052,8 +1112,8 @@ export function BlackboardWorkspace({
               </>
             )}
           </div>
-          <div className={styles.actionRow}>
-            <span className={styles.muted}>
+          <div className={`${styles.actionRow} glantri-actions`}>
+            <span className={`${styles.muted} glantri-helper-text`}>
               Sharing immediately exposes this reference to everyone in the Campaign. It does not
               change Characters, Items, or play.
             </span>
@@ -1069,7 +1129,7 @@ export function BlackboardWorkspace({
       ) : null}
 
       <div className={styles.workspaceGrid} data-detail-open={Boolean(selectedId)}>
-        <section className={styles.panel}>
+        <section className={`${styles.panel} glantri-panel`}>
           <form
             className={styles.searchForm}
             onSubmit={(event) => {
@@ -1077,7 +1137,7 @@ export function BlackboardWorkspace({
               applySearch();
             }}
           >
-            <label>
+            <label className="glantri-field-label">
               Search shared references
               <input
                 maxLength={200}
@@ -1090,7 +1150,7 @@ export function BlackboardWorkspace({
                 value={searchDraft.query}
               />
             </label>
-            <label>
+            <label className="glantri-field-label">
               Kind
               <select
                 onChange={(event) =>
@@ -1109,7 +1169,7 @@ export function BlackboardWorkspace({
                 ))}
               </select>
             </label>
-            <label>
+            <label className="glantri-field-label">
               Board
               <select
                 onChange={(event) =>
@@ -1125,7 +1185,7 @@ export function BlackboardWorkspace({
                 <option value="unpinned">Unpinned</option>
               </select>
             </label>
-            <div className={styles.searchActions}>
+            <div className={`${styles.searchActions} glantri-actions`}>
               <button disabled={searchLoading} type="submit">
                 {searchLoading ? "Searching…" : "Search"}
               </button>
@@ -1163,7 +1223,7 @@ export function BlackboardWorkspace({
                           <strong>{result.title}</strong>
                           <span className={styles.category}>{categoryLabels[result.category]}</span>
                         </span>
-                        <span className={styles.muted}>
+                        <span className={`${styles.muted} glantri-helper-text`}>
                           {result.pinned ? "Pinned to the board" : "Not pinned"}
                         </span>
                       </button>
@@ -1174,7 +1234,7 @@ export function BlackboardWorkspace({
             </section>
           ) : null}
           <div className={styles.headingRow}>
-            <h3>Shared catalogue</h3>
+            <h3 className="glantri-section-heading">Shared catalogue</h3>
             <span>{board.catalogue.length} shared</span>
           </div>
           {board.catalogue.length === 0 ? (
@@ -1198,7 +1258,7 @@ export function BlackboardWorkspace({
                       <span className={styles.category}>{categoryLabels[entry.category]}</span>
                     </span>
                     <span>{entrySummary(entry).slice(0, 150)}</span>
-                    <span className={styles.muted}>{entry.state}</span>
+                    <span className={`${styles.muted} glantri-helper-text`}>{entry.state}</span>
                   </button>
                 </li>
               ))}
@@ -1229,7 +1289,7 @@ export function BlackboardWorkspace({
           ) : null}
         </section>
 
-        <section className={styles.detail}>
+        <section className={`${styles.detail} glantri-panel`}>
           {selectedEntry ? (
             <>
               <button className={styles.narrowBack} onClick={returnToList} type="button">
@@ -1238,7 +1298,7 @@ export function BlackboardWorkspace({
               <header className={styles.detailHeader}>
                 <div>
                   <span className={styles.category}>{categoryLabels[selectedEntry.category]}</span>
-                  <h3 ref={detailHeadingRef} tabIndex={-1}>
+                  <h3 className="glantri-section-heading" ref={detailHeadingRef} tabIndex={-1}>
                     {selectedEntry.title}
                   </h3>
                 </div>
@@ -1315,16 +1375,16 @@ export function BlackboardWorkspace({
                 </>
               ) : null}
               {selectedEntry.category === "recap" ? (
-                <div className={styles.muted}>
+                <div className={`${styles.muted} glantri-helper-text`}>
                   Approved by {selectedEntry.approvedByLabel} on{" "}
                   {displayDate(selectedEntry.approvedAt)}
                 </div>
               ) : null}
-              <div className={styles.muted}>
+              <div className={`${styles.muted} glantri-helper-text`}>
                 {selectedEntry.state === "Corrected" ? "Corrected" : "Shared"} by{" "}
                 {selectedEntry.updatedByLabel} on {displayDate(selectedEntry.updatedAt)}
               </div>
-              <div className={styles.actionRow}>
+              <div className={`${styles.actionRow} glantri-actions`}>
                 {presentation === "focused" &&
                 selectedEntry.category === "image_map" &&
                 selectedEntry.content ? (
@@ -1358,7 +1418,7 @@ export function BlackboardWorkspace({
                 ) : null}
               </div>
               {presentation === "embedded" && !isGameMaster && selectedCapability?.canCorrect ? (
-                <p className={styles.muted}>
+                <p className={`${styles.muted} glantri-helper-text`}>
                   You can correct or remove this entry because you posted it.
                 </p>
               ) : null}
@@ -1369,7 +1429,7 @@ export function BlackboardWorkspace({
                     Its content will disappear from the catalogue and History. A safe removed marker
                     will remain until the GM archives it.
                   </p>
-                  <div className={styles.actionRow}>
+                  <div className={`${styles.actionRow} glantri-actions`}>
                     <button onClick={() => setConfirmRetract(false)} type="button">
                       Keep reference
                     </button>
@@ -1400,7 +1460,7 @@ export function BlackboardWorkspace({
                           }`}
                         </strong>
                         <span className={styles.bodyText}>{historySummary(revision)}</span>
-                        <span className={styles.muted}>
+                        <span className={`${styles.muted} glantri-helper-text`}>
                           {revision.changedByLabel} · {displayDate(revision.changedAt)}
                         </span>
                       </li>
@@ -1414,7 +1474,7 @@ export function BlackboardWorkspace({
               <button className={styles.narrowBack} onClick={returnToList} type="button">
                 Back to shared catalogue
               </button>
-              <h3 ref={detailHeadingRef} tabIndex={-1}>
+              <h3 className="glantri-section-heading" ref={detailHeadingRef} tabIndex={-1}>
                 Removed reference
               </h3>
               <div className={styles.notice}>
@@ -1433,7 +1493,7 @@ export function BlackboardWorkspace({
               <button className={styles.narrowBack} onClick={returnToList} type="button">
                 Back to shared catalogue
               </button>
-              <h3 ref={detailHeadingRef} tabIndex={-1}>
+              <h3 className="glantri-section-heading" ref={detailHeadingRef} tabIndex={-1}>
                 Reference unavailable
               </h3>
               <div className={styles.notice}>
@@ -1442,7 +1502,7 @@ export function BlackboardWorkspace({
             </>
           ) : (
             <>
-              <h3>Choose a shared reference</h3>
+              <h3 className="glantri-section-heading">Choose a shared reference</h3>
               <p>
                 Select an entry to read it, inspect its shared history, or pin it for the group.
               </p>
