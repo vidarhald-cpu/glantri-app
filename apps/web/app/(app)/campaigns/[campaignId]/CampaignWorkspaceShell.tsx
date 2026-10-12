@@ -56,6 +56,7 @@ import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import CampaignWorkspaceLoadErrorState from "./CampaignWorkspaceLoadErrorState";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
 import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
+import { formatScenarioStatus } from "./scenarios/[scenarioId]/components/scenarioStatusLabel";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";
@@ -1240,9 +1241,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
             >
               {activeScenario.name}
             </Link>
-            <small>
-              {activeScenario.status === "completed" ? "Closed" : activeScenario.status}
-            </small>
+            <small>{formatScenarioStatus(activeScenario.status)}</small>
             {activeEncounterSummary ? (
               <>
                 <span aria-hidden="true">›</span>
