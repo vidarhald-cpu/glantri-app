@@ -142,7 +142,11 @@ export function ScenarioEncountersSection({
                       : encounter.status.charAt(0).toUpperCase() + encounter.status.slice(1)}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem" }}>
-                    {encounter.timelineLabel ?? encounter.createdAt}
+                    {encounter.timelineLabel ?? (
+                      <time dateTime={encounter.createdAt}>
+                        {new Date(encounter.createdAt).toLocaleString()}
+                      </time>
+                    )}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "center" }}>
                     {encounter.participantCount}

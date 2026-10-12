@@ -2,6 +2,8 @@
 
 import { isScenarioReadOnly, scenarioLifecycleTransitions, type Scenario } from "@glantri/domain";
 
+import { formatScenarioStatus } from "./scenarioStatusLabel";
+
 interface ScenarioSummarySectionProps {
   onDescriptionChange: (value: string) => void;
   onNameChange: (value: string) => void;
@@ -46,12 +48,6 @@ export function ScenarioSummarySection({
     scenarioStatus,
     ...scenarioLifecycleTransitions[scenarioStatus],
   ];
-  const statusLabel = (status: Scenario["status"]) =>
-    status === "live"
-      ? "Active"
-      : status === "completed"
-        ? "Closed"
-        : status.charAt(0).toUpperCase() + status.slice(1);
 
   return (
     <section
@@ -95,7 +91,7 @@ export function ScenarioSummarySection({
           >
             {allowedStatuses.map((status) => (
               <option key={status} value={status}>
-                {statusLabel(status)}
+                {formatScenarioStatus(status)}
               </option>
             ))}
           </select>
