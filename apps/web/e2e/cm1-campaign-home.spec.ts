@@ -64,7 +64,7 @@ test.describe("CM1 Campaign home and private notes", () => {
     await expect(page.getByRole("heading", { name: "Private GM Notes" })).toBeVisible();
     await expect(page.getByText(noteContent, { exact: true })).toBeVisible();
     await expect(currentPlay.getByText(liveName, { exact: true }).locator("..")).toContainText(
-      "Live",
+      "Active",
     );
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),

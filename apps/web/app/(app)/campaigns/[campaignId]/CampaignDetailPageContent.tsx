@@ -36,6 +36,7 @@ import { ApiRequestError } from "@/lib/api/apiClient";
 import { CampaignHomeOverview } from "./CampaignHomeOverview";
 import { CampaignNotesPanel } from "./CampaignNotesPanel";
 import { CampaignMaterialPanel } from "./CampaignMaterialPanel";
+import { formatScenarioStatus } from "./scenarios/[scenarioId]/components/scenarioStatusLabel";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
@@ -1066,7 +1067,7 @@ export default function CampaignDetailPageContent({
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {scenario.status === "completed"
                         ? "Closed · history"
-                        : scenario.status.charAt(0).toUpperCase() + scenario.status.slice(1)}
+                        : formatScenarioStatus(scenario.status)}
                     </td>
                     <td style={{ padding: "0.6rem 0.75rem" }}>
                       {getContinuationLabel(scenario.id)}
