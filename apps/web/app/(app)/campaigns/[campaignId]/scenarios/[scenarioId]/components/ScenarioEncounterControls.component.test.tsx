@@ -269,4 +269,49 @@ describe("scenario encounter controls", () => {
       screen.queryByRole("button", { name: "Update Scenario equipment" }),
     ).not.toBeInTheDocument();
   });
+
+  it("shows user-facing copy only: no developer note, and the unassigned explanation stays", async () => {
+    const user = userEvent.setup();
+    renderAssignmentSection();
+
+    expect(screen.queryByText(/placeholder/i)).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Toggle The Gladiator assignment details" }),
+    );
+
+    expect(screen.queryByText(/placeholder/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/editing these fields is deferred/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This participant is not assigned to a non-archived encounter yet\. Assign them to an encounter before recording encounter-specific details\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the Timeline fallback as one localized time, never the raw ISO value", () => {
+    render(
+      <ScenarioEncountersSection
+        campaignId="campaign-1"
+        encounterDescription=""
+        encounterKind="combat"
+        encounterTimelineLabel=""
+        encounterTitle=""
+        onCreateEncounter={vi.fn()}
+        onDescriptionChange={vi.fn()}
+        onKindChange={vi.fn()}
+        onTimelineLabelChange={vi.fn()}
+        onTitleChange={vi.fn()}
+        onUpdateEncounterStatus={vi.fn()}
+        orderedEncounters={[encounter, { ...encounter, id: "encounter-2", timelineLabel: "Dawn" }]}
+        scenarioId="scenario-1"
+      />,
+    );
+
+    expect(screen.queryByText(/2026-07-10T10:00:00\.000Z/)).not.toBeInTheDocument();
+    const time = document.querySelector("time");
+    expect(time).toHaveAttribute("datetime", "2026-07-10T10:00:00.000Z");
+    expect(time?.textContent).toBe(new Date("2026-07-10T10:00:00.000Z").toLocaleString());
+    expect(screen.getByText("Dawn")).toBeInTheDocument();
+  });
 });
