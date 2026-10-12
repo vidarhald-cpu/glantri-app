@@ -2,7 +2,7 @@
 
 import { isScenarioReadOnly, scenarioLifecycleTransitions, type Scenario } from "@glantri/domain";
 
-import { formatScenarioStatus } from "./scenarioStatusLabel";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 
 interface ScenarioSummarySectionProps {
   onDescriptionChange: (value: string) => void;

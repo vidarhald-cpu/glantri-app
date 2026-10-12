@@ -12,11 +12,9 @@ import type {
 } from "@glantri/domain";
 import { roleplayDifficultyOptions } from "@glantri/domain";
 
-import {
-  panelStyle,
-  playerMetadataTagStyle,
-  playerReadOnlyPanelStyle,
-} from "./roleplayStyles";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
+
+import { panelStyle, playerMetadataTagStyle, playerReadOnlyPanelStyle } from "./roleplayStyles";
 
 interface EncounterInfoCardProps {
   campaignName?: string;
@@ -24,13 +22,17 @@ interface EncounterInfoCardProps {
   scenarioName?: string;
 }
 
-export function EncounterInfoCard({ campaignName, encounter, scenarioName }: EncounterInfoCardProps) {
+export function EncounterInfoCard({
+  campaignName,
+  encounter,
+  scenarioName,
+}: EncounterInfoCardProps) {
   return (
     <section style={panelStyle}>
       <h1 style={{ margin: 0 }}>{encounter.title}</h1>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
         <span>Type: Roleplaying</span>
-        <span>Status: {encounter.status}</span>
+        <span>Status: {formatScenarioStatus(encounter.status)}</span>
         {encounter.timelineLabel ? <span>Timeline: {encounter.timelineLabel}</span> : null}
         {scenarioName ? <span>Scenario: {scenarioName}</span> : null}
         {campaignName ? <span>Campaign: {campaignName}</span> : null}
@@ -42,29 +44,52 @@ export function EncounterInfoCard({ campaignName, encounter, scenarioName }: Enc
 
 export const RoleplayTopInfo = EncounterInfoCard;
 
-export function PlayerEncounterTopInfo({ campaignName, encounter, scenarioName }: EncounterInfoCardProps) {
+export function PlayerEncounterTopInfo({
+  campaignName,
+  encounter,
+  scenarioName,
+}: EncounterInfoCardProps) {
   return (
     <section aria-label="Player encounter summary" style={panelStyle}>
-      <div style={{ alignItems: "baseline", display: "flex", gap: "0.5rem", minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
+      <div
+        style={{
+          alignItems: "baseline",
+          display: "flex",
+          gap: "0.5rem",
+          minWidth: 0,
+          overflow: "hidden",
+          whiteSpace: "nowrap",
+        }}
+      >
         <h1 style={{ flex: "0 0 auto", fontSize: "1.35rem", lineHeight: 1.2, margin: 0 }}>
           {encounter.title}
         </h1>
-        <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
-        <span style={playerMetadataTagStyle}>{encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}</span>
+        <span aria-hidden="true" style={playerMetadataTagStyle}>
+          ·
+        </span>
+        <span style={playerMetadataTagStyle}>
+          {encounter.kind === "roleplay" ? "Roleplaying" : "Combat"}
+        </span>
         {scenarioName ? (
           <>
-            <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+            <span aria-hidden="true" style={playerMetadataTagStyle}>
+              ·
+            </span>
             <span style={playerMetadataTagStyle}>Scenario: {scenarioName}</span>
           </>
         ) : null}
         {campaignName ? (
           <>
-            <span aria-hidden="true" style={playerMetadataTagStyle}>·</span>
+            <span aria-hidden="true" style={playerMetadataTagStyle}>
+              ·
+            </span>
             <span style={playerMetadataTagStyle}>Campaign: {campaignName}</span>
           </>
         ) : null}
       </div>
-      {encounter.description ? <div style={playerReadOnlyPanelStyle}>{encounter.description}</div> : null}
+      {encounter.description ? (
+        <div style={playerReadOnlyPanelStyle}>{encounter.description}</div>
+      ) : null}
     </section>
   );
 }
@@ -161,7 +186,9 @@ export function VisibilityGridSection({
           </table>
         </div>
       ) : (
-        <div>Add participants to this encounter from the Scenario screen before setting visibility.</div>
+        <div>
+          Add participants to this encounter from the Scenario screen before setting visibility.
+        </div>
       )}
     </section>
   );
@@ -230,7 +257,9 @@ function RoleplayDescriptionRow(input: {
 }) {
   const [name, setName] = useState(input.description.name ?? input.participant.label);
   const [shortDescription, setShortDescription] = useState(input.description.shortDescription);
-  const [detailedDescription, setDetailedDescription] = useState(input.description.detailedDescription);
+  const [detailedDescription, setDetailedDescription] = useState(
+    input.description.detailedDescription,
+  );
   const dirtyFieldsRef = useRef({
     detailedDescription: false,
     name: false,
@@ -251,7 +280,10 @@ function RoleplayDescriptionRow(input: {
       setShortDescription(input.description.shortDescription);
     }
 
-    if (!dirtyFieldsRef.current.detailedDescription && !focusedFieldsRef.current.detailedDescription) {
+    if (
+      !dirtyFieldsRef.current.detailedDescription &&
+      !focusedFieldsRef.current.detailedDescription
+    ) {
       setDetailedDescription(input.description.detailedDescription);
     }
   }, [input.description, input.participant.label]);
@@ -321,10 +353,7 @@ function RoleplayDescriptionRow(input: {
           rows={3}
           value={detailedDescription}
         />
-        <button
-          onClick={() => void handleSave()}
-          type="button"
-        >
+        <button onClick={() => void handleSave()} type="button">
           Save description
         </button>
       </div>
@@ -400,16 +429,26 @@ export function RoleplayActionLogSection({ entries }: { entries: RoleplayActionL
               {entry.openEndedD10s.length > 0 ? ` · d10s ${entry.openEndedD10s.join(", ")}` : ""}
               {entry.dieResult == null ? "" : ` · die ${entry.dieResult}`}
               {entry.numericSubtotal == null ? "" : ` · total ${entry.numericSubtotal}`}
-              {entry.opponentSkillLabel ? ` · VERSUS ${entry.opponentParticipantName ?? "Opponent"} ${entry.opponentSkillLabel}` : ""}
+              {entry.opponentSkillLabel
+                ? ` · VERSUS ${entry.opponentParticipantName ?? "Opponent"} ${entry.opponentSkillLabel}`
+                : ""}
               {entry.opponentRollD20 == null ? "" : ` · opponent d20 ${entry.opponentRollD20}`}
-              {entry.opponentOpenEndedD10s.length > 0 ? ` · opponent d10s ${entry.opponentOpenEndedD10s.join(", ")}` : ""}
+              {entry.opponentOpenEndedD10s.length > 0
+                ? ` · opponent d10s ${entry.opponentOpenEndedD10s.join(", ")}`
+                : ""}
               {entry.opponentDieResult == null ? "" : ` · opponent die ${entry.opponentDieResult}`}
-              {entry.opponentNumericSubtotal == null ? "" : ` · opponent total ${entry.opponentNumericSubtotal}`}
-              {entry.opponentAchievedSuccessLevelLabel ? ` · opponent ${entry.opponentAchievedSuccessLevelLabel}` : ""}
+              {entry.opponentNumericSubtotal == null
+                ? ""
+                : ` · opponent total ${entry.opponentNumericSubtotal}`}
+              {entry.opponentAchievedSuccessLevelLabel
+                ? ` · opponent ${entry.opponentAchievedSuccessLevelLabel}`
+                : ""}
               {entry.opposedResult ? ` · opposed ${entry.opposedResult}` : ""}
               {entry.opposedMargin == null ? "" : ` · margin ${entry.opposedMargin}`}
               {entry.achievedSuccessLevelLabel ? ` · ${entry.achievedSuccessLevelLabel}` : ""}
-              {entry.resultModifier == null ? "" : ` · modifier ${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`}
+              {entry.resultModifier == null
+                ? ""
+                : ` · modifier ${entry.resultModifier >= 0 ? "+" : ""}${entry.resultModifier}`}
               {entry.success == null ? "" : entry.success ? " · SUCCESS" : " · NOT SUCCESSFUL"}
               {entry.fumble ? " · FUMBLE" : ""}
               {entry.partial ? " · Partial" : ""}
@@ -454,9 +493,7 @@ export function PlayerRoleplayEncounterView({
           <div>{gmMessage}</div>
         </section>
       ) : null}
-      <section style={panelStyle}>
-        Roleplaying encounter player tools will appear here.
-      </section>
+      <section style={panelStyle}>Roleplaying encounter player tools will appear here.</section>
     </>
   );
 }

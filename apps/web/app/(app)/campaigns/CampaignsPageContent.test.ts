@@ -38,7 +38,8 @@ describe("CampaignsPageContent player campaign listing", () => {
 
     expect(source).toContain("Create campaign");
     expect(source).toContain("createCampaignOnServer");
-    expect(source).toContain("Status: {campaign.status}");
+    expect(source).toContain("Status: {formatScenarioStatus(campaign.status)}");
+    expect(source).not.toContain("Status: {campaign.status}");
     expect(source).toContain('tab: "campaign"');
   });
 });
