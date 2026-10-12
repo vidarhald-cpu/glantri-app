@@ -16,16 +16,16 @@
 .headingRow,
 .detailHeader,
 .actionRow,
-.moveArrows {
-  display: contents;
-}
-
 .moveRow {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
   justify-content: space-between;
+}
+
+.moveArrows {
+  display: contents;
 }
 
 .intro h2,
