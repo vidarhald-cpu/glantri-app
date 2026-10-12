@@ -12,6 +12,7 @@ import {
   buildCombatAttackSourceRef,
   buildCombatDeclarationAttackSelection,
   getCombatDeclarationAttackModeUnavailableMessage,
+  getCombatDeclarationAttackSourceRequiredMessage,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -1804,5 +1805,417 @@ describe("workbook import provenance in the attack stats (#517 ruling E2)", () =
     );
     expect(count(playerPage, "buildPlayerCombatLoadoutSummary(")).toBe(4);
     expect(playerPage).not.toContain("includeSourceProvenance");
+  });
+});
+
+describe("explicit player attack source selection (#575)", () => {
+  const daggerWeaponRow = {
+    attackModes: [
+      {
+        allowsRepeatedRoundAttack: false,
+        armorModifier: "A",
+        canonicalMeleeMode: "thrust",
+        crit: "A",
+        damageClass: "pointed",
+        dmb: 3,
+        id: "thrust",
+        isPrimaryAttack: true,
+        label: "Thrust",
+        ob: 7,
+        order: 0,
+        secondCrit: "—",
+      },
+    ],
+    attackMode1Id: "thrust",
+    currentItemLabel: "Dagger",
+    itemId: "primary-weapon",
+    modeLabel: "Primary",
+    templateId: "weapon-template-dagger",
+  };
+  // The real Punch and Kick templates author no `canonicalMeleeMode`, which is what makes the
+  // mode-legality rule reject them. `canonicalMeleeMode` is passed explicitly so a test can state
+  // which case it is exercising rather than depend on the omission by accident.
+  const brawlingRow = (input: {
+    canonicalMeleeMode?: "slash" | "strike" | "thrust";
+    label: string;
+    templateId: string;
+  }) => ({
+    attackModes: [
+      {
+        allowsRepeatedRoundAttack: false,
+        armorModifier: "A",
+        canonicalMeleeMode: input.canonicalMeleeMode,
+        crit: "AC",
+        damageClass: "blunt",
+        dmb: 0,
+        id: "mode-1",
+        isPrimaryAttack: true,
+        label: "Strike",
+        ob: 1,
+        order: 0,
+      },
+    ],
+    attackMode1Id: "mode-1",
+    currentItemLabel: input.label,
+    modeLabel: "Unarmed",
+    templateId: input.templateId,
+  });
+  const weaponModeRow = (weapon: string, mode: string) => [
+    mode,
+    weapon,
+    "0",
+    "Strike",
+    "1",
+    "0",
+    "AC",
+    "—",
+    "A",
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+    "—",
+  ];
+  const unarmedRows = [weaponModeRow("Punch", "Unarmed"), weaponModeRow("Kick", "Unarmed")];
+  /** As the catalogue actually authors them today: no canonical melee mode, so no legal mode. */
+  const unarmedWeaponRows = [
+    brawlingRow({ label: "Punch", templateId: "virtual-weapon-template-punch" }),
+    brawlingRow({ label: "Kick", templateId: "virtual-weapon-template-kick" }),
+  ];
+  /** The same rows as they would be once the rules give brawling a legal attack mode. */
+  const declarableUnarmedWeaponRows = [
+    brawlingRow({
+      canonicalMeleeMode: "strike",
+      label: "Punch",
+      templateId: "virtual-weapon-template-punch",
+    }),
+    brawlingRow({
+      canonicalMeleeMode: "strike",
+      label: "Kick",
+      templateId: "virtual-weapon-template-kick",
+    }),
+  ];
+  const emptyPhaseContexts = () => ({
+    phase1: createEmptyPlayerEncounterCombatContext(),
+    phase2: createEmptyPlayerEncounterCombatContext(),
+  });
+
+  it("offers the ready weapon and preselects it, and does not offer an illegal brawling row", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: [weaponModeRow("Dagger", "Primary"), ...unarmedRows],
+        valueLabel: "Dagger",
+        weaponRows: [daggerWeaponRow, ...unarmedWeaponRows],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    // Punch and Kick are present as rows but author no canonical melee mode, so the existing
+    // mode-legality rule gives them no legal attack mode and they are not offered as a choice.
+    expect(summary.attackSourceOptions).toEqual([
+      {
+        id: "weapon:primary-weapon",
+        label: "Dagger · Primary",
+        slot: "primary",
+        sourceKind: "weapon",
+      },
+    ]);
+    // The preselection is reported, so the control can show it rather than leave it implicit.
+    expect(summary.selectedAttackSourceId).toBe("weapon:primary-weapon");
+    expect(summary.attackStats?.weaponName).toBe("Dagger");
+  });
+
+  it("offers both brawling rows once they carry a legal attack mode", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: [weaponModeRow("Dagger", "Primary"), ...unarmedRows],
+        valueLabel: "Dagger",
+        weaponRows: [daggerWeaponRow, ...declarableUnarmedWeaponRows],
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.attackSourceOptions).toEqual([
+      {
+        id: "weapon:primary-weapon",
+        label: "Dagger · Primary",
+        slot: "primary",
+        sourceKind: "weapon",
+      },
+      {
+        id: "unarmed:virtual-weapon-template-punch",
+        label: "Punch · Unarmed",
+        slot: "virtual",
+        sourceKind: "unarmed",
+        templateId: "virtual-weapon-template-punch",
+      },
+      {
+        id: "unarmed:virtual-weapon-template-kick",
+        label: "Kick · Unarmed",
+        slot: "virtual",
+        sourceKind: "unarmed",
+        templateId: "virtual-weapon-template-kick",
+      },
+    ]);
+  });
+
+  it("omits the brawling rows when the committed equipment is not usable", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      allowUnarmedFallback: false,
+      loadoutModel: buildLoadoutModel({
+        rows: unarmedRows,
+        weaponRows: declarableUnarmedWeaponRows,
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.attackSourceOptions).toEqual([
+      {
+        id: "weapon:primary-weapon",
+        label: "Long sword · Primary",
+        slot: "primary",
+        sourceKind: "weapon",
+      },
+    ]);
+  });
+
+  it("resolves an explicitly chosen brawling row into its own unarmed source", () => {
+    const loadoutModel = buildLoadoutModel({
+      fields: [],
+      rows: unarmedRows,
+      weaponRows: declarableUnarmedWeaponRows,
+    });
+    const phase1 = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackSourceId: "unarmed:virtual-weapon-template-kick",
+    });
+
+    expect(phase1.selectedAttackSourceId).toBe("unarmed:virtual-weapon-template-kick");
+    expect(phase1.attackStats?.weaponName).toBe("Kick");
+    // The phase default is Punch for phase 1; the explicit choice wins over it.
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: phase1.reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toEqual({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_1",
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: "virtual-weapon-template-kick",
+    });
+  });
+
+  it("reports the attack phase instead of silently dropping an unresolvable source", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        fields: [],
+        rows: unarmedRows,
+        weaponRows: unarmedWeaponRows,
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "attack_parry",
+      phaseContexts: emptyPhaseContexts(),
+      phaseLoadoutSummaries: {
+        phase1: { reference: null, selectedAttackModeId: undefined },
+        phase2: { reference: null, selectedAttackModeId: undefined },
+      },
+      secondaryActionId: "",
+    });
+
+    expect(summary.selectedAttackSourceId).toBeUndefined();
+    expect(selection.phaseAttackSources).toEqual({});
+    expect(selection.missingSourcePhases).toEqual(["phase1"]);
+    expect(getCombatDeclarationAttackSourceRequiredMessage(selection.missingSourcePhases)).toBe(
+      "Select an attack source for Phase 1.",
+    );
+  });
+
+  it("names every attack phase that still needs a source, and nothing when all resolve", () => {
+    expect(getCombatDeclarationAttackSourceRequiredMessage(["phase1", "phase2"])).toBe(
+      "Select an attack source for Phase 1 and Phase 2.",
+    );
+    expect(getCombatDeclarationAttackSourceRequiredMessage([])).toBeUndefined();
+  });
+
+  it("does not ask the player to choose a source when there is none to choose", () => {
+    expect(
+      getCombatDeclarationAttackSourceRequiredMessage(["phase1"], { selectableSourceCount: 0 }),
+    ).toBe(
+      "No attack source is available for Phase 1. Ready a weapon, or ask the GM to refresh your scenario equipment.",
+    );
+    expect(
+      getCombatDeclarationAttackSourceRequiredMessage(["phase1"], { selectableSourceCount: 2 }),
+    ).toBe("Select an attack source for Phase 1.");
+  });
+
+  it("does not default an unequipped Double Attack to Punch and Kick", () => {
+    // Declarable brawling rows, so the absence of a source is the removed silent default rather
+    // than the mode-legality filter.
+    const loadoutModel = buildLoadoutModel({
+      fields: [],
+      rows: unarmedRows,
+      weaponRows: declarableUnarmedWeaponRows,
+    });
+    const phaseSummaries = {
+      phase1: buildPlayerCombatLoadoutSummary({
+        actionId: "double_attack",
+        loadoutModel,
+        phaseKey: "phase1",
+        secondaryActionId: "",
+      }),
+      phase2: buildPlayerCombatLoadoutSummary({
+        actionId: "double_attack",
+        loadoutModel,
+        phaseKey: "phase2",
+        secondaryActionId: "",
+      }),
+    };
+
+    expect(phaseSummaries.phase1.selectedAttackSourceId).toBeUndefined();
+    expect(phaseSummaries.phase2.selectedAttackSourceId).toBeUndefined();
+
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "double_attack",
+      phaseContexts: emptyPhaseContexts(),
+      phaseLoadoutSummaries: phaseSummaries,
+      secondaryActionId: "",
+    });
+    expect(selection.phaseAttackSources).toEqual({});
+    expect(selection.missingSourcePhases).toEqual(["phase1", "phase2"]);
+  });
+
+  it("serializes two explicitly chosen brawling sources as distinct Double Attack opportunities", () => {
+    const loadoutModel = buildLoadoutModel({
+      fields: [],
+      rows: unarmedRows,
+      weaponRows: declarableUnarmedWeaponRows,
+    });
+    const phaseSummaries = {
+      phase1: buildPlayerCombatLoadoutSummary({
+        actionId: "double_attack",
+        loadoutModel,
+        phaseKey: "phase1",
+        secondaryActionId: "",
+        selectedAttackSourceId: "unarmed:virtual-weapon-template-punch",
+      }),
+      phase2: buildPlayerCombatLoadoutSummary({
+        actionId: "double_attack",
+        loadoutModel,
+        phaseKey: "phase2",
+        secondaryActionId: "",
+        selectedAttackSourceId: "unarmed:virtual-weapon-template-kick",
+      }),
+    };
+    const selection = buildCombatDeclarationAttackSelection({
+      actionId: "double_attack",
+      phaseContexts: emptyPhaseContexts(),
+      phaseLoadoutSummaries: phaseSummaries,
+      secondaryActionId: "",
+    });
+
+    expect(selection.missingSourcePhases).toEqual([]);
+    expect(selection.phaseAttackSources).toEqual({
+      phase1: {
+        attackModeId: "mode-1",
+        opportunitySlot: "attack_1",
+        slot: "virtual",
+        sourceKind: "unarmed",
+        templateId: "virtual-weapon-template-punch",
+      },
+      phase2: {
+        attackModeId: "mode-1",
+        opportunitySlot: "attack_2",
+        slot: "virtual",
+        sourceKind: "unarmed",
+        templateId: "virtual-weapon-template-kick",
+      },
+    });
+  });
+
+  it("declares from the chosen slot rather than the action's default slot", () => {
+    const loadoutModel = buildLoadoutModel({
+      fields: [
+        {
+          id: "primary",
+          label: "Primary weapon",
+          options: [],
+          value: "primary-weapon",
+          valueLabel: "Dagger",
+        },
+        {
+          id: "secondary",
+          label: "Second hand weapon",
+          options: [],
+          value: "secondary-weapon",
+          valueLabel: "Club",
+        },
+      ],
+      rows: [
+        weaponModeRow("Dagger", "Primary"),
+        weaponModeRow("Club", "Secondary"),
+        ...unarmedRows,
+      ],
+      weaponRows: [
+        daggerWeaponRow,
+        {
+          ...brawlingRow({ label: "Club", templateId: "weapon-template-club" }),
+          itemId: "secondary-weapon",
+          modeLabel: "Secondary",
+        },
+        ...unarmedWeaponRows,
+      ],
+    });
+
+    expect(
+      buildPlayerCombatLoadoutSummary({
+        actionId: "attack_parry",
+        loadoutModel,
+        phaseKey: "phase1",
+        secondaryActionId: "",
+      }).selectedAttackSourceId,
+    ).toBe("weapon:primary-weapon");
+
+    const chosen = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+      selectedAttackSourceId: "weapon:secondary-weapon",
+    });
+    expect(chosen.selectedAttackSourceId).toBe("weapon:secondary-weapon");
+    expect(chosen.attackStats?.weaponName).toBe("Club");
+    expect(
+      buildCombatAttackSourceRef({
+        phaseKey: "phase1",
+        reference: chosen.reference,
+        unarmedTemplateId: "virtual-weapon-template-punch",
+      }),
+    ).toEqual({
+      attackModeId: "mode-1",
+      opportunitySlot: "attack_1",
+      scenarioItemId: "secondary-weapon",
+      slot: "secondary",
+      sourceKind: "weapon",
+      templateId: "weapon-template-club",
+    });
   });
 });

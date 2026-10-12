@@ -312,6 +312,15 @@ interface PlayerCombatAttackModeSelectorProps {
   readOnly?: boolean;
 }
 
+interface PlayerCombatAttackSourceSelectorProps {
+  controlsDisabled?: boolean;
+  emptyState?: string;
+  onChange: (attackSourceId: string) => void;
+  options: readonly { id: string; label: string }[];
+  readOnly?: boolean;
+  selectedAttackSourceId?: string;
+}
+
 interface PlayerCombatAttackTargetSelectorProps {
   combatContext: ScenarioParticipantCombatContext;
   controlsDisabled?: boolean;
@@ -2843,6 +2852,72 @@ export function PlayerCombatAttackLocationSelector({
         </select>
       </label>
     </div>
+  );
+}
+
+/**
+ * The explicit weapon/unarmed choice a player's attack declaration will use (#575). Same label and
+ * select treatment as the Attack mode control immediately below it, so the declaration editor
+ * gains a control rather than a new idiom.
+ */
+export function PlayerCombatAttackSourceSelector({
+  controlsDisabled = false,
+  emptyState,
+  onChange,
+  options,
+  readOnly = false,
+  selectedAttackSourceId,
+}: PlayerCombatAttackSourceSelectorProps) {
+  if (options.length === 0) {
+    return emptyState ? (
+      <div
+        role="status"
+        style={{
+          color: "#8a3b1f",
+          display: "grid",
+          fontSize: "0.82rem",
+          gap: "0.2rem",
+        }}
+      >
+        <strong>Attack source</strong>
+        <span>{emptyState}</span>
+      </div>
+    ) : null;
+  }
+
+  if (readOnly) {
+    return (
+      <HistoricalField
+        label="Attack source"
+        value={options.find((option) => option.id === selectedAttackSourceId)?.label}
+      />
+    );
+  }
+
+  return (
+    <label
+      style={{
+        alignItems: "center",
+        display: "grid",
+        gap: "0.35rem",
+        gridTemplateColumns: compactPhaseContextSelectorColumns,
+      }}
+    >
+      <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack source</span>
+      <select
+        disabled={controlsDisabled}
+        onChange={(event) => onChange(event.target.value)}
+        style={compactPhaseContextSelectStyle}
+        value={selectedAttackSourceId ?? ""}
+      >
+        {!selectedAttackSourceId ? <option value="">Select attack source</option> : null}
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

@@ -255,6 +255,8 @@ function buildHistoricalPhaseLoadout(input: {
   const phaseSnapshot = input.panelSnapshot?.phasePanels?.[input.phaseKey];
   return {
     attackModeOptions: [],
+    // Archived history is read-only; it offers no attack source to choose.
+    attackSourceOptions: [],
     attackStats: phaseSnapshot?.attackSummary ?? null,
     mainHandParryItemLabel: phaseSnapshot?.mainHandParryItemLabel ?? "Unarmed",
     offHandParryItemLabel: phaseSnapshot?.offHandParryItemLabel ?? "Unarmed",
