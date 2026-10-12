@@ -46,6 +46,7 @@
     "db:task:seed": "node --import tsx scripts/database/worktreeDatabase.ts seed",
     "db:task:test": "node --import tsx scripts/database/worktreeDatabase.ts test",
     "db:task:exec": "node --import tsx scripts/database/worktreeDatabase.ts exec",
+    "db:task:e2e": "node --import tsx scripts/database/worktreeDatabase.ts exec -- sh scripts/database/runTaskPlaywright.sh",
     "db:task:cleanup": "node --import tsx scripts/database/worktreeDatabase.ts cleanup"
   },
   "devDependencies": {

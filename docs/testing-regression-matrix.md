@@ -134,14 +134,21 @@ port from this document: a hardcoded `localhost:4000` drives whichever process
 holds that port, which on a developer machine is normally the primary
 checkout's API on the shared playtest database.
 
-**From a task-isolated worktree**, run the suite through `db:task:exec`, which
-supplies this worktree's own `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_API_URL` and
+**From a task-isolated worktree**, run the suite with `pnpm db:task:e2e`, which
+starts the stack and Playwright inside one `db:task:exec`. That supplies this
+worktree's own `PLAYWRIGHT_BASE_URL`, `PLAYWRIGHT_API_URL` and
 `PLAYWRIGHT_BROWSER_API_URL` derived from the same worktree key as its database
 target, so the browser proof and the disposable database cannot drift apart:
 
 ```bash
-pnpm db:task:exec -- pnpm --filter @glantri/web playwright
+pnpm db:task:e2e e2e/chargen
 ```
+
+The earlier instruction here, `pnpm db:task:exec -- pnpm --filter @glantri/web
+playwright`, cannot work while the stack is up: `db:task:exec` refuses when its
+derived ports are held. The full recipe, the fixture's requirements and the
+never-list are in
+[Running the browser suite locally](./dev-database.md#running-the-browser-suite-locally).
 
 Global setup prints a `Playwright smoke target:` line naming the resolved API
 and web URLs before its first write; check it against the stack you intended.
