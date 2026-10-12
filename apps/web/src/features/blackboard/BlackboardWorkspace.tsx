@@ -952,38 +952,42 @@ export function BlackboardWorkspace({
               </button>
               {presentation === "embedded" ? (
                 <div aria-label="Arrange pinned reference" className={styles.moveRow}>
-                  <button
-                    aria-label="Move left"
-                    disabled={busy}
-                    onClick={() => move(placement, placement.x - 40, placement.y)}
-                    type="button"
-                  >
-                    ←
-                  </button>
-                  <button
-                    aria-label="Move up"
-                    disabled={busy}
-                    onClick={() => move(placement, placement.x, placement.y - 40)}
-                    type="button"
-                  >
-                    ↑
-                  </button>
-                  <button
-                    aria-label="Move down"
-                    disabled={busy}
-                    onClick={() => move(placement, placement.x, placement.y + 40)}
-                    type="button"
-                  >
-                    ↓
-                  </button>
-                  <button
-                    aria-label="Move right"
-                    disabled={busy}
-                    onClick={() => move(placement, placement.x + 40, placement.y)}
-                    type="button"
-                  >
-                    →
-                  </button>
+                  {/* Hidden by CSS (display: none) at <=720px, where pins are static and a
+                      stored position has no visible effect. */}
+                  <span className={styles.moveArrows}>
+                    <button
+                      aria-label="Move left"
+                      disabled={busy}
+                      onClick={() => move(placement, placement.x - 40, placement.y)}
+                      type="button"
+                    >
+                      ←
+                    </button>
+                    <button
+                      aria-label="Move up"
+                      disabled={busy}
+                      onClick={() => move(placement, placement.x, placement.y - 40)}
+                      type="button"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      aria-label="Move down"
+                      disabled={busy}
+                      onClick={() => move(placement, placement.x, placement.y + 40)}
+                      type="button"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      aria-label="Move right"
+                      disabled={busy}
+                      onClick={() => move(placement, placement.x + 40, placement.y)}
+                      type="button"
+                    >
+                      →
+                    </button>
+                  </span>
                   <button disabled={busy} onClick={() => unpin(placement)} type="button">
                     Unpin
                   </button>

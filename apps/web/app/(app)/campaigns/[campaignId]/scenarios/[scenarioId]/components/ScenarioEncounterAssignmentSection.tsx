@@ -99,8 +99,7 @@ export function ScenarioEncounterAssignmentSection({
     >
       <h2 style={{ margin: 0 }}>Encounter Assignment</h2>
       <p style={{ margin: 0 }}>
-        Assign concrete scenario participants to planned, active, or paused encounters. Click a
-        participant name for scenario state and encounter-specific detail placeholders.
+        Assign concrete scenario participants to planned, active, or paused encounters.
       </p>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
         <select
@@ -409,11 +408,6 @@ export function ScenarioEncounterAssignmentSection({
                                   details.
                                 </div>
                               )}
-                              <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
-                                Editing these fields is deferred; this placeholder is intentionally
-                                here in Encounter Assignment, not a separate Scenario Participants
-                                roster.
-                              </div>
                             </div>
                           </td>
                         </tr>
