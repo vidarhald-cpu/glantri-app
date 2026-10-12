@@ -36,7 +36,7 @@ import { ApiRequestError } from "@/lib/api/apiClient";
 import { CampaignHomeOverview } from "./CampaignHomeOverview";
 import { CampaignNotesPanel } from "./CampaignNotesPanel";
 import { CampaignMaterialPanel } from "./CampaignMaterialPanel";
-import { formatScenarioStatus } from "./scenarios/[scenarioId]/components/scenarioStatusLabel";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 
 interface CampaignDetailPageContentProps {
   campaignId: string;
@@ -674,7 +674,9 @@ export default function CampaignDetailPageContent({
       <div>
         {!embedded ? <Link href="/campaigns">Campaigns</Link> : null}
         <h1 style={{ marginBottom: "0.5rem" }}>{campaign.name}</h1>
-        <div style={{ marginBottom: "0.5rem" }}>Status: {campaign.status}</div>
+        <div style={{ marginBottom: "0.5rem" }}>
+          Status: {formatScenarioStatus(campaign.status)}
+        </div>
         <p style={{ margin: 0 }}>{campaign.description || "No description yet."}</p>
         {campaign.status === "draft" ? (
           <div>

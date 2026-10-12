@@ -11,6 +11,7 @@ import {
   canManageCampaignWorkspace,
   loadCampaignBrowserRecordsForUser,
 } from "@/lib/campaigns/access";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 
 const panelStyle = {
@@ -249,7 +250,7 @@ export default function CampaignsPageContent() {
               <div key={campaign.id} style={panelStyle}>
                 <strong>{campaign.name}</strong>
                 <div>{campaign.description || "No description yet."}</div>
-                <div>Status: {campaign.status}</div>
+                <div>Status: {formatScenarioStatus(campaign.status)}</div>
                 <div>
                   <Link
                     href={buildCampaignWorkspaceHref({ campaignId: campaign.id, tab: "campaign" })}

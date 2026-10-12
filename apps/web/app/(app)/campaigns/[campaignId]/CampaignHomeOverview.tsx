@@ -8,7 +8,7 @@ import {
   buildCampaignWorkspaceHref,
 } from "@/lib/campaigns/workspace";
 
-import { formatScenarioStatus } from "./scenarios/[scenarioId]/components/scenarioStatusLabel";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 
 const cardStyle = {
   border: "1px solid #d9ddd8",
