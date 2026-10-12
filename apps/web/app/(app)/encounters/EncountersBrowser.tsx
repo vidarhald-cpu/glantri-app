@@ -8,6 +8,7 @@ import { createEncounterSession } from "@glantri/rules-engine";
 
 import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
 import { LocalEncounterRepository } from "@/lib/offline/repositories/localEncounterRepository";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 
 const localEncounterRepository = new LocalEncounterRepository();
 
@@ -16,10 +17,7 @@ interface EncountersBrowserProps {
   scenarioId?: string;
 }
 
-export default function EncountersBrowser({
-  campaignId,
-  scenarioId
-}: EncountersBrowserProps) {
+export default function EncountersBrowser({ campaignId, scenarioId }: EncountersBrowserProps) {
   const [encounters, setEncounters] = useState<EncounterSession[]>([]);
   const [feedback, setFeedback] = useState<string>();
   const [loading, setLoading] = useState(true);
@@ -37,7 +35,7 @@ export default function EncountersBrowser({
   async function refreshEncounters() {
     const records = await localEncounterRepository.list();
     setEncounters(
-      scenarioId ? records.filter((record) => record.scenarioId === scenarioId) : records
+      scenarioId ? records.filter((record) => record.scenarioId === scenarioId) : records,
     );
   }
 
@@ -51,7 +49,7 @@ export default function EncountersBrowser({
     const session: EncounterSession = {
       ...createEncounterSession(titleInput),
       campaignId,
-      scenarioId
+      scenarioId,
     };
     await localEncounterRepository.save(session);
     setTitleInput("");
@@ -97,7 +95,7 @@ export default function EncountersBrowser({
           borderRadius: 12,
           display: "grid",
           gap: "0.75rem",
-          padding: "1rem"
+          padding: "1rem",
         }}
       >
         <h2 style={{ margin: 0 }}>
@@ -130,11 +128,11 @@ export default function EncountersBrowser({
                 borderRadius: 12,
                 display: "grid",
                 gap: "0.35rem",
-                padding: "1rem"
+                padding: "1rem",
               }}
             >
               <strong>{encounter.title}</strong>
-              <div>Status: {encounter.status}</div>
+              <div>Status: {formatScenarioStatus(encounter.status)}</div>
               <div>Participants: {encounter.participants.length}</div>
               <div>Updated: {encounter.updatedAt}</div>
               <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -149,7 +147,7 @@ export default function EncountersBrowser({
             background: "#f6f5ef",
             border: "1px solid #d9ddd8",
             borderRadius: 12,
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           No encounters yet.

@@ -8,6 +8,8 @@ import {
   buildCampaignWorkspaceHref,
 } from "@/lib/campaigns/workspace";
 
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
+
 const cardStyle = {
   border: "1px solid #d9ddd8",
   borderRadius: 12,
@@ -15,11 +17,6 @@ const cardStyle = {
   gap: "0.65rem",
   padding: "1rem",
 } as const;
-
-function lifecycleLabel(status: string): string {
-  if (status === "completed") return "Closed";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
 
 export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspaceOverview }) {
   const currentPcs = overview.roster.filter(
@@ -64,7 +61,7 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
               <article key={context.scenario.id} style={{ ...cardStyle, background: "white" }}>
                 <div>
                   <strong>{context.scenario.name}</strong>
-                  <div>{lifecycleLabel(context.scenario.status)}</div>
+                  <div>{formatScenarioStatus(context.scenario.status)}</div>
                 </div>
                 <Link
                   href={buildCampaignScenarioHref({
@@ -80,7 +77,7 @@ export function CampaignHomeOverview({ overview }: { overview: CampaignWorkspace
                   context.encounters.map((encounter) => (
                     <div key={encounter.id} style={{ display: "grid", gap: "0.2rem" }}>
                       <span>
-                        {encounter.title} · {lifecycleLabel(encounter.status)}
+                        {encounter.title} · {formatScenarioStatus(encounter.status)}
                         {encounter.activeCombat ? " · Combat active" : ""}
                       </span>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
