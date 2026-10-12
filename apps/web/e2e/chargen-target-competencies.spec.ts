@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { getApprovedV2RuntimeContent } from "@glantri/content";
 
+import { gotoChargenStep } from "./chargen-step-navigation";
+
 // One bounded new Slice2 journey; do not retry the known profile prerequisite failure.
 test("target competencies through existing Chargen and authoritative persistence", async ({
   page,
@@ -18,6 +20,7 @@ test("target competencies through existing Chargen and authoritative persistence
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
   await page.locator('input[name="profile"]').first().click();
+  await gotoChargenStep(page, "2. Resolve stats");
   try {
     await expect(page.getByRole("button", { name: "Swap", exact: true })).toBeVisible({
       timeout: 10000,
@@ -31,8 +34,11 @@ test("target competencies through existing Chargen and authoritative persistence
       `STOP: new Slice2 journey blocked at profile-selection prerequisite. No retry or diagnostics authorized. ${String(error)}`,
     );
   }
+  await gotoChargenStep(page, "3. Choose civilization");
   await page.getByRole("radio", { name: /Scythians/ }).click();
+  await gotoChargenStep(page, "5. Choose profession");
   await page.getByRole("radio", { name: /Courier and Messenger/ }).click();
+  await gotoChargenStep(page, "6. Skill allocation");
   await expect(
     page.getByRole("heading", { name: "Choose your Profession core route", exact: true }),
   ).toBeVisible();
@@ -69,22 +75,27 @@ test("target competencies through existing Chargen and authoritative persistence
   for (let rank = 0; rank < 6; rank++) {
     await page.getByRole("button", { name: "Add 1-h edged", exact: true }).click();
   }
-  await page.getByLabel("Show all blocked rows").check();
-  await page.getByLabel("Search specializations").fill("Falconry");
-  await expect(page.getByText(/Animal Training/).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Add Falconry", exact: true })).toBeDisabled();
-  /* Fencing is no longer offered as a Specialization: searching the Specializations step for it
-     returns no rows at all, while the Skill itself was purchased above from the individual-skill
-     list. */
+  /* The parent-skill assertion names the Specializations step explicitly. A page-wide
+     `getByText(/Animal Training/).first()` used to be satisfied by whichever step happened to be
+     mounted first, which was never the row this journey is about; the Falconry row's own parent
+     skill is what has to be on screen. */
   const specializations = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "8. Specializations", exact: true }) })
     .last();
+  await page.getByLabel("Show all blocked rows").check();
+  await page.getByLabel("Search specializations").fill("Falconry");
+  await expect(specializations.getByText(/Animal Training/).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add Falconry", exact: true })).toBeDisabled();
+  /* Fencing is no longer offered as a Specialization: searching the Specializations step for it
+     returns no rows at all, while the Skill itself was purchased above from the individual-skill
+     list. */
   await page.getByLabel("Search specializations").fill("Fencing");
   await expect(specializations.getByText(/Showing 0 of/)).toBeVisible();
   await expect(
     specializations.getByRole("button", { name: "Add Fencing", exact: true }),
   ).toHaveCount(0);
+  await gotoChargenStep(page, "11. Finalize character");
   await page.getByLabel("Character name", { exact: true }).fill(name);
   const response = page.waitForResponse(
     (r) => r.request().method() === "POST" && /\/characters\/?$/.test(new URL(r.url()).pathname),

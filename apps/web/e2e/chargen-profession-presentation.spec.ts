@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { forEachChargenStep, gotoChargenStep } from "./chargen-step-navigation";
+
 /**
  * The Chargen Profession and acquisition presentation contract, in the browser (Forgejo #372).
  *
@@ -49,15 +51,22 @@ test("Chargen explains a Profession before it exposes acquisition", async ({ pag
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
   await page.locator('input[name="profile"]').first().click();
+  await gotoChargenStep(page, "2. Resolve stats");
   await expect(page.getByRole("button", { name: "Swap", exact: true })).toBeVisible({
     timeout: 10_000,
   });
+  await gotoChargenStep(page, "3. Choose civilization");
   await page.getByRole("radio", { name: /Scandia/ }).click();
 
-  // The chooser browses by the approved taxonomy. The Profession-family filter is gone.
+  // The retired Profession-family filter is gone from every step, not merely from the one in view.
+  await forEachChargenStep(page, async () => {
+    await expect(page.getByLabel("Family")).toHaveCount(0);
+  });
+
+  // The chooser browses by the approved taxonomy.
+  await gotoChargenStep(page, "5. Choose profession");
   const kindOfWork = page.getByLabel("Kind of work");
   await expect(kindOfWork).toBeVisible();
-  await expect(page.getByLabel("Family")).toHaveCount(0);
   await expect(kindOfWork.locator("option")).toHaveCount(17);
   await kindOfWork.selectOption("letters-and-teaching");
   await expect(page.getByText("Transmitting competence and text", { exact: false })).toBeVisible();
@@ -102,6 +111,7 @@ test("Chargen explains a Profession before it exposes acquisition", async ({ pag
   for (const label of FORBIDDEN_LABELS) expect(stepText).not.toContain(label);
 
   // Step 6 purchases over the same structure: the same Learning Groups, the same words.
+  await gotoChargenStep(page, "6. Skill allocation");
   const schooling = page.locator("section").filter({ hasText: SCHOOLING }).last();
   const speech = page.locator("section").filter({ hasText: SPEECH }).last();
   await expect(schooling.getByText(`What ${SCHOOLING} teaches`)).toBeVisible();
@@ -125,6 +135,7 @@ test("Chargen explains a Profession before it exposes acquisition", async ({ pag
   await expect(ordinaryPoints).toContainText("Allocated to training");
 
   // The final review screen carries none of the retired vocabulary either.
+  await gotoChargenStep(page, "10. Review summary");
   const review = page
     .locator("section")
     .filter({ has: page.getByRole("heading", { name: "10. Review summary", exact: true }) })

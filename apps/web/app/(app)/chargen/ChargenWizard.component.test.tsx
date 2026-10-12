@@ -62,7 +62,7 @@ describe("ChargenWizard component", () => {
     await user.click(screen.getByRole("button", { name: "Roll all dice" }));
 
     await waitFor(() => {
-      expect(screen.getByText("1. Stats")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
     });
   }, 15_000);
 
@@ -94,15 +94,79 @@ describe("ChargenWizard component", () => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
     });
 
+    // Only the active step is rendered, so the stat adjustment panel on step 2 has to be opened.
+    await user.click(screen.getByRole("button", { name: "2. Resolve stats" }));
     expect(screen.queryByText("Swap")).toBeNull();
 
+    await user.click(screen.getByRole("button", { name: "1. Stats" }));
     const firstProfile = screen.getAllByRole("radio")[0]!;
     await user.click(firstProfile);
+    await user.click(screen.getByRole("button", { name: "2. Resolve stats" }));
 
     await waitFor(() => {
       expect(screen.getByText("Swap")).toBeInTheDocument();
     });
   }, 15_000);
+
+  it("renders only the active step and keeps entered values across step navigation", async () => {
+    const ChargenWizard = await importWizard();
+    const user = userEvent.setup();
+
+    render(<ChargenWizard />);
+
+    await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
+    await user.click(screen.getByRole("button", { name: "Roll all dice" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
+    });
+    // Only the active step is mounted: no later step heading is in the document.
+    expect(screen.queryByRole("heading", { name: "2. Resolve stats" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "11. Finalize character" }),
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+    });
+    const firstProfile = screen.getAllByRole("radio")[0]! as HTMLInputElement;
+    const selectedProfileLabel =
+      firstProfile.closest("label")?.querySelector("strong")?.textContent ?? "";
+    expect(selectedProfileLabel).not.toBe("");
+    await user.click(firstProfile);
+    // Selecting a profile collapses the option list into the selected-profile card.
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Expand stats" }).length).toBeGreaterThan(0);
+    });
+
+    // Enter a value on the last step, navigate to the first step, and come back.
+    await user.click(screen.getByRole("button", { name: "11. Finalize character" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "11. Finalize character" })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: "1. Stats" })).not.toBeInTheDocument();
+
+    const nameField = screen.getByLabelText("Character name");
+    await user.type(nameField, "Navigation survivor");
+    expect((nameField as HTMLInputElement).value).toBe("Navigation survivor");
+
+    await user.click(screen.getByRole("button", { name: "1. Stats" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
+    });
+    // The rolled profile selected before navigating is still selected.
+    expect(screen.getAllByRole("button", { name: "Expand stats" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(selectedProfileLabel).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "11. Finalize character" }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "11. Finalize character" })).toBeInTheDocument();
+    });
+    // The typed name survived leaving and re-entering the step.
+    expect((screen.getByLabelText("Character name") as HTMLInputElement).value).toBe(
+      "Navigation survivor",
+    );
+  }, 20_000);
 
   it("waits for an explicit Resume and restores the saved profile", async () => {
     const profiles = generateProfiles({ ruleSet: DEFAULT_CHARGEN_RULE_SET });
@@ -121,12 +185,12 @@ describe("ChargenWizard component", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Resume saved Character" })).toBeInTheDocument();
     });
-    expect(screen.queryByText("1. Stats")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "1. Stats" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Resume saved Character" }));
 
     await waitFor(() => {
-      expect(screen.getByText("1. Stats")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
       expect(
         screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked),
       ).toBe(true);
@@ -151,11 +215,11 @@ describe("ChargenWizard component", () => {
     expect(screen.getAllByText("Historical synthetic draft")).not.toHaveLength(0);
 
     await user.click(screen.getByRole("button", { name: "Create new Character" }));
-    expect(screen.queryByText("1. Stats")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "1. Stats" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Replace draft and roll" }));
 
     await waitFor(() => {
-      expect(screen.getByText("1. Stats")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
     });
   }, 15_000);
 });

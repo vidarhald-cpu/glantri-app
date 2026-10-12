@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import { getApprovedV2RuntimeContent } from "@glantri/content";
 
+import { gotoChargenStep } from "./chargen-step-navigation";
+
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const PASSWORD = "Disposable-Chargen-230";
 
@@ -53,9 +55,13 @@ async function chargenDraftOwners(page: Page): Promise<string[]> {
 
 async function completeAndFinalizeCharacter(page: Page) {
   await page.locator('input[name="profile"]').first().click();
+  await gotoChargenStep(page, "2. Resolve stats");
   await expect(page.getByRole("button", { name: "Swap", exact: true })).toBeVisible();
+  await gotoChargenStep(page, "3. Choose civilization");
   await page.getByRole("radio", { name: /Scythians/ }).click();
+  await gotoChargenStep(page, "5. Choose profession");
   await page.getByRole("radio", { name: /Courier and Messenger/ }).click();
+  await gotoChargenStep(page, "6. Skill allocation");
   await expect(
     page.getByRole("heading", { name: "Choose your Profession core route", exact: true }),
   ).toBeVisible();
@@ -91,6 +97,7 @@ async function completeAndFinalizeCharacter(page: Page) {
   await page.getByLabel("Show all blocked rows").check();
   await page.getByLabel("Search specializations").fill("Fencing");
   await page.getByRole("button", { name: "Add Fencing", exact: true }).click();
+  await gotoChargenStep(page, "11. Finalize character");
   await page.getByLabel("Character name", { exact: true }).fill("Account A finalized");
 
   const response = page.waitForResponse(
@@ -114,6 +121,7 @@ test("Chargen drafts stay account-scoped on one browser origin", async ({ page }
 
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
+  await gotoChargenStep(page, "11. Finalize character");
   await page.getByLabel("Character name", { exact: true }).fill("Account A draft");
   await expect.poll(() => chargenDraftOwners(page)).toEqual([accountA.id]);
 
@@ -123,6 +131,7 @@ test("Chargen drafts stay account-scoped on one browser origin", async ({ page }
   await expect(page.getByRole("button", { name: "Roll all dice", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Resume saved Character" })).toHaveCount(0);
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
+  await gotoChargenStep(page, "11. Finalize character");
   await page.getByLabel("Character name", { exact: true }).fill("Account B draft");
   await expect.poll(() => chargenDraftOwners(page)).toEqual([accountA.id, accountB.id].sort());
 
@@ -132,6 +141,7 @@ test("Chargen drafts stay account-scoped on one browser origin", async ({ page }
   await expect(page.getByRole("button", { name: "Resume saved Character" })).toBeVisible();
   await expect(page.getByText("1. Stats")).toHaveCount(0);
   await page.getByRole("button", { name: "Resume saved Character" }).click();
+  await gotoChargenStep(page, "11. Finalize character");
   await expect(page.getByLabel("Character name", { exact: true })).toHaveValue("Account A draft");
 
   await logout(page);
@@ -142,6 +152,7 @@ test("Chargen drafts stay account-scoped on one browser origin", async ({ page }
   await page.getByRole("button", { name: "Keep saved draft" }).click();
   await expect(page.getByRole("button", { name: "Resume saved Character" })).toBeVisible();
   await page.getByRole("button", { name: "Resume saved Character" }).click();
+  await gotoChargenStep(page, "11. Finalize character");
   await expect(page.getByLabel("Character name", { exact: true })).toHaveValue("Account B draft");
 
   await logout(page);
@@ -161,5 +172,6 @@ test("Chargen drafts stay account-scoped on one browser origin", async ({ page }
   await login(page, accountBEmail);
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Resume saved Character" }).click();
+  await gotoChargenStep(page, "11. Finalize character");
   await expect(page.getByLabel("Character name", { exact: true })).toHaveValue("Account B draft");
 });
