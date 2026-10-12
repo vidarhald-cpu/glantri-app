@@ -5683,6 +5683,10 @@ export default function ScenarioPlayerCombatPageContent({
                       />
                       <PlayerCombatAttackSourceSelector
                         controlsDisabled={declarationControlsDisabled}
+                        // Without an empty state the whole row disappears for a character with no
+                        // ready weapon — the one state where naming the attack source explains
+                        // most, and the state #575 was filed about.
+                        emptyState="No ready weapon can be declared as an attack source."
                         onChange={(attackSourceId) => {
                           markCombatDeclarationDraftDirty();
                           setPhaseAttackSourceDrafts((current) => ({

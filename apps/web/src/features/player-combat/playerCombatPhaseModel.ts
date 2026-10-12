@@ -215,6 +215,13 @@ export interface PlayerCombatLoadoutSummary {
   offHandParryItemLabel: string;
   passiveInitiative: number;
   reference: PlayerCombatLoadoutReference | null;
+  /**
+   * Whether `reference` was resolved by the unarmed Double Attack execution fallback rather than
+   * from a weapon the participant holds or a source the player chose (#575/#583). Execution reads
+   * the reference regardless; the declaration path treats a reference so marked as no source at
+   * all, so unarmed is never declared by default.
+   */
+  referenceUsedUnarmedExecutionFallback: boolean;
   selectedAttackModeId?: string;
   selectedAttackModeUsedFallback: boolean;
   selectedAttackSourceId?: string;
@@ -610,8 +617,16 @@ const unarmedAttackSourceTemplateIds = new Set(
 export function buildCombatAttackSourceRef(input: {
   phaseKey: PlayerCombatPhaseKey;
   reference: PlayerCombatLoadoutReference | null;
+  /**
+   * Whether `reference` came from the unarmed Double Attack execution fallback (#575/#583). That
+   * fallback exists so an already-declared unarmed attack stays rollable; it is not a choice the
+   * player made, so a declaration is never built from it. The phase is reported as missing a
+   * source instead, and the player is asked to pick one.
+   */
+  referenceUsedUnarmedExecutionFallback?: boolean;
   unarmedTemplateId: string;
 }): CombatAttackSourceRef | undefined {
+  if (input.referenceUsedUnarmedExecutionFallback) return undefined;
   const opportunitySlot = input.phaseKey === "phase1" ? "attack_1" : "attack_2";
   const isExplicitUnarmedSelection =
     !input.reference?.sourceItemId &&
@@ -673,7 +688,8 @@ export function buildCombatDeclarationAttackSelection(input: {
   phaseContexts: CombatRoundPhaseContexts;
   phaseLoadoutSummaries: Record<
     PlayerCombatPhaseKey,
-    Pick<PlayerCombatLoadoutSummary, "reference" | "selectedAttackModeId">
+    Pick<PlayerCombatLoadoutSummary, "reference" | "selectedAttackModeId"> &
+      Partial<Pick<PlayerCombatLoadoutSummary, "referenceUsedUnarmedExecutionFallback">>
   >;
   secondaryActionId?: string;
 }): CombatDeclarationAttackSelection {
@@ -695,6 +711,8 @@ export function buildCombatDeclarationAttackSelection(input: {
     const source = buildCombatAttackSourceRef({
       phaseKey,
       reference: input.phaseLoadoutSummaries[phaseKey].reference,
+      referenceUsedUnarmedExecutionFallback:
+        input.phaseLoadoutSummaries[phaseKey].referenceUsedUnarmedExecutionFallback,
       unarmedTemplateId:
         phaseKey === "phase1" ? "virtual-weapon-template-punch" : "virtual-weapon-template-kick",
     });
@@ -817,6 +835,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       offHandParryItemLabel,
       passiveInitiative: 0,
       reference: null,
+      referenceUsedUnarmedExecutionFallback: false,
       selectedAttackModeUsedFallback: false,
     };
   }
@@ -847,7 +866,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     return itemId ? [{ fieldId, itemId }] : [];
   });
   const preferredItemIds = preferredItemSources.map(({ itemId }) => itemId);
-  const preferredWeaponLabels =
+  const explicitWeaponLabels =
     selectedAttackSource?.sourceKind === "unarmed"
       ? PLAYER_COMBAT_UNARMED_ATTACK_SOURCES.filter(
           (source) => source.templateId === selectedAttackSource.templateId,
@@ -855,6 +874,26 @@ export function buildPlayerCombatLoadoutSummary(input: {
       : preferredFieldIds
           .map((fieldId) => loadoutFieldDisplayMap.get(fieldId)?.valueLabel)
           .filter((value): value is string => Boolean(value) && value !== "None");
+  // The unarmed Double Attack reference is resolved for EXECUTION only. An unequipped participant
+  // can hold a Double Attack declaration the domain itself built with unarmed opportunities
+  // (`buildCombatRoundDeclaredAttackOpportunities`), and that already-declared attack must stay
+  // rollable: with no reference row there are no attack stats, and the roll gate on both the
+  // player and the GM surface closes permanently. #586 defers the unarmed-rules question rather
+  // than authorising the removal of unarmed execution, so this keeps the pre-#575 reference
+  // resolution exactly as it was.
+  //
+  // It is NOT a declaration-time default. The summary reports it through
+  // `referenceUsedUnarmedExecutionFallback`, and `buildCombatAttackSourceRef` refuses to build a
+  // source from a reference so marked, so the phase lands in `missingSourcePhases` and the
+  // declaration stays blocked with a visible message instead of quietly declaring unarmed.
+  const referenceUsedUnarmedExecutionFallback =
+    input.actionId === "double_attack" &&
+    input.allowUnarmedFallback !== false &&
+    !selectedAttackSource &&
+    explicitWeaponLabels.length === 0;
+  const preferredWeaponLabels = referenceUsedUnarmedExecutionFallback
+    ? [input.phaseKey === "phase2" ? "Kick" : "Punch"]
+    : explicitWeaponLabels;
   if (input.allowUnarmedFallback === false && preferredItemIds.length === 0) {
     return {
       attackStats: null,
@@ -864,6 +903,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       offHandParryItemLabel,
       passiveInitiative: 0,
       reference: null,
+      referenceUsedUnarmedExecutionFallback,
       selectedAttackModeUsedFallback: false,
     };
   }
@@ -938,6 +978,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
         offHandParryItemLabel,
         passiveInitiative: 0,
         reference: null,
+        referenceUsedUnarmedExecutionFallback,
         selectedAttackModeUsedFallback: false,
       };
     }
@@ -977,6 +1018,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       reference,
       attackModeOptions: [],
       attackSourceOptions,
+      referenceUsedUnarmedExecutionFallback,
       selectedAttackModeUsedFallback: false,
     };
   }
@@ -1006,6 +1048,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
       offHandParryItemLabel,
       passiveInitiative: 0,
       reference: null,
+      referenceUsedUnarmedExecutionFallback,
       selectedAttackModeUsedFallback: false,
     };
   }
@@ -1210,15 +1253,23 @@ export function buildPlayerCombatLoadoutSummary(input: {
     offHandParryItemLabel,
     passiveInitiative: parsePassiveInitiative(reference.initiative),
     reference,
+    referenceUsedUnarmedExecutionFallback,
     selectedAttackModeId: modeResolution.mode?.id,
     selectedAttackModeUsedFallback: modeResolution.usedFallback,
     // What the declaration will actually use, whether the player chose it or it came from the
     // held weapon. The control renders this, so a preselection is never invisible (#575).
-    selectedAttackSourceId: buildCombatAttackWeaponSourceId({
-      itemId: reference.sourceItemId,
-      sourceKind: reference.sourceItemId ? "weapon" : "unarmed",
-      weaponTemplateId: reference.sourceTemplateId,
-    }),
+    //
+    // The unarmed execution fallback is deliberately not reported here: it resolved a reference so
+    // an already-declared unarmed attack stays rollable, not because anyone chose unarmed. Showing
+    // it as the selected source would put a silent unarmed default back on the declaration
+    // control, which is exactly what #575 ruled out (#583).
+    selectedAttackSourceId: referenceUsedUnarmedExecutionFallback
+      ? undefined
+      : buildCombatAttackWeaponSourceId({
+          itemId: reference.sourceItemId,
+          sourceKind: reference.sourceItemId ? "weapon" : "unarmed",
+          weaponTemplateId: reference.sourceTemplateId,
+        }),
   };
 }
 

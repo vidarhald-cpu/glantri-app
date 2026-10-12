@@ -2218,4 +2218,151 @@ describe("explicit player attack source selection (#575)", () => {
       templateId: "weapon-template-club",
     });
   });
+
+  // #583 repair of #575. The ruling forbade silently DEFAULTING to unarmed at declaration time.
+  // It did not authorise removing unarmed EXECUTION, and #586 defers the unarmed-rules question
+  // rather than settling it. These pin both halves of that line at once, on both surfaces: no
+  // existing test covered the execution half, which is why its removal reached `dev`.
+  describe("unarmed attack execution (#583)", () => {
+    // As the catalogue authors them today, so the brawling rows carry no legal attack mode and
+    // unarmed is not offered as a choice anywhere below. This is the state the regression broke.
+    const unequippedLoadoutModel = () =>
+      buildLoadoutModel({ fields: [], rows: unarmedRows, weaponRows: unarmedWeaponRows });
+    const unequippedDoubleAttackSummaries = (
+      overrides: Partial<Parameters<typeof buildPlayerCombatLoadoutSummary>[0]> = {},
+    ) => {
+      const loadoutModel = unequippedLoadoutModel();
+      const build = (phaseKey: "phase1" | "phase2") =>
+        buildPlayerCombatLoadoutSummary({
+          actionId: "double_attack",
+          loadoutModel,
+          phaseKey,
+          secondaryActionId: "",
+          ...overrides,
+        });
+      return { phase1: build("phase1"), phase2: build("phase2") };
+    };
+
+    it("keeps an already-declared unarmed Double Attack rollable on the player surface", () => {
+      const summaries = unequippedDoubleAttackSummaries();
+
+      // The roll gate on the player surface is `!attackStats`, so these two assertions are the
+      // "Roll attack" button being enabled for an unequipped participant.
+      expect(summaries.phase1.attackStats).not.toBeNull();
+      expect(summaries.phase2.attackStats).not.toBeNull();
+      expect(summaries.phase1.attackStats?.weaponName).toBe("Punch");
+      expect(summaries.phase2.attackStats?.weaponName).toBe("Kick");
+      expect(summaries.phase1.reference?.selectedWeapon).toBe("Punch");
+      expect(summaries.phase2.reference?.selectedWeapon).toBe("Kick");
+      expect(summaries.phase1.referenceUsedUnarmedExecutionFallback).toBe(true);
+      expect(summaries.phase2.referenceUsedUnarmedExecutionFallback).toBe(true);
+    });
+
+    it("keeps the same declared unarmed attack rollable on the GM surface", () => {
+      // The GM's Combat Round Manager passes no selected source and derives
+      // `allowUnarmedFallback` from the inspected participant's equipment status, so an unarmed
+      // participant reaches the shared helper with exactly these inputs.
+      const summaries = unequippedDoubleAttackSummaries({
+        allowUnarmedFallback: true,
+        includeSourceProvenance: true,
+      });
+
+      expect(summaries.phase1.attackStats).not.toBeNull();
+      expect(summaries.phase2.attackStats).not.toBeNull();
+      expect(summaries.phase1.attackStats?.weaponName).toBe("Punch");
+      expect(summaries.phase2.attackStats?.weaponName).toBe("Kick");
+
+      // No GM file changed when the fallback was removed, and the GM surface broke anyway,
+      // because it gates its roll on the same `attackStats` from the same helper. Pin that
+      // coupling so a future change to one surface cannot silently break the other.
+      const gmPanel = readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          "../combat-round-manager/CombatRoundManagerPanel.tsx",
+        ),
+        "utf8",
+      );
+      expect(gmPanel).toContain("buildPlayerCombatLoadoutSummary({");
+      expect(gmPanel).toContain(
+        '!inspectorPhaseLoadoutSummaries[inspectorCurrentAttackPhase ?? "phase1"].attackStats',
+      );
+      expect(gmPanel).not.toContain("allowUnarmedFallback: false");
+    });
+
+    it("still refuses to declare unarmed for a player who chose nothing", () => {
+      const summaries = unequippedDoubleAttackSummaries();
+
+      // Nothing is preselected, so the control shows no unarmed choice...
+      expect(summaries.phase1.selectedAttackSourceId).toBeUndefined();
+      expect(summaries.phase2.selectedAttackSourceId).toBeUndefined();
+      expect(summaries.phase1.attackSourceOptions).toEqual([]);
+
+      // ...and the declaration is reported as missing a source rather than quietly submitting
+      // unarmed, even though execution resolved a reference from the same summary.
+      const selection = buildCombatDeclarationAttackSelection({
+        actionId: "double_attack",
+        phaseContexts: emptyPhaseContexts(),
+        phaseLoadoutSummaries: summaries,
+        secondaryActionId: "",
+      });
+      expect(selection.phaseAttackSources).toEqual({});
+      expect(selection.missingSourcePhases).toEqual(["phase1", "phase2"]);
+      expect(
+        getCombatDeclarationAttackSourceRequiredMessage(selection.missingSourcePhases, {
+          selectableSourceCount: 0,
+        }),
+      ).toBe(
+        "No attack source is available for Phase 1 and Phase 2. Ready a weapon, or ask the GM to refresh your scenario equipment.",
+      );
+    });
+
+    it("does not let the execution reference stand in for a declaration source", () => {
+      const summaries = unequippedDoubleAttackSummaries();
+
+      // The reference itself names Punch, so only the explicit marker separates execution from
+      // declaration. Without the marker this would serialize an unarmed source nobody chose.
+      expect(
+        buildCombatAttackSourceRef({
+          phaseKey: "phase1",
+          reference: summaries.phase1.reference,
+          referenceUsedUnarmedExecutionFallback: true,
+          unarmedTemplateId: "virtual-weapon-template-punch",
+        }),
+      ).toBeUndefined();
+      expect(
+        buildCombatAttackSourceRef({
+          phaseKey: "phase1",
+          reference: summaries.phase1.reference,
+          unarmedTemplateId: "virtual-weapon-template-punch",
+        }),
+      ).toEqual({
+        attackModeId: "mode-1",
+        opportunitySlot: "attack_1",
+        slot: "virtual",
+        sourceKind: "unarmed",
+        templateId: "virtual-weapon-template-punch",
+      });
+    });
+
+    it("keeps the unarmed exclusion computed, so #586 still self-heals it", () => {
+      // Identical fixtures but for `canonicalMeleeMode`: nothing about the execution fallback
+      // hard-codes the exclusion, so authoring the rules is still all it takes to offer unarmed.
+      const declarable = buildPlayerCombatLoadoutSummary({
+        actionId: "double_attack",
+        loadoutModel: buildLoadoutModel({
+          fields: [],
+          rows: unarmedRows,
+          weaponRows: declarableUnarmedWeaponRows,
+        }),
+        phaseKey: "phase1",
+        secondaryActionId: "",
+      });
+
+      expect(declarable.attackSourceOptions.map((option) => option.id)).toEqual([
+        "unarmed:virtual-weapon-template-punch",
+        "unarmed:virtual-weapon-template-kick",
+      ]);
+      expect(unequippedDoubleAttackSummaries().phase1.attackSourceOptions).toEqual([]);
+    });
+  });
 });
