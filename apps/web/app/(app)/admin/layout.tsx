@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
 
-import { RequireAuthenticatedUser } from "@/lib/auth/RouteAccessGate";
+import { RequireRole } from "@/lib/auth/RouteAccessGate";
 import AdminLayoutShell from "./AdminLayoutShell";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <RequireAuthenticatedUser
-      message="Sign in to view the admin reference pages and editing tools."
-      title="Login required"
+    <RequireRole
+      allowedRoles={["admin", "game_master"]}
+      message="The admin reference pages and editing tools are limited to Admin and GM accounts."
+      title="Admin access required"
     >
       <AdminLayoutShell>{children}</AdminLayoutShell>
-    </RequireAuthenticatedUser>
+    </RequireRole>
   );
 }

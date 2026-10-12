@@ -12,6 +12,7 @@ import {
   buildSessionCookie,
   getAuthenticatedUser,
   getSessionTokenFromRequest,
+  requireAdminUser,
   requireAuthenticatedUser,
   requireStrictAdminUser,
 } from "../lib/sessionAuth";
@@ -96,7 +97,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/users", async (request, reply) => {
-    const user = await requireAuthenticatedUser(request, reply, authService);
+    const user = await requireAdminUser(request, reply, authService);
 
     if (!user) {
       return;
