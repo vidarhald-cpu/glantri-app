@@ -47,6 +47,34 @@ export async function gotoChargenStep(page: Page, label: ChargenStepLabel): Prom
 }
 
 /**
+ * The three Chargen chooser sections that now arrive collapsed (Forgejo #577).
+ *
+ * Step 1, step 3 and step 5 used to render their full chooser on first arrival. They now show a
+ * collapsed section with an always-visible `Expand <chooser>` control, so a spec that selects from
+ * one of them has to reveal it first. This adds navigation only: no assertion changes, and the
+ * revealed chooser is the same chooser, with the same controls, filters and rows.
+ */
+export const chargenChoosers = ["stats", "civilization", "profession"] as const;
+
+export type ChargenChooser = (typeof chargenChoosers)[number];
+
+/**
+ * Reveal one collapsed chooser on the active step and wait until it is open, so a following
+ * selection can never race the reveal.
+ *
+ * `.first()` is deliberate: a collapsed Stats section with a profile already chosen carries both
+ * the header toggle and the summary card's own `Expand stats` control, and either one opens it.
+ */
+export async function expandChargenChooser(page: Page, chooser: ChargenChooser): Promise<void> {
+  const expand = page.getByRole("button", { exact: true, name: `Expand ${chooser}` }).first();
+  await expect(expand).toBeVisible();
+  await expand.click();
+  await expect(
+    page.getByRole("button", { exact: true, name: `Collapse ${chooser}` }),
+  ).toBeVisible();
+}
+
+/**
  * Run one set of assertions against every Chargen step in turn.
  *
  * A page-wide `toHaveCount(0)` used to cover the whole wizard because every step was mounted

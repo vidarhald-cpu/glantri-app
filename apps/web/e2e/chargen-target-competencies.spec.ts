@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { getApprovedV2RuntimeContent } from "@glantri/content";
 
-import { gotoChargenStep } from "./chargen-step-navigation";
+import { expandChargenChooser, gotoChargenStep } from "./chargen-step-navigation";
 
 // One bounded new Slice2 journey; do not retry the known profile prerequisite failure.
 test("target competencies through existing Chargen and authoritative persistence", async ({
@@ -19,6 +19,7 @@ test("target competencies through existing Chargen and authoritative persistence
   expect(registration.status()).toBe(200);
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
+  await expandChargenChooser(page, "stats");
   await page.locator('input[name="profile"]').first().click();
   await gotoChargenStep(page, "2. Resolve stats");
   try {
@@ -35,8 +36,10 @@ test("target competencies through existing Chargen and authoritative persistence
     );
   }
   await gotoChargenStep(page, "3. Choose civilization");
+  await expandChargenChooser(page, "civilization");
   await page.getByRole("radio", { name: /Scythians/ }).click();
   await gotoChargenStep(page, "5. Choose profession");
+  await expandChargenChooser(page, "profession");
   await page.getByRole("radio", { name: /Courier and Messenger/ }).click();
   await gotoChargenStep(page, "6. Skill allocation");
   await expect(

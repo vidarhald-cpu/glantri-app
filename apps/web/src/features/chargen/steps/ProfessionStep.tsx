@@ -34,6 +34,11 @@ const panelStyle = {
   padding: "1rem",
 } as const;
 
+/* The collapsed section's own surface: the step's existing panel, with the muted text colour the
+   step already uses for secondary prose. Same idiom as `StatsStep.module.css`'s `.placeholder`
+   (#577). */
+const placeholderStyle = { ...panelStyle, color: "#5e5a50" } as const;
+
 /**
  * Step 5 — choose a Profession, and understand it before any mechanics appear.
  *
@@ -73,7 +78,23 @@ export function ProfessionStep({
         opacity: selectedSocietyAccess ? 1 : 0.6,
       }}
     >
-      <h2 style={{ margin: 0 }}>5. Choose profession</h2>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "0.75rem",
+          justifyContent: "space-between",
+        }}
+      >
+        <h2 style={{ margin: 0 }}>5. Choose profession</h2>
+        {/* Always visible whenever there is anything to choose, like the Stats step's own toggle,
+            so a collapsed section is never a dead end. It only reveals or hides. */}
+        {availableProfessions.length > 0 ? (
+          <button onClick={() => setShowProfessionChooser((current) => !current)} type="button">
+            {showProfessionChooser ? "Collapse profession" : "Expand profession"}
+          </button>
+        ) : null}
+      </div>
       <div style={{ fontSize: "0.95rem" }}>
         A Profession is the working life your Character has been trained into. Read what it does and
         what it can teach, then choose. Choosing one grants no ranks and spends no points.
@@ -131,7 +152,7 @@ export function ProfessionStep({
                   />
                 ) : null}
               </section>
-            ) : (
+            ) : showProfessionChooser ? (
               <>
                 <div
                   style={{
@@ -272,6 +293,10 @@ export function ProfessionStep({
                   </div>
                 )}
               </>
+            ) : (
+              <div style={placeholderStyle}>
+                Expand profession to review the available professions.
+              </div>
             )}
           </>
         ) : (
