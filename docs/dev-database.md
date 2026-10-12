@@ -11,11 +11,15 @@ The normal database at `localhost:5432/glantri` is **protected shared user state
 
 ### Normal primary checkout
 
-The primary checkout may use the protected shared database through its own `.env`:
+The checked-in `.env.example` defaults `DATABASE_URL` to a **disposable scratch database**, `glantri_local_scratch_test` on `localhost:5432`, never to the protected database. A developer who copies `.env.example` to `.env` and runs `pnpm db:up && pnpm db:migrate` is connected to that scratch database (`db:migrate` creates it if absent) and cannot reach `glantri` through it. It shares the local PostgreSQL server with the protected database but is a separate database.
+
+Pointing at the protected database is a deliberate, conscious operator act, never a default. The primary checkout may do so only through its own uncommitted `.env`, edited by the operator:
 
 ```text
 DATABASE_URL=postgresql://postgres:<password>@localhost:5432/glantri
 ```
+
+**Migration note for existing operators.** A `.env` copied from an earlier `.env.example` still points at the protected database; this change does not touch it and nothing rewrites it for you. Review your own `.env` and decide deliberately: keep the protected target (take `pnpm db:backup` first), or change it to the scratch database above.
 
 Root database commands print the sanitized host, port, database name, and `protected-shared-user-state` marker before connecting. Do not copy this `.env` into a linked Builder/QA worktree.
 
