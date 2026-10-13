@@ -33,7 +33,7 @@ import {
   GmRoleplayingEncounterScreen,
   PlayerRoleplayingEncounterScreen,
 } from "../RoleplayEncounterScreens";
-import { ParticipantDescriptionsSection } from "./RoleplaySections";
+import { EncounterInfoCard, ParticipantDescriptionsSection } from "./RoleplaySections";
 
 const participant: EncounterParticipant = {
   declaration: {
@@ -320,5 +320,16 @@ describe("Roleplay participant description drafts", () => {
     );
 
     expect(shortDescription.value).toBe("Later server update");
+  });
+});
+
+describe("Encounter info card status label", () => {
+  afterEach(() => cleanup());
+
+  it("shows the decided lifecycle label, never the raw enum", () => {
+    render(<EncounterInfoCard encounter={{ ...statCheckEncounter(), status: "completed" }} />);
+
+    expect(screen.getByText("Status: Closed")).toBeTruthy();
+    expect(screen.queryByText("Status: completed")).toBeNull();
   });
 });

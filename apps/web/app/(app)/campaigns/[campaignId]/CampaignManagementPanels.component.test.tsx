@@ -175,6 +175,11 @@ describe("Campaign management panels", () => {
     });
     expect(screen.getByText("Western Gate")).toBeInTheDocument();
     expect(screen.getByText("Council Chamber")).toBeInTheDocument();
+    // The `live` lifecycle value is shown with the product term "Active" (#578), never "Live".
+    expect(within(currentContext).getByText("Western Gate").parentElement).toHaveTextContent(
+      "Active",
+    );
+    expect(within(currentContext).queryByText("Live")).not.toBeInTheDocument();
     expect(screen.getByText(/Gate Skirmish.*Combat active/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Combat" })).toHaveAttribute(
       "href",

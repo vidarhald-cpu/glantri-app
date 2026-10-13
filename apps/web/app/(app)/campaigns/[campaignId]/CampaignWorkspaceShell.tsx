@@ -56,7 +56,7 @@ import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import CampaignWorkspaceLoadErrorState from "./CampaignWorkspaceLoadErrorState";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
 import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
-import { formatScenarioStatus } from "./scenarios/[scenarioId]/components/scenarioStatusLabel";
+import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
 import ScenarioPlayerPageContent from "./scenarios/[scenarioId]/player/ScenarioPlayerPageContent";
 import ScenarioPlayerCombatPageContent from "./scenarios/[scenarioId]/player/combat/ScenarioPlayerCombatPageContent";

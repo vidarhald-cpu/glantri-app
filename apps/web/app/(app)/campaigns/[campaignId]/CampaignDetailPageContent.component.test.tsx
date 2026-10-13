@@ -145,6 +145,34 @@ describe("CampaignDetailPageContent roster membership interaction", () => {
     );
   }, 10_000);
 
+  it("labels a live Scenario Active in the table row, agreeing with the lifecycle filter (#578)", async () => {
+    mocks.loadCampaignRoster.mockResolvedValue([rosterEntry]);
+    mocks.loadCampaignScenarios.mockResolvedValue([
+      {
+        campaignId: "campaign-1",
+        createdAt: "2026-05-01T00:00:00.000Z",
+        description: "",
+        id: "scenario-live",
+        name: "Western Gate",
+        status: "live",
+        updatedAt: "2026-05-01T00:00:00.000Z",
+      },
+    ] as unknown as Scenario[]);
+    const CampaignDetailPageContent = await importCampaignDetailPageContent();
+
+    render(<CampaignDetailPageContent campaignId="campaign-1" />);
+
+    const row = (await screen.findByText("Western Gate")).closest("tr");
+    expect(row).not.toBeNull();
+    expect(row).toHaveTextContent("Active");
+    expect(row).not.toHaveTextContent("Live");
+    const filter = screen.getByRole("combobox", { name: "Scenario lifecycle filter" });
+    const activeOption = Array.from(filter.querySelectorAll("option")).find(
+      (option) => option.textContent === "Active",
+    );
+    expect(activeOption).toHaveValue("live");
+  }, 10_000);
+
   it("lets a draft Campaign be activated with GM ownership", async () => {
     const CampaignDetailPageContent = await importCampaignDetailPageContent();
     const user = userEvent.setup();
