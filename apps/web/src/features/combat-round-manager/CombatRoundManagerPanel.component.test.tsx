@@ -48,6 +48,12 @@ const mocks = vi.hoisted(() => ({
   rollObservation: vi.fn(),
   setCombatExperienceDifficulty: vi.fn(),
   submitDeclaration: vi.fn(),
+  /**
+   * #591: when true, `buildPlayerCombatLoadoutSummary` is served the unequipped projection — the
+   * "No ready weapon" stub reference and no preselected source — so a GM-proxied declaration
+   * resolves no attack source until the GM explicitly chooses one.
+   */
+  unequippedLoadout: { value: false },
 }));
 
 vi.mock("@/lib/api/encounterClient", async (importOriginal) => {
@@ -193,12 +199,73 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
     sourceSlot: input.slot,
     sourceTemplateId: "weapon-template-longsword",
   });
+  /**
+   * The reference the real helper resolves for a participant holding no ready weapon: the
+   * "No ready weapon" stub, which names no source item, template, or attack mode, so
+   * `buildCombatAttackSourceRef` resolves nothing for the phase (#591).
+   */
+  const noReadyWeaponReference = () => ({
+    am: "—",
+    am2: "—",
+    attackMode: "—",
+    attackMode2: "—",
+    combinedDb: "—",
+    combinedDm: "—",
+    combinedParry: "—",
+    combinedSourceName: "—",
+    crit: "—",
+    crit2: "—",
+    damageClass: "—",
+    damageClass2: "—",
+    db: "—",
+    dmb: "—",
+    dmb2: "—",
+    dm: "—",
+    initiative: "—",
+    ob: "—",
+    ob2: "—",
+    parry: "—",
+    secondCrit: "—",
+    selectedWeapon: "No ready weapon",
+  });
+  /** Only the brawling rows are offerable to an unequipped participant (#590). */
+  const unequippedAttackSourceOptions = attackSourceOptions.filter(
+    (option) => option.sourceKind === "unarmed",
+  );
 
   return {
     ...actual,
     buildPlayerCombatLoadoutSummary: vi.fn(
       (input: Parameters<typeof actual.buildPlayerCombatLoadoutSummary>[0]) => {
         const phase2 = input.actionId === "double_attack" && input.phaseKey === "phase2";
+        if (mocks.unequippedLoadout.value) {
+          const chosenUnarmed = unequippedAttackSourceOptions.find(
+            (option) => option.id === input.selectedAttackSourceId,
+          );
+          return {
+            attackModeOptions: chosenUnarmed
+              ? [{ allowsRepeatedRoundAttack: false, id: "mode-1", label: "Strike" }]
+              : [],
+            attackSourceOptions: unequippedAttackSourceOptions,
+            attackStats: null,
+            mainHandParryItemLabel: "Unarmed",
+            offHandParryItemLabel: "Unarmed",
+            passiveInitiative: 0,
+            // Nothing is preselected: an unequipped participant has no ready weapon to default to,
+            // and unarmed is never implicit (#583).
+            reference: chosenUnarmed
+              ? unarmedReference({
+                  templateId: chosenUnarmed.templateId!,
+                  weapon:
+                    chosenUnarmed.templateId === "virtual-weapon-template-kick" ? "Kick" : "Punch",
+                })
+              : noReadyWeaponReference(),
+            referenceUsedUnarmedExecutionFallback: false,
+            selectedAttackModeId: chosenUnarmed ? "mode-1" : undefined,
+            selectedAttackModeUsedFallback: false,
+            selectedAttackSourceId: chosenUnarmed?.id,
+          };
+        }
         const selectedUnarmed = attackSourceOptions.find(
           (option) => option.sourceKind === "unarmed" && option.id === input.selectedAttackSourceId,
         );
@@ -1313,6 +1380,7 @@ describe("CriticalBleedTreatmentControls", () => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mocks.unequippedLoadout.value = false;
 });
 
 describe("CombatRoundManagerPanel defense review", () => {
@@ -2201,6 +2269,160 @@ describe("CombatRoundManagerPanel declaration form", () => {
     expect(sources.phase2.sourceKind).toBe("weapon");
     expect(sources.phase1.scenarioItemId).toBe("long-sword-primary");
     expect(sources.phase2.scenarioItemId).toBe("long-sword-secondary");
+  });
+
+  // #591: `buildCombatDeclarationAttackSelection` already reported `missingSourcePhases`, but the
+  // GM path discarded it and sent `phaseAttackSources: {}`, so the only refusal a GM saw was an
+  // API 400. These pin the client-side refusal, and that it is a refusal rather than a default.
+  describe("missing attack source", () => {
+    const unequippedParticipants = () => [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+
+    it("blocks a GM-proxied Double Attack with no chosen source and sends no request", async () => {
+      mocks.unequippedLoadout.value = true;
+      const participants = unequippedParticipants();
+
+      render(
+        <CombatRoundManagerPanel
+          encounter={buildEncounter()}
+          scenarioParticipants={participants}
+        />,
+      );
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+        target: { value: "double_attack" },
+      });
+
+      const attackSourceSelectors = await screen.findAllByRole("combobox", {
+        name: "Attack source",
+      });
+      expect(attackSourceSelectors).toHaveLength(2);
+      // Nothing is chosen, and nothing was substituted for the GM.
+      expect(attackSourceSelectors[0]).toHaveValue("");
+      expect(attackSourceSelectors[1]).toHaveValue("");
+
+      for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+        fireEvent.change(targetSelector, { target: { value: "encounter-defender" } });
+      }
+
+      fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+      expect(
+        (await screen.findAllByText("Select an attack source for Phase 1 and Phase 2.")).length,
+      ).toBeGreaterThan(0);
+      expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+    });
+
+    it("blocks a non-Double Attack action with no chosen source and names only its phase", async () => {
+      mocks.unequippedLoadout.value = true;
+      const participants = unequippedParticipants();
+
+      render(
+        <CombatRoundManagerPanel
+          encounter={buildEncounter()}
+          scenarioParticipants={participants}
+        />,
+      );
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+        target: { value: "attack_parry" },
+      });
+
+      await screen.findAllByRole("combobox", { name: "Attack source" });
+      for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+        fireEvent.change(targetSelector, { target: { value: "encounter-defender" } });
+      }
+
+      fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+      // Attack-Parry attacks in Phase 1 only, so only Phase 1 is named.
+      expect(
+        (await screen.findAllByText("Select an attack source for Phase 1.")).length,
+      ).toBeGreaterThan(0);
+      expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+    });
+
+    it("submits unchanged once the GM chooses an explicit source", async () => {
+      mocks.unequippedLoadout.value = true;
+      const encounter = buildEncounter();
+      const participants = unequippedParticipants();
+      mocks.submitDeclaration.mockResolvedValue({
+        encounter: { ...encounter, updatedAt: "2026-07-23T10:00:01.000Z" },
+        participant: participants[0],
+      });
+
+      render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+        target: { value: "double_attack" },
+      });
+
+      const attackSourceSelectors = await screen.findAllByRole("combobox", {
+        name: "Attack source",
+      });
+      fireEvent.change(attackSourceSelectors[0]!, {
+        target: { value: "unarmed:virtual-weapon-template-punch" },
+      });
+      fireEvent.change(screen.getAllByRole("combobox", { name: "Attack source" })[1]!, {
+        target: { value: "unarmed:virtual-weapon-template-kick" },
+      });
+
+      for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+        fireEvent.change(targetSelector, { target: { value: "encounter-defender" } });
+      }
+
+      fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+      await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+      expect(mocks.submitDeclaration.mock.calls[0]?.[0]).toMatchObject({
+        actionId: "double_attack",
+        phaseAttackSources: {
+          phase1: {
+            opportunitySlot: "attack_1",
+            slot: "virtual",
+            sourceKind: "unarmed",
+            templateId: "virtual-weapon-template-punch",
+          },
+          phase2: {
+            opportunitySlot: "attack_2",
+            slot: "virtual",
+            sourceKind: "unarmed",
+            templateId: "virtual-weapon-template-kick",
+          },
+        },
+      });
+    });
+
+    it("leaves the proactive-disarm validation showing its own message", async () => {
+      mocks.unequippedLoadout.value = true;
+      const participants = unequippedParticipants();
+
+      render(
+        <CombatRoundManagerPanel
+          encounter={buildEncounter()}
+          scenarioParticipants={participants}
+        />,
+      );
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+        target: { value: "disarm" },
+      });
+
+      // A proactive disarm still reports its own missing-selection problem, and still reports it
+      // first: the disarm validation is rendered before submission, and the new gate is placed
+      // after the handler's own disarm checks, so neither masks the other.
+      expect(
+        (await screen.findAllByText("Select a trapping weapon, opponent, and weapon to disarm."))
+          .length,
+      ).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+      expect(screen.queryByText(/^Select an attack source for Phase/)).not.toBeInTheDocument();
+      expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps both Movement and Weapon Feint Phase 1 free of attack presentation", async () => {

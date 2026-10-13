@@ -27,7 +27,7 @@
   --glantri-surface-muted: #f6f5ef; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:33 */
 
   /* Border */
-  --glantri-border: 1px solid #d9ddd8; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:416 */
+  --glantri-border: 1px solid #d9ddd8; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:417 */
   --glantri-border-subtle: 1px solid #e7e2d7; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:77 */
 
   /* Radius */
@@ -35,17 +35,17 @@
   --glantri-radius-inner: 10px; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:78 */
 
   /* Spacing steps */
-  --glantri-space-2xs: 0.2rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:523 */
+  --glantri-space-2xs: 0.2rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:524 */
   --glantri-space-xs: 0.35rem; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:152 */
-  --glantri-space-sm: 0.5rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:518 */
+  --glantri-space-sm: 0.5rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:519 */
   --glantri-space-md: 0.75rem; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:37 */
-  --glantri-space-lg: 1rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:419 */
+  --glantri-space-lg: 1rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:420 */
   --glantri-space-xl: 1.5rem; /* cite: apps/web/src/features/chargen/ChargenWizardExperience.module.css:4 */
 
   /* Text */
-  --glantri-text-muted: #5e5a50; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:511 */
-  --glantri-font-size-heading: 0.9rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:507 */
-  --glantri-font-size-helper: 0.85rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:512 */
+  --glantri-text-muted: #5e5a50; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:512 */
+  --glantri-font-size-heading: 0.9rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:508 */
+  --glantri-font-size-helper: 0.85rem; /* cite: apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:513 */
 }
 
 /* Panel: C panelStyle :413-420 == G .cardLight :41-48 (raised level). */
