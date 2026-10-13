@@ -4,6 +4,9 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
+import { kickTemplate, punchTemplate } from "@glantri/content/equipment";
+import { combatAttackSourceRefSchema, parseCompetencyId } from "@glantri/domain";
+
 import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerEncounter";
 
 import {
@@ -1832,9 +1835,10 @@ describe("explicit player attack source selection (#575)", () => {
     modeLabel: "Primary",
     templateId: "weapon-template-dagger",
   };
-  // The real Punch and Kick templates author no `canonicalMeleeMode`, which is what makes the
-  // mode-legality rule reject them. `canonicalMeleeMode` is passed explicitly so a test can state
-  // which case it is exercising rather than depend on the omission by accident.
+  // `canonicalMeleeMode` is passed explicitly so a test can state which case it is exercising
+  // rather than depend on an omission by accident: a mode without it is given no legal attack mode
+  // and is not declarable, a mode with it is. The real catalogue rows are built from the templates
+  // themselves by `catalogueBrawlingRows` below, so the authored field stays load-bearing.
   const brawlingRow = (input: {
     canonicalMeleeMode?: "slash" | "strike" | "thrust";
     label: string;
@@ -1880,12 +1884,16 @@ describe("explicit player attack source selection (#575)", () => {
     "—",
   ];
   const unarmedRows = [weaponModeRow("Punch", "Unarmed"), weaponModeRow("Kick", "Unarmed")];
-  /** As the catalogue actually authors them today: no canonical melee mode, so no legal mode. */
+  /**
+   * A brawling row authoring no canonical melee mode, so the mode-legality rule gives it no legal
+   * attack mode. This is no longer the catalogue's state (#586/#590 ruling); it is kept because the
+   * exclusion must stay computed from mode legality rather than hard-coded against brawling.
+   */
   const unarmedWeaponRows = [
     brawlingRow({ label: "Punch", templateId: "virtual-weapon-template-punch" }),
     brawlingRow({ label: "Kick", templateId: "virtual-weapon-template-kick" }),
   ];
-  /** The same rows as they would be once the rules give brawling a legal attack mode. */
+  /** Brawling rows carrying a legal attack mode, as the catalogue now authors them. */
   const declarableUnarmedWeaponRows = [
     brawlingRow({
       canonicalMeleeMode: "strike",
@@ -1898,6 +1906,30 @@ describe("explicit player attack source selection (#575)", () => {
       templateId: "virtual-weapon-template-kick",
     }),
   ];
+  /**
+   * The real Punch and Kick catalogue rows, built from the templates themselves rather than
+   * restated, so the authored `canonicalMeleeMode: "strike"` is what makes them declarable below.
+   * `combatStateDerivation` derives exactly these two rows for every character.
+   */
+  const catalogueBrawlingRows = [punchTemplate, kickTemplate].map((template) => ({
+    attackModes: (template.attackModes ?? []).map((mode, order) => ({
+      allowsRepeatedRoundAttack: false,
+      armorModifier: mode.armorModifier,
+      canonicalMeleeMode: mode.canonicalMeleeMode,
+      crit: mode.crit,
+      damageClass: mode.damageClass,
+      dmb: mode.dmb,
+      id: mode.id,
+      isPrimaryAttack: order === 0,
+      label: mode.label,
+      ob: mode.ob,
+      order,
+    })),
+    attackMode1Id: template.attackModes?.[0]?.id,
+    currentItemLabel: template.name,
+    modeLabel: "Unarmed",
+    templateId: template.id,
+  }));
   const emptyPhaseContexts = () => ({
     phase1: createEmptyPlayerEncounterCombatContext(),
     phase2: createEmptyPlayerEncounterCombatContext(),
@@ -1915,8 +1947,10 @@ describe("explicit player attack source selection (#575)", () => {
       secondaryActionId: "",
     });
 
-    // Punch and Kick are present as rows but author no canonical melee mode, so the existing
-    // mode-legality rule gives them no legal attack mode and they are not offered as a choice.
+    // These brawling rows author no canonical melee mode, so the existing mode-legality rule
+    // gives them no legal attack mode and they are not offered as a choice. The catalogue does
+    // author one now (#590); this fixture pins that the exclusion is still computed from legality
+    // rather than hard-coded, so a row the rules reject is never offered.
     expect(summary.attackSourceOptions).toEqual([
       {
         id: "weapon:primary-weapon",
@@ -2224,10 +2258,11 @@ describe("explicit player attack source selection (#575)", () => {
   // rather than settling it. These pin both halves of that line at once, on both surfaces: no
   // existing test covered the execution half, which is why its removal reached `dev`.
   describe("unarmed attack execution (#583)", () => {
-    // As the catalogue authors them today, so the brawling rows carry no legal attack mode and
-    // unarmed is not offered as a choice anywhere below. This is the state the regression broke.
+    // The real catalogue rows, so the brawling rows below carry the authored legal attack mode and
+    // unarmed IS offered as an explicit choice. The execution/declaration separation must hold in
+    // exactly that state: offering the choice is what #590 authorized, taking it unasked is not.
     const unequippedLoadoutModel = () =>
-      buildLoadoutModel({ fields: [], rows: unarmedRows, weaponRows: unarmedWeaponRows });
+      buildLoadoutModel({ fields: [], rows: unarmedRows, weaponRows: catalogueBrawlingRows });
     const unequippedDoubleAttackSummaries = (
       overrides: Partial<Parameters<typeof buildPlayerCombatLoadoutSummary>[0]> = {},
     ) => {
@@ -2292,13 +2327,19 @@ describe("explicit player attack source selection (#575)", () => {
     it("still refuses to declare unarmed for a player who chose nothing", () => {
       const summaries = unequippedDoubleAttackSummaries();
 
-      // Nothing is preselected, so the control shows no unarmed choice...
+      // #590 made Punch and Kick offerable, so the choice is now ON the control...
+      expect(summaries.phase1.attackSourceOptions.map((option) => option.id)).toEqual([
+        "unarmed:virtual-weapon-template-punch",
+        "unarmed:virtual-weapon-template-kick",
+      ]);
+
+      // ...but nothing is preselected, so no unarmed source is chosen on the player's behalf.
       expect(summaries.phase1.selectedAttackSourceId).toBeUndefined();
       expect(summaries.phase2.selectedAttackSourceId).toBeUndefined();
-      expect(summaries.phase1.attackSourceOptions).toEqual([]);
 
-      // ...and the declaration is reported as missing a source rather than quietly submitting
-      // unarmed, even though execution resolved a reference from the same summary.
+      // The declaration is still reported as missing a source rather than quietly submitting
+      // unarmed, even though execution resolved a Punch/Kick reference from the same summary.
+      // Making unarmed declarable must not make it implicit: that is the #583 line.
       const selection = buildCombatDeclarationAttackSelection({
         actionId: "double_attack",
         phaseContexts: emptyPhaseContexts(),
@@ -2307,13 +2348,13 @@ describe("explicit player attack source selection (#575)", () => {
       });
       expect(selection.phaseAttackSources).toEqual({});
       expect(selection.missingSourcePhases).toEqual(["phase1", "phase2"]);
+      // The player can now pick something, so the message asks them to pick rather than claiming
+      // nothing is available.
       expect(
         getCombatDeclarationAttackSourceRequiredMessage(selection.missingSourcePhases, {
-          selectableSourceCount: 0,
+          selectableSourceCount: summaries.phase1.attackSourceOptions.length,
         }),
-      ).toBe(
-        "No attack source is available for Phase 1 and Phase 2. Ready a weapon, or ask the GM to refresh your scenario equipment.",
-      );
+      ).toBe("Select an attack source for Phase 1 and Phase 2.");
     });
 
     it("does not let the execution reference stand in for a declaration source", () => {
@@ -2344,25 +2385,230 @@ describe("explicit player attack source selection (#575)", () => {
       });
     });
 
-    it("keeps the unarmed exclusion computed, so #586 still self-heals it", () => {
-      // Identical fixtures but for `canonicalMeleeMode`: nothing about the execution fallback
-      // hard-codes the exclusion, so authoring the rules is still all it takes to offer unarmed.
-      const declarable = buildPlayerCombatLoadoutSummary({
+    it("keeps the unarmed exclusion computed, now that #586 has self-healed it", () => {
+      // #586's self-heal has landed: the catalogue authors `canonicalMeleeMode: "strike"`, so the
+      // real rows are offered with no change to this helper. The fixtures still differ by exactly
+      // that one field, which is the whole mechanism.
+      const buildFromRows = (weaponRows: Array<Record<string, unknown>>) =>
+        buildPlayerCombatLoadoutSummary({
+          actionId: "double_attack",
+          loadoutModel: buildLoadoutModel({ fields: [], rows: unarmedRows, weaponRows }),
+          phaseKey: "phase1",
+          secondaryActionId: "",
+        });
+
+      for (const rows of [declarableUnarmedWeaponRows, catalogueBrawlingRows]) {
+        expect(buildFromRows(rows).attackSourceOptions.map((option) => option.id)).toEqual([
+          "unarmed:virtual-weapon-template-punch",
+          "unarmed:virtual-weapon-template-kick",
+        ]);
+      }
+
+      // Still computed, not hard-coded the other way either: drop the authored mode and the rows
+      // go back to being withheld, so the rules keep governing what is offered.
+      expect(buildFromRows(unarmedWeaponRows).attackSourceOptions).toEqual([]);
+    });
+  });
+
+  // #590: Punch and Kick are intrinsic attack sources and must be declarable without equipment,
+  // using the existing Brawling competency and their existing authored stats. One pin per
+  // Product-Owner acceptance criterion, at the shared boundary both surfaces go through.
+  describe("declarable intrinsic unarmed attack sources (#590)", () => {
+    const brawlingOnlyLoadoutModel = () =>
+      buildLoadoutModel({ fields: [], rows: unarmedRows, weaponRows: catalogueBrawlingRows });
+    const chooseUnarmed = (input: {
+      phaseKey: "phase1" | "phase2";
+      selectedAttackSourceId: string;
+      /** The GM/proxy path differs from the player's only by these two inputs. */
+      proxy?: boolean;
+    }) =>
+      buildPlayerCombatLoadoutSummary({
         actionId: "double_attack",
+        allowUnarmedFallback: true,
+        includeSourceProvenance: input.proxy === true,
+        loadoutModel: brawlingOnlyLoadoutModel(),
+        phaseKey: input.phaseKey,
+        secondaryActionId: "",
+        selectedAttackSourceId: input.selectedAttackSourceId,
+      });
+
+    it("authors exactly the one catalogue field that makes brawling declarable", () => {
+      // The whole blockage was this field's absence, and `"strike"` is the templates' own authored
+      // mode label. Everything else the ruling requires was already authored.
+      for (const template of [punchTemplate, kickTemplate]) {
+        expect(template.attackModes).toHaveLength(1);
+        expect(template.attackModes?.[0]?.canonicalMeleeMode).toBe("strike");
+        expect(template.attackModes?.[0]?.label).toBe("Strike");
+        // Criterion 3: resolution routes through Brawling because the mode says so.
+        expect(template.attackModes?.[0]?.competencyRef).toEqual(parseCompetencyId("brawling"));
+        expect(template.weaponSkill).toBe("Brawling");
+        expect(template.weaponClass).toBe("brawling");
+      }
+    });
+
+    it("declares an explicitly chosen Punch or Kick, with the authored stats", () => {
+      // Criterion 1 at the shared boundary: an explicit choice becomes a canonical unarmed source.
+      const cases = [
+        {
+          dmb: "0",
+          ob: "1",
+          opportunitySlot: "attack_1",
+          phaseKey: "phase1" as const,
+          templateId: "virtual-weapon-template-punch",
+          weapon: "Punch",
+        },
+        {
+          dmb: "2",
+          ob: "0",
+          opportunitySlot: "attack_2",
+          phaseKey: "phase2" as const,
+          templateId: "virtual-weapon-template-kick",
+          weapon: "Kick",
+        },
+      ];
+
+      for (const expected of cases) {
+        const summary = chooseUnarmed({
+          phaseKey: expected.phaseKey,
+          selectedAttackSourceId: `unarmed:${expected.templateId}`,
+        });
+
+        // The choice is reported back, so the control shows it rather than leaving it implicit.
+        expect(summary.selectedAttackSourceId).toBe(`unarmed:${expected.templateId}`);
+        expect(summary.attackModeUnavailableMessage).toBeUndefined();
+        expect(summary.selectedAttackModeId).toBe("mode-1");
+        // Criterion 3: the existing authored Punch/Kick stats, not a substitute.
+        expect(summary.attackStats?.weaponName).toBe(expected.weapon);
+        expect(summary.attackStats?.ob).toBe(expected.ob);
+        expect(summary.attackStats?.dmb).toBe(expected.dmb);
+        expect(summary.attackStats?.maxCrits).toBe("AC");
+
+        const source = buildCombatAttackSourceRef({
+          phaseKey: expected.phaseKey,
+          reference: summary.reference,
+          referenceUsedUnarmedExecutionFallback: summary.referenceUsedUnarmedExecutionFallback,
+          unarmedTemplateId: expected.templateId,
+        });
+        expect(source).toEqual({
+          attackModeId: "mode-1",
+          opportunitySlot: expected.opportunitySlot,
+          slot: "virtual",
+          sourceKind: "unarmed",
+          templateId: expected.templateId,
+        });
+        // Criterion 5: the canonical reference the API parses carries no Item instance at all.
+        expect(combatAttackSourceRefSchema.parse(source)).not.toHaveProperty("scenarioItemId");
+      }
+    });
+
+    it("submits a complete declaration from an explicit unarmed choice on both surfaces", () => {
+      // Criteria 1 and 2: the player path and the GM/proxy path differ only by the two inputs the
+      // GM passes, so both are exercised against the same helper the surfaces share.
+      for (const proxy of [false, true]) {
+        const summaries = {
+          phase1: chooseUnarmed({
+            phaseKey: "phase1",
+            proxy,
+            selectedAttackSourceId: "unarmed:virtual-weapon-template-punch",
+          }),
+          phase2: chooseUnarmed({
+            phaseKey: "phase2",
+            proxy,
+            selectedAttackSourceId: "unarmed:virtual-weapon-template-kick",
+          }),
+        };
+
+        const selection = buildCombatDeclarationAttackSelection({
+          actionId: "double_attack",
+          phaseContexts: emptyPhaseContexts(),
+          phaseLoadoutSummaries: summaries,
+          secondaryActionId: "",
+        });
+
+        expect(selection.missingSourcePhases).toEqual([]);
+        expect(selection.phaseAttackSources).toEqual({
+          phase1: {
+            attackModeId: "mode-1",
+            opportunitySlot: "attack_1",
+            slot: "virtual",
+            sourceKind: "unarmed",
+            templateId: "virtual-weapon-template-punch",
+          },
+          phase2: {
+            attackModeId: "mode-1",
+            opportunitySlot: "attack_2",
+            slot: "virtual",
+            sourceKind: "unarmed",
+            templateId: "virtual-weapon-template-kick",
+          },
+        });
+        expect(
+          getCombatDeclarationAttackModeUnavailableMessage({
+            actionId: "double_attack",
+            phaseLoadoutSummaries: summaries,
+            secondaryActionId: "",
+          }),
+        ).toBeUndefined();
+      }
+    });
+
+    it("keeps normal melee resolution unchanged when a weapon is ready", () => {
+      // Criterion 4. Punch and Kick are now offered alongside the ready weapon, and the weapon is
+      // still what a declaration starts from and still serializes as a weapon source.
+      const summary = buildPlayerCombatLoadoutSummary({
+        actionId: "attack_parry",
         loadoutModel: buildLoadoutModel({
-          fields: [],
-          rows: unarmedRows,
-          weaponRows: declarableUnarmedWeaponRows,
+          rows: [weaponModeRow("Dagger", "Primary"), ...unarmedRows],
+          valueLabel: "Dagger",
+          weaponRows: [daggerWeaponRow, ...catalogueBrawlingRows],
         }),
         phaseKey: "phase1",
         secondaryActionId: "",
       });
 
-      expect(declarable.attackSourceOptions.map((option) => option.id)).toEqual([
+      expect(summary.attackSourceOptions.map((option) => option.id)).toEqual([
+        "weapon:primary-weapon",
         "unarmed:virtual-weapon-template-punch",
         "unarmed:virtual-weapon-template-kick",
       ]);
-      expect(unequippedDoubleAttackSummaries().phase1.attackSourceOptions).toEqual([]);
+      expect(summary.selectedAttackSourceId).toBe("weapon:primary-weapon");
+      expect(summary.attackStats?.weaponName).toBe("Dagger");
+      expect(
+        buildCombatAttackSourceRef({
+          phaseKey: "phase1",
+          reference: summary.reference,
+          unarmedTemplateId: "virtual-weapon-template-punch",
+        }),
+      ).toEqual({
+        attackModeId: "thrust",
+        opportunitySlot: "attack_1",
+        scenarioItemId: "primary-weapon",
+        slot: "primary",
+        sourceKind: "weapon",
+        templateId: "weapon-template-dagger",
+      });
+    });
+
+    it("gives the GM surface the same explicit choice through the shared helper", () => {
+      // #583's regression reached GM Combat with no GM file changed, so pin the GM wiring rather
+      // than assume it: the GM's own chosen source reaches the shared summary helper, and the GM
+      // renders the player's control instead of a GM-only idiom.
+      const gmPanel = readFileSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          "../combat-round-manager/CombatRoundManagerPanel.tsx",
+        ),
+        "utf8",
+      );
+      expect(gmPanel).toContain("PlayerCombatAttackSourceSelector");
+      expect(gmPanel).toContain(
+        "selectedAttackSourceId: inspectorDraft.phaseAttackSourceIds[phaseKey],",
+      );
+      expect(gmPanel).toContain("options={phaseLoadoutSummary.attackSourceOptions}");
+      // Nothing may pre-populate the GM's choice: an unarmed declaration has to be chosen.
+      expect(gmPanel).toContain("phaseAttackSourceIds: {},");
+      expect(gmPanel).not.toContain("virtual-weapon-template-punch");
+      expect(gmPanel).not.toContain("virtual-weapon-template-kick");
     });
   });
 });

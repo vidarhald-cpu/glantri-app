@@ -245,6 +245,7 @@ import {
   type PlayerCombatAttackStatsView,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
+  PlayerCombatAttackSourceSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatDefenseStatsTable,
@@ -530,6 +531,7 @@ interface CombatInspectorDeclarationDraft {
   disarmSelection: CombatDisarmDeclarationSelection;
   movementId: PlayerEncounterMovementId | "";
   movementIntent: MovementIntent;
+  phaseAttackSourceIds: CombatInspectorPhaseAttackSourceDrafts;
   phaseContexts: CombatInspectorPhaseContextDrafts;
   secondaryActionContext?: ScenarioParticipantSecondaryActionContext;
   secondaryActionId: PlayerEncounterActionId | "";
@@ -540,6 +542,17 @@ interface CombatInspectorDeclarationDraft {
 interface CombatInspectorPhaseContextDrafts {
   phase1: ScenarioParticipantCombatContext;
   phase2: ScenarioParticipantCombatContext;
+}
+
+/**
+ * The attack source the GM explicitly chose for each phase while proxying a declaration (#590),
+ * as a `PlayerCombatAttackSourceOption.id`. Empty means nothing was chosen, so the shared helper
+ * keeps deriving the source from the action's own loadout slot exactly as before. It is never
+ * pre-populated with an unarmed source: an unarmed declaration has to be chosen.
+ */
+interface CombatInspectorPhaseAttackSourceDrafts {
+  phase1?: string;
+  phase2?: string;
 }
 
 type CombatInspectorSourceMode = "current" | "history";
@@ -837,6 +850,7 @@ function buildDeclarationDraft(
       declaration?.movementIntent ??
       scopedCombat?.lastMovementIntent ??
       createDefaultMovementIntent(),
+    phaseAttackSourceIds: {},
     phaseContexts: buildInspectorPhaseContexts(participant, declaration, scope),
     secondaryActionContext: declaration?.secondaryActionContext,
     secondaryActionId: isPlayerEncounterActionId(declaration?.secondaryActionId)
@@ -912,6 +926,7 @@ function buildInspectorDisplayDraft(input: {
       "",
     movementIntent:
       input.snapshot.declarationSummary?.movementIntent ?? createDefaultMovementIntent(),
+    phaseAttackSourceIds: input.draft.phaseAttackSourceIds,
     phaseContexts: buildHistoricalInspectorPhaseContexts(input.snapshot),
     secondaryActionContext: input.snapshot.declarationSummary?.secondaryActionContext,
     feintMethod: input.snapshot.declarationSummary?.feint?.method ?? input.draft.feintMethod,
@@ -6389,6 +6404,7 @@ export default function CombatRoundManagerPanel({
             loadoutModel: phaseLoadoutModel,
             phaseKey,
             selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
+            selectedAttackSourceId: inspectorDraft.phaseAttackSourceIds[phaseKey],
             secondaryActionId: inspectorDraft.secondaryActionId,
           });
           const requestSummary = buildPlayerCombatLoadoutSummary({
@@ -6400,6 +6416,7 @@ export default function CombatRoundManagerPanel({
             loadoutModel: requestPhaseLoadoutModel,
             phaseKey,
             selectedAttackModeId: inspectorDraft.phaseContexts[phaseKey].attackModeId,
+            selectedAttackSourceId: inspectorDraft.phaseAttackSourceIds[phaseKey],
             secondaryActionId: inspectorDraft.secondaryActionId,
           });
           return {
@@ -6426,6 +6443,7 @@ export default function CombatRoundManagerPanel({
             content,
             inspectorBuild,
             inspectorDraft.actionId,
+            inspectorDraft.phaseAttackSourceIds,
             inspectorDraft.phaseContexts,
             inspectorDraft.secondaryActionContext,
             inspectorHasLocalModifierEdits,
@@ -6453,6 +6471,7 @@ export default function CombatRoundManagerPanel({
     inspectorBuild,
     inspector.participant?.participantId,
     inspectorDraft.actionId,
+    inspectorDraft.phaseAttackSourceIds,
     inspectorDraft.phaseContexts,
     inspectorDraft.secondaryActionContext,
     inspectorHasLocalModifierEdits,
@@ -13554,6 +13573,34 @@ export default function CombatRoundManagerPanel({
                                 }
                                 readOnly={inspectorIsHistorical}
                               />
+                              {/*
+                                The GM proxies a player's declaration, so the GM needs the same
+                                explicit attack-source choice the player has (#590). Punch and Kick
+                                reach this list from the shared option helper once the catalogue
+                                authors a legal brawling mode; nothing here special-cases unarmed,
+                                and no source is chosen on the GM's behalf.
+                              */}
+                              {inspectorIsHistorical ? null : (
+                                <PlayerCombatAttackSourceSelector
+                                  controlsDisabled={saving}
+                                  // Without an empty state the row vanishes for an unequipped
+                                  // participant, the one state where naming the attack source
+                                  // explains most. Same copy as the player control.
+                                  emptyState="No ready weapon can be declared as an attack source."
+                                  onChange={(attackSourceId) =>
+                                    updateInspectorDraft({
+                                      phaseAttackSourceIds: {
+                                        ...inspectorDraft.phaseAttackSourceIds,
+                                        [phaseKey]: attackSourceId,
+                                      },
+                                    })
+                                  }
+                                  options={phaseLoadoutSummary.attackSourceOptions}
+                                  selectedAttackSourceId={
+                                    phaseLoadoutSummary.selectedAttackSourceId
+                                  }
+                                />
+                              )}
                               <PlayerCombatAttackModeSelector
                                 controlsDisabled={saving || inspectorIsHistorical}
                                 emptyState={

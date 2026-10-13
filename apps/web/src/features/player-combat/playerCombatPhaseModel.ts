@@ -340,12 +340,13 @@ const PLAYER_COMBAT_ATTACK_SOURCE_FIELD_IDS = [
  * only from the committed loadout and the canonical unarmed templates; nothing is invented, and no
  * slot or name fallback stands in for a missing item.
  *
- * A brawling row is offered only where the existing mode-legality rule accepts it. The Punch and
- * Kick templates currently author no `canonicalMeleeMode`, so `resolvePreferredAttackMode` finds
- * them no legal attack mode and unarmed is not a legal declaration — offering it anyway would put
- * a choice on the surface that the rules reject. A ready weapon stays listed even when its own
- * modes are unavailable, because `attackModeUnavailableMessage` already names that reason for the
- * weapon the player is holding.
+ * A brawling row is offered only where the existing mode-legality rule accepts it; the exclusion
+ * is computed, never hard-coded. The Punch and Kick templates author `canonicalMeleeMode: "strike"`
+ * (#586/#590 ruling), so `resolvePreferredAttackMode` finds them a legal attack mode and both rows
+ * are offered as explicit unarmed choices. A brawling row that carried no legal mode would still
+ * be withheld, because offering it would put a choice on the surface that the rules reject. A ready
+ * weapon stays listed even when its own modes are unavailable, because
+ * `attackModeUnavailableMessage` already names that reason for the weapon the player is holding.
  */
 function buildPlayerCombatAttackSourceOptions(input: {
   allowUnarmed: boolean;

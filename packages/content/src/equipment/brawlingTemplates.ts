@@ -21,6 +21,7 @@ export const punchTemplate: WeaponTemplate = {
   attackModes: [
     {
       id: "mode-1",
+      canonicalMeleeMode: "strike",
       competencyRef: brawlingCompetencyId,
       label: "Strike",
       damageClass: "blunt",
@@ -106,6 +107,7 @@ export const kickTemplate: WeaponTemplate = {
   attackModes: [
     {
       id: "mode-1",
+      canonicalMeleeMode: "strike",
       competencyRef: brawlingCompetencyId,
       label: "Strike",
       damageClass: "blunt",
