@@ -118,6 +118,7 @@ pnpm db:task:cleanup
 - `db:task:seed` seeds only the owned application database.
 - `db:task:test` migrates the owned test database, then runs the database integration suite with the explicit test URL.
 - `db:task:exec` supplies both owned URLs, the task stack's own loopback host and ports, and the browser proof suite's own base URLs, to application or other database-capable commands.
+- `db:task:e2e` runs the Playwright suite inside one `db:task:exec`, with a stack it starts itself. It composes existing commands and adds no guard bypass; see [Running the browser suite locally](#running-the-browser-suite-locally).
 - `db:task:cleanup` re-derives current-worktree ownership and verifies the Docker task/worktree ownership labels before removing the exact disposable container and `.env.task`.
 
 Each migration, reset, seed, application, client, and integration-test path validates the current `.env.task`, current-worktree identity, PostgreSQL 16 image, ownership labels, running state, and bound port before database access. It prints a preflight line containing only the ownership marker, host, port, and database name. Passwords are never printed. Direct Prisma commands are unsupported; Prisma's configuration and every repository-owned direct `PrismaClient` construction path apply the same worktree environment guard so they cannot use a copied environment or an inherited protected/foreign target.
@@ -155,8 +156,11 @@ QA lane wrote two rows into the shared playtest database while doing everything 
   unconfigured test run — it falls back to the shared `localhost:4000` default and writes those
   accounts into whatever process holds that port. Playwright does not run under Turborepo, so
   these three need no `turbo.json` declaration; `db:task:exec` places them in the child
-  environment directly. Run the suite as `pnpm db:task:exec -- pnpm --filter @glantri/web
-playwright`, never with literal ports copied from a document.
+  environment directly. Never copy literal ports from a document. **Do not run Playwright as a
+  second `pnpm db:task:exec` while the stack is up** — that command refuses, because the stack
+  holds the very ports its preflight probes. Use `pnpm db:task:e2e`, which starts the stack and
+  Playwright inside one `db:task:exec`; see
+  [Running the browser suite locally](#running-the-browser-suite-locally).
 - **Addresses use the `127.0.0.1` literal**, not `localhost`. The bind address and both
   browser-facing URLs are then byte-identical, so CORS matches exactly and no resolver decides
   between `127.0.0.1` and `::1`. `127.0.0.1` is still a secure context, so Web Crypto works.
@@ -208,6 +212,116 @@ This is the developer-machine model. The CI service and port model is a delibera
 document — see [the private Forgejo Actions runner](./ci/forgejo-actions-runner.md), whose fixed
 DIND ports are safe for a different reason (runner capacity one) and whose isolation problem is
 orphaned containers rather than environment propagation.
+
+## Running the browser suite locally
+
+The Playwright suite (`apps/web/e2e`) can be run locally against a disposable task target without
+ever touching protected playtest data. In CI it runs as `application-docker-test` against a fresh
+`glantri_test` database created and migrated with `prisma migrate deploy`; the local recipe below
+reproduces that same state: **migrated, and never seeded**.
+
+Forgejo #492 once recorded that the Chargen specs "cannot run". That is false in CI and false
+locally when launched correctly, and the belief let a real CI failure through twice. The recipe
+below was executed end to end on a clean worktree, and the four Chargen specs passed.
+
+### Recipe
+
+Run everything from your own linked worktree. Once per machine, install the browser (plain, not
+`--with-deps`; Chromium may already be in `~/Library/Caches/ms-playwright`):
+
+```bash
+pnpm --filter @glantri/web exec playwright install chromium
+```
+
+Then, for each run:
+
+```bash
+pnpm install
+pnpm build                                          # root build, not a filtered package
+pnpm db:task:setup -- --task <issue>
+pnpm db:task:verify
+pnpm db:task:migrate -- --target application        # never db:task:seed
+pnpm db:task:e2e e2e/chargen                        # any Playwright arguments; none runs everything
+pnpm db:task:cleanup
+```
+
+`pnpm db:task:e2e` is `pnpm db:task:exec -- sh scripts/database/runTaskPlaywright.sh`. Inside one
+guarded environment it builds the web app, starts the built API (`apps/api/dist/server.js`, so the
+root `pnpm build` is a prerequisite) and the production web server on this
+worktree's derived ports, waits for both, runs `playwright test` with your arguments, and stops
+the stack it started. Because Playwright runs inside that environment it carries the derived
+`PLAYWRIGHT_*` addresses and the guarded `DATABASE_URL` and `GLANTRI_DB_*` values, so no spec is
+left unrunnable (see [Which specs run](#which-specs-run)). It opens no database connection of its
+own and does not touch any guard.
+
+### What the fixture requires
+
+`apps/web/e2e/global-setup.ts` creates real accounts, campaigns and characters through the API
+before the first spec runs. It needs a target that is **migrated and has no GM account**:
+
+- It registers `smoke-gm@test.local` and calls `POST /auth/bootstrap-gm`, which succeeds only
+  while no GM exists. Both calls sit in one `try`. If a different GM already exists, the
+  bootstrap fails, the block falls through to `/auth/login`, and the suite carries on with an
+  account that is **not** a GM. Later GM-only setup then fails confusingly instead of clearly.
+  This is read from the code and was not exercised.
+- It is **not idempotent across runs**. The early `try`/`catch` blocks tolerate existing rows, but
+  the B2 and delegated-privacy sections create campaigns and roster `smoke-char-00001` and
+  `smoke-char-00003` without tolerance. A second run against the same target stops at
+  `POST /campaigns/<id>/roster` with `409 CHARACTER_ALREADY_IN_ACTIVE_CAMPAIGN`. This was
+  reproduced.
+
+So **each run needs a freshly created target**. Recycle it with `db:task:cleanup`, then
+`db:task:setup -- --task <issue>`, then `db:task:migrate -- --target application`. Do **not**
+use `db:task:reset`: Prisma's destructive-action consent gate correctly refuses it for an
+automated worker, and that refusal must stand. Do **not** run `db:task:seed`: seeding creates
+users and a GM that `global-setup.ts` then collides with.
+
+### Which specs run
+
+All Chargen specs run, and so do `lost-seal-scenario.spec.ts` and
+`player-attack-initiative-identity.spec.ts`. The last two write fixtures through
+`@glantri/database/testing/scenarioPrivacy`, which needs `DATABASE_URL` in the Playwright
+process. Under `db:task:e2e` the guarded environment supplies it and the helper's
+`assertWorktreeDatabaseRuntimeSafety` path applies, so the `_test`-suffix rule for a bare
+`DATABASE_URL_TEST` is not involved. Launching Playwright _outside_ `db:task:exec`, with only the
+three `PLAYWRIGHT_*` variables, is what leaves those two specs failing with "requires the guarded
+task database environment" or "`DATABASE_URL_TEST` is required". That failure is a launch mistake,
+not a fixture limitation. Do not work around it by exporting database URLs by hand.
+
+### Known failure modes
+
+- **`next dev` can serve 404 for every route** with `Watchpack Error: EMFILE` in its log when the
+  machine is running several dev servers at once. That is why `db:task:e2e` uses a production
+  build and `next start`. The macOS file-limit background is in
+  [the regression matrix](./testing-regression-matrix.md#the-macos-file-limit-behind-the-emfile-404s--recorded-2026-09-29).
+- **A stale `apps/web/.next` left by `pnpm build` breaks a later `pnpm dev`** the same way. Remove
+  it first if you need a dev server.
+- **A stack process can be killed mid-run on a busy machine.** Three consecutive full runs lost
+  their API to `Killed: 9` when it was started as `pnpm --filter @glantri/api dev`, while another
+  lane was running that same command; every later spec then failed in under 100 ms. The cause was
+  not proved, and a broad `pkill` by another lane is the suspect. Starting the API from its built
+  `dist` instead was followed by one clean full run, which is why the script does so. The script
+  now reports a dead stack process and exits non-zero, so a run of fast failures is not misread as
+  product failures. Judge a run by whether the failures are fast and contiguous.
+- **`db:task:exec` refuses while any stack holds its ports.** Stop the old stack first. A
+  `db:task:e2e` run stops its own stack on exit, including when Playwright fails.
+- A local run leaves `apps/web/playwright-report` and `apps/web/test-results` behind, and
+  `pnpm lint` then fails on them. Remove both before judging a lint result.
+- The suite includes two artifact-storage specs that CI skips by design; treat their local failure
+  as the known baseline in the regression matrix, not as a regression.
+
+### What a worker must never do
+
+- Never use `localhost:5432/glantri`, never read, copy or reuse the primary checkout's `.env`, and
+  never create or edit an operator-local `.env`.
+- Never run `db:task:seed`, or run Playwright against a target that already holds a GM or a
+  previous run's data.
+- Never bypass or manufacture consent for the Prisma destructive-action gate, and never export
+  database URLs or `GLANTRI_DB_*` values by hand to get past a guard.
+- Never point `PLAYWRIGHT_API_URL` at a port you did not start. An unpropagated URL falls back to
+  `localhost:4000` and writes smoke accounts into whatever holds it.
+- Do not change `validateTestDatabaseTarget`, the `_test`-suffix rule or any `db:task:*` safety
+  behaviour to make a spec pass. Structural separation of the test database is post-Alpha work.
 
 ## Protected Shared Database Backup Expectations
 

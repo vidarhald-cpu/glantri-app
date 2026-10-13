@@ -101,6 +101,7 @@ import {
   buildPlayerCombatModifierRows,
   PlayerCombatAttackLocationSelector,
   PlayerCombatAttackModeSelector,
+  PlayerCombatAttackSourceSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
   PlayerCombatActionButtonPanel,
@@ -137,6 +138,7 @@ import {
   buildPlayerCombatPhasePanelModel,
   formatScenarioCombatEquipmentDiagnostic,
   getCombatDeclarationAttackModeUnavailableMessage,
+  getCombatDeclarationAttackSourceRequiredMessage,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
@@ -1231,6 +1233,12 @@ export default function ScenarioPlayerCombatPageContent({
       phase1: createEmptyPlayerEncounterCombatContext(),
       phase2: createEmptyPlayerEncounterCombatContext(),
     });
+  // The attack source each phase will declare from, as a PlayerCombatAttackSourceOption id (#575).
+  // Undefined means "no explicit choice yet", and the loadout summary then keeps deriving the
+  // source from the action's relevant slot, so a held weapon stays preselected.
+  const [phaseAttackSourceDrafts, setPhaseAttackSourceDrafts] = useState<
+    Record<PlayerCombatPhaseKey, string | undefined>
+  >({ phase1: undefined, phase2: undefined });
   const [combatDeclarationDraftDirty, setCombatDeclarationDraftDirty] = useState(false);
   const [combatDeclarationDraftKey, setCombatDeclarationDraftKey] = useState("");
   const [savingCombatContext, setSavingCombatContext] = useState(false);
@@ -2206,6 +2214,7 @@ export default function ScenarioPlayerCombatPageContent({
         phase1: createEmptyPlayerEncounterCombatContext(),
         phase2: createEmptyPlayerEncounterCombatContext(),
       });
+      setPhaseAttackSourceDrafts({ phase1: undefined, phase2: undefined });
       setCombatDeclarationDraftDirty(false);
       setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
       return;
@@ -2242,6 +2251,16 @@ export default function ScenarioPlayerCombatPageContent({
     setFeintMethod(selectedRoundDeclaration?.feint?.method ?? "movement");
     setCombatContextDraft(nextDraft.combatContext);
     setPhaseCombatContextDrafts(nextDraft.phaseContexts);
+    // A stored declaration already names its own canonical weapon source per opportunity, so the
+    // control shows what was declared rather than re-deriving it (#575).
+    setPhaseAttackSourceDrafts({
+      phase1: selectedRoundDeclaration?.attackOpportunities?.find(
+        (opportunity) => opportunity.phase === "phase1",
+      )?.weaponSourceId,
+      phase2: selectedRoundDeclaration?.attackOpportunities?.find(
+        (opportunity) => opportunity.phase === "phase2",
+      )?.weaponSourceId,
+    });
     setCombatDeclarationDraftDirty(false);
     setCombatDeclarationDraftKey(selectedCombatDeclarationDraftKey);
   }, [
@@ -2899,6 +2918,23 @@ export default function ScenarioPlayerCombatPageContent({
       secondaryActionId: selectedSecondaryActionId || undefined,
     });
     requestPhaseContexts = declarationAttackSelection.phaseContexts;
+    const attackSourceRequiredMessage = getCombatDeclarationAttackSourceRequiredMessage(
+      declarationAttackSelection.missingSourcePhases,
+      {
+        selectableSourceCount: Math.max(
+          ...declarationAttackSelection.missingSourcePhases.map(
+            (phaseKey) => phaseCombatLoadoutSummaries[phaseKey].attackSourceOptions.length,
+          ),
+          0,
+        ),
+      },
+    );
+    if (attackSourceRequiredMessage) {
+      // Never submit a declaration whose attack phases have no source: that request is certain to
+      // be rejected, and the old code sent it anyway and showed nothing (#575).
+      setError(attackSourceRequiredMessage);
+      return;
+    }
     const disarmAttackSource = declarationAttackSelection.phaseAttackSources[disarmSelection.phase];
     if (
       disarmMethod === "proactive" &&
@@ -4285,6 +4321,7 @@ export default function ScenarioPlayerCombatPageContent({
         loadoutModel: phaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
+        selectedAttackSourceId: phaseAttackSourceDrafts[phaseKey],
         secondaryActionId: selectedSecondaryActionId,
       });
       const baseSummary = buildPlayerCombatLoadoutSummary({
@@ -4295,6 +4332,7 @@ export default function ScenarioPlayerCombatPageContent({
         loadoutModel: basePhaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
+        selectedAttackSourceId: phaseAttackSourceDrafts[phaseKey],
         secondaryActionId: selectedSecondaryActionId,
       });
       const requestSummary = buildPlayerCombatLoadoutSummary({
@@ -4305,6 +4343,7 @@ export default function ScenarioPlayerCombatPageContent({
         loadoutModel: requestPhaseLoadoutModel,
         phaseKey,
         selectedAttackModeId: phaseCombatContextDrafts[phaseKey].attackModeId,
+        selectedAttackSourceId: phaseAttackSourceDrafts[phaseKey],
         secondaryActionId: selectedSecondaryActionId,
       });
 
@@ -4732,8 +4771,24 @@ export default function ScenarioPlayerCombatPageContent({
         command.type === "decide_double_attack_phase2",
     ),
   );
+  // #575: an attack phase with no resolvable source used to be dropped silently and rejected by
+  // the API with nothing shown. Name the reason and keep the declaration unsubmittable instead.
+  const declarationAttackSourceValidationMessage = declarationStepOpen
+    ? getCombatDeclarationAttackSourceRequiredMessage(
+        renderedDeclarationAttackSelection.missingSourcePhases,
+        {
+          selectableSourceCount: Math.max(
+            ...renderedDeclarationAttackSelection.missingSourcePhases.map(
+              (phaseKey) => phaseCombatLoadoutSummaries[phaseKey].attackSourceOptions.length,
+            ),
+            0,
+          ),
+        },
+      )
+    : undefined;
   const declarationTargetValidationMessage =
-    (selectedActionId === "disarm" || selectedActionId === "parry_disarm") &&
+    declarationAttackSourceValidationMessage ??
+    ((selectedActionId === "disarm" || selectedActionId === "parry_disarm") &&
     (!disarmSelection.actingItemId ||
       !disarmSelection.targetParticipantId ||
       !disarmSelection.targetItemId)
@@ -4744,7 +4799,7 @@ export default function ScenarioPlayerCombatPageContent({
         ? "The selected weapon has no valid combat skill for a weapon feint."
         : !currentInitiativePhase && declarationIncomplete
           ? targetValidation.message
-          : undefined;
+          : undefined);
   const combatExperienceValidationMessage: string | undefined = undefined;
   const currentActionDomainValidationDisabled =
     controlsDisabled ||
@@ -5544,6 +5599,23 @@ export default function ScenarioPlayerCombatPageContent({
                       </div>
                       {feintMethod === "weapon" && phaseModel.attackStats ? (
                         <>
+                          <PlayerCombatAttackSourceSelector
+                            controlsDisabled={declarationControlsDisabled}
+                            onChange={(attackSourceId) => {
+                              markCombatDeclarationDraftDirty();
+                              setPhaseAttackSourceDrafts((current) => ({
+                                ...current,
+                                phase1: attackSourceId,
+                              }));
+                            }}
+                            options={phaseLoadoutSummary.attackSourceOptions.filter(
+                              // A weapon feint is resolved from a weapon's own combat skill, so
+                              // the API accepts only a weapon source for it.
+                              (option) => option.sourceKind === "weapon",
+                            )}
+                            emptyState="No ready weapon can perform a weapon feint."
+                            selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
+                          />
                           <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
                           <PlayerCombatAttackModeSelector
                             controlsDisabled={declarationControlsDisabled}
@@ -5608,6 +5680,22 @@ export default function ScenarioPlayerCombatPageContent({
                             [phaseKey]: combatContext,
                           }));
                         }}
+                      />
+                      <PlayerCombatAttackSourceSelector
+                        controlsDisabled={declarationControlsDisabled}
+                        // Without an empty state the whole row disappears for a character with no
+                        // ready weapon — the one state where naming the attack source explains
+                        // most, and the state #575 was filed about.
+                        emptyState="No ready weapon can be declared as an attack source."
+                        onChange={(attackSourceId) => {
+                          markCombatDeclarationDraftDirty();
+                          setPhaseAttackSourceDrafts((current) => ({
+                            ...current,
+                            [phaseKey]: attackSourceId,
+                          }));
+                        }}
+                        options={phaseLoadoutSummary.attackSourceOptions}
+                        selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
                       />
                       <PlayerCombatAttackModeSelector
                         controlsDisabled={declarationControlsDisabled}

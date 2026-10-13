@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { forEachChargenStep, gotoChargenStep } from "./chargen-step-navigation";
+import {
+  expandChargenChooser,
+  forEachChargenStep,
+  gotoChargenStep,
+} from "./chargen-step-navigation";
 
 /**
  * The Chargen Profession and acquisition presentation contract, in the browser (Forgejo #372).
@@ -50,12 +54,14 @@ test("Chargen explains a Profession before it exposes acquisition", async ({ pag
 
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
+  await expandChargenChooser(page, "stats");
   await page.locator('input[name="profile"]').first().click();
   await gotoChargenStep(page, "2. Resolve stats");
   await expect(page.getByRole("button", { name: "Swap", exact: true })).toBeVisible({
     timeout: 10_000,
   });
   await gotoChargenStep(page, "3. Choose civilization");
+  await expandChargenChooser(page, "civilization");
   await page.getByRole("radio", { name: /Scandia/ }).click();
 
   // The retired Profession-family filter is gone from every step, not merely from the one in view.
@@ -65,6 +71,7 @@ test("Chargen explains a Profession before it exposes acquisition", async ({ pag
 
   // The chooser browses by the approved taxonomy.
   await gotoChargenStep(page, "5. Choose profession");
+  await expandChargenChooser(page, "profession");
   const kindOfWork = page.getByLabel("Kind of work");
   await expect(kindOfWork).toBeVisible();
   await expect(kindOfWork.locator("option")).toHaveCount(17);

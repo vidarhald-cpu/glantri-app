@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { createCharacterForE2e } from "./character-fixture";
+import { expandChargenChooser } from "./chargen-step-navigation";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -62,6 +63,7 @@ test.describe("chargen flow", () => {
     await page.goto("/chargen");
 
     await page.getByRole("button", { name: "Roll all dice" }).click();
+    await expandChargenChooser(page, "stats");
 
     await expect(page.getByRole("radio").first()).toBeVisible({ timeout: 15_000 });
   });

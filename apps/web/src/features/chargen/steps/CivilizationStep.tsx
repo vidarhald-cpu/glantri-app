@@ -16,6 +16,17 @@ interface CivilizationStepProps {
   showCivilizationChooser: State["showCivilizationChooser"];
 }
 
+/* The collapsed section's own surface. These are the values the step's existing selected-summary
+   panel already uses, read back here so the collapsed state is the same idiom the step owns rather
+   than a new one (#577, matching `StatsStep.module.css`'s `.placeholder`). */
+const placeholderStyle = {
+  background: "#f6f5ef",
+  border: "1px solid #d9ddd8",
+  borderRadius: 12,
+  color: "#5e5a50",
+  padding: "1rem",
+} as const;
+
 export function CivilizationStep({
   civilizations,
   handleCivilizationChange,
@@ -26,15 +37,29 @@ export function CivilizationStep({
   selectedProfile,
   selectedSociety,
   setShowCivilizationChooser,
-  showCivilizationChooser
+  showCivilizationChooser,
 }: CivilizationStepProps) {
   return (
     <section style={{ display: "grid", gap: "0.75rem", opacity: selectedProfile ? 1 : 0.6 }}>
-      <h2 style={{ margin: 0 }}>3. Choose civilization</h2>
+      <div
+        style={{
+          alignItems: "center",
+          display: "flex",
+          gap: "0.75rem",
+          justifyContent: "space-between",
+        }}
+      >
+        <h2 style={{ margin: 0 }}>3. Choose civilization</h2>
+        {/* Always visible, like the Stats step's own toggle, so a collapsed section is never a
+            dead end. It only reveals or hides; it never selects. */}
+        <button onClick={() => setShowCivilizationChooser((current) => !current)} type="button">
+          {showCivilizationChooser ? "Collapse civilization" : "Expand civilization"}
+        </button>
+      </div>
       <div style={{ fontSize: "0.95rem" }}>
         Choose the civilization that frames this character&apos;s culture and language naming.
-        Chargen will infer the linked society automatically for class labels, foundational
-        access, education, and profession access.
+        Chargen will infer the linked society automatically for class labels, foundational access,
+        education, and profession access.
       </div>
       {selectedCivilization && !showCivilizationChooser ? (
         <div
@@ -44,7 +69,7 @@ export function CivilizationStep({
             borderRadius: 12,
             display: "grid",
             gap: "0.75rem",
-            padding: "1rem"
+            padding: "1rem",
           }}
         >
           <div
@@ -52,7 +77,7 @@ export function CivilizationStep({
               alignItems: "start",
               display: "grid",
               gap: "0.75rem",
-              gridTemplateColumns: "minmax(0, 1fr) auto"
+              gridTemplateColumns: "minmax(0, 1fr) auto",
             }}
           >
             <div style={{ display: "grid", gap: "0.35rem" }}>
@@ -91,10 +116,14 @@ export function CivilizationStep({
             {languageSelectionSummary.selectableLanguages.length > 0 ? (
               <div>
                 Optional languages:{" "}
-                {languageSelectionSummary.selectableLanguages.map((language) => language.name).join(", ")}
+                {languageSelectionSummary.selectableLanguages
+                  .map((language) => language.name)
+                  .join(", ")}
               </div>
             ) : null}
-            <div>Band labels: {selectedSociety ? formatSocietyBandLabels(selectedSociety) : "—"}</div>
+            <div>
+              Band labels: {selectedSociety ? formatSocietyBandLabels(selectedSociety) : "—"}
+            </div>
             {selectedCivilization.historicalAnalogue ? (
               <div>Historical analogue: {selectedCivilization.historicalAnalogue}</div>
             ) : null}
@@ -103,7 +132,7 @@ export function CivilizationStep({
             {civilizations.length === 1 ? <div>Only available civilization at present.</div> : null}
           </div>
         </div>
-      ) : (
+      ) : showCivilizationChooser ? (
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {selectedCivilization ? (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
@@ -123,7 +152,7 @@ export function CivilizationStep({
                 border: "1px solid #d9ddd8",
                 borderRadius: 12,
                 cursor: selectedProfile ? "pointer" : "not-allowed",
-                padding: "1rem"
+                padding: "1rem",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -162,6 +191,10 @@ export function CivilizationStep({
               ) : null}
             </label>
           ))}
+        </div>
+      ) : (
+        <div style={placeholderStyle}>
+          Expand civilization to review the available civilizations.
         </div>
       )}
     </section>
