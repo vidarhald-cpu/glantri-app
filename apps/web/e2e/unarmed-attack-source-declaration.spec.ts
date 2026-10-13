@@ -1,0 +1,396 @@
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import {
+  initializeCombatRoundState,
+  rollCombatRoundCombatExperience,
+  setCombatRoundCombatExperienceDifficulty,
+  type CombatRoundState,
+  type EncounterSession,
+} from "@glantri/domain";
+
+import { characterPayload } from "./character-fixture";
+
+/**
+ * #590 — Punch and Kick are intrinsic combat attack sources and must be declarable without
+ * equipment, through the existing Brawling competency and their existing authored stats.
+ *
+ * This is the rendered/executed evidence on a running stack. It also proves the authored catalogue
+ * field reaches the served bundle and the rendered option list, not only the source file: a
+ * snapshot persists the rest of the catalogue, so a source edit alone would prove nothing.
+ */
+const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+
+const PUNCH_SOURCE_ID = "unarmed:virtual-weapon-template-punch";
+const KICK_SOURCE_ID = "unarmed:virtual-weapon-template-kick";
+
+async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
+  if (!response.ok()) {
+    throw new Error(`${response.status()} ${await response.text()}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+async function post<T>(
+  request: APIRequestContext,
+  endpoint: string,
+  data: unknown = {},
+): Promise<T> {
+  return json<T>(await request.post(`${API_URL}${endpoint}`, { data }));
+}
+
+/** A character with a Brawling rank, so unarmed resolution has a competency to resolve through. */
+function brawlerPayload(id: string, name: string) {
+  const payload = characterPayload(id, name);
+  return {
+    build: {
+      ...payload.build,
+      progression: {
+        ...payload.build.progression,
+        secondaryPoolTotal: 60,
+        skills: [
+          {
+            category: "secondary",
+            categoryId: "combat",
+            groupId: "basic_melee_training",
+            secondaryRanks: 9,
+            skillId: "brawling",
+          },
+        ],
+      },
+    },
+  };
+}
+
+async function readDeclaration(input: {
+  encounterId: string;
+  participantId: string;
+  request: APIRequestContext;
+}) {
+  const { encounter } = await json<{ encounter: { combatRoundState: CombatRoundState } }>(
+    await input.request.get(`${API_URL}/encounters/${input.encounterId}`),
+  );
+  return encounter.combatRoundState.participants.find(
+    (participant) => participant.participantId === input.participantId,
+  )?.declaration;
+}
+
+/**
+ * Picks an attack source from the rendered control, after proving both brawling rows are offered
+ * as explicit labelled options and that nothing unarmed was selected on the actor's behalf.
+ */
+async function chooseUnarmedAttackSource(input: { page: Page; value: string }): Promise<void> {
+  const selector = input.page.getByRole("combobox", { name: "Attack source" }).first();
+  await expect(selector).toBeVisible();
+  await expect(selector.locator(`option[value="${PUNCH_SOURCE_ID}"]`)).toHaveText(
+    "Punch · Unarmed",
+  );
+  await expect(selector.locator(`option[value="${KICK_SOURCE_ID}"]`)).toHaveText("Kick · Unarmed");
+  await expect(selector).toHaveValue("");
+  await selector.selectOption(input.value);
+  await expect(selector).toHaveValue(input.value);
+}
+
+async function selectGmInspectorParticipant(input: { label: string; page: Page }): Promise<void> {
+  const heading = input.page.getByRole("heading", { name: /^Combat inspector — / });
+  await expect(heading).toBeVisible();
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if ((await heading.innerText()).includes(input.label)) return;
+    await input.page.getByRole("button", { name: "Next participant" }).click();
+  }
+  throw new Error(`The GM inspector never reached ${input.label}.`);
+}
+
+async function declare(input: { page: Page }): Promise<Record<string, unknown>> {
+  const sent: Array<Record<string, unknown>> = [];
+  const listener = (request: {
+    method: () => string;
+    postDataJSON: () => unknown;
+    url: () => string;
+  }) => {
+    if (request.method() === "POST" && request.url().includes("/combat-declaration")) {
+      sent.push(request.postDataJSON() as Record<string, unknown>);
+    }
+  };
+  input.page.on("request", listener);
+  const responsePromise = input.page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" && response.url().includes("/combat-declaration"),
+  );
+  await input.page.getByRole("button", { name: "Declare action" }).first().click();
+  const response = await responsePromise;
+  expect(response.ok(), await response.text()).toBe(true);
+  input.page.off("request", listener);
+  expect(sent).toHaveLength(1);
+  return sent[0]!;
+}
+
+test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
+  test.use({ storageState: "e2e/.auth/gm.json" });
+
+  test("lets a player and a GM each explicitly declare Punch or Kick with no Item instance", async ({
+    browser,
+    page: gmPage,
+  }) => {
+    test.setTimeout(240_000);
+    const suffix = Date.now();
+    const playerContext = await browser.newContext({ storageState: "e2e/.auth/player.json" });
+    const proxyContext = await browser.newContext({ storageState: "e2e/.auth/non-holder.json" });
+    const playerUser = await json<{ user: { id: string } }>(
+      await playerContext.request.get(`${API_URL}/auth/me`),
+    );
+    const proxyUser = await json<{ user: { id: string } }>(
+      await proxyContext.request.get(`${API_URL}/auth/me`),
+    );
+
+    // Two unequipped brawlers: the player declares for their own, the GM proxies the other, so
+    // neither half can mask the other. One player may hold only one active character per scenario,
+    // so the proxied character belongs to a second account.
+    const playerCharacter = {
+      context: playerContext,
+      id: `unarmed-player-${suffix}`,
+      name: `Unarmed Player ${suffix}`,
+      userId: playerUser.user.id,
+    };
+    const proxyCharacter = {
+      context: proxyContext,
+      id: `unarmed-proxy-${suffix}`,
+      name: `Unarmed Proxy ${suffix}`,
+      userId: proxyUser.user.id,
+    };
+    for (const character of [playerCharacter, proxyCharacter]) {
+      const created = await character.context.request.post(`${API_URL}/characters`, {
+        data: brawlerPayload(character.id, character.name),
+      });
+      expect(created.ok(), await created.text()).toBe(true);
+      // No ready weapon: the state #586 reported as unable to declare an attack at all.
+      const equipment = await json<{ state: { revision: number } }>(
+        await character.context.request.get(`${API_URL}/characters/${character.id}/equipment`),
+      );
+      await post(
+        character.context.request,
+        `/characters/${character.id}/equipment/loadout/active-primary-weapon`,
+        { expectedRevision: equipment.state.revision, itemId: null },
+      );
+    }
+
+    const campaign = await post<{ campaign: { id: string } }>(gmPage.request, "/campaigns", {
+      name: `Issue 590 Unarmed ${suffix}`,
+      status: "active",
+    });
+    const campaignId = campaign.campaign.id;
+    for (const character of [playerCharacter, proxyCharacter]) {
+      await post(gmPage.request, `/campaigns/${campaignId}/roster`, {
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+    }
+    const scenario = await post<{ scenario: { id: string } }>(
+      gmPage.request,
+      `/campaigns/${campaignId}/scenarios`,
+      { name: `Issue 590 Scenario ${suffix}`, status: "live" },
+    );
+    const scenarioId = scenario.scenario.id;
+    const participantIdByCharacterId: Record<string, string> = {};
+    for (const character of [playerCharacter, proxyCharacter]) {
+      const participant = await post<{ participant: { id: string } }>(
+        gmPage.request,
+        `/scenarios/${scenarioId}/participants/character`,
+        { characterId: character.id, controlledByUserId: character.userId },
+      );
+      participantIdByCharacterId[character.id] = participant.participant.id;
+      await post(
+        gmPage.request,
+        `/scenarios/${scenarioId}/participants/${participant.participant.id}/refresh-character-equipment`,
+      );
+    }
+    const targetName = `Unarmed target ${suffix}`;
+    const target = await post<{ participant: { id: string } }>(
+      gmPage.request,
+      `/scenarios/${scenarioId}/participants/entity`,
+      {
+        entityInput: { kind: "npc", name: targetName, snapshot: { displayName: targetName } },
+        role: "enemy",
+      },
+    );
+
+    const now = new Date().toISOString();
+    const playerCombatantId = `issue-590-player-${suffix}`;
+    const proxyCombatantId = `issue-590-proxy-${suffix}`;
+    const targetCombatantId = `issue-590-target-${suffix}`;
+    const created = await post<{ encounter: EncounterSession }>(
+      gmPage.request,
+      `/scenarios/${scenarioId}/encounters`,
+      {
+        session: {
+          campaignId,
+          createdAt: now,
+          currentRound: 1,
+          id: `issue-590-encounter-${suffix}`,
+          kind: "combat",
+          participantMembershipMode: "explicit",
+          participants: [
+            {
+              characterId: playerCharacter.id,
+              id: playerCombatantId,
+              label: playerCharacter.name,
+              participantType: "scenario",
+              scenarioParticipantId: participantIdByCharacterId[playerCharacter.id],
+            },
+            {
+              characterId: proxyCharacter.id,
+              id: proxyCombatantId,
+              label: proxyCharacter.name,
+              participantType: "scenario",
+              scenarioParticipantId: participantIdByCharacterId[proxyCharacter.id],
+            },
+            {
+              id: targetCombatantId,
+              label: targetName,
+              participantType: "scenario",
+              scenarioParticipantId: target.participant.id,
+            },
+          ],
+          scenarioId,
+          status: "active",
+          title: `Issue 590 Combat ${suffix}`,
+          updatedAt: now,
+        },
+      },
+    );
+    const encounterId = created.encounter.id;
+    const refreshed = await json<{ encounter: EncounterSession }>(
+      await gmPage.request.get(`${API_URL}/encounters/${encounterId}`),
+    );
+    const activated = await gmPage.request.patch(`${API_URL}/encounters/${encounterId}/status`, {
+      data: { expectedRevision: refreshed.encounter.updatedAt, status: "active" },
+    });
+    expect(activated.ok(), await activated.text()).toBe(true);
+
+    const activeEncounter = await json<{ encounter: EncounterSession }>(
+      await gmPage.request.get(`${API_URL}/encounters/${encounterId}`),
+    );
+    // Round 1 always opens with a Combat Experience check, which gates the declaration controls.
+    // Resolving it is scaffolding, exactly as the GM panel's own component fixture does it.
+    const combatRoundState = [playerCombatantId, proxyCombatantId, targetCombatantId].reduce(
+      (state, participantId, index) =>
+        rollCombatRoundCombatExperience({
+          command: { createdAt: new Date(Date.now() + index).toISOString() },
+          participantId,
+          rng: () => 0.6,
+          skillTotal: 26,
+          state,
+        }).state,
+      setCombatRoundCombatExperienceDifficulty({
+        difficulty: 26,
+        state: initializeCombatRoundState({ encounter: activeEncounter.encounter }),
+      }),
+    );
+    expect(combatRoundState.currentStep).toBe("select_actions");
+    const stateUpdate = await gmPage.request.put(`${API_URL}/encounters/${encounterId}`, {
+      data: {
+        expectedRevision: activeEncounter.encounter.updatedAt,
+        session: {
+          ...activeEncounter.encounter,
+          combatRoundState,
+          currentRound: 1,
+          status: "active",
+        },
+      },
+    });
+    expect(stateUpdate.ok(), await stateUpdate.text()).toBe(true);
+
+    // ---- Criterion 1: a player explicitly chooses Punch and attacks with it. ----
+    const playerPage = await playerContext.newPage();
+    await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
+    const playerAction = playerPage.getByRole("combobox", { name: "Action" }).first();
+    await expect(playerAction).toBeVisible();
+    await playerAction.selectOption("attack_parry");
+    await chooseUnarmedAttackSource({ page: playerPage, value: PUNCH_SOURCE_ID });
+    // Criterion 3, rendered: the stats this declaration will use name Punch, not a substitute.
+    await expect(playerPage.getByText("Punch", { exact: true }).first()).toBeVisible();
+    await playerPage
+      .getByRole("combobox", { name: "Target" })
+      .first()
+      .selectOption({ label: targetName });
+
+    const playerSent = await declare({ page: playerPage });
+    const playerSentSources = playerSent["phaseAttackSources"] as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(playerSentSources.phase1).toMatchObject({
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: "virtual-weapon-template-punch",
+    });
+    // Criterion 5: no Item instance is required, requested or sent.
+    expect(playerSentSources.phase1).not.toHaveProperty("scenarioItemId");
+
+    const playerDeclaration = await readDeclaration({
+      encounterId,
+      participantId: playerCombatantId,
+      request: gmPage.request,
+    });
+    expect(playerDeclaration?.actionId).toBe("attack_parry");
+    expect(playerDeclaration?.submittedBy).toBe("player");
+    // Persisted: the server committed a real Punch attack opportunity from the explicit choice,
+    // and it names no Item instance.
+    const playerOpportunity = playerDeclaration?.attackOpportunities?.find(
+      (opportunity) => opportunity.phase === "phase1",
+    );
+    expect(playerOpportunity).toMatchObject({
+      sourceKind: "unarmed",
+      status: "committed",
+      targetParticipantId: targetCombatantId,
+      weaponSourceId: PUNCH_SOURCE_ID,
+      weaponSourceSlot: "virtual",
+      weaponTemplateId: "virtual-weapon-template-punch",
+    });
+    expect(playerOpportunity?.itemId).toBeUndefined();
+    expect(playerOpportunity?.weaponInstanceId).toBeUndefined();
+    await playerPage.close();
+
+    // ---- Criterion 2: a GM/proxy explicitly chooses Kick and attacks with it. ----
+    await gmPage.goto(
+      `/campaigns/${campaignId}?scenarioId=${scenarioId}&encounterId=${encounterId}&tab=combat`,
+    );
+    await selectGmInspectorParticipant({ label: proxyCharacter.name, page: gmPage });
+    const gmAction = gmPage.getByRole("combobox", { name: "Action" }).first();
+    await expect(gmAction).toBeVisible();
+    await gmAction.selectOption("attack_parry");
+    await chooseUnarmedAttackSource({ page: gmPage, value: KICK_SOURCE_ID });
+    await gmPage
+      .getByRole("combobox", { name: "Target" })
+      .first()
+      .selectOption({ label: targetName });
+
+    const gmSent = await declare({ page: gmPage });
+    const gmSentSources = gmSent["phaseAttackSources"] as Record<string, Record<string, unknown>>;
+    expect(gmSentSources.phase1).toMatchObject({
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: "virtual-weapon-template-kick",
+    });
+    expect(gmSentSources.phase1).not.toHaveProperty("scenarioItemId");
+
+    const gmDeclaration = await readDeclaration({
+      encounterId,
+      participantId: proxyCombatantId,
+      request: gmPage.request,
+    });
+    expect(gmDeclaration?.submittedBy).toBe("gm");
+    const gmOpportunity = gmDeclaration?.attackOpportunities?.find(
+      (opportunity) => opportunity.phase === "phase1",
+    );
+    expect(gmOpportunity).toMatchObject({
+      sourceKind: "unarmed",
+      status: "committed",
+      targetParticipantId: targetCombatantId,
+      weaponSourceId: KICK_SOURCE_ID,
+      weaponSourceSlot: "virtual",
+      weaponTemplateId: "virtual-weapon-template-kick",
+    });
+    expect(gmOpportunity?.itemId).toBeUndefined();
+    expect(gmOpportunity?.weaponInstanceId).toBeUndefined();
+  });
+});
