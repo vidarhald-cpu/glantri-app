@@ -33,10 +33,11 @@ let testAccountIndex = 0;
 let currentTestAccountId = "";
 
 /**
- * Reveal the collapsed Stats chooser (Forgejo #577).
+ * Reveal the collapsed Stats chooser.
  *
- * Step 1 arrives collapsed, so the rolled-profile radios exist only once the player expands the
- * section. This is navigation the player now performs; it changes nothing these cases assert.
+ * Forgejo #597 opens Stats automatically when the roll completes, so this navigation is no longer
+ * required after `Roll all dice`. A *restored* draft is a return rather than a roll and still
+ * arrives collapsed behind the expand control (#577), so the resume case below still performs it.
  */
 async function expandStats(user: ReturnType<typeof userEvent.setup>) {
   /* A collapsed Stats section with a profile already restored carries both the header toggle and
@@ -89,7 +90,7 @@ describe("ChargenWizard component", () => {
 
     await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
     await user.click(screen.getByRole("button", { name: "Roll all dice" }));
-    await expandStats(user);
+    /* #597: the roll opens Stats itself, so the cards are present with no further click. */
 
     await waitFor(() => {
       const profileCards = screen.getAllByRole("radio");
@@ -105,7 +106,7 @@ describe("ChargenWizard component", () => {
 
     await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
     await user.click(screen.getByRole("button", { name: "Roll all dice" }));
-    await expandStats(user);
+    /* #597: the roll opens Stats itself, so the radios are present with no further click. */
 
     await waitFor(() => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
@@ -143,7 +144,7 @@ describe("ChargenWizard component", () => {
       screen.queryByRole("heading", { name: "11. Finalize character" }),
     ).not.toBeInTheDocument();
 
-    await expandStats(user);
+    /* #597: the roll opens Stats itself, so the radios are present with no further click. */
     await waitFor(() => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
     });
@@ -222,13 +223,17 @@ describe("ChargenWizard component", () => {
   }, 15_000);
 
   /**
-   * The collapsed first arrival (Forgejo #577).
+   * The collapsed first arrival (Forgejo #577), as narrowed by #597.
    *
-   * Steps 1, 3 and 5 each arrive collapsed with no selection, behind an always-visible expand
-   * control, and expanding chooses nothing. This is the wizard-level proof that the three chooser
-   * flags start closed and that no step auto-selects on the player's behalf.
+   * Forgejo #597 reverses the collapsed arrival **for Stats only**: the roll is the action whose
+   * result Stats holds, so step 1 now arrives open on the rolled values instead of telling the
+   * player to expand something to see what they just generated. Steps 3 and 5 are unchanged and
+   * still arrive collapsed behind an always-visible expand control.
+   *
+   * What #577 proved and this case still proves: no step auto-selects on the player's behalf.
+   * Stats arriving open is a reveal, not a choice — nothing is checked.
    */
-  it("arrives at each chooser step collapsed, with a discoverable expand control", async () => {
+  it("opens Stats on the rolled values and keeps the later choosers collapsed", async () => {
     const ChargenWizard = await importWizard();
     const user = userEvent.setup();
 
@@ -240,19 +245,18 @@ describe("ChargenWizard component", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
     });
-    expect(screen.getByText("Expand stats to review the rolled profiles.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Expand stats" })).toBeInTheDocument();
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
-
-    /* Expanding reveals the chooser and selects nothing. */
-    await user.click(screen.getByRole("button", { name: "Expand stats" }));
+    /* #597: the rolled values are on screen without a further click, and the instruction to open
+       the section is gone because the section is already open. */
     await waitFor(() => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(1);
     });
+    expect(screen.queryByText("Expand stats to review the rolled profiles.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Expand stats" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Collapse stats" })).toBeInTheDocument();
+    /* The reveal still selects nothing on the player's behalf (#577). */
     expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(
       false,
     );
-    expect(screen.getByRole("button", { name: "Collapse stats" })).toBeInTheDocument();
     await user.click(screen.getAllByRole("radio")[0]!);
 
     await user.click(screen.getByRole("button", { name: "3. Choose civilization" }));

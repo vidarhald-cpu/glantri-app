@@ -47,12 +47,17 @@ export async function gotoChargenStep(page: Page, label: ChargenStepLabel): Prom
 }
 
 /**
- * The three Chargen chooser sections that now arrive collapsed (Forgejo #577).
+ * The three Chargen chooser sections that arrive collapsed (Forgejo #577), as narrowed by #597.
  *
  * Step 1, step 3 and step 5 used to render their full chooser on first arrival. They now show a
  * collapsed section with an always-visible `Expand <chooser>` control, so a spec that selects from
  * one of them has to reveal it first. This adds navigation only: no assertion changes, and the
  * revealed chooser is the same chooser, with the same controls, filters and rows.
+ *
+ * Forgejo #597 narrows that for Stats: `Roll all dice` now opens step 1 on the values it just
+ * rolled, so a spec that rolls does **not** expand Stats. `"stats"` remains in this list because a
+ * *resumed* draft is a return rather than a roll and still arrives collapsed, which
+ * `chargen-account-drafts.spec.ts` exercises. Civilization and Profession are unchanged.
  */
 export const chargenChoosers = ["stats", "civilization", "profession"] as const;
 

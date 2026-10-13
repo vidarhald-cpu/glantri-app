@@ -19,7 +19,9 @@ test("target competencies through existing Chargen and authoritative persistence
   expect(registration.status()).toBe(200);
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
-  await expandChargenChooser(page, "stats");
+  /* #597: the roll reveals Stats itself. Wait for the rolled rows so the selection below cannot
+     race the reveal, exactly as the removed `expandChargenChooser` wait did. */
+  await expect(page.locator('input[name="profile"]').first()).toBeVisible({ timeout: 15_000 });
   await page.locator('input[name="profile"]').first().click();
   await gotoChargenStep(page, "2. Resolve stats");
   try {
