@@ -1,0 +1,22 @@
+/*
+ * Containment only (#601 D1). The Scenario metadata row is laid out horizontally, and its four
+ * fixed minimum tracks (160 + 240 + 130 + the button) need 666px. In a 375px viewport that row
+ * was what widened the whole Scenario document to 690px, pushing the Description input and the
+ * "Make available" button off the right edge.
+ *
+ * The desktop template is unchanged. Below the width where the row cannot fit, the fields stack
+ * instead of widening the page: the row wraps within itself, nothing is hidden, and no scroll
+ * affordance is needed because every field becomes full width.
+ */
+.summaryRow {
+  align-items: end;
+  grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr) minmax(130px, 0.7fr) auto;
+  min-width: 0;
+}
+
+@media (max-width: 719px) {
+  .summaryRow {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

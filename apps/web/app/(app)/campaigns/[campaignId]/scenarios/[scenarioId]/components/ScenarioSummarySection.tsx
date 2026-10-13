@@ -4,6 +4,8 @@ import { isScenarioReadOnly, scenarioLifecycleTransitions, type Scenario } from 
 
 import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 
+import styles from "./ScenarioSummarySection.module.css";
+
 interface ScenarioSummarySectionProps {
   onDescriptionChange: (value: string) => void;
   onNameChange: (value: string) => void;
@@ -52,13 +54,12 @@ export function ScenarioSummarySection({
   return (
     <section
       aria-label="Scenario summary"
+      className={styles.summaryRow}
       style={{
-        alignItems: "end",
         border: "1px solid #d9ddd8",
         borderRadius: 12,
         display: "grid",
         gap: "0.75rem",
-        gridTemplateColumns: "minmax(160px, 1fr) minmax(240px, 2fr) minmax(130px, 0.7fr) auto",
         padding: "0.85rem 1rem",
       }}
     >
