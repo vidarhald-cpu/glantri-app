@@ -70,6 +70,8 @@ import { ArtifactPanel } from "@/features/artifacts";
 import { BlackboardWorkspace } from "@/features/blackboard";
 import { MapWorkspace } from "@/features/maps";
 
+import styles from "./CampaignWorkspaceShell.module.css";
+
 interface CampaignWorkspaceShellProps {
   campaignId: string;
 }
@@ -1645,9 +1647,12 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
          * Containment only (#601 D3). A single-column `auto` grid track takes its max-content
          * width, so the Combat panel widened the whole document to 427px in a 375px viewport and
          * the content nearest the right edge - the Parry-context modifier labels among it - fell
-         * outside the visible area. `minmax(0, 1fr)` holds the track to the available width and
-         * the wrapper below gives the panel its own horizontal scroll affordance, so nothing is
-         * hidden. The panel's own markup and inline styles are untouched.
+         * outside the visible area. `minmax(0, 1fr)` holds the track to the available width, and
+         * below 960px the region around the panel gives it its own horizontal scroll affordance,
+         * so nothing is hidden. At wider viewports the page was already contained and no scroll
+         * region is created, because one would clip the few pixels `main`'s side padding has room
+         * for (see `CampaignWorkspaceShell.module.css`). The panel's own markup and inline styles
+         * are untouched.
          */
         <section style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1fr)" }}>
           {canAccessGmEncounter && selectedActiveEncounter ? (
@@ -1671,7 +1676,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   </div>
                 </section>
               ) : null}
-              <div style={{ minWidth: 0, overflowX: "auto" }}>
+              <div className={styles.combatPanelRegion}>
                 <CombatRoundManagerPanel
                   encounter={selectedActiveEncounter}
                   key={selectedActiveEncounter.id}
