@@ -676,10 +676,16 @@ test.describe("Lost Seal Scenario happy path", () => {
     await restrictDuringOpenCombat("hidden");
     await restoreVisibleParticipant();
     await restrictDuringOpenCombat("gm_only");
-    expect(await readGmEquipmentStatuses()).toMatchObject({
-      ...expectedCurrentEquipmentStatuses,
-      [participantB.participant.id]: "stale",
-    });
+    // Forgejo issue #599. This expected `stale` for participant B, and that expectation recorded
+    // a defect rather than intended behaviour: nothing here changes B's equipment. B went stale
+    // only because the GM Combat surface's own `GET /characters/:id/equipment` lazily initialized
+    // an aggregate that B's participant snapshot had already been captured from, which then made
+    // the Item options endpoint answer 409 for the rest of the Combat. Participant capture now
+    // initializes the aggregate first, so opening Combat no longer invalidates its own state.
+    // Genuine staleness is still exercised above, where an actual equipment change blocks the
+    // Combat start with "must reconcile" until participant A is reconciled.
+    expect(await readGmEquipmentStatuses()).toMatchObject(expectedCurrentEquipmentStatuses);
+    // The remedy stays available and is a no-op on an already-current participant.
     await json(
       await page.request.post(
         `${API_URL}/scenarios/${scenario.scenario.id}/participants/${participantB.participant.id}/reconcile-character-equipment`,

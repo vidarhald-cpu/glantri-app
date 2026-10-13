@@ -85,7 +85,7 @@ if (!process.env.DATABASE_URL_TEST) {
         createPrismaCharacterEquipmentRepository(prisma!),
       );
       const campaignService = new CampaignService(repo, characterService);
-      const service = new ScenarioService(repo, characterService, equipmentService);
+      const service = new ScenarioService(repo, characterService, equipmentService, prisma!);
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
         name: "Roster Gate",
@@ -182,7 +182,7 @@ if (!process.env.DATABASE_URL_TEST) {
         createPrismaCharacterEquipmentRepository(prisma!),
       );
       const campaignService = new CampaignService(repo, characterService);
-      const service = new ScenarioService(repo, characterService, equipmentService);
+      const service = new ScenarioService(repo, characterService, equipmentService, prisma!);
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
         name: "Delegated Campaign",
@@ -237,7 +237,7 @@ if (!process.env.DATABASE_URL_TEST) {
         createPrismaCharacterEquipmentRepository(prisma!),
       );
       const campaignService = new CampaignService(repository, characterService);
-      const service = new ScenarioService(repository, characterService, equipmentService);
+      const service = new ScenarioService(repository, characterService, equipmentService, prisma!);
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
         name: "History Campaign",
