@@ -284,7 +284,7 @@ describe("scenario encounter controls", () => {
     expect(screen.queryByText(/editing these fields is deferred/i)).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        /This participant is not assigned to a non-archived encounter yet\. Assign them to an encounter before recording encounter-specific details\./,
+        /This participant is not assigned to a current encounter yet\. Assign them to an encounter before recording encounter-specific details\./,
       ),
     ).toBeInTheDocument();
   });
