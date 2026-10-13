@@ -1157,8 +1157,11 @@ export function useChargenWizardState() {
     setSelectedProfileId(undefined);
     setSelectedProfessionId(undefined);
     setSelectedCivilizationId(undefined);
-    /* A new Character is a first arrival, so the choosers start collapsed here too (#577). */
-    setShowRolledProfileOptions(false);
+    /* #597: rolling the dice is the action whose result the Stats section holds, so that one
+       section opens on the rolled values rather than reporting them behind another control.
+       The Civilization and Profession choosers stay collapsed on arrival per #577/#587 — they
+       hold choices the roll did not make, and the Profession list is 86 options. */
+    setShowRolledProfileOptions(true);
     setShowCivilizationChooser(false);
     setShowProfessionChooser(false);
     setExpandedProfessionId(undefined);
