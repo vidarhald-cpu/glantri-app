@@ -32,6 +32,21 @@ async function importWizard() {
 let testAccountIndex = 0;
 let currentTestAccountId = "";
 
+/**
+ * Reveal the collapsed Stats chooser (Forgejo #577).
+ *
+ * Step 1 arrives collapsed, so the rolled-profile radios exist only once the player expands the
+ * section. This is navigation the player now performs; it changes nothing these cases assert.
+ */
+async function expandStats(user: ReturnType<typeof userEvent.setup>) {
+  /* A collapsed Stats section with a profile already restored carries both the header toggle and
+     the summary card's own `Expand stats` control, and either one opens it. */
+  await waitFor(() => {
+    expect(screen.getAllByRole("button", { name: "Expand stats" }).length).toBeGreaterThan(0);
+  });
+  await user.click(screen.getAllByRole("button", { name: "Expand stats" })[0]!);
+}
+
 describe("ChargenWizard component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,6 +89,7 @@ describe("ChargenWizard component", () => {
 
     await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
     await user.click(screen.getByRole("button", { name: "Roll all dice" }));
+    await expandStats(user);
 
     await waitFor(() => {
       const profileCards = screen.getAllByRole("radio");
@@ -89,6 +105,7 @@ describe("ChargenWizard component", () => {
 
     await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
     await user.click(screen.getByRole("button", { name: "Roll all dice" }));
+    await expandStats(user);
 
     await waitFor(() => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
@@ -126,6 +143,7 @@ describe("ChargenWizard component", () => {
       screen.queryByRole("heading", { name: "11. Finalize character" }),
     ).not.toBeInTheDocument();
 
+    await expandStats(user);
     await waitFor(() => {
       expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
     });
@@ -191,11 +209,101 @@ describe("ChargenWizard component", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
+    });
+    /* The restored profile is named by the collapsed section before anything is expanded. */
+    expect(screen.getAllByText(profiles[0]!.label).length).toBeGreaterThan(0);
+    await expandStats(user);
+
+    await waitFor(() => {
       expect(
         screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked),
       ).toBe(true);
     });
   }, 15_000);
+
+  /**
+   * The collapsed first arrival (Forgejo #577).
+   *
+   * Steps 1, 3 and 5 each arrive collapsed with no selection, behind an always-visible expand
+   * control, and expanding chooses nothing. This is the wizard-level proof that the three chooser
+   * flags start closed and that no step auto-selects on the player's behalf.
+   */
+  it("arrives at each chooser step collapsed, with a discoverable expand control", async () => {
+    const ChargenWizard = await importWizard();
+    const user = userEvent.setup();
+
+    render(<ChargenWizard />);
+
+    await waitFor(() => screen.getByRole("button", { name: "Roll all dice" }));
+    await user.click(screen.getByRole("button", { name: "Roll all dice" }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "1. Stats" })).toBeInTheDocument();
+    });
+    expect(screen.getByText("Expand stats to review the rolled profiles.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand stats" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+
+    /* Expanding reveals the chooser and selects nothing. */
+    await user.click(screen.getByRole("button", { name: "Expand stats" }));
+    await waitFor(() => {
+      expect(screen.getAllByRole("radio").length).toBeGreaterThan(1);
+    });
+    expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(
+      false,
+    );
+    expect(screen.getByRole("button", { name: "Collapse stats" })).toBeInTheDocument();
+    await user.click(screen.getAllByRole("radio")[0]!);
+
+    await user.click(screen.getByRole("button", { name: "3. Choose civilization" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText("Expand civilization to review the available civilizations."),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Expand civilization" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+
+    await user.click(screen.getByRole("button", { name: "Expand civilization" }));
+    await waitFor(() => {
+      expect(screen.getAllByRole("radio").length).toBeGreaterThan(0);
+    });
+    expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(
+      false,
+    );
+    const civilization = screen.getAllByRole("radio")[0]! as HTMLInputElement;
+    const civilizationName =
+      civilization.closest("label")?.querySelector("strong")?.textContent ?? "";
+    expect(civilizationName).not.toBe("");
+    await user.click(civilization);
+    /* The collapsed civilization section names the choice. */
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Change civilization" })).toBeInTheDocument();
+    });
+    expect(screen.getAllByText(civilizationName).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "5. Choose profession" }));
+    await waitFor(() => {
+      expect(
+        screen.getByText("Expand profession to review the available professions."),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "Expand profession" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    /* The chooser's own controls are collapsed with it, and come back unchanged. */
+    expect(screen.queryByLabelText("Search professions")).toBeNull();
+    expect(screen.queryByLabelText("Kind of work")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Expand profession" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Search professions")).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText("Kind of work")).toBeInTheDocument();
+    expect(screen.getAllByRole("radio").length).toBeGreaterThan(1);
+    expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(
+      false,
+    );
+  }, 30_000);
 
   it("keeps a historical draft readable and requires confirmation before starting new", async () => {
     await new ChargenSessionRepository().save({

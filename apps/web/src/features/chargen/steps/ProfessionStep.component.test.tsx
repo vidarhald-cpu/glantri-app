@@ -140,3 +140,70 @@ describe("Profession chooser", () => {
     expect(text).toContain("Choosing a Profession grants no ranks and spends no points");
   });
 });
+
+/**
+ * The collapsed Profession section (Forgejo #577).
+ *
+ * First arrival at step 5 used to render the search box, the kind-of-work filter and all 86 radios.
+ * It now follows the Stats step's own grammar instead: an always-visible header toggle, a collapsed
+ * placeholder with no selection, and a collapsed summary that names the chosen Profession.
+ */
+describe("Collapsed Profession section", () => {
+  it("collapses to a placeholder and a discoverable expand control when nothing is selected", () => {
+    renderStep({ showProfessionChooser: false });
+
+    expect(
+      screen.getByText("Expand profession to review the available professions."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Expand profession" })).toBeInTheDocument();
+    /* Neither the chooser's controls nor its rows are rendered while the section is collapsed. */
+    expect(screen.queryByLabelText("Search professions")).toBeNull();
+    expect(screen.queryByLabelText("Kind of work")).toBeNull();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+  });
+
+  it("asks to reveal the chooser when the header toggle is used, and never selects for the player", async () => {
+    const setShowProfessionChooser = vi.fn();
+    const handleProfessionChange = vi.fn();
+    renderStep({ handleProfessionChange, setShowProfessionChooser, showProfessionChooser: false });
+
+    await userEvent.click(screen.getByRole("button", { name: "Expand profession" }));
+
+    expect(setShowProfessionChooser).toHaveBeenCalledTimes(1);
+    expect(handleProfessionChange).not.toHaveBeenCalled();
+    const update = setShowProfessionChooser.mock.calls[0]![0] as (current: boolean) => boolean;
+    expect(update(false)).toBe(true);
+  });
+
+  it("reveals the unchanged chooser when expanded", () => {
+    renderStep();
+
+    expect(screen.getByRole("button", { name: "Collapse profession" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Search professions")).toBeInTheDocument();
+    expect(screen.getByLabelText("Kind of work")).toBeInTheDocument();
+    expect(screen.getAllByRole("radio")).toHaveLength(cards.length);
+    for (const radio of screen.getAllByRole("radio")) expect(radio).not.toBeChecked();
+    expect(screen.queryByText("Expand profession to review the available professions.")).toBeNull();
+  });
+
+  it("names the selected Profession in the collapsed state", () => {
+    renderStep({
+      selectedProfessionCard: cards[0],
+      selectedProfessionId: "profession:thief",
+      showProfessionChooser: false,
+    });
+
+    expect(screen.getByText(cards[0]!.subtypeName)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change profession" })).toBeInTheDocument();
+    expect(screen.queryByText("Expand profession to review the available professions.")).toBeNull();
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+  });
+
+  it("offers no expand control when there is nothing to choose yet", () => {
+    renderStep({ availableProfessions: [], showProfessionChooser: false });
+
+    expect(screen.getByText("Select a rolled profile and civilization first.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Expand profession" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Collapse profession" })).toBeNull();
+  });
+});

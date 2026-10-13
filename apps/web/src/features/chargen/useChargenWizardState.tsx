@@ -155,9 +155,12 @@ export function useChargenWizardState() {
   const [selectedProfileId, setSelectedProfileId] = useState<string>();
   const [selectedCivilizationId, setSelectedCivilizationId] = useState<string>();
   const [selectedProfessionId, setSelectedProfessionId] = useState<string>();
-  const [showRolledProfileOptions, setShowRolledProfileOptions] = useState(true);
-  const [showCivilizationChooser, setShowCivilizationChooser] = useState(true);
-  const [showProfessionChooser, setShowProfessionChooser] = useState(true);
+  /* #577: the three chooser sections arrive collapsed, so a first arrival is a section heading and
+     its expand control rather than the whole list. Nothing is auto-selected; expanding reveals the
+     same chooser, and a selection still collapses the section through the handlers below. */
+  const [showRolledProfileOptions, setShowRolledProfileOptions] = useState(false);
+  const [showCivilizationChooser, setShowCivilizationChooser] = useState(false);
+  const [showProfessionChooser, setShowProfessionChooser] = useState(false);
   const [expandedProfessionId, setExpandedProfessionId] = useState<string>();
   const [professionCategoryFilter, setProfessionCategoryFilter] = useState("all");
   const [professionSearch, setProfessionSearch] = useState("");
@@ -875,7 +878,9 @@ export function useChargenWizardState() {
     }
 
     setSelectedProfessionId(undefined);
-    setShowProfessionChooser(true);
+    /* The society changed, so the Profession selection is cleared. Step 5 is then a first arrival
+       with no selection and shows its collapsed section rather than all 86 options (#577). */
+    setShowProfessionChooser(false);
     setProgression(createChargenProgression("standard", chargenRuleSet));
     setRowActionFeedback({});
     setGroupTrainingCostChange(undefined);
@@ -1152,9 +1157,10 @@ export function useChargenWizardState() {
     setSelectedProfileId(undefined);
     setSelectedProfessionId(undefined);
     setSelectedCivilizationId(undefined);
-    setShowRolledProfileOptions(true);
-    setShowCivilizationChooser(true);
-    setShowProfessionChooser(true);
+    /* A new Character is a first arrival, so the choosers start collapsed here too (#577). */
+    setShowRolledProfileOptions(false);
+    setShowCivilizationChooser(false);
+    setShowProfessionChooser(false);
     setExpandedProfessionId(undefined);
     setExpandedAllocationSections([]);
     setExpandedSkillDetails([]);
