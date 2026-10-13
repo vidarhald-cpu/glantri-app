@@ -73,6 +73,15 @@ export function CombatItemInteractionPanel({
   readOnly = false,
 }: CombatItemInteractionPanelProps) {
   const [options, setOptions] = useState<CombatItemInteractionOptions>();
+  /**
+   * Forgejo issue #599 — load failure is represented separately from loading.
+   *
+   * `options` alone cannot tell the two apart: it is only ever assigned on the success path, so
+   * the absence of it used to mean both "still loading" and "the request failed", and a failed
+   * load presented itself as work still in progress indefinitely. This holds the failure instead,
+   * carrying the server's own message, so the panel always reaches a resolved state.
+   */
+  const [loadError, setLoadError] = useState<string>();
   const [recipientByItemId, setRecipientByItemId] = useState<Record<string, string>>({});
   const [detailByItemId, setDetailByItemId] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -111,13 +120,14 @@ export function CombatItemInteractionPanel({
   useEffect(() => {
     let active = true;
     setFeedback(undefined);
+    setLoadError(undefined);
     void loadCombatItemInteractionOptions(encounter.id)
       .then((next) => {
         if (active) setOptions(next);
       })
       .catch((error) => {
         if (active) {
-          setFeedback(
+          setLoadError(
             error instanceof Error ? error.message : "Unable to load Items for this Combat.",
           );
         }
@@ -283,9 +293,10 @@ export function CombatItemInteractionPanel({
         </div>
       ) : options ? (
         <div>{isGm ? "No supported Items for this participant." : "No available Items."}</div>
-      ) : (
+      ) : loadError ? null : (
         <div>Loading Items…</div>
       )}
+      {loadError ? <div role="status">{loadError}</div> : null}
       {feedback ? <div role="status">{feedback}</div> : null}
     </section>
   );

@@ -21,12 +21,14 @@ import {
   scenarioSessionStateSchema,
 } from "@glantri/domain";
 
+import { createPrismaCharacterEquipmentRepository } from "../repositories/characterEquipmentRepository";
 import {
   createPrismaScenarioRepository,
   ScenarioPersistenceError,
   type ScenarioRepository,
 } from "../repositories/scenarioRepository";
 import { CharacterEquipmentReadModelService } from "./characterEquipmentReadModelService";
+import { CharacterEquipmentWriteService } from "./characterEquipmentWriteService";
 import { CharacterService } from "./characterService";
 import {
   assertControllerAssignmentAvailable,
@@ -73,7 +75,40 @@ export class ScenarioService {
     private readonly characterService = new CharacterService(),
     private readonly equipmentService = new CharacterEquipmentReadModelService(),
     private readonly client: PrismaClient = defaultPrisma,
+    /**
+     * Forgejo issue #599. Scenario participant capture is the write boundary at which Combat
+     * begins to depend on a Character's equipment aggregate, so it is the boundary that must
+     * guarantee the aggregate is initialized. See `captureCurrentEquipmentState`. It defaults to
+     * a service bound to this service's own client, so a caller that supplied a client never
+     * silently initializes an aggregate on a different database.
+     */
+    private readonly equipmentWriteService = new CharacterEquipmentWriteService(
+      createPrismaCharacterEquipmentRepository(client),
+    ),
   ) {}
+
+  /**
+   * Reads the equipment state a Scenario-owned projection is about to be captured from, having
+   * first guaranteed the aggregate is initialized.
+   *
+   * Forgejo issue #599. Lazy initialization (default storage locations and an active loadout) is
+   * the one remaining write that an otherwise read-only equipment request can still perform, and
+   * it advances `CharacterEquipmentAggregate.revision`. A Character finalized through Chargen
+   * reaches the roster uninitialized, so a projection captured before initialization recorded a
+   * revision and fingerprint that the very next equipment read invalidated — and
+   * `assertScenarioEquipmentCurrent` then refused every Item interaction and canonical Disarm in
+   * that Scenario with a 409 until the GM reconciled.
+   *
+   * Initializing here, immediately before the capture, closes that ordering for good:
+   * initialization advances the revision at most once per Character, so performing it before the
+   * first projection of that Character exists means no later read — and no later capture for
+   * another Scenario — can advance it again. It adds no write path of its own: this method is only
+   * ever called from the two existing writes that capture the projection.
+   */
+  private async captureCurrentEquipmentState(characterId: string) {
+    await this.equipmentWriteService.ensureCharacterEquipmentInitialized(characterId);
+    return this.equipmentService.getCharacterEquipmentState(characterId, { kind: "gm" });
+  }
 
   async resolveEquipmentStatuses(input: {
     participants: ScenarioParticipant[];
@@ -482,10 +517,7 @@ export class ScenarioService {
       scenarioId: input.scenarioId,
     });
 
-    const equipmentState = await this.equipmentService.getCharacterEquipmentState(
-      input.characterId,
-      { kind: "gm" },
-    );
+    const equipmentState = await this.captureCurrentEquipmentState(input.characterId);
     const snapshotState = createParticipantSnapshotFromCharacter({
       build: character.build,
       equipmentState,
@@ -563,10 +595,7 @@ export class ScenarioService {
       throw new Error("Character not found.");
     }
 
-    const equipmentState = await this.equipmentService.getCharacterEquipmentState(
-      participant.characterId,
-      { kind: "gm" },
-    );
+    const equipmentState = await this.captureCurrentEquipmentState(participant.characterId);
     const refreshed = createParticipantSnapshotFromCharacter({
       build: character.build,
       equipmentState,
