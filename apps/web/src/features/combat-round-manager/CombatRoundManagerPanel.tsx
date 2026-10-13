@@ -290,6 +290,7 @@ import {
   buildPlayerCombatPhasePanelModel,
   formatScenarioCombatEquipmentDiagnostic,
   getCombatDeclarationAttackModeUnavailableMessage,
+  getCombatDeclarationAttackSourceRequiredMessage,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
@@ -10111,6 +10112,17 @@ export default function CombatRoundManagerPanel({
         disarmAttackSource.scenarioItemId !== disarmActingItem?.id)
     ) {
       setSaveError("Use the selected trapping weapon as the attack source for that phase.");
+      return;
+    }
+    // #591: the GM path used to discard `missingSourcePhases` and send `phaseAttackSources: {}`,
+    // so a GM-proxied attack for an unequipped participant was refused only by the API. Refuse it
+    // here instead, after the more specific proactive-disarm check above so that message still
+    // wins. No source is ever substituted: an explicit selection remains required.
+    const attackSourceRequiredMessage = getCombatDeclarationAttackSourceRequiredMessage(
+      declarationAttackSelection.missingSourcePhases,
+    );
+    if (!isModifierReview && attackSourceRequiredMessage) {
+      setSaveError(attackSourceRequiredMessage);
       return;
     }
     const attackModeUnavailableMessage = getCombatDeclarationAttackModeUnavailableMessage({
