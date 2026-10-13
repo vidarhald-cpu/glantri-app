@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { forEachChargenStep, gotoChargenStep } from "./chargen-step-navigation";
+import {
+  expandChargenChooser,
+  forEachChargenStep,
+  gotoChargenStep,
+} from "./chargen-step-navigation";
 
 /**
  * Overlapping Learning Group training, in the browser.
@@ -42,14 +46,17 @@ test("overlapping training is an allocation edit and never an unexplained cost r
 
   await page.goto("/chargen");
   await page.getByRole("button", { name: "Roll all dice", exact: true }).click();
+  await expandChargenChooser(page, "stats");
   await page.locator('input[name="profile"]').first().click();
   await gotoChargenStep(page, "2. Resolve stats");
   await expect(page.getByRole("button", { name: "Swap", exact: true })).toBeVisible({
     timeout: 10_000,
   });
   await gotoChargenStep(page, "3. Choose civilization");
+  await expandChargenChooser(page, "civilization");
   await page.getByRole("radio", { name: /Scandia/ }).click();
   await gotoChargenStep(page, "5. Choose profession");
+  await expandChargenChooser(page, "profession");
   await page.getByRole("radio", { name: /Teacher/ }).click();
 
   // The retired vocabulary is absent from every step, not merely from the one in view.
