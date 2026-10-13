@@ -5,7 +5,7 @@ import { formatAuthRoleLabel, type AuthRole, type AuthUser } from "@glantri/auth
 
 import { loadAuthUsers, updateAuthUserRole } from "@/lib/api/authClient";
 import { useCanAccessAdmin } from "@/lib/auth/SessionUserContext";
-import { AdminPageIntro, AdminPanel, AdminReadOnlyNotice } from "../admin-ui";
+import { AdminPageIntro, AdminPanel } from "../admin-ui";
 
 const roleOptions: AuthRole[] = ["player", "game_master", "admin"];
 
@@ -123,9 +123,6 @@ export default function PlayersAdminPage() {
             </table>
           </div>
         )}
-        {!canEdit ? (
-          <AdminReadOnlyNotice message="Player accounts can review users here, but only Admin and GM roles can change role assignments." />
-        ) : null}
         {feedback ? <div style={{ color: "#5f543a" }}>{feedback}</div> : null}
       </AdminPanel>
     </section>
