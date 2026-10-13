@@ -288,6 +288,33 @@ describe("thrown use comes from the mode's authored attackType, never from a slo
   });
 });
 
+describe("intrinsic unarmed sources resolve through Brawling (#590)", () => {
+  // #590 made Punch and Kick declarable without equipment. The ruling requires that resolution use
+  // the existing Brawling competency, so pin it by moving ranks: only Brawling may move the number.
+  it.each([punchTemplate, kickTemplate])("$name follows Brawling and nothing else", (template) => {
+    const mode = template.attackModes![0]!;
+    expect(mode.competencyRef).toBe("brawling");
+    expect(mode.canonicalMeleeMode).toBe("strike");
+
+    const baselineOb = ob(template, mode.id);
+    expect(typeof baselineOb).toBe("number");
+
+    const moreBrawling = buildCombatStateCharacterInputs(
+      buildSheet({ ...ranksById, brawling: 91 }),
+    );
+    expect(ob(template, mode.id, moreBrawling)).not.toBe(baselineOb);
+
+    // Every other weapon competency on the sheet, including the ones a slot-based or name-based
+    // resolution might reach for, leaves the unarmed number exactly where it was.
+    for (const competencyId of Object.keys(ranksById).filter((id) => id !== "brawling")) {
+      const moved = buildCombatStateCharacterInputs(
+        buildSheet({ ...ranksById, [competencyId]: 97 }),
+      );
+      expect(ob(template, mode.id, moved), `${competencyId} moved the unarmed OB`).toBe(baselineOb);
+    }
+  });
+});
+
 describe("no behaviour change for weapons that already resolved correctly (characterization)", () => {
   // Captured from the unmodified baseline 10a846b5 on this fixed character: every non-thrown mode
   // with a non-throwing slot and every thrown mode with the throwing slot, Firearms excluded.

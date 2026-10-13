@@ -98,6 +98,69 @@ vi.mock("@/lib/api/scenarioClient", async (importOriginal) => {
 vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/features/player-combat/playerCombatPhaseModel")>();
+  /**
+   * The unarmed reference the real helper resolves for an explicitly chosen brawling row: a
+   * Punch/Kick template with NO `sourceItemId`, which is what makes an unarmed declaration need no
+   * Item instance (#590).
+   */
+  const unarmedReference = (input: { templateId: string; weapon: "Kick" | "Punch" }) => ({
+    am: "A",
+    am2: "—",
+    attackMode: "Strike",
+    attackMode2: "—",
+    combinedDb: "—",
+    combinedDm: "—",
+    combinedParry: "—",
+    combinedSourceName: "—",
+    crit: "AC",
+    crit2: "—",
+    damageClass: "blunt",
+    damageClass2: "—",
+    db: "0",
+    dmb: input.weapon === "Kick" ? "2" : "0",
+    dmb2: "—",
+    dm: "0",
+    initiative: "0",
+    ob: input.weapon === "Kick" ? "0" : "1",
+    ob2: "—",
+    parry: "0",
+    secondCrit: "—",
+    selectedWeapon: input.weapon,
+    sourceAttackModeId: "mode-1",
+    sourceTemplateId: input.templateId,
+  });
+  /**
+   * The attack sources the shared option helper builds for this fixture: the two ready long-sword
+   * slots plus the two brawling rows, which the catalogue makes declarable (#586/#590 ruling).
+   */
+  const attackSourceOptions = [
+    {
+      id: "weapon:long-sword-primary",
+      label: "Long sword · Primary",
+      slot: "primary" as const,
+      sourceKind: "weapon" as const,
+    },
+    {
+      id: "weapon:long-sword-secondary",
+      label: "Long sword · Secondary",
+      slot: "secondary" as const,
+      sourceKind: "weapon" as const,
+    },
+    {
+      id: "unarmed:virtual-weapon-template-punch",
+      label: "Punch · Unarmed",
+      slot: "virtual" as const,
+      sourceKind: "unarmed" as const,
+      templateId: "virtual-weapon-template-punch",
+    },
+    {
+      id: "unarmed:virtual-weapon-template-kick",
+      label: "Kick · Unarmed",
+      slot: "virtual" as const,
+      sourceKind: "unarmed" as const,
+      templateId: "virtual-weapon-template-kick",
+    },
+  ];
   const reference = (input: {
     attackModeId: string;
     itemId: string;
@@ -136,26 +199,46 @@ vi.mock("@/features/player-combat/playerCombatPhaseModel", async (importOriginal
     buildPlayerCombatLoadoutSummary: vi.fn(
       (input: Parameters<typeof actual.buildPlayerCombatLoadoutSummary>[0]) => {
         const phase2 = input.actionId === "double_attack" && input.phaseKey === "phase2";
-        const selectedAttackModeId = input.selectedAttackModeId ?? (phase2 ? "mode-2" : "mode-1");
-        const selectedReference = reference({
-          attackModeId: selectedAttackModeId,
-          itemId: phase2 ? "long-sword-secondary" : "long-sword-primary",
-          slot: phase2 ? "secondary" : "primary",
-        });
+        const selectedUnarmed = attackSourceOptions.find(
+          (option) => option.sourceKind === "unarmed" && option.id === input.selectedAttackSourceId,
+        );
+        const selectedAttackModeId = selectedUnarmed
+          ? "mode-1"
+          : (input.selectedAttackModeId ?? (phase2 ? "mode-2" : "mode-1"));
+        const selectedReference = selectedUnarmed
+          ? unarmedReference({
+              templateId: selectedUnarmed.templateId!,
+              weapon:
+                selectedUnarmed.templateId === "virtual-weapon-template-kick" ? "Kick" : "Punch",
+            })
+          : reference({
+              attackModeId: selectedAttackModeId,
+              itemId: phase2 ? "long-sword-secondary" : "long-sword-primary",
+              slot: phase2 ? "secondary" : "primary",
+            });
 
         return {
-          attackModeOptions: [
-            {
-              allowsRepeatedRoundAttack: false,
-              id: "mode-1",
-              label: "Slash",
-            },
-            {
-              allowsRepeatedRoundAttack: false,
-              id: "mode-2",
-              label: "Thrust",
-            },
-          ],
+          attackSourceOptions,
+          referenceUsedUnarmedExecutionFallback: false,
+          selectedAttackSourceId: selectedUnarmed
+            ? selectedUnarmed.id
+            : phase2
+              ? "weapon:long-sword-secondary"
+              : "weapon:long-sword-primary",
+          attackModeOptions: selectedUnarmed
+            ? [{ allowsRepeatedRoundAttack: false, id: "mode-1", label: "Strike" }]
+            : [
+                {
+                  allowsRepeatedRoundAttack: false,
+                  id: "mode-1",
+                  label: "Slash",
+                },
+                {
+                  allowsRepeatedRoundAttack: false,
+                  id: "mode-2",
+                  label: "Thrust",
+                },
+              ],
           attackStats: {
             attackMode: selectedReference.am,
             dmb: selectedReference.dmb,
@@ -2007,6 +2090,117 @@ describe("CombatRoundManagerPanel declaration form", () => {
         },
       },
     });
+  });
+
+  // #590: the GM proxies a player's declaration, so the GM gets the same explicit attack-source
+  // choice. Punch and Kick are offerable because the catalogue authors a legal brawling mode; what
+  // these pin is that the GM surface renders that choice and serializes exactly what was chosen.
+  it("lets the GM explicitly declare Punch and Kick with no Item instance", async () => {
+    const encounter = buildEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.submitDeclaration.mockResolvedValue({
+      encounter: { ...encounter, updatedAt: "2026-07-23T10:00:01.000Z" },
+      participant: participants[0],
+    });
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "double_attack" },
+    });
+
+    const attackSourceSelectors = await screen.findAllByRole("combobox", {
+      name: "Attack source",
+    });
+    expect(attackSourceSelectors).toHaveLength(2);
+    // The brawling rows are rendered as explicit choices on the GM surface, with the player
+    // control's own labels.
+    for (const attackSourceSelector of attackSourceSelectors) {
+      expect(
+        within(attackSourceSelector).getByRole("option", { name: "Punch · Unarmed" }),
+      ).toBeInTheDocument();
+      expect(
+        within(attackSourceSelector).getByRole("option", { name: "Kick · Unarmed" }),
+      ).toBeInTheDocument();
+    }
+    // Nothing unarmed is chosen until the GM chooses it: each phase's ready weapon slot stays
+    // preselected, exactly as it was before Punch and Kick became offerable.
+    expect(attackSourceSelectors[0]).toHaveValue("weapon:long-sword-primary");
+    expect(attackSourceSelectors[1]).toHaveValue("weapon:long-sword-secondary");
+
+    fireEvent.change(attackSourceSelectors[0]!, {
+      target: { value: "unarmed:virtual-weapon-template-punch" },
+    });
+    fireEvent.change(screen.getAllByRole("combobox", { name: "Attack source" })[1]!, {
+      target: { value: "unarmed:virtual-weapon-template-kick" },
+    });
+
+    for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+      fireEvent.change(targetSelector, { target: { value: "encounter-defender" } });
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+    await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+    const payload = mocks.submitDeclaration.mock.calls[0]?.[0];
+    expect(payload).toMatchObject({
+      actionId: "double_attack",
+      phaseAttackSources: {
+        phase1: {
+          attackModeId: "mode-1",
+          opportunitySlot: "attack_1",
+          slot: "virtual",
+          sourceKind: "unarmed",
+          templateId: "virtual-weapon-template-punch",
+        },
+        phase2: {
+          attackModeId: "mode-1",
+          opportunitySlot: "attack_2",
+          slot: "virtual",
+          sourceKind: "unarmed",
+          templateId: "virtual-weapon-template-kick",
+        },
+      },
+    });
+    // No Item instance is required or sent: the unarmed source carries no `scenarioItemId` at all.
+    expect(payload.phaseAttackSources.phase1).not.toHaveProperty("scenarioItemId");
+    expect(payload.phaseAttackSources.phase2).not.toHaveProperty("scenarioItemId");
+  });
+
+  it("never declares unarmed on the GM surface unless the GM chose it", async () => {
+    const encounter = buildEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.submitDeclaration.mockResolvedValue({
+      encounter: { ...encounter, updatedAt: "2026-07-23T10:00:01.000Z" },
+      participant: participants[0],
+    });
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "double_attack" },
+    });
+    await screen.findAllByRole("combobox", { name: "Attack source" });
+    for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+      fireEvent.change(targetSelector, { target: { value: "encounter-defender" } });
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+    await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+    const sources = mocks.submitDeclaration.mock.calls[0]?.[0]?.phaseAttackSources;
+    // Making unarmed declarable must not make it implicit (#583): with nothing chosen the ready
+    // weapon is still what is declared, and normal melee resolution is unchanged.
+    expect(sources.phase1.sourceKind).toBe("weapon");
+    expect(sources.phase2.sourceKind).toBe("weapon");
+    expect(sources.phase1.scenarioItemId).toBe("long-sword-primary");
+    expect(sources.phase2.scenarioItemId).toBe("long-sword-secondary");
   });
 
   it("keeps both Movement and Weapon Feint Phase 1 free of attack presentation", async () => {
