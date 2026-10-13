@@ -89,6 +89,16 @@ async function chooseUnarmedAttackSource(input: { page: Page; value: string }): 
   await expect(selector).toHaveValue(input.value);
 }
 
+/**
+ * Reads the rendered attack stats row (I, OB, DMB, AM, MC, Range). Criterion 3: the OB must be a
+ * real number derived through the mode's Brawling competency, never `COMBAT_COMPETENCY_REFUSED`.
+ */
+async function readRenderedAttackStats(page: Page): Promise<string[]> {
+  const row = page.locator("table").filter({ hasText: "OB" }).first().locator("tbody tr").first();
+  await expect(row).toBeVisible();
+  return row.locator("td").allInnerTexts();
+}
+
 async function selectGmInspectorParticipant(input: { label: string; page: Page }): Promise<void> {
   const heading = input.page.getByRole("heading", { name: /^Combat inspector — / });
   await expect(heading).toBeVisible();
@@ -134,11 +144,15 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     const suffix = Date.now();
     const playerContext = await browser.newContext({ storageState: "e2e/.auth/player.json" });
     const proxyContext = await browser.newContext({ storageState: "e2e/.auth/non-holder.json" });
+    const armedContext = await browser.newContext({ storageState: "e2e/.auth/unrelated.json" });
     const playerUser = await json<{ user: { id: string } }>(
       await playerContext.request.get(`${API_URL}/auth/me`),
     );
     const proxyUser = await json<{ user: { id: string } }>(
       await proxyContext.request.get(`${API_URL}/auth/me`),
+    );
+    const armedUser = await json<{ user: { id: string } }>(
+      await armedContext.request.get(`${API_URL}/auth/me`),
     );
 
     // Two unequipped brawlers: the player declares for their own, the GM proxies the other, so
@@ -156,19 +170,51 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
       name: `Unarmed Proxy ${suffix}`,
       userId: proxyUser.user.id,
     };
-    for (const character of [playerCharacter, proxyCharacter]) {
+    // A third brawler with a ready dagger, for criterion 4: normal melee declaration must be
+    // untouched by Punch and Kick becoming offerable, and must stay what is preselected.
+    const armedCharacter = {
+      context: armedContext,
+      id: `unarmed-armed-${suffix}`,
+      name: `Armed Brawler ${suffix}`,
+      userId: armedUser.user.id,
+    };
+    const characters = [playerCharacter, proxyCharacter, armedCharacter];
+    let daggerItemId = "";
+    for (const character of characters) {
       const created = await character.context.request.post(`${API_URL}/characters`, {
         data: brawlerPayload(character.id, character.name),
       });
       expect(created.ok(), await created.text()).toBe(true);
-      // No ready weapon: the state #586 reported as unable to declare an attack at all.
       const equipment = await json<{ state: { revision: number } }>(
         await character.context.request.get(`${API_URL}/characters/${character.id}/equipment`),
       );
+      if (character !== armedCharacter) {
+        // No ready weapon: the state #586 reported as unable to declare an attack at all.
+        await post(
+          character.context.request,
+          `/characters/${character.id}/equipment/loadout/active-primary-weapon`,
+          { expectedRevision: equipment.state.revision, itemId: null },
+        );
+        continue;
+      }
+      const withItem = await post<{
+        state: { itemsById: Record<string, { id: string; templateId?: string }>; revision: number };
+      }>(armedContext.request, `/characters/${character.id}/equipment/items`, {
+        expectedRevision: equipment.state.revision,
+        initialCarryMode: "equipped",
+        initialLocationId: `${character.id}:loc-equipped`,
+        quantity: 1,
+        templateId: "weapon-template-dagger",
+      });
+      daggerItemId =
+        Object.values(withItem.state.itemsById).find(
+          (item) => item.templateId === "weapon-template-dagger",
+        )?.id ?? "";
+      expect(daggerItemId).not.toBe("");
       await post(
-        character.context.request,
+        armedContext.request,
         `/characters/${character.id}/equipment/loadout/active-primary-weapon`,
-        { expectedRevision: equipment.state.revision, itemId: null },
+        { expectedRevision: withItem.state.revision, itemId: daggerItemId },
       );
     }
 
@@ -177,7 +223,7 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
       status: "active",
     });
     const campaignId = campaign.campaign.id;
-    for (const character of [playerCharacter, proxyCharacter]) {
+    for (const character of characters) {
       await post(gmPage.request, `/campaigns/${campaignId}/roster`, {
         category: "pc",
         sourceId: character.id,
@@ -191,7 +237,7 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     );
     const scenarioId = scenario.scenario.id;
     const participantIdByCharacterId: Record<string, string> = {};
-    for (const character of [playerCharacter, proxyCharacter]) {
+    for (const character of characters) {
       const participant = await post<{ participant: { id: string } }>(
         gmPage.request,
         `/scenarios/${scenarioId}/participants/character`,
@@ -216,6 +262,7 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     const now = new Date().toISOString();
     const playerCombatantId = `issue-590-player-${suffix}`;
     const proxyCombatantId = `issue-590-proxy-${suffix}`;
+    const armedCombatantId = `issue-590-armed-${suffix}`;
     const targetCombatantId = `issue-590-target-${suffix}`;
     const created = await post<{ encounter: EncounterSession }>(
       gmPage.request,
@@ -242,6 +289,13 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
               label: proxyCharacter.name,
               participantType: "scenario",
               scenarioParticipantId: participantIdByCharacterId[proxyCharacter.id],
+            },
+            {
+              characterId: armedCharacter.id,
+              id: armedCombatantId,
+              label: armedCharacter.name,
+              participantType: "scenario",
+              scenarioParticipantId: participantIdByCharacterId[armedCharacter.id],
             },
             {
               id: targetCombatantId,
@@ -271,7 +325,12 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     );
     // Round 1 always opens with a Combat Experience check, which gates the declaration controls.
     // Resolving it is scaffolding, exactly as the GM panel's own component fixture does it.
-    const combatRoundState = [playerCombatantId, proxyCombatantId, targetCombatantId].reduce(
+    const combatRoundState = [
+      playerCombatantId,
+      proxyCombatantId,
+      armedCombatantId,
+      targetCombatantId,
+    ].reduce(
       (state, participantId, index) =>
         rollCombatRoundCombatExperience({
           command: { createdAt: new Date(Date.now() + index).toISOString() },
@@ -306,8 +365,14 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     await expect(playerAction).toBeVisible();
     await playerAction.selectOption("attack_parry");
     await chooseUnarmedAttackSource({ page: playerPage, value: PUNCH_SOURCE_ID });
-    // Criterion 3, rendered: the stats this declaration will use name Punch, not a substitute.
+    // Criterion 3, rendered: the stats this declaration will use name Punch and resolve through
+    // its authored Brawling competency, so the OB is a number rather than a refusal.
     await expect(playerPage.getByText("Punch", { exact: true }).first()).toBeVisible();
+    const punchStats = await readRenderedAttackStats(playerPage);
+    expect(punchStats.join(" | ")).not.toContain("Refused");
+    expect(punchStats[1]).toMatch(/^\d+$/);
+    expect(Number(punchStats[1])).toBeGreaterThan(0);
+    await expect(playerPage.getByText(/Refused: no competency reference/)).toHaveCount(0);
     await playerPage
       .getByRole("combobox", { name: "Target" })
       .first()
@@ -392,5 +457,52 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     });
     expect(gmOpportunity?.itemId).toBeUndefined();
     expect(gmOpportunity?.weaponInstanceId).toBeUndefined();
+
+    // ---- Criterion 4: normal melee resolution is unchanged, and never implicitly unarmed. ----
+    await selectGmInspectorParticipant({ label: armedCharacter.name, page: gmPage });
+    await gmPage.getByRole("combobox", { name: "Action" }).first().selectOption("attack_parry");
+    const armedSourceSelector = gmPage.getByRole("combobox", { name: "Attack source" }).first();
+    await expect(armedSourceSelector).toBeVisible();
+    // The ready weapon is still offered and still preselected, with Punch and Kick beside it as
+    // choices the GM has to make deliberately.
+    await expect(armedSourceSelector).toHaveValue(`weapon:${daggerItemId}`);
+    await expect(armedSourceSelector.locator(`option[value="${PUNCH_SOURCE_ID}"]`)).toHaveText(
+      "Punch · Unarmed",
+    );
+    await expect(armedSourceSelector.locator(`option[value="${KICK_SOURCE_ID}"]`)).toHaveText(
+      "Kick · Unarmed",
+    );
+    await gmPage
+      .getByRole("combobox", { name: "Target" })
+      .first()
+      .selectOption({ label: targetName });
+
+    const armedSent = await declare({ page: gmPage });
+    const armedSentSources = armedSent["phaseAttackSources"] as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(armedSentSources.phase1).toMatchObject({
+      scenarioItemId: daggerItemId,
+      slot: "primary",
+      sourceKind: "weapon",
+      templateId: "weapon-template-dagger",
+    });
+
+    const armedDeclaration = await readDeclaration({
+      encounterId,
+      participantId: armedCombatantId,
+      request: gmPage.request,
+    });
+    const armedOpportunity = armedDeclaration?.attackOpportunities?.find(
+      (opportunity) => opportunity.phase === "phase1",
+    );
+    expect(armedOpportunity).toMatchObject({
+      sourceKind: "weapon",
+      status: "committed",
+      targetParticipantId: targetCombatantId,
+      weaponInstanceId: daggerItemId,
+      weaponTemplateId: "weapon-template-dagger",
+    });
   });
 });
