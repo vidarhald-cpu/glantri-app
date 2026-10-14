@@ -1,0 +1,22 @@
+/*
+ * Containment only (#601, repair cycle 1). The Combat panel's own minimum width is fixed, so
+ * below a certain viewport width it needs more room than the track it sits in. Where that excess
+ * is larger than `main`'s own 1.5rem side padding the page itself overflowed, which is what the
+ * scroll region fixes; where it is smaller the padding already absorbed it and the page was
+ * contained, so a scroll container there would clip content the layout had room for - measured
+ * on #601's own encounter, exactly the five pixels of "to Right/forward" that were cut at 1024.
+ *
+ * The excess reaches that 24px of padding at about 964px, so the region scrolls only below
+ * 960px. At and above it no scroll container exists at all and the surface keeps precisely the
+ * layout it had before #601, while every width where the page used to overflow still stays
+ * inside the viewport. The panel's own markup and inline styles are untouched.
+ */
+.combatPanelRegion {
+  min-width: 0;
+}
+
+@media (max-width: 959px) {
+  .combatPanelRegion {
+    overflow-x: auto;
+  }
+}

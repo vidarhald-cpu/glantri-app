@@ -502,4 +502,72 @@ describe("CombatItemInteractionPanel — read-only inspection (Forgejo #509 F2)"
       unmount();
     }
   });
+  /**
+   * Forgejo issue #599. The loading branch used to be simply `!options`, and `options` is only
+   * ever assigned on the success path, so a failed request stayed on "Loading Items…" for as long
+   * as the panel was mounted and never retried. On an ordinary Scenario that failure is the
+   * permanent 409 the staleness guard raises, so the whole Item and Disarm capability presented
+   * itself as work still in progress. A failed load must reach a resolved, failed state that
+   * carries the server's own message.
+   */
+  it("represents a failed load as failed rather than as still loading", async () => {
+    vi.mocked(loadCombatItemInteractionOptions).mockRejectedValueOnce(
+      new Error(
+        "Scenario equipment changed outside play. The GM must reconcile it before dependent play can continue.",
+      ),
+    );
+
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "Scenario equipment changed outside play. The GM must reconcile it before dependent play can continue.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Loading Items…")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the panel's own message when a failed load carries none", async () => {
+    vi.mocked(loadCombatItemInteractionOptions).mockRejectedValueOnce("no message");
+
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(await screen.findByText("Unable to load Items for this Combat.")).toBeInTheDocument();
+    expect(screen.queryByText("Loading Items…")).not.toBeInTheDocument();
+  });
+
+  it("reaches the resolved empty state, not a loading state, when a Combat has no Items", async () => {
+    vi.mocked(loadCombatItemInteractionOptions).mockResolvedValueOnce({
+      actors: [{ items: [], label: "Aster", participantId: "participant-1" }],
+      disarmTargets: [],
+      presentItems: [],
+      recipients: [],
+    });
+
+    render(
+      <CombatItemInteractionPanel
+        encounter={encounter}
+        isGm={false}
+        onEncounterUpdated={vi.fn()}
+        participantId="participant-1"
+      />,
+    );
+
+    expect(await screen.findByText("No available Items.")).toBeInTheDocument();
+    expect(screen.queryByText("Loading Items…")).not.toBeInTheDocument();
+  });
 });

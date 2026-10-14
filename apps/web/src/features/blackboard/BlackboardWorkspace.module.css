@@ -136,17 +136,36 @@
   width: 100%;
 }
 
+/*
+ * Containment only (#601 D2): a card's heading row is a flex line inside a grid item whose
+ * automatic minimum size is its content width, so a long title pushed the kind pill out of the
+ * panel. Letting the row and its parts shrink keeps the pill inside the card.
+ */
+.catalogueButton,
+.catalogueButton .headingRow,
+.catalogueButton .headingRow > * {
+  min-width: 0;
+}
+
 .catalogueButton[aria-current="true"] {
   border-color: #2f5d62;
   box-shadow: 0 0 0 2px rgba(47, 93, 98, 0.16);
 }
 
+/*
+ * Containment only (#601 D2). The filter row's four fixed minimum tracks need 604px, while the
+ * catalogue panel is 424px wide at 1280x800 - which is why the row, the card text, the kind
+ * pills and the "N shared" count were laid out outside the panel and painted under the detail
+ * panel beside it. The row now wraps inside the panel instead of overflowing it; the panel
+ * width, the two-panel split and every card's markup are unchanged.
+ */
 .searchForm {
   align-items: end;
   display: grid;
   gap: 0.7rem;
-  grid-template-columns: minmax(12rem, 1fr) minmax(9rem, auto) minmax(10rem, auto) auto;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
   margin-bottom: 1rem;
+  min-width: 0;
 }
 
 .searchForm input,

@@ -70,6 +70,8 @@ import { ArtifactPanel } from "@/features/artifacts";
 import { BlackboardWorkspace } from "@/features/blackboard";
 import { MapWorkspace } from "@/features/maps";
 
+import styles from "./CampaignWorkspaceShell.module.css";
+
 interface CampaignWorkspaceShellProps {
   campaignId: string;
 }
@@ -1394,7 +1396,13 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ) : null}
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "scenario" ? (
-        <section style={{ display: "grid", gap: "1rem" }}>
+        /*
+         * Containment only (#601 D1): the Scenario surface below is laid out horizontally, so the
+         * single-column `auto` track it sits in took its max-content width and widened the whole
+         * document. `minmax(0, 1fr)` keeps it inside the viewport; its tables keep their own
+         * `overflow-x: auto` wrappers.
+         */
+        <section style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1fr)" }}>
           {workspaceState.activeScenarioId ? (
             canAccessGmEncounter ? (
               <ScenarioDetailPageContent
@@ -1635,7 +1643,18 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
       ) : null}
 
       {!workspaceLoadError && accessMode !== "none" && workspaceState.activeTab === "combat" ? (
-        <section style={{ display: "grid", gap: "1rem" }}>
+        /*
+         * Containment only (#601 D3). A single-column `auto` grid track takes its max-content
+         * width, so the Combat panel widened the whole document to 427px in a 375px viewport and
+         * the content nearest the right edge - the Parry-context modifier labels among it - fell
+         * outside the visible area. `minmax(0, 1fr)` holds the track to the available width, and
+         * below 960px the region around the panel gives it its own horizontal scroll affordance,
+         * so nothing is hidden. At wider viewports the page was already contained and no scroll
+         * region is created, because one would clip the few pixels `main`'s side padding has room
+         * for (see `CampaignWorkspaceShell.module.css`). The panel's own markup and inline styles
+         * are untouched.
+         */
+        <section style={{ display: "grid", gap: "1rem", gridTemplateColumns: "minmax(0, 1fr)" }}>
           {canAccessGmEncounter && selectedActiveEncounter ? (
             <>
               {sortedActiveScenarioEncounters.length > 1 ? (
@@ -1657,21 +1676,23 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   </div>
                 </section>
               ) : null}
-              <CombatRoundManagerPanel
-                encounter={selectedActiveEncounter}
-                key={selectedActiveEncounter.id}
-                onEncounterUpdated={acceptActiveEncounter}
-                onScenarioParticipantsUpdated={(nextParticipants) => {
-                  setScenarioParticipants((current) =>
-                    current.map(
-                      (participant) =>
-                        nextParticipants.find((entry) => entry.id === participant.id) ??
-                        participant,
-                    ),
-                  );
-                }}
-                scenarioParticipants={scenarioParticipants}
-              />
+              <div className={styles.combatPanelRegion}>
+                <CombatRoundManagerPanel
+                  encounter={selectedActiveEncounter}
+                  key={selectedActiveEncounter.id}
+                  onEncounterUpdated={acceptActiveEncounter}
+                  onScenarioParticipantsUpdated={(nextParticipants) => {
+                    setScenarioParticipants((current) =>
+                      current.map(
+                        (participant) =>
+                          nextParticipants.find((entry) => entry.id === participant.id) ??
+                          participant,
+                      ),
+                    );
+                  }}
+                  scenarioParticipants={scenarioParticipants}
+                />
+              </div>
             </>
           ) : canAccessGmEncounter ? (
             <section style={panelStyle}>

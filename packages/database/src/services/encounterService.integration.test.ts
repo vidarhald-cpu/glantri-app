@@ -109,6 +109,7 @@ if (!process.env.DATABASE_URL_TEST) {
         scenarioRepository,
         new CharacterService(createPrismaCharacterRepository(prisma!)),
         new CharacterEquipmentReadModelService(createPrismaCharacterEquipmentRepository(prisma!)),
+        prisma!,
       );
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const campaign = await campaignService.createCampaign({
@@ -186,6 +187,7 @@ if (!process.env.DATABASE_URL_TEST) {
         scenarioRepository,
         characterService,
         equipmentService,
+        prisma!,
       );
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
@@ -381,6 +383,7 @@ if (!process.env.DATABASE_URL_TEST) {
         scenarioRepository,
         characterService,
         equipmentService,
+        prisma!,
       );
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,
@@ -509,6 +512,7 @@ if (!process.env.DATABASE_URL_TEST) {
         scenarioRepository,
         characterService,
         equipmentService,
+        prisma!,
       );
       const campaign = await campaignService.createCampaign({
         gmUserId: gm.id,

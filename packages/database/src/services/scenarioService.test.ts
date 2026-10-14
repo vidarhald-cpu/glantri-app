@@ -19,6 +19,20 @@ function rosterCharacters(rosterEntries: CampaignRosterEntry[], ...characterIds:
   }
 }
 
+/**
+ * Forgejo issue #599 — the Scenario participant capture boundary initializes the Character's
+ * equipment aggregate before it reads the state it is about to project. These unit tests run
+ * against repository stubs, so they record the initializer's calls rather than reaching a
+ * database, and assert the order the invariant depends on.
+ */
+function createEquipmentWriteStub(record?: (characterId: string) => void) {
+  return {
+    ensureCharacterEquipmentInitialized: async (characterId: string) => {
+      record?.(characterId);
+    },
+  } as never;
+}
+
 describe("ScenarioService controller assignment", () => {
   it("explicitly refreshes committed equipment while preserving live participant state", async () => {
     const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
@@ -35,6 +49,8 @@ describe("ScenarioService controller assignment", () => {
       repository,
       { getCharacterById: async () => character } as never,
       { getCharacterEquipmentState: async () => equipmentState } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
     const original = await service.addCharacterParticipant({
       characterId: character.id,
@@ -143,6 +159,8 @@ describe("ScenarioService controller assignment", () => {
           templatesById: {},
         }),
       } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
 
     await service.addCharacterParticipant({
@@ -184,6 +202,8 @@ describe("ScenarioService controller assignment", () => {
           templatesById: {},
         }),
       } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
 
     const participant = await service.addCharacterParticipant({
@@ -231,6 +251,8 @@ describe("ScenarioService controller assignment", () => {
           templatesById: {},
         }),
       } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
 
     const participant = await service.addCharacterParticipant({
@@ -273,6 +295,8 @@ describe("ScenarioService controller assignment", () => {
           templatesById: {},
         }),
       } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
 
     const baseEntity: ReusableEntity = {
@@ -485,6 +509,8 @@ describe("ScenarioService controller assignment", () => {
           templatesById: {},
         }),
       } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
 
     const first = await service.addCharacterParticipant({
@@ -555,6 +581,8 @@ describe("ScenarioService controller assignment", () => {
             templatesById: {},
           }),
         } as never,
+        undefined,
+        createEquipmentWriteStub(),
       );
 
       const participant = await service.addCharacterParticipant({
@@ -603,6 +631,8 @@ describe("ScenarioService controller assignment", () => {
             templatesById: {},
           }),
         } as never,
+        undefined,
+        createEquipmentWriteStub(),
       );
 
       const participant = await service.addCharacterParticipant({
@@ -652,6 +682,8 @@ describe("ScenarioService controller assignment", () => {
           templatesById: {},
         }),
       } as never,
+      undefined,
+      createEquipmentWriteStub(),
     );
 
     await service.addCharacterParticipant({
@@ -955,5 +987,89 @@ describe("ScenarioService scenario relationships", () => {
       }),
     ).rejects.toThrow("Continuation scenario not found in this campaign.");
     expect(scenarioRelationships).toHaveLength(0);
+  });
+});
+
+describe("ScenarioService equipment aggregate initialization boundary", () => {
+  /**
+   * Forgejo issue #599. A Character finalized through Chargen reaches the roster with an
+   * uninitialized equipment aggregate, and lazy initialization advances
+   * `CharacterEquipmentAggregate.revision`. If the projection is captured first, the next
+   * equipment read invalidates it and `assertScenarioEquipmentCurrent` refuses every Item
+   * interaction and canonical Disarm in that Scenario with a 409. Capture must therefore follow
+   * initialization, not precede it.
+   */
+  it("initializes the Character equipment aggregate before capturing the participant projection", async () => {
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
+    rosterCharacters(rosterEntries, character.id);
+    const order: string[] = [];
+    const service = new ScenarioService(
+      repository,
+      { getCharacterById: async () => character } as never,
+      {
+        getCharacterEquipmentState: async (characterId: string) => {
+          order.push(`read:${characterId}`);
+          return {
+            activeLoadoutByCharacterId: {},
+            itemsById: {},
+            locationsById: {},
+            revision: 1,
+            templatesById: {},
+          };
+        },
+      } as never,
+      undefined,
+      createEquipmentWriteStub((characterId) => order.push(`initialize:${characterId}`)),
+    );
+
+    const participant = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+
+    expect(order).toEqual(["initialize:character-1", "read:character-1"]);
+    expect(participant.snapshot.equipmentProjection?.aggregateRevision).toBe(1);
+  });
+
+  it("initializes the aggregate before an explicit GM reconcile recaptures the projection", async () => {
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
+    rosterCharacters(rosterEntries, character.id);
+    const order: string[] = [];
+    const service = new ScenarioService(
+      repository,
+      { getCharacterById: async () => character } as never,
+      {
+        getCharacterEquipmentState: async (characterId: string) => {
+          order.push(`read:${characterId}`);
+          return {
+            activeLoadoutByCharacterId: {},
+            itemsById: {},
+            locationsById: {},
+            revision: 1,
+            templatesById: {},
+          };
+        },
+      } as never,
+      undefined,
+      createEquipmentWriteStub((characterId) => order.push(`initialize:${characterId}`)),
+    );
+    const participant = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+    order.length = 0;
+
+    await service.refreshCharacterParticipantEquipmentSnapshot({
+      participantId: participant.id,
+      scenarioId: "scenario-1",
+    });
+
+    expect(order).toEqual(["initialize:character-1", "read:character-1"]);
   });
 });

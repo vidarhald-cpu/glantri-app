@@ -985,7 +985,14 @@ export default function ScenarioDetailPageContent({
    */
   if (isScenarioReadOnly(scenario.status)) {
     return (
-      <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+      <section
+        style={{
+          display: "grid",
+          gap: "1rem",
+          gridTemplateColumns: "minmax(0, 1fr)",
+          maxWidth: 980,
+        }}
+      >
         <RememberedCampaignWorkspaceEffect
           campaignId={campaignId}
           encounterId={null}
@@ -1041,7 +1048,20 @@ export default function ScenarioDetailPageContent({
     templateSources[0];
 
   return (
-    <section style={{ display: "grid", gap: "1rem", maxWidth: 980 }}>
+    /*
+     * Containment only (#601 D1): a single-column `auto` grid track takes its max-content width,
+     * so the horizontally laid out sections below widened the whole document instead of staying
+     * inside the viewport. `minmax(0, 1fr)` constrains the track to the available width; the
+     * tables keep their own `overflow-x: auto` wrappers and scroll within themselves.
+     */
+    <section
+      style={{
+        display: "grid",
+        gap: "1rem",
+        gridTemplateColumns: "minmax(0, 1fr)",
+        maxWidth: 980,
+      }}
+    >
       <RememberedCampaignWorkspaceEffect
         campaignId={campaignId}
         encounterId={null}
