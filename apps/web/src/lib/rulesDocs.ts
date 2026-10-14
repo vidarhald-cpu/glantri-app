@@ -79,6 +79,7 @@ export const unregisteredRulesDocuments: Record<string, UnregisteredRulesDocumen
   "competency-reference/societies.md": "bulk-reference",
   "competency-rules.md": "unrouted",
   "encumbrance-and-movement-workbook.md": "internal",
+  "gm/criticals.md": "unrouted",
   "gm/parry.md": "unrouted",
   "internal/parry-notes.md": "internal",
   "observe-opponent.md": "unrouted",
