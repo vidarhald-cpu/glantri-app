@@ -540,8 +540,14 @@ const compactStatsTableStyle = {
   width: "100%",
 } as const;
 
-const compactPhaseContextSelectorColumns = "6.5rem 7rem auto";
-const compactPhaseContextSelectStyle = { width: "7rem" } as const;
+// The label/select/context grid must stay inside its own phase card. Every track is
+// shrinkable so the row never exceeds the card: an overflowing third column is painted
+// outside the card, where the next card's opaque background covers it (#607).
+const compactPhaseContextSelectorColumns = "minmax(0, 6.5rem) minmax(0, 8rem) minmax(0, auto)";
+// 8rem is the first whole step that holds the longest placeholder ("Select attack source", 124px
+// of content inside a border box); the previous 7rem clipped it to "Select attack sou…" at every
+// viewport width (#607).
+const compactPhaseContextSelectStyle = { maxWidth: "100%", width: "8rem" } as const;
 const compactPhaseTargetRowStyle = {
   alignItems: "center",
   display: "grid",
@@ -552,7 +558,7 @@ const compactPhaseTargetRowStyle = {
 } as const;
 const compactPhaseTargetSelectStyle = {
   ...compactPhaseContextSelectStyle,
-  maxWidth: "13rem",
+  maxWidth: "min(13rem, 100%)",
 } as const;
 const compactPhaseTargetMetaStyle = {
   color: "#4f5f57",
@@ -3027,7 +3033,9 @@ function ParryDirectionSelector({
         ))}
       </select>
       <span
-        style={{ color: "#5e5a50", fontSize: "0.82rem", whiteSpace: "nowrap" }}
+        // Wrapping keeps the whole coverage direction readable inside the card. Holding it on
+        // one line pushed it outside, where the neighbouring card painted over it (#607).
+        style={{ color: "#5e5a50", fontSize: "0.82rem" }}
         title={
           direction && coverageDirection
             ? `${itemLabel}: ${getPlayerEncounterParryDirectionLabel(

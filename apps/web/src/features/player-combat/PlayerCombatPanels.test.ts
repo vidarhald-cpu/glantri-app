@@ -764,7 +764,16 @@ describe("PlayerCombatPanels", () => {
       'targetLocation: targetLocation === "none" ? undefined : targetLocation',
     );
     expect(source).toContain("compactPhaseContextSelectorColumns");
-    expect(source).toContain('const compactPhaseContextSelectorColumns = "6.5rem 7rem auto"');
+    // Every track is shrinkable, so the row cannot grow past its own phase card. A fixed track
+    // pushed the coverage label outside the card, where the next card's opaque background painted
+    // over it, and a hard 7rem select clipped its own "Select attack source" placeholder (#607).
+    expect(source).toContain(
+      'const compactPhaseContextSelectorColumns = "minmax(0, 6.5rem) minmax(0, 8rem) minmax(0, auto)"',
+    );
+    expect(source).not.toContain('const compactPhaseContextSelectorColumns = "6.5rem 7rem auto"');
+    expect(source).toContain(
+      'const compactPhaseContextSelectStyle = { maxWidth: "100%", width: "8rem" }',
+    );
     expect(source).toContain("style={compactPhaseContextSelectStyle}");
     expect(source).toContain("compactStatsRowStyle");
     expect(source).toContain('gridTemplateColumns: "minmax(6rem, 0.8fr) 1fr"');
@@ -799,6 +808,11 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain('gridTemplateColumns: "4.75rem 7rem auto"');
     expect(source).not.toContain('style={{ width: "7rem" }}');
     expect(source).toContain("to ${getPlayerEncounterParryDirectionLabel(coverageDirection)}");
+    // The parry coverage label must stay wrappable. Pinned to one line it overflowed the phase
+    // card and the neighbouring card painted over it at normal desktop widths (#607).
+    expect(source).not.toContain(
+      'style={{ color: "#5e5a50", fontSize: "0.82rem", whiteSpace: "nowrap" }}',
+    );
     expect(source).not.toContain('itemLabel={mainHandItemLabel || "Unarmed"}');
     expect(source).not.toContain('itemLabel={offHandItemLabel || "Unarmed"}');
     expect(source).not.toContain("PLAYER_ENCOUNTER_INCOMING_ATTACK_SIDE_OPTIONS");
