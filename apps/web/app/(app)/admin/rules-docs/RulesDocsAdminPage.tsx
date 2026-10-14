@@ -4,11 +4,9 @@ import { getRulesDocumentationPageModel } from "@/lib/rulesDocs";
 import { AdminPageIntro, AdminPanel, AdminStatusBadge } from "../admin-ui";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
-export default async function RulesDocsAdminPage(props: {
-  selectedDocumentId?: string;
-}) {
+export default async function RulesDocsAdminPage(props: { selectedDocumentId?: string }) {
   const { documents, selectedDocument } = await getRulesDocumentationPageModel({
-    selectedDocumentId: props.selectedDocumentId
+    selectedDocumentId: props.selectedDocumentId,
   });
 
   return (
@@ -16,12 +14,13 @@ export default async function RulesDocsAdminPage(props: {
       <AdminPageIntro
         eyebrow="Admin / Rules & Documentation"
         title="Rules Documentation"
-        summary="Repo-local rules and calculation references rendered from docs/rules. These notes are read-only and should change alongside app calculation changes."
+        summary="Current Glantri rules and calculation references. Each page explains the values the app shows and how it resolves them."
       />
 
       <AdminPanel>
         <div style={{ color: "#5f543a", lineHeight: 1.6 }}>
-          When app calculations or displayed derived values change, update the relevant rules documentation in the same change.
+          These pages are read-only. Historical baselines, source provenance, and internal
+          maintenance notes are kept in the repository and are not published here.
         </div>
       </AdminPanel>
 
@@ -30,7 +29,7 @@ export default async function RulesDocsAdminPage(props: {
           alignItems: "start",
           display: "grid",
           gap: "1rem",
-          gridTemplateColumns: "minmax(220px, 0.32fr) minmax(0, 1fr)"
+          gridTemplateColumns: "minmax(220px, 0.32fr) minmax(0, 1fr)",
         }}
       >
         <AdminPanel title="Documents" subtitle="Select a rules reference.">
@@ -52,7 +51,7 @@ export default async function RulesDocsAdminPage(props: {
                     display: "grid",
                     gap: "0.25rem",
                     padding: "0.75rem",
-                    textDecoration: "none"
+                    textDecoration: "none",
                   }}
                 >
                   <strong>{document.title}</strong>
@@ -73,10 +72,11 @@ export default async function RulesDocsAdminPage(props: {
               <h2
                 style={{
                   color: "#2c2418",
-                  fontFamily: '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif',
+                  fontFamily:
+                    '"Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif',
                   fontSize: "clamp(1.7rem, 3vw, 2.4rem)",
                   lineHeight: 1.1,
-                  margin: 0
+                  margin: 0,
                 }}
               >
                 {selectedDocument.title}
