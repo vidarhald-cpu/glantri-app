@@ -21,6 +21,78 @@ export interface RulesDocument extends RulesDocumentRegistryEntry {
   markdown: string;
 }
 
+/**
+ * Why a `docs/rules` page is deliberately absent from the reader registry below.
+ *
+ * - `bulk-reference`: a large generated catalogue reached from a registered page, not read linearly.
+ * - `embedded`: its canonical table is rendered into registered pages by a `{{rule-table:...}}`
+ *   directive, so the standalone page would duplicate reader-visible content.
+ * - `historical`: retained provenance or a superseded baseline; kept in the repository, not
+ *   presented as current reader material.
+ * - `index`: a navigation or compatibility page, not a rules page.
+ * - `internal`: source coordinates, workbook provenance, implementation mapping or open questions.
+ *   Per `docs/rules/README.md` these stay out of the Player and GM routes.
+ * - `non-runtime`: a settled reconciliation or candidate catalogue that authorizes no runtime
+ *   behaviour, so it describes nothing a reader can currently do in the app.
+ * - `unrouted`: current table-facing material whose reader route is not settled. Classification is
+ *   owned by the audience-taxonomy work (Forgejo #589) and the consolidation lane (Forgejo #609);
+ *   it is **not** resolved by registering the page here.
+ */
+export type UnregisteredRulesDocumentReason =
+  | "bulk-reference"
+  | "embedded"
+  | "historical"
+  | "index"
+  | "internal"
+  | "non-runtime"
+  | "unrouted";
+
+/**
+ * Every `docs/rules/**\/*.md` page that is intentionally not reader-exposed, keyed by its path
+ * relative to `docs/rules`.
+ *
+ * This list exists so registry drift fails a test instead of review: `rulesDocs.test.ts` asserts
+ * that the pages on disk are exactly the registered pages plus these, so a new or renamed page
+ * cannot land unclassified and a deleted page cannot leave a stale entry behind.
+ *
+ * Adding a page here does not publish it, and a page must never be registered merely to satisfy
+ * an accessibility check (`docs/process/task-contract.md:195-198`).
+ */
+export const unregisteredRulesDocuments: Record<string, UnregisteredRulesDocumentReason> = {
+  "README.md": "index",
+  "ambiguity-log.md": "internal",
+  "armor-workbook.md": "internal",
+  "combat-action-rule-inventory.md": "internal",
+  "combat-attack-and-defense.md": "internal",
+  "combat-declarations.md": "unrouted",
+  "combat-distance.md": "unrouted",
+  "combat-hit-location.md": "embedded",
+  "combat-initiative-workbook.md": "internal",
+  "combat-modifier-calculation.md": "internal",
+  "combat-ob-dmb-workbook.md": "internal",
+  "competency-reference/README.md": "index",
+  "competency-reference/gaps-and-exceptions.md": "bulk-reference",
+  "competency-reference/learning-groups.md": "bulk-reference",
+  "competency-reference/profession-learning-group-skills.md": "bulk-reference",
+  "competency-reference/professions.md": "bulk-reference",
+  "competency-reference/skills.md": "bulk-reference",
+  "competency-reference/societies.md": "bulk-reference",
+  "competency-rules.md": "unrouted",
+  "encumbrance-and-movement-workbook.md": "internal",
+  "gm/parry.md": "unrouted",
+  "internal/parry-notes.md": "internal",
+  "observe-opponent.md": "unrouted",
+  "offensive-parry.md": "unrouted",
+  "parry.md": "index",
+  "pilot-skill-content-release-v1.md": "historical",
+  "pilot-skill-rules-v1.md": "historical",
+  "player/parry.md": "unrouted",
+  "secondary-critical-sec-grammar-decision-memo.md": "historical",
+  "secondary-critical-sec-grammar.md": "non-runtime",
+  "source-mapping.md": "internal",
+  "target-critical-catalogue-v1.md": "non-runtime",
+};
+
 export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   {
     audience: "Players, GMs, admins, and rules reviewers",
@@ -41,26 +113,6 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 5,
     section: "Chargen",
     title: "Chargen Calculations",
-  },
-  {
-    audience: "Players, GMs, and rules reviewers",
-    description:
-      "Canonical Pilot v1 reference for Skill weights, learning histories, relationships, Specializations, DS/AB access, budgets, language finalization, and Gate A golden Characters.",
-    fileName: "pilot-skill-rules-v1.md",
-    id: "pilot-skill-rules-v1",
-    order: 7,
-    section: "Skills",
-    title: "Pilot Skill Rules v1",
-  },
-  {
-    audience: "Players, GMs, and content reviewers",
-    description:
-      "Canonical bounded pilot content release: exact Skills and weights, histories, professions, relationships, Specializations, access routes, languages, retained Character fixtures, version, and digest.",
-    fileName: "pilot-skill-content-release-v1.md",
-    id: "pilot-skill-content-release-v1",
-    order: 8,
-    section: "Skills",
-    title: "Pilot Skill Content Release v1",
   },
   {
     audience: "Players and GM reviewers",
