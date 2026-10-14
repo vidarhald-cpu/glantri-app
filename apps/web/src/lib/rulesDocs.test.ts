@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -5,7 +8,27 @@ import {
   getRulesDocumentEntryById,
   getRulesDocumentationPageModel,
   getRulesDocuments,
+  unregisteredRulesDocuments,
 } from "./rulesDocs";
+
+// Mirrors getRulesDocsDirectory() in ./rulesDocs so the test resolves the same tree the
+// application reads, whether the suite runs from the repository root or from apps/web.
+const rulesDocsDirectory =
+  path.basename(process.cwd()) === "web" && path.basename(path.dirname(process.cwd())) === "apps"
+    ? path.resolve(process.cwd(), "../../docs/rules")
+    : path.resolve(process.cwd(), "docs/rules");
+
+function listRulesMarkdownFiles(directory: string, prefix = ""): string[] {
+  return fs
+    .readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) =>
+      entry.isDirectory()
+        ? listRulesMarkdownFiles(path.join(directory, entry.name), `${prefix}${entry.name}/`)
+        : entry.name.endsWith(".md")
+          ? [`${prefix}${entry.name}`]
+          : [],
+    );
+}
 
 describe("rules documentation registry", () => {
   it("includes Character Sheet Calculations", () => {
@@ -22,18 +45,6 @@ describe("rules documentation registry", () => {
           id: "chargen-calculations",
           section: "Chargen",
           title: "Chargen Calculations",
-        }),
-        expect.objectContaining({
-          fileName: "pilot-skill-rules-v1.md",
-          id: "pilot-skill-rules-v1",
-          section: "Skills",
-          title: "Pilot Skill Rules v1",
-        }),
-        expect.objectContaining({
-          fileName: "pilot-skill-content-release-v1.md",
-          id: "pilot-skill-content-release-v1",
-          section: "Skills",
-          title: "Pilot Skill Content Release v1",
         }),
         expect.objectContaining({
           fileName: "retained-character-ledger.md",
@@ -79,20 +90,21 @@ describe("rules documentation registry", () => {
         }),
       ]),
     );
-    expect(getRulesDocuments()).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "combat-hit-location",
-        }),
-      ]),
-    );
+    expect(getRulesDocuments().map((document) => document.id)).not.toContain("combat-hit-location");
+  });
+
+  it("keeps the bounded Pilot references out of reader exposure", () => {
+    const ids = getRulesDocuments().map((document) => document.id);
+
+    expect(ids).not.toContain("pilot-skill-rules-v1");
+    expect(ids).not.toContain("pilot-skill-content-release-v1");
+    expect(unregisteredRulesDocuments["pilot-skill-rules-v1.md"]).toBe("historical");
+    expect(unregisteredRulesDocuments["pilot-skill-content-release-v1.md"]).toBe("historical");
   });
 
   it("orders Chargen Calculations first", () => {
     expect(getRulesDocuments().map((document) => document.title)).toEqual([
       "Chargen Calculations",
-      "Pilot Skill Rules v1",
-      "Pilot Skill Content Release v1",
       "Retained Character Ledger and Headless Chargen",
       "Character Sheet Calculations",
       "Character Progression Calculations",
@@ -109,53 +121,6 @@ describe("rules documentation registry", () => {
       id: "chargen-calculations",
       title: "Chargen Calculations",
     });
-  });
-
-  it("loads the canonical Pilot Skill Rules v1 formulas and Gate A evidence", async () => {
-    const model = await getRulesDocumentationPageModel({
-      selectedDocumentId: "pilot-skill-rules-v1",
-    });
-
-    expect(model.selectedDocument.title).toBe("Pilot Skill Rules v1");
-    expect(model.selectedDocument.markdown).toContain("# Pilot Skill Rules v1");
-    expect(model.selectedDocument.markdown).toContain(
-      "direct Skill cost = Skill weight × directly acquired ranks",
-    );
-    expect(model.selectedDocument.markdown).toContain(
-      "group bundle cost = ceil(2/3 × weightedUseful)",
-    );
-    expect(model.selectedDocument.markdown).toContain("non-recursive-temporary-pilot-limitation");
-    expect(model.selectedDocument.markdown).toContain("Typical prerequisite thresholds");
-    expect(model.selectedDocument.markdown).toContain("grants exactly zero competence");
-    expect(model.selectedDocument.markdown).toContain("Mandatory spoken language");
-    expect(model.selectedDocument.markdown).toContain("source is `society` or `background`");
-    expect(model.selectedDocument.markdown).toContain("Deliberate optimizer");
-    expect(model.selectedDocument.markdown).toContain("Configuration Formation `47`, Flex `5`");
-  });
-
-  it("loads the canonical bounded Pilot Skill content release identity and safeguards", async () => {
-    const model = await getRulesDocumentationPageModel({
-      selectedDocumentId: "pilot-skill-content-release-v1",
-    });
-
-    expect(model.selectedDocument.title).toBe("Pilot Skill Content Release v1");
-    expect(model.selectedDocument.markdown).toContain("# Pilot Skill Content Release v1");
-    expect(model.selectedDocument.markdown).toContain("content-release:pilot-skills:1");
-    expect(model.selectedDocument.markdown).toContain("pilot-skills-content/1.0.1");
-    expect(model.selectedDocument.markdown).toContain(
-      "f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419",
-    );
-    expect(model.selectedDocument.markdown).toContain("ordinary Trade and Smithing route is AB2");
-    expect(model.selectedDocument.markdown).toContain(
-      "Olog Princely Law, and Court Administration",
-    );
-    expect(model.selectedDocument.markdown).toContain("from the synthetic Gate A fixtures");
-    expect(model.selectedDocument.markdown).toContain(
-      "Every exception records `grantsCompetence: 0`",
-    );
-    expect(model.selectedDocument.markdown).toContain("background automatically grants writing");
-    expect(model.selectedDocument.markdown).toContain("Recursive relationships remain deferred");
-    expect(model.selectedDocument.markdown).toContain("new content version");
   });
 
   it("loads the retained Character ledger, Campaign, migration, snapshot, and privacy authority", async () => {
@@ -350,6 +315,60 @@ describe("rules documentation registry", () => {
     );
     expect(model.selectedDocument.markdown).not.toContain("Glantri_CriticalEffects_AppFacing");
     expect(model.selectedDocument.markdown).not.toContain("AppFacing_Crits");
+  });
+
+  it("keeps the retained Pilot baseline intact on disk although it is unpublished", () => {
+    // De-registering these two pages removed them from reader exposure, not from the repository.
+    // Their content assertions are kept here, read straight from disk, so the retained baseline
+    // cannot drift silently now that no reader route loads it.
+    const rules = fs.readFileSync(path.join(rulesDocsDirectory, "pilot-skill-rules-v1.md"), "utf8");
+
+    expect(rules).toContain("# Pilot Skill Rules v1");
+    expect(rules).toContain("direct Skill cost = Skill weight \u00d7 directly acquired ranks");
+    expect(rules).toContain("group bundle cost = ceil(2/3 \u00d7 weightedUseful)");
+    expect(rules).toContain("non-recursive-temporary-pilot-limitation");
+    expect(rules).toContain("Mandatory spoken language");
+    expect(rules).toContain("Configuration Formation `47`, Flex `5`");
+
+    const release = fs.readFileSync(
+      path.join(rulesDocsDirectory, "pilot-skill-content-release-v1.md"),
+      "utf8",
+    );
+
+    expect(release).toContain("# Pilot Skill Content Release v1");
+    expect(release).toContain("content-release:pilot-skills:1");
+    expect(release).toContain("pilot-skills-content/1.0.1");
+    expect(release).toContain("f524303b274b546c42daac06b65403957e896f35609d42ce7456ff5781c9f419");
+    expect(release).toContain("Every exception records `grantsCompetence: 0`");
+    expect(release).toContain("Recursive relationships remain deferred");
+  });
+
+  it("registers only pages that exist on disk", () => {
+    for (const document of getRulesDocuments()) {
+      expect(
+        fs.existsSync(path.join(rulesDocsDirectory, document.fileName)),
+        `registered rules document is missing from docs/rules: ${document.fileName}`,
+      ).toBe(true);
+    }
+  });
+
+  it("uses unique ids, file names and order values", () => {
+    const documents = getRulesDocuments();
+
+    expect(new Set(documents.map((document) => document.id)).size).toBe(documents.length);
+    expect(new Set(documents.map((document) => document.fileName)).size).toBe(documents.length);
+    expect(new Set(documents.map((document) => document.order)).size).toBe(documents.length);
+  });
+
+  it("classifies every docs/rules page as either registered or deliberately unregistered", () => {
+    const onDisk = listRulesMarkdownFiles(rulesDocsDirectory).sort();
+    const registered = getRulesDocuments().map((document) => document.fileName);
+    const classified = [...registered, ...Object.keys(unregisteredRulesDocuments)].sort();
+
+    // A new or renamed page cannot land unclassified, and a removed page cannot leave a stale
+    // exclusion behind. Classifying a page does not publish it: an internal-only note must never
+    // be registered merely to satisfy an accessibility check.
+    expect(classified).toEqual(onDisk);
   });
 
   it("expands structured rule-table directives into markdown tables", () => {

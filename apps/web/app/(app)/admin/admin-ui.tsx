@@ -127,7 +127,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       {
         description:
-          "Read repo-local markdown references for rules, formulas, and displayed calculations.",
+          "Read the current Glantri rules, formulas, and calculation references used in play.",
         href: "/admin/rules-docs",
         label: "Rules Docs",
       },

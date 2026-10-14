@@ -17,8 +17,10 @@ implementation detail, and unresolved design work.
 | -------- | ------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------------- |
 | Parry    | [Declare Parry and read its result](./player/parry.md) | [Resolve Parry](./gm/parry.md) | [Parry sources, math, and implementation](./internal/parry-notes.md) |
 
-Pages not listed here have not yet been audience-separated. Their existing content remains
-maintained and reachable while migration proceeds.
+Pages not listed here have not yet been audience-separated. Their existing content remains in the
+repository and maintained while migration proceeds. What the Rules Docs reader route publishes is
+decided by the [document registry](../../apps/web/src/lib/rulesDocs.ts), which records an explicit
+reason for every page it does not publish. A page is never registered merely to make it reachable.
 
 Current retained-Character authority is documented in
 [Retained Character Ledger and Headless Chargen](./retained-character-ledger.md), which links the
@@ -37,7 +39,8 @@ Current Skill authority is split deliberately:
 - [Pilot Skill Rules v1](./pilot-skill-rules-v1.md) and
   [Pilot Skill Content Release v1](./pilot-skill-content-release-v1.md) govern the
   bounded Pilot's accepted quantitative arithmetic, calibration, content, and
-  migration boundary.
+  migration boundary. Both pages are retained in the repository as that bounded baseline and its
+  provenance, and are **not** published on the Rules Docs reader route.
 
 The qualitative decision does not change or generalize Pilot v1 mechanics.
 
