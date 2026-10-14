@@ -396,14 +396,13 @@ export function ScenarioEncounterAssignmentSection({
                               {joinedEncounters.length > 0 ? (
                                 joinedEncounters.map((encounter) => (
                                   <div key={encounter.id}>
-                                    <strong>{encounter.title}:</strong> appearance, disguise,
-                                    clothing/equipment notes, encounter role, visibility notes, and
-                                    GM-only notes will live on this encounter participant entry.
+                                    <strong>{encounter.title}:</strong> this participant is assigned
+                                    to this encounter.
                                   </div>
                                 ))
                               ) : (
                                 <div>
-                                  This participant is not assigned to a non-archived encounter yet.
+                                  This participant is not assigned to a current encounter yet.
                                   Assign them to an encounter before recording encounter-specific
                                   details.
                                 </div>
