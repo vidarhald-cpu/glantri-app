@@ -298,7 +298,10 @@ round-end damage rows created by those commands.
 D1/D2 records the pieces needed for critical-effect lookup:
 
 - Damage table critical grade/type `A-F`.
-- The final numeric critical roll from `2d8 + critical type modifier + armor critical modifier`.
+- The final numeric critical roll from `2d8 + critical type modifier - armor critical modifier`. The
+  armor critical modifier is **subtracted**: armor reduces Critical severity. The per-grade modifier
+  table and the executed armor examples are in the
+  [Criticals GM value reference](gm/criticals.md).
 - The selected hit location.
 - The weapon's attack critical code / MC.
 
