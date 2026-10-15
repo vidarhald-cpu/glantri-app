@@ -202,7 +202,8 @@ explicitly as the parry source gives
 
 Combat does **not** read your character's live equipment. It reads the **equipment projection
 captured for this Scenario participant** — the loadout and Item identities as they were when the
-participant was prepared. That is what makes a round reproducible and what history replays.
+participant was prepared. Declarations use those captured identities, so changing your character's
+equipment mid-Scenario does not silently change what a Combat already in progress resolves with.
 
 The participant's equipment therefore has a status:
 
@@ -240,8 +241,9 @@ their reference.
 Each Item shows where it currently is — `Equipped`, `Held · On person`, `Stowed`, or
 `Present · Unheld` — and each declared Item action carries its own status through
 `Waiting for GM review`, `Reviewed — waiting to act`, `In progress`, and then `Completed`,
-`Interrupted` or `Cancelled`. A Combat with no available Items says so (`No available Items.`); an
-empty panel is a resolved state, not a pending one.
+`Interrupted` or `Cancelled`. A Combat with nothing to interact with says so — `No available Items.`
+to a player, `No supported Items for this participant.` to the GM. An empty panel is a resolved
+state, not a pending one.
 
 **Item interactions and canonical Disarm both depend on the participant's equipment projection
 being current.** If it is stale the panel reports
