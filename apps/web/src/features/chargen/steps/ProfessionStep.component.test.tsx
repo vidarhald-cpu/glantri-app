@@ -207,3 +207,77 @@ describe("Collapsed Profession section", () => {
     expect(screen.queryByRole("button", { name: "Collapse profession" })).toBeNull();
   });
 });
+
+/**
+ * A Profession this Character can reach no training for (Forgejo #635).
+ *
+ * The Product Owner ruling of 2026-10-15 keeps the accepted access behaviour unchanged and asks for
+ * the existing authored reason to be surfaced here. It warns and never prevents: filtering the
+ * target Professions by availability is forbidden by `chargen-target-professions.md` section 10, so
+ * the radio stays enabled and the reader is simply told.
+ */
+describe("Profession with no reachable training", () => {
+  const closed = {
+    ...card("profession:scribe"),
+    trainingAccess: {
+      authoredReasons: ["A records office is a standing bureaucracy keeping written record."],
+      closedBy: "society" as const,
+      situation: "No one among the Scythians trains this Profession.",
+    },
+  };
+
+  it("warns on the chooser row and leaves the Profession selectable", async () => {
+    const handleProfessionChange = vi.fn();
+    renderStep({ handleProfessionChange, visibleProfessionCards: [closed, cards[1]!] });
+
+    expect(screen.getByText("No training available here")).toBeInTheDocument();
+    expect(
+      screen.getByText("No one among the Scythians trains this Profession."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("A records office is a standing bureaucracy keeping written record."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("You may still choose it.")).toBeInTheDocument();
+
+    const radios = screen.getAllByRole("radio");
+    expect(radios[0]).not.toBeDisabled();
+    await userEvent.click(radios[0]!);
+    expect(handleProfessionChange).toHaveBeenCalledWith("profession:scribe");
+  });
+
+  it("repeats the explanation on the selected Profession, without the invitation to choose", () => {
+    renderStep({
+      selectedProfessionCard: closed,
+      selectedProfessionId: "profession:scribe",
+      showProfessionChooser: false,
+    });
+
+    expect(screen.getByText("No training available here")).toBeInTheDocument();
+    expect(
+      screen.getByText("No one among the Scythians trains this Profession."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("You may still choose it.")).toBeNull();
+  });
+
+  it("exposes no raw identifier and no implementation vocabulary in the notice", () => {
+    const { container } = renderStep({ visibleProfessionCards: [closed] });
+    const text = container.querySelector('[role="note"]')!.textContent ?? "";
+
+    for (const pattern of [
+      /\b(?:profession|skill|group|society|civilization|specialization):/i,
+      /\b[A-Z]\d{2}\b/,
+      /[a-z]+_[a-z]+/,
+    ])
+      expect(text, `${pattern}`).not.toMatch(pattern);
+    for (const term of ["core route", "availability", "projection", "schema"])
+      expect(text.toLowerCase(), term).not.toContain(term);
+  });
+
+  it("adds nothing at all to a Profession whose training is reachable", () => {
+    const { container } = renderStep();
+
+    expect(container.querySelector('[role="note"]')).toBeNull();
+    expect(screen.queryByText("No training available here")).toBeNull();
+    expect(screen.getAllByRole("radio")).toHaveLength(cards.length);
+  });
+});
