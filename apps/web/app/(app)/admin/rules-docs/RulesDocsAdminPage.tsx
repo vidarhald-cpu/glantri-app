@@ -86,7 +86,10 @@ export default async function RulesDocsAdminPage(props: { selectedDocumentId?: s
               </p>
             </header>
 
-            <MarkdownRenderer markdown={selectedDocument.markdown} />
+            <MarkdownRenderer
+              fileName={selectedDocument.fileName}
+              markdown={selectedDocument.markdown}
+            />
           </article>
         </AdminPanel>
       </div>

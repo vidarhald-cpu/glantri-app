@@ -232,6 +232,108 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   },
 ];
 
+/**
+ * What the reader surface may do with one Markdown link target found inside a rules document.
+ *
+ * `document` and `fragment` carry a destination a reader can actually reach. `unrouted` means no
+ * reader route exists for the target, so the surface renders the visible label as text instead of
+ * handing the reader an anchor that leads nowhere. A page is never registered merely to turn an
+ * `unrouted` target into a link — see `unregisteredRulesDocuments` above.
+ */
+export type RulesDocumentLinkResolution =
+  | { href: string; kind: "document" | "external" | "fragment" }
+  | { kind: "unrouted" };
+
+/**
+ * Resolve a `docs/rules`-relative link target against the directory of the document it was written
+ * in, returning the path relative to `docs/rules`.
+ *
+ * `undefined` means the target climbs out of `docs/rules` entirely — `../decisions/...`,
+ * `../audits/...` and `../recovery/...` all do — and so cannot name a reader page.
+ */
+function resolveDocsRulesRelativePath(
+  sourceFileName: string,
+  targetPath: string,
+): string | undefined {
+  const segments = sourceFileName.split("/").slice(0, -1);
+
+  for (const segment of targetPath.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      if (segments.length === 0) {
+        return undefined;
+      }
+
+      segments.pop();
+      continue;
+    }
+
+    segments.push(segment);
+  }
+
+  return segments.length > 0 ? segments.join("/") : undefined;
+}
+
+/**
+ * Where a Markdown link inside a rules document should point on the reader surface.
+ *
+ * The registry above is the single source of truth for what is reader-routed; there is no second
+ * list. A relative `.md` target is resolved against `sourceFileName`'s directory and matched
+ * against the registered `fileName`s, so the same resolution covers `./combat-to-hit.md` from the
+ * root, `./gm/criticals.md` into a subdirectory, and `../combat-round-and-actions.md` back out of
+ * one. A registered match becomes the reader route the sidebar already uses today,
+ * `/admin/rules-docs?doc=<id>`, keeping any `#fragment` the author wrote.
+ *
+ * `sourceFileName` may be omitted when the containing document is not known. Fragments and
+ * ordinary web addresses still resolve; a relative target cannot, so it stays `unrouted` rather
+ * than being guessed at.
+ */
+export function resolveRulesDocumentLink(
+  target: string,
+  sourceFileName?: string,
+): RulesDocumentLinkResolution {
+  if (target.startsWith("#")) {
+    return { href: target, kind: "fragment" };
+  }
+
+  if (/^(https?|mailto):/i.test(target)) {
+    return { href: target, kind: "external" };
+  }
+
+  /* Any other scheme, and any root-relative app path, is not a rules-document reference. */
+  if (/^([a-z][a-z0-9+.-]*):/i.test(target) || target.startsWith("/")) {
+    return { kind: "unrouted" };
+  }
+
+  const fragmentIndex = target.indexOf("#");
+  const targetPath = fragmentIndex === -1 ? target : target.slice(0, fragmentIndex);
+  const fragment = fragmentIndex === -1 ? "" : target.slice(fragmentIndex);
+
+  if (!targetPath.endsWith(".md") || !sourceFileName) {
+    return { kind: "unrouted" };
+  }
+
+  const resolvedPath = resolveDocsRulesRelativePath(sourceFileName, targetPath);
+
+  if (!resolvedPath) {
+    return { kind: "unrouted" };
+  }
+
+  const entry = rulesDocumentsRegistry.find((document) => document.fileName === resolvedPath);
+
+  if (!entry) {
+    return { kind: "unrouted" };
+  }
+
+  return {
+    href: `/admin/rules-docs?doc=${encodeURIComponent(entry.id)}${fragment}`,
+    kind: "document",
+  };
+}
+
 const structuredRuleTables: Record<string, ClosedDieRuleTable> = {
   [HIT_LOCATION_RULE_TABLE.id]: HIT_LOCATION_RULE_TABLE,
 };

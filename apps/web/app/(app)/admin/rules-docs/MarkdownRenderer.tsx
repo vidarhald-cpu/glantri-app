@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { resolveRulesDocumentLink } from "@/lib/rulesDocs";
+
 type MarkdownBlock =
   | {
       level: number;
@@ -213,7 +215,7 @@ function renderInlineMarkup(text: string): ReactNode[] {
   });
 }
 
-function renderInlineText(text: string): ReactNode[] {
+function renderInlineText(text: string, fileName?: string): ReactNode[] {
   const parts = text.split(INLINE_SPLIT_PATTERN);
 
   return parts.map((part, index) => {
@@ -228,8 +230,20 @@ function renderInlineText(text: string): ReactNode[] {
     const link = INLINE_LINK_PATTERN.exec(part);
 
     if (link && isSafeLinkTarget(link[2])) {
+      const resolution = resolveRulesDocumentLink(link[2], fileName);
+
+      /**
+       * An `unrouted` target has no reader route, so the reader gets the author's visible label as
+       * ordinary text. That is strictly better than an anchor leading to "Page not found", and it
+       * is a presentation decision only: whether such material should eventually become
+       * reader-reachable is owned elsewhere, and nothing is registered to make a link work.
+       */
+      if (resolution.kind === "unrouted") {
+        return <span key={index}>{renderInlineMarkup(link[1])}</span>;
+      }
+
       return (
-        <a href={link[2]} key={index}>
+        <a href={resolution.href} key={index}>
           {renderInlineMarkup(link[1])}
         </a>
       );
@@ -239,42 +253,107 @@ function renderInlineText(text: string): ReactNode[] {
   });
 }
 
-export function MarkdownRenderer(props: { markdown: string }) {
+/**
+ * Markup-stripped heading text, so a slug is computed from what a reader sees rather than from the
+ * markdown that produced it. A link contributes its visible text and not its target.
+ */
+function headingPlainText(text: string): string {
+  return text
+    .replace(/\[([^\]\n]+)\]\([^()\s]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1");
+}
+
+/**
+ * The heading-`id` contract the `#fragment` links in `docs/rules` are written against, and which
+ * document authors may rely on.
+ *
+ * Lower-case the heading's visible text, drop every character that is not a letter, a number, an
+ * underscore, a space or a hyphen, then replace each remaining space with a hyphen. This is the
+ * widely assumed GitHub-style slug, and it is what the authored fragments already expect:
+ *
+ * - **Numbers keep their digits and lose their punctuation**, so `## 6. Distance` is `#6-distance`
+ *   and `### 7.1 Offensive Parry` is `#71-offensive-parry`.
+ * - **Dropped punctuation leaves the surrounding spaces behind**, which then each become a hyphen:
+ *   `### 7.3 Feint - Attack` is `#73-feint---attack`, three hyphens for space-hyphen-space.
+ * - **Inline code and bold contribute their text, not their markers**, so the backticks in
+ *   ``### `sharp|head|10` — ...`` are stripped and the key's characters participate in the slug.
+ * - **Duplicate headings** get `-1`, `-2` and so on appended in document order; the first
+ *   occurrence is unsuffixed.
+ * - A heading whose visible text contains no sluggable character gets **no `id` at all** rather
+ *   than an empty one.
+ */
+function slugifyHeadingText(text: string): string {
+  return headingPlainText(text)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}_ -]+/gu, "")
+    .trim()
+    .replace(/ /g, "-");
+}
+
+/** Heading ids for one document, deduplicated in document order, keyed by block index. */
+function buildHeadingIds(blocks: MarkdownBlock[]): Record<number, string> {
+  const ids: Record<number, string> = {};
+  const used = new Map<string, number>();
+
+  blocks.forEach((block, index) => {
+    if (block.type !== "heading") {
+      return;
+    }
+
+    const slug = slugifyHeadingText(block.text);
+
+    if (!slug) {
+      return;
+    }
+
+    const seen = used.get(slug) ?? 0;
+    used.set(slug, seen + 1);
+    ids[index] = seen === 0 ? slug : `${slug}-${seen}`;
+  });
+
+  return ids;
+}
+
+export function MarkdownRenderer(props: { fileName?: string; markdown: string }) {
   const blocks = parseMarkdownBlocks(props.markdown);
+  const headingIds = buildHeadingIds(blocks);
+  const { fileName } = props;
 
   return (
     <div style={{ display: "grid", gap: "1rem" }}>
       {blocks.map((block, index) => {
         if (block.type === "heading") {
           const headingStyle = { color: "#2c2418", margin: "0.75rem 0 0" };
+          const id = headingIds[index];
 
           if (block.level <= 1) {
             return (
-              <h2 key={index} style={headingStyle}>
-                {renderInlineText(block.text)}
+              <h2 id={id} key={index} style={headingStyle}>
+                {renderInlineText(block.text, fileName)}
               </h2>
             );
           }
 
           if (block.level === 2) {
             return (
-              <h3 key={index} style={headingStyle}>
-                {renderInlineText(block.text)}
+              <h3 id={id} key={index} style={headingStyle}>
+                {renderInlineText(block.text, fileName)}
               </h3>
             );
           }
 
           if (block.level === 3) {
             return (
-              <h4 key={index} style={headingStyle}>
-                {renderInlineText(block.text)}
+              <h4 id={id} key={index} style={headingStyle}>
+                {renderInlineText(block.text, fileName)}
               </h4>
             );
           }
 
           return (
-            <h5 key={index} style={headingStyle}>
-              {renderInlineText(block.text)}
+            <h5 id={id} key={index} style={headingStyle}>
+              {renderInlineText(block.text, fileName)}
             </h5>
           );
         }
@@ -282,7 +361,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
         if (block.type === "paragraph") {
           return (
             <p key={index} style={{ color: "#4f4635", lineHeight: 1.7, margin: 0 }}>
-              {renderInlineText(block.lines.join(" "))}
+              {renderInlineText(block.lines.join(" "), fileName)}
             </p>
           );
         }
@@ -296,7 +375,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
               style={{ color: "#4f4635", lineHeight: 1.7, margin: 0, paddingLeft: "1.35rem" }}
             >
               {block.items.map((item, itemIndex) => (
-                <li key={itemIndex}>{renderInlineText(item)}</li>
+                <li key={itemIndex}>{renderInlineText(item, fileName)}</li>
               ))}
             </ListTag>
           );
@@ -338,7 +417,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
                         textAlign: "left",
                       }}
                     >
-                      {renderInlineText(cell)}
+                      {renderInlineText(cell, fileName)}
                     </th>
                   ))}
                 </tr>
@@ -356,7 +435,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
                           verticalAlign: "top",
                         }}
                       >
-                        {renderInlineText(cell)}
+                        {renderInlineText(cell, fileName)}
                       </td>
                     ))}
                   </tr>
