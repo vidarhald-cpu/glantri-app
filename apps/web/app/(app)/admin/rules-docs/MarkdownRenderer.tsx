@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 
 import { resolveRulesDocumentLink } from "@/lib/rulesDocs";
 
@@ -237,9 +237,12 @@ function renderInlineText(text: string, fileName?: string): ReactNode[] {
        * ordinary text. That is strictly better than an anchor leading to "Page not found", and it
        * is a presentation decision only: whether such material should eventually become
        * reader-reachable is owned elsewhere, and nothing is registered to make a link work.
+       *
+       * A `Fragment` rather than a `span`, so the label renders as the plain text it is and no
+       * element appears in the DOM where ordinary text used to sit.
        */
       if (resolution.kind === "unrouted") {
-        return <span key={index}>{renderInlineMarkup(link[1])}</span>;
+        return <Fragment key={index}>{renderInlineMarkup(link[1])}</Fragment>;
       }
 
       return (
