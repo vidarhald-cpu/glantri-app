@@ -59,21 +59,21 @@ circumstance is applied to that roll instead; it does not change the Character's
 A Characteristic is an integer from `1` to `25`, so every GM the app can show is in the table
 below. Read it instead of evaluating the formula at the table:
 
-| Current |  GM |
-| ------: | --: |
-|       1 |  -5 |
-|     2–3 |  -4 |
-|     4–5 |  -3 |
-|     6–7 |  -2 |
-|     8–9 |  -1 |
-|   10–12 |   0 |
-|   13–14 |   1 |
-|   15–16 |   2 |
-|   17–18 |   3 |
-|   19–20 |   4 |
-|   21–22 |   5 |
-|   23–24 |   6 |
-|      25 |   7 |
+| Current | GM  |
+| ------- | --- |
+| 1       | -5  |
+| 2–3     | -4  |
+| 4–5     | -3  |
+| 6–7     | -2  |
+| 8–9     | -1  |
+| 10–12   | 0   |
+| 13–14   | 1   |
+| 15–16   | 2   |
+| 17–18   | 3   |
+| 19–20   | 4   |
+| 21–22   | 5   |
+| 23–24   | 6   |
+| 25      | 7   |
 
 **Below `11`, truncation toward zero rounds a negative result up, not down.** This is where reading
 the table beats evaluating the formula: at every even `Current` from `2` to `10`, truncating gives

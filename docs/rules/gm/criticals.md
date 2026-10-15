@@ -40,9 +40,9 @@ selected hit location and the attack direction; the direction changes which regi
 that region has no coverage value, or the hit location is missing, the app uses `0` and records why. Executed end to end with critical dice `4` and `5` against grade `B`:
 
 | Armor critical modifier | 2d8 | Critical type modifier | Final critical roll |
-| ----------------------: | --: | ---------------------: | ------------------: |
-|                       1 |   9 |                     -4 |                   4 |
-|                       3 |   9 |                     -4 |                   2 |
+| ----------------------- | --- | ---------------------- | ------------------- |
+| 1                       | 9   | -4                     | 4                   |
+| 3                       | 9   | -4                     | 2                   |
 
 ## Reachable final critical rolls
 
