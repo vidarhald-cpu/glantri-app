@@ -163,6 +163,16 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
   },
   {
     audience: "Players and GM reviewers",
+    description:
+      "Reader guide to a Combat round as it currently runs: the round steps, the declarable primary and secondary actions, explicit attack-source declaration including intrinsic Punch and Kick, the committed Scenario equipment projection and its reconciliation, Item interactions, distance, and the manoeuvres.",
+    fileName: "combat-round-and-actions.md",
+    id: "combat-round-and-actions",
+    order: 32,
+    section: "Combat",
+    title: "Combat Round, Loadout and Actions",
+  },
+  {
+    audience: "Players and GM reviewers",
     description: "Manual reference for the canonical combat to-hit hit/miss/grazing lookup.",
     fileName: "combat-to-hit.md",
     id: "combat-to-hit",

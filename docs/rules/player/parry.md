@@ -8,7 +8,8 @@ defense.
 1. Choose **Parry** as the primary action.
 2. Do not select an opponent, attack target, weapon attack source, attack mode, or outgoing attack.
 3. Optionally leave the secondary action open or add
-   [Observe Opponent](../observe-opponent.md), which keeps its own Phase 1 target and result.
+   [Observe Opponent](../combat-round-and-actions.md#8-observe-opponent), which keeps its own
+   Phase 1 target and result.
 4. Confirm the declaration. The declaration is blocked if the participant has no canonical Dodge
    skill total.
 
