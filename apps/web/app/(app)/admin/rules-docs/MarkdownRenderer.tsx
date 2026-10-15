@@ -65,7 +65,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       blocks.push({
         code: codeLines.join("\n"),
         language,
-        type: "code"
+        type: "code",
       });
       index += 1;
       continue;
@@ -76,7 +76,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       blocks.push({
         level: heading[1].length,
         text: heading[2],
-        type: "heading"
+        type: "heading",
       });
       index += 1;
       continue;
@@ -93,7 +93,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
 
       blocks.push({
         rows,
-        type: "table"
+        type: "table",
       });
       continue;
     }
@@ -120,7 +120,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       blocks.push({
         items,
         ordered,
-        type: "list"
+        type: "list",
       });
       continue;
     }
@@ -146,15 +146,59 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
 
     blocks.push({
       lines: paragraphLines,
-      type: "paragraph"
+      type: "paragraph",
     });
   }
 
   return blocks;
 }
 
-function renderInlineText(text: string): ReactNode[] {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+/**
+ * An ordinary inline link, `[text](target)`, with both sides non-empty and the target free of
+ * whitespace and parentheses.
+ *
+ * Deliberately narrow. Anything this does not match keeps rendering as the literal text it renders
+ * today rather than becoming a degenerate anchor: `[text](` and `[text]` are not links at all,
+ * `[](target)` would produce an anchor with no accessible name, and `[text]()` would produce one
+ * that points back at the page the reader is already on. Nested brackets in the text also fall
+ * through, because a link whose own text is ambiguous is better left visible than guessed at.
+ */
+const INLINE_LINK_PATTERN = /^\[([^\]\n]+)\]\(([^()\s]+)\)$/;
+
+/** Inline code and bold, unchanged — this is the split the renderer has always used. */
+const INLINE_MARKUP_SOURCE = "`[^`]+`|\\*\\*[^*]+\\*\\*";
+
+const INLINE_SPLIT_PATTERN = new RegExp(
+  `(${INLINE_MARKUP_SOURCE}|\\[[^\\]\\n]+\\]\\([^()\\s]+\\))`,
+  "g",
+);
+
+/**
+ * Only targets a reader can be handed safely. A fragment, a relative or root-relative path, and an
+ * ordinary web or mail address are linked; anything carrying another scheme (`javascript:`,
+ * `data:`) stays literal text, so markdown content can never introduce an executable href.
+ */
+function isSafeLinkTarget(target: string): boolean {
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(target);
+
+  if (!scheme) {
+    return true;
+  }
+
+  return ["http", "https", "mailto"].includes(scheme[1].toLowerCase());
+}
+
+/**
+ * Inline code and bold only, with no link handling.
+ *
+ * This is the body `renderInlineText` has always had. It is also what renders a link's own text, so
+ * `` [`pilot-skill-rules-v1.md`](./pilot-skill-rules-v1.md) `` keeps its `<code>` element inside the
+ * anchor instead of losing it to the link branch. One level, reusing the existing pass — a link
+ * nested inside bold (`**[text](target)**`) still renders as literal text inside the `<strong>`,
+ * because the bold match starts first and wins. No registered reader page contains that form.
+ */
+function renderInlineMarkup(text: string): ReactNode[] {
+  const parts = text.split(new RegExp(`(${INLINE_MARKUP_SOURCE})`, "g"));
 
   return parts.map((part, index) => {
     if (part.startsWith("`") && part.endsWith("`")) {
@@ -163,6 +207,32 @@ function renderInlineText(text: string): ReactNode[] {
 
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+
+    return part;
+  });
+}
+
+function renderInlineText(text: string): ReactNode[] {
+  const parts = text.split(INLINE_SPLIT_PATTERN);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return <code key={index}>{part.slice(1, -1)}</code>;
+    }
+
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index}>{part.slice(2, -2)}</strong>;
+    }
+
+    const link = INLINE_LINK_PATTERN.exec(part);
+
+    if (link && isSafeLinkTarget(link[2])) {
+      return (
+        <a href={link[2]} key={index}>
+          {renderInlineMarkup(link[1])}
+        </a>
+      );
     }
 
     return part;
@@ -221,7 +291,10 @@ export function MarkdownRenderer(props: { markdown: string }) {
           const ListTag = block.ordered ? "ol" : "ul";
 
           return (
-            <ListTag key={index} style={{ color: "#4f4635", lineHeight: 1.7, margin: 0, paddingLeft: "1.35rem" }}>
+            <ListTag
+              key={index}
+              style={{ color: "#4f4635", lineHeight: 1.7, margin: 0, paddingLeft: "1.35rem" }}
+            >
               {block.items.map((item, itemIndex) => (
                 <li key={itemIndex}>{renderInlineText(item)}</li>
               ))}
@@ -240,7 +313,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
                 lineHeight: 1.6,
                 margin: 0,
                 overflowX: "auto",
-                padding: "1rem"
+                padding: "1rem",
               }}
             >
               <code>{block.code}</code>
@@ -262,7 +335,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
                         borderBottom: "1px solid rgba(85, 73, 48, 0.22)",
                         color: "#2c2418",
                         padding: "0.55rem 0.7rem",
-                        textAlign: "left"
+                        textAlign: "left",
                       }}
                     >
                       {renderInlineText(cell)}
@@ -280,7 +353,7 @@ export function MarkdownRenderer(props: { markdown: string }) {
                           borderBottom: "1px solid rgba(85, 73, 48, 0.1)",
                           color: "#4f4635",
                           padding: "0.55rem 0.7rem",
-                          verticalAlign: "top"
+                          verticalAlign: "top",
                         }}
                       >
                         {renderInlineText(cell)}
