@@ -172,7 +172,7 @@ Durable Builder repair evidence:
 Exact failed behavior:
 Declared changed files / scope:
 Selected directly affected regression gates:
-Conditional privacy/security, browser, and database gates:
+Conditional privacy/security, browser, database, and rendered UI composition gates:
 Git and publication limits:
 ```
 
@@ -355,8 +355,10 @@ retain independence, exact-head and scope gates and apply the verification class
   `main`, production, or integration decisions stop and return.
 
 Conditional gates are omitted only with a short applicability reason. Privacy,
-security, database isolation, or browser evidence must not be skipped because a
-run is in REPAIR mode when the repair can affect that surface.
+security, database isolation, and browser evidence must not be skipped because a
+run is in REPAIR mode when the repair can affect that surface. Rendered UI
+composition review must not be skipped because a run is in REPAIR mode when the
+repair affects established UI.
 
 ### Rendered UI composition and visual review
 
