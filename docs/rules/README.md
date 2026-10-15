@@ -27,6 +27,12 @@ Current retained-Character authority is documented in
 accepted Pilot v1 rules and exact canonical content release to persisted revisions, Campaign
 membership, migration lineage, snapshots, and viewer-safe provenance.
 
+The current reader guide to Character generation is
+[Chargen Calculations](./chargen-calculations.md). It carries the ten-step Chargen walkthrough as
+the application renders it, together with the rule-set parameters, point pools, purchase costs,
+and finalization conditions behind each step. Skill, Learning Group, and Profession questions
+belong to Competency Rules below rather than to that page.
+
 Current Skill authority is **Competency V2** — Skills, Learning Groups, and Professions:
 
 - [Competency Rules](./competency-rules.md) is the reader-facing Skill authority, and with the
