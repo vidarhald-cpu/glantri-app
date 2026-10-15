@@ -41,18 +41,18 @@ The modifier is read from the hit lookup row, not the later damage lookup row, a
 attack result. Current parry modifiers are:
 
 | Hit lookup total | Defender parry modifier |
-| --- | --- |
-| `15` or less | `0` |
-| `16` | `-1` |
-| `17` | `-2` |
-| `18` | `-3` |
-| `19` | `-4` |
-| `20` | `-5` |
-| `21` | `-6` |
-| `22` | `-7` |
-| `23` | `-8` |
-| `24` | `-9` |
-| `25` or more | `-10` |
+| ---------------- | ----------------------- |
+| `15` or less     | `0`                     |
+| `16`             | `-1`                    |
+| `17`             | `-2`                    |
+| `18`             | `-3`                    |
+| `19`             | `-4`                    |
+| `20`             | `-5`                    |
+| `21`             | `-6`                    |
+| `22`             | `-7`                    |
+| `23`             | `-8`                    |
+| `24`             | `-9`                    |
+| `25` or more     | `-10`                   |
 
 During P1/P2, this stored attack-result modifier is added to General/Fatigue and DB/Parry raw
 modifiers before the normal percentage adjustment is calculated. Clear undoing a parry removes the
@@ -134,11 +134,12 @@ stored as table metadata when present, but critical effects remain a GM review n
 
 If the damage lookup produces a critical grade, D1/D2 enters critical pending after the damage
 proposal is created. The attacker rolls `2d8`; the final critical roll is `2d8 + critical type
-modifier + armor critical modifier`. The critical type modifier comes from the combat critical
-modifier table. Armor critical modifier is read from the selected hit-location armor coverage when
-available, and the GM may review or override the critical type modifier, armor critical modifier,
-final critical roll, and critical location. The stored critical roll is informational for now and
-does not create automated critical-effect rows.
+modifier - armor critical modifier`. The armor critical modifier is **subtracted**: armor reduces
+Critical severity. The critical type modifier comes from the combat critical modifier table. Armor
+critical modifier is read from the selected hit-location armor coverage when available, and the GM
+may review or override the critical type modifier, armor critical modifier, final critical roll, and
+critical location. The stored critical roll is informational for now and does not create automated
+critical-effect rows.
 
 During D1/D2 review, the GM may record compact overrides without replacing the computed proposal.
 Review fields can override selected hit location, armor modifier, total damage, critical grade,

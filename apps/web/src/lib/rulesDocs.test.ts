@@ -102,9 +102,59 @@ describe("rules documentation registry", () => {
     expect(unregisteredRulesDocuments["pilot-skill-content-release-v1.md"]).toBe("historical");
   });
 
+  it("publishes Competency Rules as the current reader-facing Skill authority", () => {
+    expect(getRulesDocuments()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fileName: "competency-rules.md",
+          id: "competency-rules",
+          section: "Skills",
+          title: "Competency Rules",
+        }),
+      ]),
+    );
+    expect(unregisteredRulesDocuments).not.toHaveProperty("competency-rules.md");
+  });
+
+  it("publishes the audience-separated Parry and Criticals pages", () => {
+    expect(getRulesDocuments()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fileName: "player/parry.md", id: "player-parry" }),
+        expect.objectContaining({ fileName: "gm/parry.md", id: "gm-parry" }),
+        expect.objectContaining({ fileName: "gm/criticals.md", id: "gm-criticals" }),
+      ]),
+    );
+
+    for (const fileName of ["player/parry.md", "gm/parry.md", "gm/criticals.md"]) {
+      expect(unregisteredRulesDocuments).not.toHaveProperty(fileName);
+    }
+  });
+
+  it("keeps the Parry internal notes and the compatibility index out of the reader route", () => {
+    expect(unregisteredRulesDocuments["internal/parry-notes.md"]).toBe("internal");
+    expect(unregisteredRulesDocuments["parry.md"]).toBe("index");
+
+    const ids = getRulesDocuments().map((document) => document.id);
+    expect(ids).not.toContain("parry");
+    expect(ids).not.toContain("parry-notes");
+  });
+
+  it("leaves the unrouted pages Forgejo #620 does not cover unrouted", () => {
+    // Their reader route is owned by the audience-taxonomy work (#589), not by this registration.
+    for (const fileName of [
+      "combat-declarations.md",
+      "combat-distance.md",
+      "observe-opponent.md",
+      "offensive-parry.md",
+    ]) {
+      expect(unregisteredRulesDocuments[fileName]).toBe("unrouted");
+    }
+  });
+
   it("orders Chargen Calculations first", () => {
     expect(getRulesDocuments().map((document) => document.title)).toEqual([
       "Chargen Calculations",
+      "Competency Rules",
       "Retained Character Ledger and Headless Chargen",
       "Character Sheet Calculations",
       "Character Progression Calculations",
@@ -113,6 +163,9 @@ describe("rules documentation registry", () => {
       "Glantri Combat To Hit / Damage",
       "Glantri Critical Effects",
       "Combat Experience",
+      "Parry — Player Rules",
+      "Parry — GM Procedure",
+      "Criticals — GM Value Reference",
     ]);
   });
 
@@ -275,6 +328,12 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Commit phase damage");
     expect(model.selectedDocument.markdown).toContain("one active physical damage effect row");
     expect(model.selectedDocument.markdown).toContain("critical effects remain a GM");
+    // The runtime subtracts the armor critical modifier (packages/domain critical.ts, the combat
+    // round manager, and docs/rules/gm/criticals.md). This page said "+" until Forgejo #620.
+    expect(model.selectedDocument.markdown).toContain(
+      "`2d8 + critical type\nmodifier - armor critical modifier`",
+    );
+    expect(model.selectedDocument.markdown).not.toContain("+ armor critical modifier");
     expect(model.selectedDocument.markdown).not.toContain("New Combat Arena.xlsx");
     expect(model.selectedDocument.markdown).not.toContain("Sheet: `to hit (new)`");
     expect(model.selectedDocument.markdown).not.toContain("| Lookup total |");
@@ -315,6 +374,47 @@ describe("rules documentation registry", () => {
     );
     expect(model.selectedDocument.markdown).not.toContain("Glantri_CriticalEffects_AppFacing");
     expect(model.selectedDocument.markdown).not.toContain("AppFacing_Crits");
+  });
+
+  it("loads the player Parry page from its audience subdirectory", async () => {
+    const model = await getRulesDocumentationPageModel({ selectedDocumentId: "player-parry" });
+
+    expect(model.selectedDocument.title).toBe("Parry \u2014 Player Rules");
+    expect(model.selectedDocument.markdown).toContain("# Parry \u2014 Player Rules");
+    expect(model.selectedDocument.markdown).toContain(
+      "The rule uses one fifth of total Dodge, rounded down.",
+    );
+    expect(model.selectedDocument.markdown).toContain("21 or higher succeeds; 20 or lower fails");
+  });
+
+  it("loads the GM Parry procedure from its audience subdirectory", async () => {
+    const model = await getRulesDocumentationPageModel({ selectedDocumentId: "gm-parry" });
+
+    expect(model.selectedDocument.title).toBe("Parry \u2014 GM Procedure");
+    expect(model.selectedDocument.markdown).toContain("# Parry \u2014 GM Procedure");
+    expect(model.selectedDocument.markdown).toContain("## 1. Validate The Declaration");
+    expect(model.selectedDocument.markdown).toContain("Current Operational Boundaries");
+  });
+
+  it("loads the GM Criticals value reference with the subtracted armor modifier", async () => {
+    const model = await getRulesDocumentationPageModel({ selectedDocumentId: "gm-criticals" });
+
+    expect(model.selectedDocument.title).toBe("Criticals \u2014 GM Value Reference");
+    expect(model.selectedDocument.markdown).toContain(
+      "final critical roll = 2d8 + critical type modifier - armor critical modifier",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "**The armor critical modifier is subtracted.**",
+    );
+  });
+
+  it("loads the Competency Rules page with the Skill, Learning Group and Profession structure", async () => {
+    const model = await getRulesDocumentationPageModel({ selectedDocumentId: "competency-rules" });
+
+    expect(model.selectedDocument.title).toBe("Competency Rules");
+    expect(model.selectedDocument.markdown).toContain("# Competency rules");
+    expect(model.selectedDocument.markdown).toContain("## Learning Groups");
+    expect(model.selectedDocument.markdown).toContain("## Professions");
   });
 
   it("keeps the retained Pilot baseline intact on disk although it is unpublished", () => {
