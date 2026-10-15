@@ -347,13 +347,45 @@ retain independence, exact-head and scope gates and apply the verification class
 - database: when PostgreSQL is needed, use the linked-worktree QA quick-start
   in `docs/dev-database.md`; never inherit or copy another environment;
 - browser: use synthetic/browser evidence when presentation, interaction,
-  privacy, responsive behavior, or the contract requires it; and
+  privacy, responsive behavior, or the contract requires it;
+- rendered UI composition: for a UI-affecting PR, re-produce the before/after
+  captures and apply the
+  [visual review gate](#rendered-ui-composition-and-visual-review); and
 - control plane: unresolved product, rule, UX, architecture, scope, hotspot,
   `main`, production, or integration decisions stop and return.
 
 Conditional gates are omitted only with a short applicability reason. Privacy,
 security, database isolation, or browser evidence must not be skipped because a
 run is in REPAIR mode when the repair can affect that surface.
+
+### Rendered UI composition and visual review
+
+A UI-affecting PR is reviewed by rendering it, never by reading its diff. The
+reviewer **re-produces** the before/after captures at the widths the contract
+names instead of accepting the images supplied, and reports any composition
+change the contract did not authorize as a finding. A UI-affecting PR is one
+whose rendered output can move, not one whose diff contains a UI file: a change
+touching no UI file can still change what renders.
+
+Record the **usable width actually measured**, not the viewport requested. A
+uniform chrome/scrollbar offset of roughly 27px explained every previously
+irreproducible figure in the Alpha wave.
+
+Clipping and occlusion are different defects and need different probes. Apply
+all three measurements; the first two cannot find what the third finds:
+
+- viewport-relative measurement cannot detect clipping by an intermediate
+  scroll container, so measure against the clipping ancestor;
+- clipping-ancestor measurement cannot detect **occlusion**: it reports clip 0
+  and **is correct**, because the text is painted and then covered by an opaque
+  sibling;
+- only `elementFromPoint` glyph probes detect text painted and then covered.
+  Three separate occlusion defects in the Alpha wave were invisible to both of
+  the other methods.
+
+When checking whether a change added persistent explanatory prose, do not sweep
+by CSS class. Combat predates the shared presentation primitives and styles
+inline, and a class-keyed survey missed every Combat string.
 
 ## Verdict, child state, and harvesting
 

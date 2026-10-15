@@ -198,6 +198,14 @@ Preservation QA and other mechanically specifiable verification may use a cheape
 
 Large web features normally separate `components/`, `hooks/`, `state/`, `view-models/`, tests, and a responsibility README; roughly 500 lines is a review signal, not a mandatory split. Apply `docs/product/product-presentation-principles.md` when the task changes user-visible behavior.
 
+### Established UI composition is an invariant
+
+- Rendered UI composition — the layout, structure, styling, and standing copy of an existing surface — is an **established invariant that a task preserves unless its contract explicitly authorizes visual change**. A functional Builder whose change alters composition **reports that as a finding** instead of absorbing it as a detail. A change can alter what renders without touching a UI file, so "no UI file changed" is not evidence that composition held.
+- A Builder working to a functional contract **must not restyle or restructure unrelated UI, and must not add persistent explanatory prose** to a surface. Persistent prose is unconditional copy that teaches once; conditional empty states, validation messages, and warnings are correct, are not persistent prose, and must not be removed under this rule.
+- **Intentional redesign requires separate authorization** naming the surfaces and the intended change. A functional authorization is never a redesign authorization, and neither is a QA finding about appearance.
+- **UI-affecting PRs require before/after rendered screenshots and independent visual review.** The contract states the surfaces and widths and the implementer produces the captures — see [presentation acceptance](docs/process/task-contract.md#presentation-acceptance); independent QA **re-produces** them rather than accepting the supplied images, under the [rendered UI composition gate](docs/process/qa-execution.md#rendered-ui-composition-and-visual-review), which carries the required measurement method.
+- This evidence is not free: it costs a running stack, a populated fixture, and captures per width, on many PRs that turn out fine. It is required anyway. Across the Alpha wave every genuine UI defect was found by rendering the change and **none by reading a diff**, a latent sizing defect survived three lanes unreachable, and separate QA cycles were spent on a traded width and on an occlusion that no diff could have shown.
+
 ## Git, provenance, tools, and verification
 
 - Use one clean, short-lived task branch/worktree from the exact accepted `dev` SHA. Do not continue feature work on accepted or long-lived branches.

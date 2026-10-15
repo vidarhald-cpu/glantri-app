@@ -268,6 +268,12 @@ Criteria must apply the [Glantri-wide Product & Presentation Principles](../prod
 - basic keyboard, focus, readability, and supported responsive behavior;
 - internal terms or diagnostics that must not appear.
 
+For a UI-affecting task — one whose rendered output can move, which includes a task whose changed files contain no UI file at all — also state:
+
+- which existing surfaces are an invariant and must render unchanged, and any visual change the task **is** authorized to make, surface by surface; absent an explicit authorization, established composition is preserved under [`AGENTS.md`](../../AGENTS.md#established-ui-composition-is-an-invariant), and intentional redesign is a separate authorization rather than a detail of this one;
+- the exact widths at which before/after rendered captures are required, stated as **usable width** rather than the viewport requested, because the two differ by a chrome/scrollbar offset of roughly 27px;
+- that the implementer produces those captures and independent QA re-produces them under the [rendered UI composition gate](./qa-execution.md#rendered-ui-composition-and-visual-review), which carries the required measurement method.
+
 Do not prescribe a comprehensive screen design when the functional area is still emerging. Specify the smallest coherent presentation contract needed for the implemented workflow.
 
 #### Information-flow/privacy acceptance
