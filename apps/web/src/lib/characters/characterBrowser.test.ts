@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import type { AuthUser } from "@glantri/auth";
 import type { ServerCharacterRecord } from "../api/characterClient";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
+import { getApprovedV2RuntimeContent } from "@glantri/content";
 import {
   canBrowseAllCharacterOwners,
   buildCharacterBrowserEntries,
   buildCharacterBrowserOwnerOptions,
   filterCharacterBrowserEntries,
+  resolveProfessionLabel,
+  PROFESSION_NOT_SET_LABEL,
+  UNRESOLVED_PROFESSION_LABEL,
 } from "./characterBrowser";
 
 function createLocalRecord(
@@ -395,5 +399,105 @@ describe("characterBrowser", () => {
     expect(ownerEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
     expect(owningGmEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
     expect(adminEntries.map((entry) => entry.id)).toEqual([retainedDraft.id]);
+  });
+
+  describe("professionLabel", () => {
+    function labelFor(professionId: string | undefined): string {
+      const entries = buildCharacterBrowserEntries({
+        currentUser,
+        localRecords: [
+          createLocalRecord({
+            build: {
+              ...createLocalRecord({ id: "profession-card" }).build,
+              name: "Profession Card",
+              professionId,
+            },
+            creatorId: "gm-1",
+            id: "profession-card",
+          }),
+        ],
+        serverRecords: [],
+      });
+
+      expect(entries).toHaveLength(1);
+      return entries[0]!.professionLabel;
+    }
+
+    it("renders the catalogue's own Profession title rather than the stored id", () => {
+      const courier = getApprovedV2RuntimeContent().professions.find(
+        (profession) => profession.id === "profession:courier",
+      );
+
+      expect(courier?.name).toBe("Courier and Messenger");
+      expect(labelFor("profession:courier")).toBe("Courier and Messenger");
+      expect(labelFor("profession:courier")).not.toBe("profession:courier");
+      // The id tail title-cased would read "Courier", which is not what the catalogue calls it.
+      expect(labelFor("profession:courier")).not.toBe("Courier");
+    });
+
+    it("resolves a split-family track id to that track's own catalogue name", () => {
+      const professions = getApprovedV2RuntimeContent().professions;
+
+      // The family id itself is not selectable once the family splits into tracks.
+      expect(professions.some((profession) => profession.id === "profession:sailor")).toBe(false);
+      expect(
+        professions.find((profession) => profession.id === "profession:sailor:small-craft")?.name,
+      ).toBe("Sailor and Boat Worker — Small-craft boat worker");
+
+      expect(labelFor("profession:sailor:small-craft")).toBe(
+        "Sailor and Boat Worker — Small-craft boat worker",
+      );
+      expect(labelFor("profession:sailor:rigged-vessel")).toBe(
+        "Sailor and Boat Worker — Rigged-vessel deck hand",
+      );
+    });
+
+    it("reports an unresolvable stored id honestly instead of showing it", () => {
+      // A Character finalized before a content change can hold an id the catalogue no longer has.
+      expect(labelFor("profession:retired-from-the-catalogue")).toBe(UNRESOLVED_PROFESSION_LABEL);
+      expect(labelFor("profession:retired-from-the-catalogue")).not.toContain("profession:");
+      expect(labelFor("profession:retired-from-the-catalogue")).not.toContain("retired");
+
+      // A split family's own id is not a selectable Profession, so it does not name one either.
+      expect(labelFor("profession:sailor")).toBe(UNRESOLVED_PROFESSION_LABEL);
+    });
+
+    it("never derives a display name from the id, even when the id tail looks like one", () => {
+      // Each of these tails would title-case or pass straight through into a plausible-looking
+      // name. None of them is in the catalogue, so none of them may ever be displayed.
+      const forgedIds = [
+        "profession:Courier and Messenger",
+        "profession:unknown:Rigged-vessel deck hand",
+        "profession:master-alchemist",
+        "Courier and Messenger",
+      ];
+
+      for (const forgedId of forgedIds) {
+        const label = labelFor(forgedId);
+
+        expect(label).toBe(UNRESOLVED_PROFESSION_LABEL);
+        expect(label).not.toBe(forgedId);
+        expect(forgedId).not.toContain(label);
+      }
+    });
+
+    it("still reports a build with no recorded Profession as not set", () => {
+      expect(labelFor(undefined)).toBe(PROFESSION_NOT_SET_LABEL);
+      expect(resolveProfessionLabel(undefined)).toBe(PROFESSION_NOT_SET_LABEL);
+    });
+
+    it("resolves every selectable Profession to a name that is not its id", () => {
+      const professions = getApprovedV2RuntimeContent().professions;
+
+      expect(professions).toHaveLength(86);
+
+      for (const profession of professions) {
+        const label = resolveProfessionLabel(profession.id);
+
+        expect(label).toBe(profession.name);
+        expect(label).not.toBe(profession.id);
+        expect(label).not.toContain("profession:");
+      }
+    });
   });
 });

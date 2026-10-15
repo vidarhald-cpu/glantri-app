@@ -1,4 +1,5 @@
 import type { AuthUser } from "@glantri/auth";
+import { getApprovedV2RuntimeContent } from "@glantri/content";
 
 import type { ServerCharacterRecord } from "../api/characterClient";
 import type { LocalCharacterRecord } from "../offline/glantriDexie";
@@ -35,6 +36,41 @@ export interface CharacterBrowserEntry {
 export interface CharacterBrowserOwnerOption {
   label: string;
   value: CharacterBrowserOwnerFilter;
+}
+
+/** No Profession is recorded on the build at all. */
+export const PROFESSION_NOT_SET_LABEL = "Not set";
+/**
+ * A Profession is recorded but the approved Profession content does not contain it — for example a
+ * Character finalized before a content change. The card must still say something true, so it
+ * reports that the recorded Profession cannot be named rather than naming it.
+ */
+export const UNRESOLVED_PROFESSION_LABEL = "Not recognised";
+
+let approvedProfessionNamesById: Map<string, string> | undefined;
+
+function approvedProfessionNames(): Map<string, string> {
+  return (approvedProfessionNamesById ??= new Map(
+    getApprovedV2RuntimeContent().professions.map((profession) => [profession.id, profession.name]),
+  ));
+}
+
+/**
+ * Resolves the player-facing Profession name from the approved Profession content, which is the
+ * same authoritative catalogue the Chargen selection is drawn from. A split Profession family is
+ * selected as one of its tracks, so a stored track id resolves to that track's own catalogue name.
+ *
+ * A display name is NEVER derived from the id. Turning `profession:courier` into "Courier" would
+ * silently diverge from the catalogue's own title, "Courier and Messenger". There is deliberately
+ * no slicing, splitting, title-casing, or pattern matching on the id here, and none may be added:
+ * an id that cannot be found is reported as unrecognised instead.
+ */
+export function resolveProfessionLabel(professionId: string | undefined): string {
+  if (!professionId) {
+    return PROFESSION_NOT_SET_LABEL;
+  }
+
+  return approvedProfessionNames().get(professionId) ?? UNRESOLVED_PROFESSION_LABEL;
 }
 
 export function canBrowseAllCharacterOwners(currentUser: AuthUser | null): boolean {
@@ -200,7 +236,7 @@ export function buildCharacterBrowserEntries(input: {
         name: record.build.name.trim() || UNNAMED_CHARACTER_PLACEHOLDER,
         ownerFilterValue: owner.filterValue,
         ownerLabel: owner.label,
-        professionLabel: record.build.professionId ?? "Not set",
+        professionLabel: resolveProfessionLabel(record.build.professionId),
         record,
         socialClassLabel:
           record.build.socialClass ?? record.build.profile.socialClassResult ?? "Not set",
