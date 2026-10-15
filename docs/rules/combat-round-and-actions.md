@@ -48,9 +48,10 @@ Two things follow from that shape and are worth holding on to:
 
 - **A round has two attack phases, Phase 1 and Phase 2.** Which phases your declared action attacks
   in is fixed by the action, not chosen separately — see the action table below.
-- **The round opens on a Combat Experience check and the declaration controls are closed until it
-  is resolved.** The check is resolved before declarations are made, so declarations are made
-  against the current result.
+- **A round opens on the Combat Experience step, before anyone declares.** When a check has become
+  due — by schedule, or after a Critical-triggered reset — it is resolved here and the declaration
+  controls stay closed until it is, so declarations are never made against a superseded result. Due
+  is not expired: the previous Combat Experience stays active until a fresh roll replaces it.
 
 The round ends on the round summary, which is also where declared distance preferences are
 resolved — see [section 6](#6-distance).
@@ -121,9 +122,12 @@ actual change happens through the ordinary Item controls and GM adjudication —
 
 ### 2.3 Movement and distance intentions
 
-Movement intent is one of: **Maintain distance to opponent** (the default), **Step**, **Advance**,
-**Withdraw**, **Run**, **Take cover**. Every one of these is compatible with every available
-primary action, so movement never blocks an action choice.
+The movement selector offers: **Maintain distance to opponent** (the default), **Step**,
+**Advance**, **Withdraw**, **Run**, **Take cover**.
+
+**No available primary action restricts your movement choice in the current version.** Every
+primary action accepts every kind of movement the declaration supports, so movement never closes
+off an action, and an action never closes off a movement.
 
 Separately from movement, you may hold position or set a preferred distance against one or more
 visible opponents. Those are intentions for the **next** round, not this one — see
@@ -142,6 +146,15 @@ The declaration is checked before it is accepted, and the message names the thin
 | `Select an opponent to observe.` / `Select an active opponent to observe.` | Observe Opponent has no target, or the target has left the fight. |
 | `Observe Opponent cannot target the acting participant.`                   | You cannot observe yourself.                                      |
 | `Select an attack source for Phase 1.`                                     | See [section 3](#3-attack-source).                                |
+
+### 2.5 The parry context is currently Single attack only
+
+Declaring a parry source, incoming attack side and parry direction alongside your own attack is
+available on **Single attack** and nowhere else. With any other primary action the parry context
+reports `Parry context applies to Single attack in this first pass.` This is a current boundary, not
+a rule that the other actions cannot be parried from: an **incoming** parry is a separate
+defender-owned roll, which the [player Parry page](./player/parry.md) covers and which does not
+depend on what you declared.
 
 ## 3. Attack source
 
