@@ -253,6 +253,30 @@ describe("rules documentation registry", () => {
     );
   });
 
+  // Forgejo #609. The Chargen guide's walkthrough describes the wizard a player actually walks,
+  // so these claims are pinned here: they would otherwise drift silently away from
+  // ChargenWizardExperience.tsx and from reviewChargenDraft's blocking conditions.
+  it("loads the Chargen walkthrough with the rendered step sequence and finalization gate", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "chargen-calculations",
+    });
+
+    expect(model.selectedDocument.markdown).toContain("Chargen is a ten-step wizard");
+    expect(model.selectedDocument.markdown).toContain("`Step N of 10`");
+    expect(model.selectedDocument.markdown).toContain("`9b. Specialization Table`");
+    expect(model.selectedDocument.markdown).toContain(
+      "render **inside** step `6. Skill allocation`",
+    );
+    expect(model.selectedDocument.markdown).toContain("### Profession core routes");
+    expect(model.selectedDocument.markdown).toContain(
+      "one applicable Profession core route is selected",
+    );
+    // Pilot v1 is historical provenance, not current reader authority (#620 ruling).
+    expect(model.selectedDocument.markdown).not.toContain("pilot-skill-rules-v1.md");
+    // Superseded by the Product Owner ruling of 2026-09-29 recorded in competency-rules.md.
+    expect(model.selectedDocument.markdown).not.toContain("are likewise mutually exclusive");
+  });
+
   it("loads the Combat Experience document with current result bands", async () => {
     const model = await getRulesDocumentationPageModel({
       selectedDocumentId: "combat-experience",
