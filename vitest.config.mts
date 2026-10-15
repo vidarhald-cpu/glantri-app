@@ -29,6 +29,26 @@ export default mergeConfig(
             "apps/web/node_modules/react/$1",
           ),
         },
+        // `react-dom` is a Web-package dependency too, so a bare `react-dom` or
+        // `react-dom/server` import in a Web test does not resolve from the repository root the
+        // way it does inside the package. Component tests reaching it through
+        // `@testing-library/react` resolve from that library's own location and so never hit
+        // this; a test importing it directly does. Mirror the `react` aliases above so both
+        // kinds behave the same at the root, as this config intends.
+        {
+          find: /^react-dom$/,
+          replacement: path.join(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "apps/web/node_modules/react-dom/index.js",
+          ),
+        },
+        {
+          find: /^react-dom\/(.*)$/,
+          replacement: path.join(
+            path.dirname(fileURLToPath(import.meta.url)),
+            "apps/web/node_modules/react-dom/$1",
+          ),
+        },
       ],
     },
     test: {
