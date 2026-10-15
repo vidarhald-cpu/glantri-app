@@ -27,20 +27,22 @@ Current retained-Character authority is documented in
 accepted Pilot v1 rules and exact canonical content release to persisted revisions, Campaign
 membership, migration lineage, snapshots, and viewer-safe provenance.
 
-Current Skill authority is split deliberately:
+Current Skill authority is **Competency V2** — Skills, Learning Groups, and Professions:
 
-- [Competency Rules](./competency-rules.md) and the linked
-  [Skill, Learning Group, and Profession reference](./competency-reference/README.md)
-  provide the complete player/GM-facing target-system explanation and content;
+- [Competency Rules](./competency-rules.md) is the reader-facing Skill authority, and with the
+  linked [Skill, Learning Group, and Profession reference](./competency-reference/README.md)
+  provides the complete player/GM-facing explanation and content; and
 - [Skill Catalogue qualitative architecture](../decisions/rules/0002-skill-catalogue-qualitative-architecture.md)
   governs the 19 navigation domains, competence identities, DS/AB meaning,
   language/written-tradition boundary, directional authoring relationships, and
-  learning-history semantics; and
-- [Pilot Skill Rules v1](./pilot-skill-rules-v1.md) and
-  [Pilot Skill Content Release v1](./pilot-skill-content-release-v1.md) govern the
-  bounded Pilot's accepted quantitative arithmetic, calibration, content, and
-  migration boundary. Both pages are retained in the repository as that bounded baseline and its
-  provenance, and are **not** published on the Rules Docs reader route.
+  learning-history semantics.
+
+[Pilot Skill Rules v1](./pilot-skill-rules-v1.md) and
+[Pilot Skill Content Release v1](./pilot-skill-content-release-v1.md) are **not** current reader
+authority. They are historical, provenance, and compatibility material: they record the bounded
+Pilot's accepted quantitative arithmetic, calibration, content, and migration boundary. Both pages
+are retained in the repository as that bounded baseline and its provenance, and are **not**
+published on the Rules Docs reader route.
 
 The qualitative decision does not change or generalize Pilot v1 mechanics.
 

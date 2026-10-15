@@ -77,17 +77,13 @@ export const unregisteredRulesDocuments: Record<string, UnregisteredRulesDocumen
   "competency-reference/professions.md": "bulk-reference",
   "competency-reference/skills.md": "bulk-reference",
   "competency-reference/societies.md": "bulk-reference",
-  "competency-rules.md": "unrouted",
   "encumbrance-and-movement-workbook.md": "internal",
-  "gm/criticals.md": "unrouted",
-  "gm/parry.md": "unrouted",
   "internal/parry-notes.md": "internal",
   "observe-opponent.md": "unrouted",
   "offensive-parry.md": "unrouted",
   "parry.md": "index",
   "pilot-skill-content-release-v1.md": "historical",
   "pilot-skill-rules-v1.md": "historical",
-  "player/parry.md": "unrouted",
   "secondary-critical-sec-grammar-decision-memo.md": "historical",
   "secondary-critical-sec-grammar.md": "non-runtime",
   "source-mapping.md": "internal",
@@ -95,6 +91,16 @@ export const unregisteredRulesDocuments: Record<string, UnregisteredRulesDocumen
 };
 
 export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
+  {
+    audience: "Players, GMs, and rules reviewers",
+    description:
+      "Current Competency authority: how Skills, Learning Groups, and Professions relate, availability by Society Level and Social Band, and what chargen grants.",
+    fileName: "competency-rules.md",
+    id: "competency-rules",
+    order: 7,
+    section: "Skills",
+    title: "Competency Rules",
+  },
   {
     audience: "Players, GMs, admins, and rules reviewers",
     description:
@@ -183,6 +189,36 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     order: 45,
     section: "Combat",
     title: "Combat Experience",
+  },
+  {
+    audience: "Players and GM reviewers",
+    description:
+      "Player and GM reference for declaring Parry, the Dodge-derived declaration modifier, and the defender-owned open-ended incoming-attack Parry check.",
+    fileName: "player/parry.md",
+    id: "player-parry",
+    order: 50,
+    section: "Combat",
+    title: "Parry — Player Rules",
+  },
+  {
+    audience: "GM reviewers",
+    description:
+      "Ordered GM procedure for validating a Parry declaration, proxying or reviewing an incoming Parry check, clear/continue behavior, and current operational boundaries.",
+    fileName: "gm/parry.md",
+    id: "gm-parry",
+    order: 55,
+    section: "Combat",
+    title: "Parry — GM Procedure",
+  },
+  {
+    audience: "GM reviewers",
+    description:
+      "Critical values and effects the current application produces, including the critical roll with its subtracted armor critical modifier, per-grade modifiers, and the derivation of every value.",
+    fileName: "gm/criticals.md",
+    id: "gm-criticals",
+    order: 60,
+    section: "Combat",
+    title: "Criticals — GM Value Reference",
   },
 ];
 
