@@ -332,4 +332,25 @@ describe("Encounter info card status label", () => {
     expect(screen.getByText("Status: Closed")).toBeTruthy();
     expect(screen.queryByText("Status: completed")).toBeNull();
   });
+
+  it("derives the Type label from encounter.kind, not a hardcoded string", () => {
+    const { unmount } = render(
+      <EncounterInfoCard encounter={{ ...statCheckEncounter(), kind: "combat" }} />,
+    );
+    expect(screen.getByText("Type: Combat")).toBeTruthy();
+    expect(screen.queryByText("Type: Roleplaying")).toBeNull();
+    unmount();
+
+    render(<EncounterInfoCard encounter={{ ...statCheckEncounter(), kind: "roleplay" }} />);
+    expect(screen.getByText("Type: Roleplaying")).toBeTruthy();
+  });
+
+  it("falls back to the capitalised raw kind for an unknown kind, never blank", () => {
+    render(
+      <EncounterInfoCard
+        encounter={{ ...statCheckEncounter(), kind: "social" as unknown as "combat" }}
+      />,
+    );
+    expect(screen.getByText("Type: Social")).toBeTruthy();
+  });
 });
