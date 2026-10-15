@@ -255,7 +255,7 @@ purchase is the change in that bundle price. It must not be invented in the UI.
 **Mutually exclusive Profession routes are a separate concept from ordinary
 overlap.** Where the Profession reference says `choose one`, the routes are
 alternatives and must be enforced as alternatives, not reconciled as overlap.
-**The two Profession-specific alternatives under [Professions](#professions) are
+**The two Profession-specific alternatives** under [Professions](#professions) **are
 not such a case**: by the Product Owner ruling of 2026-09-29 recorded there, both
 may be acquired and each is paid for independently, so their shared competence is
 handled by the ordinary overlap arithmetic and nothing is prohibited.

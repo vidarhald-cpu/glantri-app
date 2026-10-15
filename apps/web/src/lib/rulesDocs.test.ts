@@ -8,6 +8,7 @@ import {
   getRulesDocumentEntryById,
   getRulesDocumentationPageModel,
   getRulesDocuments,
+  resolveRulesDocumentLink,
   unregisteredRulesDocuments,
 } from "./rulesDocs";
 
@@ -533,6 +534,51 @@ describe("rules documentation registry", () => {
     // exclusion behind. Classifying a page does not publish it: an internal-only note must never
     // be registered merely to satisfy an accessibility check.
     expect(classified).toEqual(onDisk);
+  });
+
+  it("resolves a relative link target against the registry, and only against the registry", () => {
+    /* A registered page becomes the reader route the sidebar already uses. */
+    expect(resolveRulesDocumentLink("./combat-to-hit.md", "combat-round-and-actions.md")).toEqual({
+      href: "/admin/rules-docs?doc=combat-to-hit",
+      kind: "document",
+    });
+    /* Into a subdirectory, and back out of one, with the author's fragment preserved. */
+    expect(resolveRulesDocumentLink("./gm/criticals.md", "combat-round-and-actions.md")).toEqual({
+      href: "/admin/rules-docs?doc=gm-criticals",
+      kind: "document",
+    });
+    expect(
+      resolveRulesDocumentLink("../combat-round-and-actions.md#8-observe-opponent", "gm/parry.md"),
+    ).toEqual({
+      href: "/admin/rules-docs?doc=combat-round-and-actions#8-observe-opponent",
+      kind: "document",
+    });
+
+    /* A same-page fragment stays a fragment, and an ordinary web address stays itself. */
+    expect(resolveRulesDocumentLink("#6-distance", "combat-round-and-actions.md")).toEqual({
+      href: "#6-distance",
+      kind: "fragment",
+    });
+    expect(resolveRulesDocumentLink("https://example.test/x", "gm/parry.md")).toEqual({
+      href: "https://example.test/x",
+      kind: "external",
+    });
+
+    /* Everything with no reader route is unrouted, and no page is registered to change that. */
+    for (const [target, source] of [
+      ["./pilot-skill-rules-v1.md", "competency-rules.md"],
+      ["./competency-reference/skills.md", "competency-rules.md"],
+      ["../decisions/rules/0011-shared.md", "competency-rules.md"],
+      ["../audits/c1-critical-fixtures.md", "combat-critical-effects.md"],
+      ["../recovery/2026-09-06-c1-five-key-post-393-payloads.json", "combat-critical-effects.md"],
+      ["javascript:void", "competency-rules.md"],
+      ["/admin/characters", "competency-rules.md"],
+    ] as const) {
+      expect(resolveRulesDocumentLink(target, source), target).toEqual({ kind: "unrouted" });
+    }
+
+    /* Without a containing document a relative target cannot be resolved, so it is not guessed. */
+    expect(resolveRulesDocumentLink("./combat-to-hit.md")).toEqual({ kind: "unrouted" });
   });
 
   it("expands structured rule-table directives into markdown tables", () => {

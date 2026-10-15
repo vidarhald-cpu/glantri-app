@@ -21,21 +21,21 @@ Displayed GM = trunc((Current stat - 11) / 2)
       expect.arrayContaining([
         expect.objectContaining({
           text: "Title",
-          type: "heading"
+          type: "heading",
         }),
         expect.objectContaining({
           code: "Displayed GM = trunc((Current stat - 11) / 2)",
           language: "text",
-          type: "code"
+          type: "code",
         }),
         expect.objectContaining({
           rows: [
             ["Label", "Value"],
-            ["GM", "2"]
+            ["GM", "2"],
           ],
-          type: "table"
-        })
-      ])
+          type: "table",
+        }),
+      ]),
     );
   });
 });
