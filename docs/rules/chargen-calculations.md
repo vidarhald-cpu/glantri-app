@@ -430,8 +430,12 @@ ordinary acquisition arithmetic. The named routes and the full statement of that
 [Competency Rules](./competency-rules.md); the earlier wording on this page, which described the
 Guard, Watcher and Escort routes as mutually exclusive, is superseded by it.
 
-In Chargen this appears as the core-route choice described under `Profession core routes` above:
-the selected route is the one that must be completed, and the other route's training stays
-available for purchase at its ordinary cost and access. These alternatives create no tracks, do
-not restrict independent or direct competency purchases, and imply nothing about other
-Professions.
+In Chargen neither alternative is the `Choose your Profession core route` choice described under
+`Profession core routes` above. Guard, Watcher and Escort has only one applicable core route, so
+that choice never appears for it: both of its alternative routes are ordinary purchasable training
+within `6. Skill allocation`, each bought at its ordinary cost and access, and neither of them is
+the training that completes the Profession. Sailor and Boat Worker is reached as two separately
+selectable Professions, so there the alternative is settled by which one is chosen at
+`5. Choose profession`, and the selected Profession's own single core route is what must then be
+completed. These alternatives create no tracks, do not restrict independent or direct competency
+purchases, and imply nothing about other Professions.
