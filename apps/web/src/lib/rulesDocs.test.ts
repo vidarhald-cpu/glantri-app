@@ -160,6 +160,7 @@ describe("rules documentation registry", () => {
       "Character Progression Calculations",
       "Equipment & Encumbrance Calculations",
       "Equip Items Calculations",
+      "Combat Round, Loadout and Actions",
       "Glantri Combat To Hit / Damage",
       "Glantri Critical Effects",
       "Combat Experience",
@@ -295,6 +296,45 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Base DB");
     expect(model.selectedDocument.markdown).toContain("Combined parry modifier");
     expect(model.selectedDocument.markdown).toContain("GMR");
+  });
+
+  it("loads the Combat Round, Loadout and Actions guide with its load-bearing runtime facts", async () => {
+    const model = await getRulesDocumentationPageModel({
+      selectedDocumentId: "combat-round-and-actions",
+    });
+
+    expect(model.selectedDocument.title).toBe("Combat Round, Loadout and Actions");
+    expect(model.selectedDocument.markdown).toContain("# Combat Round, Loadout and Actions");
+    // Declaration is explicit (#575/#583/#591): an attacking phase without a source is refused.
+    expect(model.selectedDocument.markdown).toContain("**You choose it explicitly.**");
+    expect(model.selectedDocument.markdown).toContain("Phase 1 attack source is required.");
+    // Punch and Kick are intrinsic and need no Item instance (#590).
+    expect(model.selectedDocument.markdown).toContain("`Punch · Unarmed`");
+    expect(model.selectedDocument.markdown).toContain("`Kick · Unarmed`");
+    expect(model.selectedDocument.markdown).toContain("they need **no Item\nat all**");
+    expect(model.selectedDocument.markdown).toContain("**Brawling**");
+    // Counterattack is not declarable, and the generic Other action is not offered.
+    expect(model.selectedDocument.markdown).toContain(
+      "**Counterattack cannot currently be declared.**",
+    );
+    // Item interactions and canonical Disarm need a current equipment projection (#599).
+    expect(model.selectedDocument.markdown).toContain(
+      "The GM must reconcile it before dependent play can\ncontinue.",
+    );
+    // Verified runtime values, not hand-evaluated: distance penalty, Disarm and Break Off bands.
+    expect(model.selectedDocument.markdown).toContain(
+      "**−2 per step away from the nearest preferred distance.**",
+    );
+    // Cell padding is Prettier's, so the band boundary is pinned without the surrounding spaces.
+    expect(model.selectedDocument.markdown).toMatch(
+      /\| 16 or more +\| Disarmed and Unbalanced \(1 round\) +\|/,
+    );
+    expect(model.selectedDocument.markdown).toMatch(
+      /\| \+21 or more +\| You break off; attacker OB −4% +\|/,
+    );
+    expect(model.selectedDocument.markdown).toMatch(/\| −10 to 0 +\| Attack continues +\|/);
+    // The armor critical modifier is subtracted; this page must never reintroduce the add-form.
+    expect(model.selectedDocument.markdown).not.toContain("+ armor critical modifier");
   });
 
   it("loads the Glantri Combat To Hit / Damage document with roll and damage-scope notes", async () => {
