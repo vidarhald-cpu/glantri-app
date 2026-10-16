@@ -10,6 +10,7 @@ import {
   buildProfessionRelationshipContext,
   buildSocietyMatrixRowsInternal,
   applySocietyReachBands,
+  resolveProfessionDisplayName,
   resolveProfessionGrantPackage
 } from "./_helpers";
 
@@ -232,8 +233,8 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
           category: "Inconsistent profession progression",
           detail: `Higher level ${current.societyLevel} removes profession access from lower level ${previous.societyLevel}.`,
           id: `profession-regression:${current.id}`,
-          relatedEntries: missingProfessions.map(
-            (professionId) => professionsById.get(professionId)?.name ?? professionId
+          relatedEntries: missingProfessions.map((professionId) =>
+            resolveProfessionDisplayName(professionsById, professionId)
           ),
           severity: "warning",
           societyRowId: current.id,

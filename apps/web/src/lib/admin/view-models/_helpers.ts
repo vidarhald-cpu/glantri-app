@@ -101,6 +101,24 @@ export function getAuditSeverityRank(severity: InternalAuditSeverity): number {
   return 2;
 }
 
+export const PROFESSION_UNAVAILABLE_LABEL = "Profession unavailable";
+
+/**
+ * Resolves a Profession id to its catalogue name for Admin/GM display.
+ *
+ * When the id is not in the catalogue the ruled fallback is shown instead of
+ * the internal identifier. There is deliberately no slicing, splitting,
+ * title-casing, or pattern matching on the id here, and none may be added:
+ * deriving "Courier" from `profession:courier` would silently diverge from the
+ * catalogue's own title ("Courier and Messenger").
+ */
+export function resolveProfessionDisplayName(
+  professionsById: ReadonlyMap<string, { name: string }>,
+  professionId: string
+): string {
+  return professionsById.get(professionId)?.name ?? PROFESSION_UNAVAILABLE_LABEL;
+}
+
 export function buildSkillMaps(content: CanonicalContent) {
   const skillGroupsById = new Map(content.skillGroups.map((group) => [group.id, group]));
   const skillsById = new Map(content.skills.map((skill) => [skill.id, skill]));
@@ -436,8 +454,8 @@ export function buildSocietyMatrixRowsInternal(content: CanonicalContent) {
         notes: societyLevel.notes ?? "",
         professionDerivedReachCount: professionDerivedSkillIds.length,
         reachableProfessions: uniqueSorted(
-          reachableProfessionIds.map(
-            (professionId) => professionsById.get(professionId)?.name ?? professionId
+          reachableProfessionIds.map((professionId) =>
+            resolveProfessionDisplayName(professionsById, professionId)
           )
         ),
         society: societiesById.get(societyLevel.societyId) ?? societyLevel.societyId,
