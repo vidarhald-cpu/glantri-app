@@ -392,7 +392,23 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("damage result proposal");
     expect(model.selectedDocument.markdown).toContain("Commit phase damage");
     expect(model.selectedDocument.markdown).toContain("one active physical damage effect row");
-    expect(model.selectedDocument.markdown).toContain("critical effects remain a GM");
+    // Forgejo #611: this page claimed Critical effects were unimplemented long after they were.
+    // Committing a C1-active Critical writes `c1-*` combat-effect rows
+    // (`buildCombatRoundDamageCommitRows` in packages/domain/src/encounter/combatRoundManager.ts),
+    // so the page now states the real, bounded behaviour and must not revert to the stale claim.
+    expect(model.selectedDocument.markdown).toContain(
+      "Critical-effect automation is bounded rather than absent",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "are created as source-linked combat-effect rows when the damage proposal is committed",
+    );
+    expect(model.selectedDocument.markdown).not.toContain("critical effects remain a GM");
+    expect(model.selectedDocument.markdown).not.toContain(
+      "does not create automated\ncritical-effect rows",
+    );
+    expect(model.selectedDocument.markdown).not.toContain(
+      "until the critical effect table is\nimplemented",
+    );
     // The runtime subtracts the armor critical modifier (packages/domain critical.ts, the combat
     // round manager, and docs/rules/gm/criticals.md). This page said "+" until Forgejo #620.
     expect(model.selectedDocument.markdown).toContain(

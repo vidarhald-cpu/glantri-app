@@ -235,12 +235,12 @@ contribution must not simply sum.
 A player must likewise not be charged for a group component that produces no
 effective Skill benefit.
 
-This is the product statement of behaviour the accepted calculation already
-defines: `pilot-skill-rules/v1` counts only the strongest group's contribution
-for a Skill and prices only the useful increment, keeping weaker memberships
-visible and explained rather than deleted
-([`pilot-skill-rules-v1.md`](./pilot-skill-rules-v1.md), section 4 "Learning
-groups and histories"). "Overlap does not duplicate the Skill or multiply a
+This is the product statement of behaviour the current calculation already
+defines: the shared Learning Group acquisition arithmetic counts only the
+strongest group's contribution for a Skill and prices only the useful increment,
+keeping weaker memberships visible and explained rather than deleted. The
+retained Pilot v1 record is the historical provenance of that arithmetic and is
+not current reader authority. "Overlap does not duplicate the Skill or multiply a
 purchase" under [Learning Groups](#learning-groups), and "Multiple valid routes
 never multiply the purchase, discount, or resulting competency" above, state the
 same rule for membership and for purchase.
