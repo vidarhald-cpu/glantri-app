@@ -271,14 +271,43 @@ phase's attack: **−2 per step away from the nearest preferred distance.** It i
 declaration or modifier review is committed, and both the GM and the player see it before the
 attack is rolled.
 
-| Preferred | Actual | Modifier |
-| --------- | -----: | -------: |
-| 3         |      3 |        0 |
-| 3         |      4 |       −2 |
-| 3         |      1 |       −4 |
-| 3         |      0 |       −6 |
-| 1 or 2    |      4 |       −4 |
-| 3 or 4    |      1 |       −4 |
+Count the steps from the current distance to the **nearest** distance your weapon prefers, then
+read the modifier. Distance runs `0` to `8`, so eight steps is the widest gap there is and the
+table is complete:
+
+| Steps from the nearest preferred distance | Modifier |
+| ----------------------------------------: | -------: |
+|                      0 (you are at reach) |        0 |
+|                                         1 |       −2 |
+|                                         2 |       −4 |
+|                                         3 |       −6 |
+|                                         4 |       −8 |
+|                                         5 |      −10 |
+|                                         6 |      −12 |
+|                                         7 |      −14 |
+|                                         8 |      −16 |
+
+**Count to the nearest preferred distance, not to the weapon's best one.** A weapon that prefers
+more than one distance is penalised from whichever of them is closest, so it has no penalty at any
+of them:
+
+| Preferred | Actual | Steps | Modifier |
+| --------- | -----: | ----: | -------: |
+| 3         |      3 |     0 |        0 |
+| 3         |      4 |     1 |       −2 |
+| 3         |      1 |     2 |       −4 |
+| 3         |      0 |     3 |       −6 |
+| 1 or 2    |      4 |     2 |       −4 |
+| 3 or 4    |      1 |     2 |       −4 |
+| 3 or 4    |      4 |     0 |        0 |
+| 2 or 6    |      4 |     2 |       −4 |
+
+The last row is the case worth remembering: a weapon preferring `2` or `6`, used at `4`, is two
+steps from both and takes `−4` — being between two preferred distances is not the same as being at
+one.
+
+Where the application has no usable preferred-distance data for the weapon, it generates **no
+distance modifier at all** rather than guessing a reach.
 
 This modifier applies to **attack rolls only**. It does not touch DB or Parry, the damage lookup,
 initiative, the critical roll, armor, or the weapon's base OB.
