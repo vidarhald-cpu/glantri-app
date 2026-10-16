@@ -56,9 +56,9 @@ The app does not yet allocate Parry sources across multiple opponents or automat
 two-source composition, the special minimum `+1`, positional restrictions, missile-specific Parry,
 mandatory backward movement, blocked-retreat penalties, or terrain-space validation.
 
-Do not treat these gaps as reconciled rules. Their source and implementation status are recorded in
-[Parry internal notes](../internal/parry-notes.md), and Combat conflicts remain tracked in
-[issue #211](https://github.com/vidarhald-cpu/glantri-app/issues/211).
+Do not treat these gaps as reconciled rules. Their source and implementation status, and the
+unresolved Combat conflicts behind them, are recorded in
+[Parry internal notes](../internal/parry-notes.md).
 
 Player-facing declaration and incoming-roll instructions are in
 [Parry — Player Rules](../player/parry.md).

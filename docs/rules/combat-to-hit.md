@@ -7,13 +7,14 @@ substep before that proposal is calculated; if the proposal has a critical grade
 is a second explicit D1/D2 substep before commit. Committing that proposal writes source-linked
 combat-effect rows for the defender. The proposal includes compact GM review overrides for location,
 armor, total damage, critical grade, critical-roll modifiers/result, notes, and manual immediate
-effect rows. Critical-effect automation is bounded rather than absent: each of the 34 Critical keys
-that carries a representative C1 fixture writes that fixture's canonical atoms as source-linked
-combat-effect rows at commit, and the structured GM adjudication over those atoms is available for
-the five C1-active review keys only. The remaining 574 catalogue results stay on the legacy GM-note
-path, and full injury typing is still future work.
-[Glantri Critical Effects](./combat-critical-effects.md) and
-[Criticals — GM Value Reference](./gm/criticals.md) carry the current boundary and the values.
+effect rows. Critical-effect automation is bounded rather than absent: a Critical key that carries a
+representative C1 fixture writes that fixture's canonical atoms as source-linked combat-effect rows
+at commit, and the structured GM adjudication over those atoms is available for the C1-active review
+keys only. Catalogue results with no representative fixture stay on the legacy GM-note path, and
+full injury typing is still future work.
+[Glantri Critical Effects](./combat-critical-effects.md#c1-representative-fixture-authority) is the
+authority for that boundary and for how many keys sit on each side of it, and
+[Criticals — GM Value Reference](./gm/criticals.md) carries the values.
 
 ## Hit lookup
 
@@ -145,18 +146,20 @@ modifier - armor critical modifier`. The armor critical modifier is **subtracted
 Critical severity. The critical type modifier comes from the combat critical modifier table. Armor
 critical modifier is read from the selected hit-location armor coverage when available, and the GM
 may review or override the critical type modifier, armor critical modifier, final critical roll, and
-critical location. When the committed Critical key is one of the 34 that carry a representative C1
-fixture, the stored critical roll resolves that fixture's canonical atoms — a minimum total damage
+critical location. When the committed Critical key carries a representative C1 fixture, the stored
+critical roll resolves that fixture's canonical atoms — a minimum total damage
 floor, a Stun where the result has one, typed conditions, Bleed where the result has it, an
 immediate operation such as dropping a held item, and read-only GM information. The Stun, condition
 and Bleed atoms, together with a read-only treatment state row, are created as source-linked
 combat-effect rows when the damage proposal is committed; an accepted operation commits as its own
 operational row instead. The structured GM adjudication over
 those atoms — suppressing a permitted atom, choosing the Stun rung, editing the instance title or
-narrative — is available for the five C1-active review keys only. For the other 29 fixture keys the
-canonical rows are written without that adjudication and no legacy proposal rows are written
-alongside them. For the remaining 574 catalogue results the stored roll remains a GM review note on
-the legacy proposal path.
+narrative — is available for the C1-active review keys only. For a fixture-carrying key outside that
+review set the canonical rows are written without that adjudication and no legacy proposal rows are
+written alongside them. For a catalogue result with no representative fixture the stored roll
+remains a GM review note on the legacy proposal path. Which keys sit on each side of that boundary,
+and how many, is in
+[Glantri Critical Effects](./combat-critical-effects.md#c1-representative-fixture-authority).
 
 During D1/D2 review, the GM may record compact overrides without replacing the computed proposal.
 Review fields can override selected hit location, armor modifier, total damage, critical grade,

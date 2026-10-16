@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import { getRulesDocumentById, getRulesDocumentEntryById } from "@/lib/rulesDocs";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 /**
@@ -177,5 +178,61 @@ Back to [section 6](#6-distance).
     expect(render("Tracked as [issue #211](https://example.test/issues/211).")).toContain(
       '<a href="https://example.test/issues/211">issue #211</a>',
     );
+  });
+});
+
+/**
+ * Forgejo #651's cross-page references, rendered rather than computed.
+ *
+ * Both are `#fragment` targets into another registered page, and the slug contract is only a
+ * contract: #612 verified 107 published cells while its flagship table rendered as pipe text,
+ * because nobody rendered the page. So each reference is checked twice from the real registered
+ * Markdown — the anchor the referring page emits, and the heading `id` on the page it points at —
+ * and a renamed heading on either side fails here.
+ */
+describe("the registered reader pages' cross-page fragment references resolve when rendered", () => {
+  async function renderPage(id: string): Promise<string> {
+    const document = await getRulesDocumentById(id);
+    const entry = getRulesDocumentEntryById(id);
+
+    return renderToStaticMarkup(
+      createElement(MarkdownRenderer, {
+        fileName: entry.fileName,
+        markdown: document.markdown,
+      }),
+    );
+  }
+
+  it("renders the C1 boundary authority heading combat-to-hit.md links to", async () => {
+    const referring = await renderPage("combat-to-hit");
+    const authority = await renderPage("combat-critical-effects");
+
+    expect(referring).toContain(
+      '<a href="/admin/rules-docs?doc=combat-critical-effects#c1-representative-fixture-authority">',
+    );
+    expect(authority).toContain('id="c1-representative-fixture-authority"');
+  });
+
+  it("renders the next-check schedule section combat-round-and-actions.md links to", async () => {
+    const referring = await renderPage("combat-round-and-actions");
+    const schedule = await renderPage("combat-experience");
+
+    expect(referring).toContain(
+      '<a href="/admin/rules-docs?doc=combat-experience#when-the-next-check-is-due">schedule</a>',
+    );
+    expect(schedule).toContain('id="when-the-next-check-is-due"');
+    /* The schedule is a table, so it must render as one rather than as a row of pipe characters. */
+    expect(schedule).toContain("<th");
+    expect(schedule).toContain("Next check due");
+    expect(schedule).not.toContain("| Result rolled in round |");
+  });
+
+  it("renders no development-tracker anchor on the GM Parry procedure", async () => {
+    const html = await renderPage("gm-parry");
+
+    expect(html).not.toContain("github.com");
+    expect(html).toContain("Parry internal notes");
+    /* The internal notes are deliberately unregistered, so the label stays text, not a dead link. */
+    expect(html).not.toContain("internal/parry-notes.md");
   });
 });
