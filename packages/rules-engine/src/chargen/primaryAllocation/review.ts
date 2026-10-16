@@ -152,7 +152,7 @@ export function reviewChargenDraft(input: ReviewChargenDraftInput): ReviewCharge
     const definition = getSkillById(input.content, skill.skillId);
 
     if (!definition) {
-      errorSet.add(`Missing skill definition for ${skill.skillId}.`);
+      errorSet.add("A required skill is unavailable. Ask the GM to review this character.");
       continue;
     }
 
@@ -182,7 +182,9 @@ export function reviewChargenDraft(input: ReviewChargenDraftInput): ReviewCharge
     const definition = getSpecializationById(input.content, specialization.specializationId);
 
     if (!definition) {
-      errorSet.add(`Missing specialization definition for ${specialization.specializationId}.`);
+      errorSet.add(
+        "A required specialization is unavailable. Ask the GM to review this character.",
+      );
       continue;
     }
 
