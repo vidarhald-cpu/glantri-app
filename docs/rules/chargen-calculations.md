@@ -146,6 +146,36 @@ Size-to-DEX modifier:
 
 `Size GM` uses the same stat modifier table above.
 
+`SIZ` is an integer from `1` to `25`, so the rule above resolves to the table below. Read it
+rather than looking up `Size GM` and then applying the sign change by hand:
+
+| `SIZ` | Size-to-DEX modifier |
+| ----: | -------------------: |
+|     1 |                   +5 |
+|   2–3 |                   +4 |
+|   4–5 |                   +3 |
+|   6–7 |                   +2 |
+|   8–9 |                   +1 |
+| 10–14 |                    0 |
+| 15–16 |                   -1 |
+| 17–18 |                   -2 |
+| 19–20 |                   -3 |
+| 21–22 |                   -4 |
+| 23–24 |                   -5 |
+|    25 |                   -6 |
+
+Three things in that table do not follow from the stat modifier table alone:
+
+- The modifier **runs opposite** to `Size GM`. A small Character gains DEX and a large one loses
+  it, so the sign is the one the stat modifier table does not have.
+- The no-modifier band is `10–14`, five values wide, because `SIZ 13` and `SIZ 14` have a
+  `Size GM` of `1` but still fall under the `SIZ <= 14` condition.
+- The upper tail carries the `- 1`, so `SIZ 15` is `-1` rather than `-2`, and the largest penalty
+  at `SIZ 25` is `-6` rather than `-7`.
+
+Worked example: `SIZ 17` has `Size GM 3`, and `SIZ > 14`, so the modifier is `-(3 - 1)` = `-2`. A
+Character who rolled `DEX 14` resolves to `DEX 12`.
+
 ## 5. Exchanges and builds
 
 App section: Chargen step `2. Resolve stats`.
@@ -421,7 +451,7 @@ Target builds retain family/track/source identity and approved group definitions
 
 ## Profession-specific route alternatives
 
-Two Professions — Sailor and Boat Worker, and Guard, Watcher and Escort — offer a choice between
+Two Profession families — Sailor and Boat Worker, and Guard, Watcher and Escort — offer a choice between
 two training routes to overlapping competence. **"Alternative" here means a choice of route, not a
 prohibition.** By the Product Owner ruling of 2026-09-29 (Forgejo #387) the two alternatives are
 **not mutually exclusive**: a Character who trains in only one route buys only that one, a

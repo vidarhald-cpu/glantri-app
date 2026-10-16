@@ -7,7 +7,13 @@ substep before that proposal is calculated; if the proposal has a critical grade
 is a second explicit D1/D2 substep before commit. Committing that proposal writes source-linked
 combat-effect rows for the defender. The proposal includes compact GM review overrides for location,
 armor, total damage, critical grade, critical-roll modifiers/result, notes, and manual immediate
-effect rows. Critical-effect automation, bleeding, and full injury typing remain future work.
+effect rows. Critical-effect automation is bounded rather than absent: each of the 34 Critical keys
+that carries a representative C1 fixture writes that fixture's canonical atoms as source-linked
+combat-effect rows at commit, and the structured GM adjudication over those atoms is available for
+the five C1-active review keys only. The remaining 574 catalogue results stay on the legacy GM-note
+path, and full injury typing is still future work.
+[Glantri Critical Effects](./combat-critical-effects.md) and
+[Criticals — GM Value Reference](./gm/criticals.md) carry the current boundary and the values.
 
 ## Hit lookup
 
@@ -130,7 +136,8 @@ damage for audit.
 The armor modifier table is available as structured rule data. Current D1/D2 proposals read equipped
 armor coverage by reviewed hit location and front/back direction, subtract armor value from table
 damage, and apply the armor modifier table after damage lookup. Critical grade and minimum damage are
-stored as table metadata when present, but critical effects remain a GM review note for now.
+stored as table metadata when present; Critical effects themselves are resolved by the critical roll
+below and are documented in [Glantri Critical Effects](./combat-critical-effects.md).
 
 If the damage lookup produces a critical grade, D1/D2 enters critical pending after the damage
 proposal is created. The attacker rolls `2d8`; the final critical roll is `2d8 + critical type
@@ -138,8 +145,18 @@ modifier - armor critical modifier`. The armor critical modifier is **subtracted
 Critical severity. The critical type modifier comes from the combat critical modifier table. Armor
 critical modifier is read from the selected hit-location armor coverage when available, and the GM
 may review or override the critical type modifier, armor critical modifier, final critical roll, and
-critical location. The stored critical roll is informational for now and does not create automated
-critical-effect rows.
+critical location. When the committed Critical key is one of the 34 that carry a representative C1
+fixture, the stored critical roll resolves that fixture's canonical atoms — a minimum total damage
+floor, a Stun where the result has one, typed conditions, Bleed where the result has it, an
+immediate operation such as dropping a held item, and read-only GM information. The Stun, condition
+and Bleed atoms, together with a read-only treatment state row, are created as source-linked
+combat-effect rows when the damage proposal is committed; an accepted operation commits as its own
+operational row instead. The structured GM adjudication over
+those atoms — suppressing a permitted atom, choosing the Stun rung, editing the instance title or
+narrative — is available for the five C1-active review keys only. For the other 29 fixture keys the
+canonical rows are written without that adjudication and no legacy proposal rows are written
+alongside them. For the remaining 574 catalogue results the stored roll remains a GM review note on
+the legacy proposal path.
 
 During D1/D2 review, the GM may record compact overrides without replacing the computed proposal.
 Review fields can override selected hit location, armor modifier, total damage, critical grade,
@@ -155,8 +172,11 @@ The proposal is not applied until the GM uses Commit phase damage. That command 
 combat-effect event and, when total damage is positive, one active physical damage effect row for the
 defender using the effective reviewed values. If the proposal has an effective hit location, the row
 is recorded at that character damage location; General damage is used only when no specific location
-is available. Critical grade and critical roll remain commit notes until the critical effect table is
-implemented. Commit also writes one active row for each reviewed additional effect. The rows are
+is available. Critical grade and critical roll are carried into the commit notes, and for a Critical
+key with a representative C1 fixture commit also writes that fixture's canonical atoms as their own
+rows. The reviewed critical effect proposal's minimum total damage floor, where the result carries
+one, is applied to the committed physical damage. Commit also writes one active
+row for each reviewed additional effect. The rows are
 source-linked to the command by deterministic event/effect IDs, and GM review notes are carried into
 the commit description. Phase-one committed rows are part of the participant's live JSON-backed
 combatEffects state before phase two continues, so reviewed modifier rows affect phase-two combat
