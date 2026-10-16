@@ -157,8 +157,11 @@ is the round the participant resolves Combat Experience again.
 An Active `21+` result has no duration, so it schedules no next check and never becomes due by
 schedule. A confirmation made without rolling, because the participant's Combat Experience total
 already meets the difficulty, resolves in that same `21+` band and schedules nothing either. While a
-participant is on a `21+` result, only a Critical-triggered reset asks them for Combat Experience
-again.
+participant is on a `21+` result, only a Critical-triggered reset brings the scheduled check back.
+That exclusivity is about the schedule alone. A phase attack asks separately, and the band of the
+result a participant is holding makes no difference to it, so a participant on a `21+` result must
+still resolve Combat Experience whenever the [Phase Attack Rolls](#phase-attack-rolls) conditions
+are met.
 
 Being due is not the same as expiring. The result that is running stays active until the fresh roll
 replaces it, and that fresh roll schedules the next check its own duration implies.

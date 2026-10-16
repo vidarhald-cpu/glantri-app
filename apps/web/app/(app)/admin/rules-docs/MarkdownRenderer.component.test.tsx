@@ -182,15 +182,15 @@ Back to [section 6](#6-distance).
 });
 
 /**
- * Forgejo #651's cross-page references, rendered rather than computed.
+ * Forgejo #651's fragment references, rendered rather than computed.
  *
- * Both are `#fragment` targets into another registered page, and the slug contract is only a
+ * Each is a `#fragment` target into a registered page, and the slug contract is only a
  * contract: #612 verified 107 published cells while its flagship table rendered as pipe text,
- * because nobody rendered the page. So each reference is checked twice from the real registered
+ * because nobody rendered the page. So every reference is checked twice from the real registered
  * Markdown — the anchor the referring page emits, and the heading `id` on the page it points at —
  * and a renamed heading on either side fails here.
  */
-describe("the registered reader pages' cross-page fragment references resolve when rendered", () => {
+describe("the registered reader pages' fragment references resolve when rendered", () => {
   async function renderPage(id: string): Promise<string> {
     const document = await getRulesDocumentById(id);
     const entry = getRulesDocumentEntryById(id);
@@ -225,6 +225,13 @@ describe("the registered reader pages' cross-page fragment references resolve wh
     expect(schedule).toContain("<th");
     expect(schedule).toContain("Next check due");
     expect(schedule).not.toContain("| Result rolled in round |");
+  });
+
+  it("renders the Phase Attack Rolls heading the next-check section points back at", async () => {
+    const html = await renderPage("combat-experience");
+
+    expect(html).toContain('<a href="#phase-attack-rolls">Phase Attack Rolls</a>');
+    expect(html).toContain('id="phase-attack-rolls"');
   });
 
   it("renders no development-tracker anchor on the GM Parry procedure", async () => {

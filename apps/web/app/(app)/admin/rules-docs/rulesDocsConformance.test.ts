@@ -332,7 +332,10 @@ describe("rules documentation reader pages render as the elements they are meant
  *    duplication cannot creep back; `AUTHORITY_FRAGMENT` requires the reference that replaced it.
  *    Relocation alone does not close gap 1 — `combat-critical-effects.md` still states the active
  *    count in four separate sentences — so the per-occurrence counts do the work, and all four are
- *    now individually guarded where previously one of them matched no pattern at all.
+ *    now individually guarded where previously one of them matched no pattern at all. The
+ *    adjudication count is published four times on the same page and was still bound once, by the
+ *    key-naming regex that stops at its first match; its four occurrences are per-occurrence
+ *    claims here too, so every published count on the authority page is individually bound.
  */
 describe("published Critical automation counts match the executed fixture and adjudication sets", () => {
   const catalogueKeys = CRITICAL_EFFECTS_TABLE.criticalResults.map((result) => result.critKey);
@@ -423,6 +426,41 @@ describe("published Critical automation counts match the executed fixture and ad
         label: "legacy catalogue row count, commit-resolution sentence",
         occurrences: 1,
         pattern: new RegExp(`the (${COUNT}) inactive rows`, "g"),
+      },
+      /*
+       * The adjudication count is published four times on this page and was bound once, by the
+       * `The N active review keys are ...` regex below, which is outside this per-occurrence
+       * machinery and stops at its first match. Measured, that let two sentences publish a wrong
+       * count and pass the whole file: `exactly five keys use the structured canonical-atom
+       * review` reworded to `six`, and `For the five active review keys` to `seven`. Each
+       * occurrence is now bound on its own, so either mutation fails here.
+       */
+      {
+        expected: adjudicationCount,
+        label: "C1-active review key count, post-#393 boundary callout",
+        occurrences: 1,
+        pattern: new RegExp(
+          `exactly (${COUNT}) keys use the structured canonical-atom review`,
+          "g",
+        ),
+      },
+      {
+        expected: adjudicationCount,
+        label: "C1-active review key count, frozen-recovery sentence",
+        occurrences: 1,
+        pattern: new RegExp(`The exact (${COUNT})-key post-#393 recovery`, "g"),
+      },
+      {
+        expected: adjudicationCount,
+        label: "C1-active review key count, key-naming sentence",
+        occurrences: 1,
+        pattern: new RegExp(`The (${COUNT}) active review keys are`, "g"),
+      },
+      {
+        expected: adjudicationCount,
+        label: "C1-active review key count, Current Action rendering sentence",
+        occurrences: 1,
+        pattern: new RegExp(`For the (${COUNT}) active review keys`, "g"),
       },
     ],
   };

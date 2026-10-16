@@ -304,6 +304,18 @@ describe("rules documentation registry", () => {
     expect(combatExperienceFlowed).toContain(
       "An Active `21+` result has no duration, so it schedules no next check and never becomes due by schedule.",
     );
+    // The exclusivity sentence between those two pins was the one claim in this section that no
+    // assertion held, and it reached CI green stating that only a Critical-triggered reset asks a
+    // `21+` participant for Combat Experience again. A phase attack asks whatever band the current
+    // result is in, so the sentence is pinned in two halves: the scope of the exclusivity, and the
+    // phase-attack carve-out with the cross-reference that keeps it consistent with the Phase
+    // Attack Rolls section on the same page.
+    expect(combatExperienceFlowed).toContain(
+      "While a participant is on a `21+` result, only a Critical-triggered reset brings the scheduled check back. That exclusivity is about the schedule alone.",
+    );
+    expect(combatExperienceFlowed).toContain(
+      "a participant on a `21+` result must still resolve Combat Experience whenever the [Phase Attack Rolls](#phase-attack-rolls) conditions are met.",
+    );
     expect(combatExperienceFlowed).toContain(
       "Being due is not the same as expiring. The result that is running stays active until the fresh roll replaces it",
     );
