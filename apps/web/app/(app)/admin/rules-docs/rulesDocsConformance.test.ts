@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   CRITICAL_STUN_CHANNELS,
+  REPRESENTATIVE_CRITICAL_FIXTURES,
+  buildRepresentativeCriticalRuntimeDefinition,
+  isC1FiveKeyCriticalRuntimeKey,
   calculateWorkbookEncumbranceLevel,
   calculateWorkbookMovementModifier,
   deriveParryPrimaryActionModifier,
@@ -13,6 +16,7 @@ import {
   type RepresentativeCriticalStun,
 } from "@glantri/rules-engine";
 import {
+  CRITICAL_EFFECTS_TABLE,
   applySecondaryCriticalGradeReduction,
   calculateDistanceObPenalty,
   evaluateCombatExperienceResult,
@@ -68,6 +72,18 @@ const PLAUSIBLE_DELIMITER_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/;
 async function readPageBlocks(id: string) {
   const document = await getRulesDocumentById(id);
   return parseMarkdownBlocks(document.markdown);
+}
+
+/**
+ * A page's raw Markdown with every whitespace run collapsed to one space.
+ *
+ * Prose claims wrap wherever Prettier puts the line break, so a guard written against the raw text
+ * pins the wrapping rather than the claim and a reflowed restatement walks straight past it. Every
+ * prose claim below is matched against this flowed form instead.
+ */
+async function readFlowedPageText(id: string): Promise<string> {
+  const document = await getRulesDocumentById(id);
+  return document.markdown.replace(/\s+/g, " ");
 }
 
 async function readPageTables(id: string): Promise<ParsedTable[]> {
@@ -279,6 +295,207 @@ describe("rules documentation reader pages render as the elements they are meant
       }
     },
   );
+});
+
+/**
+ * Forgejo #611's own first attempt is what this block exists to prevent.
+ *
+ * Every other assertion in this file goes through a published *table*, because a table has cells a
+ * test can read back. The claim that failed QA was **prose**: `combat-to-hit.md` said the canonical
+ * Critical rows were written for "the five C1-active Critical keys" and that "for every other
+ * Critical result the stored roll ... creates no rows". The row gate is not the five-key set at all
+ * — `buildRepresentativeCriticalRuntimeDefinition` returns a definition for *any* key carrying a
+ * representative fixture, `encounterRoutes.ts` builds `criticalRuntime` for any `critKey`, and
+ * `buildCombatRoundDamageCommitRows` emits the `c1-*` kinds whenever that runtime exists. The
+ * five-key set gates the structured GM *adjudication*. 38 table assertions could not see any of it,
+ * because none of it was in a table.
+ *
+ * So the counts and the boundary are bound here directly:
+ *
+ * - the active/legacy split comes from `REPRESENTATIVE_CRITICAL_FIXTURES` against the catalogue;
+ * - the adjudication count comes from `isC1FiveKeyCriticalRuntimeKey`;
+ * - the row boundary is executed, so narrowing row creation to the five fails this file;
+ * - every published count claim is matched by a pattern that must hit, so rewording the sentence
+ *   fails as loudly as changing the number.
+ */
+describe("published Critical automation counts match the executed fixture and adjudication sets", () => {
+  const catalogueKeys = CRITICAL_EFFECTS_TABLE.criticalResults.map((result) => result.critKey);
+  const fixtureKeys = REPRESENTATIVE_CRITICAL_FIXTURES.map((fixture) => fixture.criticalKey);
+  const fiveKeys = fixtureKeys.filter((key) => isC1FiveKeyCriticalRuntimeKey(key));
+  const catalogueCount = new Set(catalogueKeys).size;
+  const activeCount = REPRESENTATIVE_CRITICAL_FIXTURES.length;
+  const legacyCount = catalogueCount - activeCount;
+  const adjudicationCount = fiveKeys.length;
+  const nonAdjudicationActiveCount = activeCount - adjudicationCount;
+
+  /** Published prose spells small counts as words. */
+  const NUMBER_WORDS: Record<string, number> = {
+    five: 5,
+    four: 4,
+    one: 1,
+    three: 3,
+    two: 2,
+  };
+
+  function publishedNumber(captured: string): number {
+    const word = NUMBER_WORDS[captured.toLowerCase()];
+
+    return word ?? Number(captured);
+  }
+
+  interface CountClaim {
+    readonly expected: number;
+    readonly label: string;
+    /** Must match at least once; group 1 is the published count, as digits or as a number word. */
+    readonly pattern: RegExp;
+  }
+
+  const CLAIMS: Record<string, readonly CountClaim[]> = {
+    "combat-critical-effects": [
+      {
+        expected: activeCount,
+        label: "representative C1 Critical definitions frozen",
+        pattern: /freezes (\d+|five|four|three|two|one) representative C1 Critical definitions/g,
+      },
+      {
+        expected: catalogueCount,
+        label: "whole-catalogue result count",
+        pattern: /(\d+)-result catalogue/g,
+      },
+      {
+        expected: activeCount,
+        label: "C1-active key count",
+        pattern:
+          /those exact (\d+|five|four|three|two|one) keys|one of the (\d+|five|four|three|two|one)\s*C1 keys/g,
+      },
+      {
+        expected: legacyCount,
+        label: "legacy catalogue row count",
+        pattern:
+          /other (\d+|five|four|three|two|one) catalogue rows|the (\d+|five|four|three|two|one) inactive rows/g,
+      },
+    ],
+    "combat-to-hit": [
+      {
+        expected: activeCount,
+        label: "fixture-carrying Critical key count",
+        pattern:
+          /each of the (\d+|five|four|three|two|one) Critical keys that carries a representative C1 fixture|one of the (\d+|five|four|three|two|one) that carry a representative C1 fixture/g,
+      },
+      {
+        expected: adjudicationCount,
+        label: "C1-active review key count gating adjudication",
+        pattern: /available for the (\d+|five|four|three|two|one) C1-active review keys only/g,
+      },
+      {
+        expected: legacyCount,
+        label: "legacy catalogue result count",
+        pattern: /remaining (\d+|five|four|three|two|one) catalogue results/g,
+      },
+      {
+        expected: nonAdjudicationActiveCount,
+        label: "fixture keys that commit rows without adjudication",
+        pattern: /the other (\d+|five|four|three|two|one) fixture keys/g,
+      },
+    ],
+  };
+
+  it("builds a Critical runtime definition for every fixture key and for no other catalogue key", () => {
+    expect(fixtureKeys).toHaveLength(activeCount);
+    expect(new Set(fixtureKeys).size).toBe(activeCount);
+
+    for (const key of fixtureKeys) {
+      expect(
+        buildRepresentativeCriticalRuntimeDefinition(key, () => 0.5),
+        `${key} carries a representative fixture, so commit writes its c1-* rows`,
+      ).toBeDefined();
+    }
+
+    const legacyKeys = catalogueKeys.filter((key) => !fixtureKeys.includes(key));
+
+    expect(legacyKeys).toHaveLength(legacyCount);
+
+    for (const key of legacyKeys) {
+      expect(
+        buildRepresentativeCriticalRuntimeDefinition(key, () => 0.5),
+        `${key} carries no fixture, so it stays on the legacy GM-note path`,
+      ).toBeUndefined();
+    }
+  });
+
+  it("gates adjudication, not row creation, on the C1-active review keys", () => {
+    expect(adjudicationCount).toBeLessThan(activeCount);
+    expect(nonAdjudicationActiveCount).toBeGreaterThan(0);
+
+    for (const key of fiveKeys) {
+      expect(fixtureKeys).toContain(key);
+    }
+
+    /*
+     * The boundary in one assertion: a key outside the five still yields a runtime definition, and
+     * rejects an adjudication. Narrowing row creation to the five breaks the first expectation;
+     * widening adjudication past the five breaks the second.
+     */
+    for (const key of fixtureKeys.filter((candidate) => !fiveKeys.includes(candidate))) {
+      expect(buildRepresentativeCriticalRuntimeDefinition(key, () => 0.5)).toBeDefined();
+      expect(() =>
+        buildRepresentativeCriticalRuntimeDefinition(key, () => 0.5, {
+          criticalKey: key,
+          suppressedEffectKeys: [],
+        }),
+      ).toThrow(RangeError);
+    }
+  });
+
+  it("publishes the C1-active review keys the adjudication set actually holds", async () => {
+    const flowed = await readFlowedPageText("combat-critical-effects");
+    const sentence = /The (\d+|five|four|three|two|one) active review keys are ([^.]+)\./.exec(
+      flowed,
+    );
+
+    expect(sentence, "combat-critical-effects.md no longer names the active review keys").not.toBe(
+      null,
+    );
+    expect(publishedNumber(sentence![1]!)).toBe(adjudicationCount);
+
+    const published = [...sentence![2]!.matchAll(/`([^`]+)`/g)].map((match) => match[1]!);
+
+    expect([...published].sort()).toStrictEqual([...fiveKeys].sort());
+  });
+
+  it.each(Object.keys(CLAIMS))("states only executed Critical counts on %s", async (id) => {
+    const flowed = await readFlowedPageText(id);
+
+    for (const claim of CLAIMS[id]!) {
+      const matches = [...flowed.matchAll(claim.pattern)];
+
+      expect(
+        matches.length,
+        `${id}: no published sentence states the ${claim.label}; the claim was reworded away from its guard`,
+      ).toBeGreaterThan(0);
+
+      for (const match of matches) {
+        const captured = match.slice(1).find((group) => group !== undefined)!;
+
+        expect(
+          publishedNumber(captured),
+          `${id}: published ${claim.label} is "${captured}" but the application yields ${claim.expected}`,
+        ).toBe(claim.expected);
+      }
+    }
+  });
+
+  it("keeps the two registered Critical pages on the same split", async () => {
+    const toHit = await readFlowedPageText("combat-to-hit");
+    const criticalEffects = await readFlowedPageText("combat-critical-effects");
+
+    for (const page of [toHit, criticalEffects]) {
+      expect(page).toContain(String(activeCount));
+      expect(page).toContain(String(legacyCount));
+    }
+
+    expect(activeCount + legacyCount).toBe(catalogueCount);
+  });
 });
 
 describe("Criticals - GM Value Reference matches the executed Critical helpers", () => {
