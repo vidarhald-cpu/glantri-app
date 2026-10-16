@@ -159,4 +159,11 @@ cancellation recorded by that CE command.
 
 ## Current Boundary
 
-This slice does not restrict player action dropdowns and does not implement action-selection gating for Panic or Passive beyond requiring the relevant CE roll before declaration or phase attack resolution. Critical-triggered CE rerolls and ordinary non-combat CE skill-roll behavior are follow-up work.
+This slice does not restrict player action dropdowns and does not implement action-selection gating for Panic or Passive beyond requiring the relevant CE roll before declaration or phase attack resolution. Ordinary non-combat CE skill-roll behavior is follow-up work.
+
+The Critical-triggered reset is **implemented**. A Critical resolved against a participant marks a
+fresh Combat Experience as due for that participant with reason `critical`, due from the next round.
+The reset is only marked at the critical roll; it is resolved in the next round's `pre_declaration`
+step, never mid-round and never during Round End. Declarations already made against the prior result
+are not invalidated, and the previous Combat Experience stays active until the fresh roll replaces
+it. Clearing the critical roll restores the exact previous due marker.
