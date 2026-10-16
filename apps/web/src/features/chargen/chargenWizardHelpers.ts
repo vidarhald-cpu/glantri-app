@@ -27,6 +27,7 @@ import type {
   ProfessionBrowseItem,
 } from "@/lib/chargen/chargenBrowse";
 import type { SkillReferenceProfession } from "@/lib/skills/skillReferenceModel";
+import type { ProfessionTrainingAccess } from "./professionTrainingAccess";
 import type { AuthUser } from "@glantri/auth";
 
 export const UNIVERSAL_SOCIAL_BANDS = [1, 2, 3, 4] as const;
@@ -74,6 +75,14 @@ export interface ProfessionBrowseCard extends ProfessionBrowseItem {
   hasLiteracyFoundation: boolean;
   profession: ProfessionDefinition;
   subtypeName: string;
+  /**
+   * Present only when this Character can reach none of the Profession's training (#635). The
+   * Profession stays selectable: `chargen-target-professions.md` section 10 forbids filtering the
+   * target Professions by availability, and `profession-provenance-availability.md` section 6 keeps
+   * Profession presence and training availability deliberately separate questions. The reader is
+   * told, not prevented.
+   */
+  trainingAccess?: ProfessionTrainingAccess;
 }
 
 export interface RuleStatusItem {
