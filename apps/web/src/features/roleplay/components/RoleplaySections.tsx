@@ -22,6 +22,23 @@ interface EncounterInfoCardProps {
   scenarioName?: string;
 }
 
+/**
+ * Display label for an encounter kind, using the vocabulary the player summary and the
+ * scenario session panel already use ("Roleplaying" / "Combat"). A kind outside the known
+ * union (e.g. a newer server value) falls back to its capitalised raw value, never blank.
+ */
+export function formatEncounterKindLabel(kind: string): string {
+  if (kind === "roleplay") {
+    return "Roleplaying";
+  }
+
+  if (kind === "combat") {
+    return "Combat";
+  }
+
+  return kind ? `${kind.charAt(0).toUpperCase()}${kind.slice(1)}` : "Unknown";
+}
+
 export function EncounterInfoCard({
   campaignName,
   encounter,
@@ -31,7 +48,7 @@ export function EncounterInfoCard({
     <section style={panelStyle}>
       <h1 style={{ margin: 0 }}>{encounter.title}</h1>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-        <span>Type: Roleplaying</span>
+        <span>Type: {formatEncounterKindLabel(encounter.kind)}</span>
         <span>Status: {formatScenarioStatus(encounter.status)}</span>
         {encounter.timelineLabel ? <span>Timeline: {encounter.timelineLabel}</span> : null}
         {scenarioName ? <span>Scenario: {scenarioName}</span> : null}
