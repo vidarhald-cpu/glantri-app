@@ -278,7 +278,12 @@ The movement chain is:
 | Base move         | If `Size GM <= 2`: `10 + STR GM + DEX GM + Size GM`; otherwise `10 + STR GM + DEX GM + 2`. |
 | Final movement    | `base move - workbook movement-table adjustment`                                           |
 
-See `Equipment & Encumbrance Calculations` for item ENC, carry modes, mount load, and the full encumbrance threshold table.
+Encumbrance level runs `0` to `15`, so the movement modifier can be read from a table instead of
+calculated: see
+[Movement modifier by encumbrance level](./equipment-encumbrance-calculations.md#movement-modifier-by-encumbrance-level).
+It is published once there rather than copied here.
+
+See [Equipment & Encumbrance Calculations](./equipment-encumbrance-calculations.md) for item ENC, carry modes, mount load, and the full encumbrance threshold table.
 
 ## 10. Encumbrance-dependent skills
 

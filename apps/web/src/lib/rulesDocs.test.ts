@@ -392,7 +392,52 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("damage result proposal");
     expect(model.selectedDocument.markdown).toContain("Commit phase damage");
     expect(model.selectedDocument.markdown).toContain("one active physical damage effect row");
-    expect(model.selectedDocument.markdown).toContain("critical effects remain a GM");
+    // Forgejo #611: this page claimed Critical effects were unimplemented long after they were.
+    // Committing a Critical that carries a representative C1 fixture writes `c1-*` combat-effect
+    // rows (`buildCombatRoundDamageCommitRows` in
+    // packages/domain/src/encounter/combatRoundManager.ts), so the page now states the real,
+    // bounded behaviour and must not revert to the stale claim.
+    //
+    // The first repair of that claim then overshot in the other direction, saying the rows were
+    // created for the five C1-active review keys only and that every other Critical result
+    // "creates no rows". The row gate is `criticalRuntime` being defined, which
+    // `buildRepresentativeCriticalRuntimeDefinition` returns for *any* key carrying a fixture; the
+    // five-key set gates the structured GM adjudication, not row creation. Both the understating
+    // and the overstating forms are guarded below, and
+    // apps/web/app/(app)/admin/rules-docs/rulesDocsConformance.test.ts binds the published counts
+    // to the application's own fixture and five-key sets so neither number can drift unguarded.
+    expect(model.selectedDocument.markdown).toContain(
+      "Critical-effect automation is bounded rather than absent",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "are created as source-linked\ncombat-effect rows when the damage proposal is committed",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "the structured GM adjudication over those atoms is available for\nthe five C1-active review keys only",
+    );
+    expect(model.selectedDocument.markdown).not.toContain("critical effects remain a GM");
+    expect(model.selectedDocument.markdown).not.toContain(
+      "does not create automated\ncritical-effect rows",
+    );
+    expect(model.selectedDocument.markdown).not.toContain(
+      "until the critical effect table is\nimplemented",
+    );
+    // The stale-claim guards above pin the exact line wrapping the page happens to have, so a
+    // reflowed reintroduction would slip past them. Re-check every one against a
+    // whitespace-collapsed copy of the same Markdown, and add the overstating forms this page
+    // carried between Forgejo #611's first attempt and its repair.
+    const flowed = model.selectedDocument.markdown.replace(/\s+/g, " ");
+    for (const staleClaim of [
+      "critical effects remain a GM",
+      "does not create automated critical-effect rows",
+      "until the critical effect table is implemented",
+      "the five C1-active Critical keys resolve through a structured canonical review",
+      "Remaining Critical results stay on the legacy GM-note path",
+      "For every other Critical result the stored roll remains a GM review note and creates no rows",
+      "For a C1-active Critical key the stored critical roll resolves a structured canonical review",
+    ]) {
+      expect(flowed).not.toContain(staleClaim);
+    }
     // The runtime subtracts the armor critical modifier (packages/domain critical.ts, the combat
     // round manager, and docs/rules/gm/criticals.md). This page said "+" until Forgejo #620.
     expect(model.selectedDocument.markdown).toContain(
