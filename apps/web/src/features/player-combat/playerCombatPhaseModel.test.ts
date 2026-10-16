@@ -944,6 +944,86 @@ describe("player combat phase model", () => {
     );
   });
 
+  // #666 — a Template-derived temporary actor never has a Character scenario-equipment projection,
+  // because one is only ever written by the Character-only `refresh-character-equipment` reconcile.
+  // Diagnosing that structural absence as a repairable Character fault both named a control the
+  // participant assignment grid does not render for a temporary actor and, through
+  // `allowUnarmedFallback`, withheld the intrinsic attack sources that are such an actor's only
+  // legal ones.
+  it("treats a temporary actor carrying no committed equipment as unarmed rather than incomplete", () => {
+    expect(
+      getScenarioCombatEquipmentStatus({
+        participantSourceType: "entity",
+        scenarioEquipmentState: undefined,
+      }),
+    ).toEqual({ kind: "unarmed" });
+
+    // A template that authors an equipment state with no loadout owner is still unarmed, not faulty:
+    // there is nothing a Character refresh could reconcile either way.
+    expect(
+      getScenarioCombatEquipmentStatus({
+        participantSourceType: "entity",
+        scenarioEquipmentState: {
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        },
+      }),
+    ).toEqual({ kind: "unarmed" });
+
+    // A Character is unchanged: a missing projection stays a diagnosable fault.
+    expect(
+      getScenarioCombatEquipmentStatus({
+        characterId: "character-1",
+        participantSourceType: "character",
+        scenarioEquipmentState: undefined,
+      }),
+    ).toMatchObject({ kind: "incomplete" });
+    expect(getScenarioCombatEquipmentStatus({ characterId: "character-1" })).toMatchObject({
+      kind: "incomplete",
+    });
+  });
+
+  it("gives a temporary actor with no committed equipment an explicit empty loadout to derive from", () => {
+    // `null` makes the combat loadout derivation return an empty model, which withholds the Punch
+    // and Kick rows `combatStateDerivation` otherwise always derives.
+    expect(resolveScenarioCombatEquipmentState({ participantSourceType: "entity" })).toEqual({
+      activeLoadoutByCharacterId: {},
+      itemsById: {},
+      locationsById: {},
+      templates: { templatesById: {} },
+    });
+    expect(resolveScenarioCombatEquipmentState({ participantSourceType: "character" })).toBeNull();
+    expect(resolveScenarioCombatEquipmentState({})).toBeNull();
+  });
+
+  it("never sends a GM to the Character-only refresh control for a temporary actor", () => {
+    const status = { kind: "incomplete" as const, message: "incomplete" };
+
+    const gmDiagnostic = formatScenarioCombatEquipmentDiagnostic({
+      isGameMaster: true,
+      participantName: "Training Bandit",
+      participantSourceType: "entity",
+      status,
+    });
+    expect(gmDiagnostic).toBe(
+      "Training Bandit’s committed scenario equipment is incomplete or out of date. Recreate this temporary actor from its Template source on the scenario page.",
+    );
+    expect(gmDiagnostic).not.toContain("participant assignment grid");
+
+    const playerDiagnostic = formatScenarioCombatEquipmentDiagnostic({
+      isGameMaster: false,
+      participantName: "Training Bandit",
+      participantSourceType: "entity",
+      status,
+    });
+    expect(playerDiagnostic).toBe(
+      "Training Bandit’s committed scenario equipment is incomplete or out of date. Ask the GM to recreate this temporary actor from its Template source.",
+    );
+    expect(playerDiagnostic).not.toContain("participant assignment grid");
+  });
+
   it("does not silently replace incomplete committed equipment with Punch or Kick", () => {
     const summary = buildPlayerCombatLoadoutSummary({
       actionId: "double_attack",
