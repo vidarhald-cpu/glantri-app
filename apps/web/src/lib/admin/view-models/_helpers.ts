@@ -16,7 +16,7 @@ export function getWeightedSkillPoints(skill: CanonicalContent["skills"][number]
 
 export function getGroupMemberships(
   content: CanonicalContent,
-  groupId: string
+  groupId: string,
 ): Array<{ relevance: "core" | "optional"; skillId: string }> {
   const group = content.skillGroups.find((candidate) => candidate.id === groupId);
 
@@ -28,11 +28,15 @@ export function getGroupMemberships(
     .filter((skill) => getSkillGroupIds(skill).includes(groupId))
     .map((skill) => ({
       relevance: skill.groupId === groupId ? ("core" as const) : ("optional" as const),
-      skillId: skill.id
+      skillId: skill.id,
     }));
 }
 
-export function formatSocietyEntryLabel(societyName: string, level: number, socialClass: string): string {
+export function formatSocietyEntryLabel(
+  societyName: string,
+  level: number,
+  socialClass: string,
+): string {
   return `${societyName} L${level} - ${socialClass}`;
 }
 
@@ -101,22 +105,39 @@ export function getAuditSeverityRank(severity: InternalAuditSeverity): number {
   return 2;
 }
 
+export const PROFESSION_UNAVAILABLE_LABEL = "Profession unavailable";
+
+/**
+ * Resolves a Profession id to its catalogue name for Admin/GM display.
+ *
+ * When the id is not in the catalogue the ruled fallback is shown instead of
+ * the internal identifier. There is deliberately no slicing, splitting,
+ * title-casing, or pattern matching on the id here, and none may be added:
+ * deriving "Courier" from `profession:courier` would silently diverge from the
+ * catalogue's own title ("Courier and Messenger").
+ */
+export function resolveProfessionDisplayName(
+  professionsById: ReadonlyMap<string, { name: string }>,
+  professionId: string,
+): string {
+  return professionsById.get(professionId)?.name ?? PROFESSION_UNAVAILABLE_LABEL;
+}
+
 export function buildSkillMaps(content: CanonicalContent) {
   const skillGroupsById = new Map(content.skillGroups.map((group) => [group.id, group]));
   const skillsById = new Map(content.skills.map((skill) => [skill.id, skill]));
-  const professionsById = new Map(content.professions.map((profession) => [profession.id, profession]));
+  const professionsById = new Map(
+    content.professions.map((profession) => [profession.id, profession]),
+  );
   const societiesById = new Map(
-    content.societyLevels.map((societyLevel) => [
-      societyLevel.societyId,
-      societyLevel.societyName
-    ])
+    content.societyLevels.map((societyLevel) => [societyLevel.societyId, societyLevel.societyName]),
   );
 
   return {
     professionsById,
     skillGroupsById,
     skillsById,
-    societiesById
+    societiesById,
   };
 }
 
@@ -152,7 +173,11 @@ export function buildSkillRelationshipContext(content: CanonicalContent) {
   }
 
   for (const specialization of content.specializations) {
-    appendArrayMapValue(directSpecializationsBySkillId, specialization.skillId, specialization.name);
+    appendArrayMapValue(
+      directSpecializationsBySkillId,
+      specialization.skillId,
+      specialization.name,
+    );
   }
 
   const chainMemo = new Map<string, string[]>();
@@ -198,40 +223,37 @@ export function buildSkillRelationshipContext(content: CanonicalContent) {
     getSkillName,
     skillGroupsById,
     skillsById,
-    specializationChildIds
+    specializationChildIds,
   };
 }
 
-export function resolveProfessionGrantPackage(
-  content: CanonicalContent,
-  professionId: string
-) {
+export function resolveProfessionGrantPackage(content: CanonicalContent, professionId: string) {
   const professionPackage = resolveEffectiveProfessionPackage({
     content,
-    subtypeId: professionId
+    subtypeId: professionId,
   });
   const grantedSkillGroupIds = uniqueSorted([
     ...professionPackage.core.finalEffectiveGroupIds,
-    ...professionPackage.favored.finalEffectiveGroupIds
+    ...professionPackage.favored.finalEffectiveGroupIds,
   ]);
   const groupReachableSkillIds = uniqueSorted([
     ...professionPackage.core.reachableSkillIdsThroughGroups,
-    ...professionPackage.favored.reachableSkillIdsThroughGroups
+    ...professionPackage.favored.reachableSkillIdsThroughGroups,
   ]);
   const directSkillIds = uniqueSorted([
     ...professionPackage.core.finalEffectiveSkillIds,
-    ...professionPackage.favored.finalEffectiveSkillIds
+    ...professionPackage.favored.finalEffectiveSkillIds,
   ]);
   const reachableSkillIds = uniqueSorted([
     ...professionPackage.core.finalEffectiveReachableSkillIds,
-    ...professionPackage.favored.finalEffectiveReachableSkillIds
+    ...professionPackage.favored.finalEffectiveReachableSkillIds,
   ]);
 
   return {
     directSkillIds,
     grantedSkillGroupIds,
     groupReachableSkillIds,
-    reachableSkillIds
+    reachableSkillIds,
   };
 }
 
@@ -250,7 +272,7 @@ export function buildProfessionRelationshipContext(content: CanonicalContent) {
     const label = formatSocietyEntryLabel(
       societyLevel.societyName,
       societyLevel.societyLevel,
-      societyLevel.socialClass
+      societyLevel.socialClass,
     );
 
     for (const professionId of societyLevel.professionIds) {
@@ -277,7 +299,7 @@ export function buildProfessionRelationshipContext(content: CanonicalContent) {
     ...skillContext,
     groupSkillIdsByGroupId,
     skillHasSpecializationLinks,
-    societyEntriesByProfessionId
+    societyEntriesByProfessionId,
   };
 }
 
@@ -290,14 +312,14 @@ export function buildProfessionMatrixRowsInternal(content: CanonicalContent) {
       const { directSkillIds, grantedSkillGroupIds, groupReachableSkillIds, reachableSkillIds } =
         resolveProfessionGrantPackage(content, profession.id);
       const directSkillsById = new Map(
-        directSkillIds.map((skillId) => [skillId, professionContext.skillsById.get(skillId)])
+        directSkillIds.map((skillId) => [skillId, professionContext.skillsById.get(skillId)]),
       );
       const directlyGrantedSkills = directSkillIds.map((skillId) => {
         const skill = directSkillsById.get(skillId);
 
         return joinDisplayName(
           skill?.name ?? skillId,
-          skill?.category === "secondary" ? "secondary" : "ordinary"
+          skill?.category === "secondary" ? "secondary" : "ordinary",
         );
       });
       const duplicateDirectSkills = directSkillIds
@@ -306,7 +328,9 @@ export function buildProfessionMatrixRowsInternal(content: CanonicalContent) {
       const directSkillExceptions = directSkillIds
         .filter((skillId) => !groupReachableSkillIds.includes(skillId))
         .map((skillId) => professionContext.getSkillName(skillId));
-      const reachableSkills = reachableSkillIds.map((skillId) => professionContext.getSkillName(skillId));
+      const reachableSkills = reachableSkillIds.map((skillId) =>
+        professionContext.getSkillName(skillId),
+      );
       const reachableSecondarySkills = reachableSkillIds
         .filter((skillId) => professionContext.skillsById.get(skillId)?.category === "secondary")
         .map((skillId) => professionContext.getSkillName(skillId));
@@ -316,7 +340,7 @@ export function buildProfessionMatrixRowsInternal(content: CanonicalContent) {
 
       return {
         allowedSocietyEntries: uniqueSorted(
-          professionContext.societyEntriesByProfessionId.get(profession.id) ?? []
+          professionContext.societyEntriesByProfessionId.get(profession.id) ?? [],
         ),
         description: profession.description ?? "",
         directSkillExceptions: uniqueSorted(directSkillExceptions),
@@ -325,20 +349,20 @@ export function buildProfessionMatrixRowsInternal(content: CanonicalContent) {
         duplicateDirectSkills: uniqueSorted(duplicateDirectSkills),
         grantedSkillGroups: uniqueSorted(
           grantedSkillGroupIds.map(
-            (groupId) => professionContext.skillGroupsById.get(groupId)?.name ?? groupId
-          )
+            (groupId) => professionContext.skillGroupsById.get(groupId)?.name ?? groupId,
+          ),
         ),
         hasDirectSkillExceptions: directSkillExceptions.length > 0,
         id: profession.id,
         name: profession.name,
         notes: "",
         reachableGroupSkills: uniqueSorted(
-          groupReachableSkillIds.map((skillId) => professionContext.getSkillName(skillId))
+          groupReachableSkillIds.map((skillId) => professionContext.getSkillName(skillId)),
         ),
         reachableSecondarySkills: uniqueSorted(reachableSecondarySkills),
         reachableSkills: uniqueSorted(reachableSkills),
         reachableSpecializationLinkedSkills: uniqueSorted(reachableSpecializationLinkedSkills),
-        totalReachableSkills: reachableSkillIds.length
+        totalReachableSkills: reachableSkillIds.length,
       };
     });
 }
@@ -361,10 +385,12 @@ export function applyProfessionReachBands(
     reachableSkills: string[];
     reachableSpecializationLinkedSkills: string[];
     totalReachableSkills: number;
-  }>
+  }>,
 ) {
   const averageReach =
-    rows.length === 0 ? 0 : rows.reduce((sum, row) => sum + row.totalReachableSkills, 0) / rows.length;
+    rows.length === 0
+      ? 0
+      : rows.reduce((sum, row) => sum + row.totalReachableSkills, 0) / rows.length;
   const narrowThreshold = Math.max(1, Math.floor(averageReach / 2));
   const broadThreshold = Math.max(4, Math.ceil(averageReach * 1.5));
 
@@ -375,7 +401,7 @@ export function applyProfessionReachBands(
         ? ("narrow" as const)
         : row.totalReachableSkills >= broadThreshold
           ? ("broad" as const)
-          : ("medium" as const)
+          : ("medium" as const),
   }));
 }
 
@@ -387,30 +413,29 @@ export function buildSocietyMatrixRowsInternal(content: CanonicalContent) {
   return [...content.societyLevels]
     .sort(
       (left, right) =>
-        left.societyName.localeCompare(right.societyName) ||
-        left.societyLevel - right.societyLevel
+        left.societyName.localeCompare(right.societyName) || left.societyLevel - right.societyLevel,
     )
     .map((societyLevel) => {
       const reachableProfessionIds = uniqueSorted(societyLevel.professionIds);
       const professionDerivedSkillIds = uniqueSorted(
         reachableProfessionIds.flatMap(
-          (professionId) => resolveProfessionGrantPackage(content, professionId).reachableSkillIds
-        )
+          (professionId) => resolveProfessionGrantPackage(content, professionId).reachableSkillIds,
+        ),
       );
       const directSkillGroupIds = uniqueSorted(societyLevel.skillGroupIds);
       const directGroupSkillIds = uniqueSorted(
         directSkillGroupIds.flatMap(
-          (groupId) => professionContext.groupSkillIdsByGroupId.get(groupId) ?? []
-        )
+          (groupId) => professionContext.groupSkillIdsByGroupId.get(groupId) ?? [],
+        ),
       );
       const directSkillIds = uniqueSorted(societyLevel.skillIds);
       const directAddedSkillIds = uniqueSorted([...directGroupSkillIds, ...directSkillIds]);
       const totalEffectiveSkillIds = uniqueSorted([
         ...professionDerivedSkillIds,
-        ...directAddedSkillIds
+        ...directAddedSkillIds,
       ]);
       const directOnlySkillIds = totalEffectiveSkillIds.filter(
-        (skillId) => !professionDerivedSkillIds.includes(skillId)
+        (skillId) => !professionDerivedSkillIds.includes(skillId),
       );
 
       return {
@@ -418,32 +443,32 @@ export function buildSocietyMatrixRowsInternal(content: CanonicalContent) {
           societyLevel.baseEducation === undefined ? "" : String(societyLevel.baseEducation),
         directGroupOverrideCount: directSkillGroupIds.length,
         directOnlySkills: uniqueSorted(
-          directOnlySkillIds.map((skillId) => societySkillContext.getSkillName(skillId))
+          directOnlySkillIds.map((skillId) => societySkillContext.getSkillName(skillId)),
         ),
         directSkillGroups: uniqueSorted(
-          directSkillGroupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+          directSkillGroupIds.map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
         ),
         directSkillOverrideCount: directSkillIds.length,
         directSkills: uniqueSorted(
-          directSkillIds.map((skillId) => societySkillContext.getSkillName(skillId))
+          directSkillIds.map((skillId) => societySkillContext.getSkillName(skillId)),
         ),
         dieRange: getDieRange(societyLevel.societyLevel),
         effectiveProfessionSkills: uniqueSorted(
-          professionDerivedSkillIds.map((skillId) => societySkillContext.getSkillName(skillId))
+          professionDerivedSkillIds.map((skillId) => societySkillContext.getSkillName(skillId)),
         ),
         hasDirectOverrides: directSkillGroupIds.length > 0 || directSkillIds.length > 0,
         id: `${societyLevel.societyId}:${societyLevel.societyLevel}`,
         notes: societyLevel.notes ?? "",
         professionDerivedReachCount: professionDerivedSkillIds.length,
         reachableProfessions: uniqueSorted(
-          reachableProfessionIds.map(
-            (professionId) => professionsById.get(professionId)?.name ?? professionId
-          )
+          reachableProfessionIds.map((professionId) =>
+            resolveProfessionDisplayName(professionsById, professionId),
+          ),
         ),
         society: societiesById.get(societyLevel.societyId) ?? societyLevel.societyId,
         societyClassName: societyLevel.socialClass,
         societyLevel: societyLevel.societyLevel,
-        totalEffectiveReachableSkills: totalEffectiveSkillIds.length
+        totalEffectiveReachableSkills: totalEffectiveSkillIds.length,
       };
     });
 }
@@ -467,7 +492,7 @@ export function applySocietyReachBands(
     societyClassName: string;
     societyLevel: number;
     totalEffectiveReachableSkills: number;
-  }>
+  }>,
 ) {
   const averageReach =
     rows.length === 0
@@ -483,6 +508,6 @@ export function applySocietyReachBands(
         ? ("narrow" as const)
         : row.totalEffectiveReachableSkills >= broadThreshold
           ? ("broad" as const)
-          : ("medium" as const)
+          : ("medium" as const),
   }));
 }
