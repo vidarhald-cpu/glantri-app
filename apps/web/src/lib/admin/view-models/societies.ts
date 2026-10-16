@@ -11,7 +11,7 @@ import {
   buildSocietyMatrixRowsInternal,
   applySocietyReachBands,
   resolveProfessionDisplayName,
-  resolveProfessionGrantPackage
+  resolveProfessionGrantPackage,
 } from "./_helpers";
 
 export interface SocietyAdminRow {
@@ -93,7 +93,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
 
   for (const row of rows) {
     const societyLevel = content.societyLevels.find(
-      (candidate) => `${candidate.societyId}:${candidate.societyLevel}` === row.id
+      (candidate) => `${candidate.societyId}:${candidate.societyLevel}` === row.id,
     );
 
     if (!societyLevel) {
@@ -103,13 +103,13 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
     const reachableProfessionIds = uniqueSorted(societyLevel.professionIds);
     const professionDerivedSkillIds = uniqueSorted(
       reachableProfessionIds.flatMap(
-        (professionId) => resolveProfessionGrantPackage(content, professionId).reachableSkillIds
-      )
+        (professionId) => resolveProfessionGrantPackage(content, professionId).reachableSkillIds,
+      ),
     );
     const duplicateDirectSkillNames = uniqueSorted(
       societyLevel.skillIds
         .filter((skillId) => professionDerivedSkillIds.includes(skillId))
-        .map((skillId) => professionContext.getSkillName(skillId))
+        .map((skillId) => professionContext.getSkillName(skillId)),
     );
     const duplicateDirectGroupNames = uniqueSorted(
       societyLevel.skillGroupIds
@@ -120,10 +120,14 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
             groupSkillIds.every((skillId) => professionDerivedSkillIds.includes(skillId))
           );
         })
-        .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId)
+        .map((groupId) => skillGroupsById.get(groupId)?.name ?? groupId),
     );
 
-    if (reachableProfessionIds.length === 0 && societyLevel.skillGroupIds.length === 0 && societyLevel.skillIds.length === 0) {
+    if (
+      reachableProfessionIds.length === 0 &&
+      societyLevel.skillGroupIds.length === 0 &&
+      societyLevel.skillIds.length === 0
+    ) {
       issues.push({
         category: "No access grants",
         detail: "This society row grants no professions, no direct groups, and no direct skills.",
@@ -131,7 +135,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
         relatedEntries: [],
         severity: "blocking",
         societyRowId: row.id,
-        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`,
       });
     }
 
@@ -143,19 +147,20 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
         relatedEntries: duplicateDirectSkillNames,
         severity: "warning",
         societyRowId: row.id,
-        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`,
       });
     }
 
     if (duplicateDirectGroupNames.length > 0) {
       issues.push({
         category: "Duplicate direct groups",
-        detail: "These direct society skill groups are already fully covered by profession-derived reach.",
+        detail:
+          "These direct society skill groups are already fully covered by profession-derived reach.",
         id: `duplicate-direct-groups:${row.id}`,
         relatedEntries: duplicateDirectGroupNames,
         severity: "warning",
         societyRowId: row.id,
-        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`,
       });
     }
 
@@ -167,7 +172,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
         relatedEntries: row.reachableProfessions,
         severity: "info",
         societyRowId: row.id,
-        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`,
       });
     }
 
@@ -179,7 +184,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
         relatedEntries: row.reachableProfessions,
         severity: "info",
         societyRowId: row.id,
-        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`,
       });
     }
 
@@ -191,7 +196,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
         relatedEntries: [],
         severity: "warning",
         societyRowId: row.id,
-        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`
+        societyRowName: `${row.society} L${row.societyLevel} - ${row.societyClassName}`,
       });
     }
   }
@@ -217,15 +222,19 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
     for (let index = 1; index < sortedRows.length; index += 1) {
       const previous = sortedRows[index - 1];
       const current = sortedRows[index];
-      const previousLevel = content.societyLevels.find((row) => `${row.societyId}:${row.societyLevel}` === previous.id);
-      const currentLevel = content.societyLevels.find((row) => `${row.societyId}:${row.societyLevel}` === current.id);
+      const previousLevel = content.societyLevels.find(
+        (row) => `${row.societyId}:${row.societyLevel}` === previous.id,
+      );
+      const currentLevel = content.societyLevels.find(
+        (row) => `${row.societyId}:${row.societyLevel}` === current.id,
+      );
 
       if (!previousLevel || !currentLevel) {
         continue;
       }
 
       const missingProfessions = previousLevel.professionIds.filter(
-        (professionId) => !currentLevel.professionIds.includes(professionId)
+        (professionId) => !currentLevel.professionIds.includes(professionId),
       );
 
       if (missingProfessions.length > 0) {
@@ -234,16 +243,18 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
           detail: `Higher level ${current.societyLevel} removes profession access from lower level ${previous.societyLevel}.`,
           id: `profession-regression:${current.id}`,
           relatedEntries: missingProfessions.map((professionId) =>
-            resolveProfessionDisplayName(professionsById, professionId)
+            resolveProfessionDisplayName(professionsById, professionId),
           ),
           severity: "warning",
           societyRowId: current.id,
-          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`
+          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`,
         });
       }
 
-      const previousEducation = previous.baseEducation.length > 0 ? Number(previous.baseEducation) : undefined;
-      const currentEducation = current.baseEducation.length > 0 ? Number(current.baseEducation) : undefined;
+      const previousEducation =
+        previous.baseEducation.length > 0 ? Number(previous.baseEducation) : undefined;
+      const currentEducation =
+        current.baseEducation.length > 0 ? Number(current.baseEducation) : undefined;
 
       if (
         previousEducation !== undefined &&
@@ -257,7 +268,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
           relatedEntries: [societyName],
           severity: "warning",
           societyRowId: current.id,
-          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`
+          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`,
         });
       }
 
@@ -269,7 +280,7 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
           relatedEntries: [societyName],
           severity: "warning",
           societyRowId: current.id,
-          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`
+          societyRowName: `${current.society} L${current.societyLevel} - ${current.societyClassName}`,
         });
       }
     }
@@ -279,109 +290,124 @@ export function buildSocietyAuditIssues(content: CanonicalContent): SocietyAudit
     (left, right) =>
       getAuditSeverityRank(left.severity) - getAuditSeverityRank(right.severity) ||
       left.category.localeCompare(right.category) ||
-      left.societyRowName.localeCompare(right.societyRowName)
+      left.societyRowName.localeCompare(right.societyRowName),
   );
 }
 
 export function buildSocietyAdminRows(content: CanonicalContent): SocietyAdminRow[] {
   return buildSocietyMatrixRows(content)
     .map((societyRow) => {
-    const society = content.societies.find((candidate) => candidate.id === societyRow.id.split(":")[0]);
-    const literacyAccessSummary = summarizeAccessBands(
-      content.societyBandSkillAccess
-        .filter(
-          (entry) => entry.societyId === societyRow.id.split(":")[0] && entry.skillId === "literacy"
-        )
-        .map((entry) => entry.socialBand)
-    );
-    const baselineLanguages = (society?.baselineLanguageIds ?? [])
-      .map((languageId) => content.languages.find((candidate) => candidate.id === languageId)?.name ?? languageId);
-    const professionFans = societyRow.reachableProfessions.map((professionName) => {
-      const profession = content.professions.find((candidate) => candidate.name === professionName);
-
-      if (!profession) {
-        return {
-          coreGroups: [],
-          optionalGroups: [],
-          professionName,
-          reachableSkills: []
-        };
-      }
-
-      const grants = content.professionSkills.filter(
-        (candidate) =>
-          candidate.professionId === profession.id &&
-          candidate.grantType === "group" &&
-          candidate.skillGroupId
+      const society = content.societies.find(
+        (candidate) => candidate.id === societyRow.id.split(":")[0],
       );
-      const mapGroup = (skillGroupId: string) => {
-        const group = content.skillGroups.find((candidate) => candidate.id === skillGroupId);
-        const memberships =
-          group?.skillMemberships?.length
+      const literacyAccessSummary = summarizeAccessBands(
+        content.societyBandSkillAccess
+          .filter(
+            (entry) =>
+              entry.societyId === societyRow.id.split(":")[0] && entry.skillId === "literacy",
+          )
+          .map((entry) => entry.socialBand),
+      );
+      const baselineLanguages = (society?.baselineLanguageIds ?? []).map(
+        (languageId) =>
+          content.languages.find((candidate) => candidate.id === languageId)?.name ?? languageId,
+      );
+      const professionFans = societyRow.reachableProfessions.map((professionName) => {
+        const profession = content.professions.find(
+          (candidate) => candidate.name === professionName,
+        );
+
+        if (!profession) {
+          return {
+            coreGroups: [],
+            optionalGroups: [],
+            professionName,
+            reachableSkills: [],
+          };
+        }
+
+        const grants = content.professionSkills.filter(
+          (candidate) =>
+            candidate.professionId === profession.id &&
+            candidate.grantType === "group" &&
+            candidate.skillGroupId,
+        );
+        const mapGroup = (skillGroupId: string) => {
+          const group = content.skillGroups.find((candidate) => candidate.id === skillGroupId);
+          const memberships = group?.skillMemberships?.length
             ? group.skillMemberships
             : content.skills
                 .filter((skill) => getSkillGroupIds(skill).includes(skillGroupId))
                 .map((skill) => ({
-                  relevance: skill.groupId === skillGroupId ? ("core" as const) : ("optional" as const),
-                  skillId: skill.id
+                  relevance:
+                    skill.groupId === skillGroupId ? ("core" as const) : ("optional" as const),
+                  skillId: skill.id,
                 }));
 
-        return {
-          coreSkills: memberships
-            .filter((membership) => membership.relevance === "core")
-            .map((membership) => content.skills.find((skill) => skill.id === membership.skillId)?.name ?? membership.skillId),
-          groupName: group?.name ?? skillGroupId,
-          optionalSkills: memberships
-            .filter((membership) => membership.relevance === "optional")
-            .map((membership) => content.skills.find((skill) => skill.id === membership.skillId)?.name ?? membership.skillId)
+          return {
+            coreSkills: memberships
+              .filter((membership) => membership.relevance === "core")
+              .map(
+                (membership) =>
+                  content.skills.find((skill) => skill.id === membership.skillId)?.name ??
+                  membership.skillId,
+              ),
+            groupName: group?.name ?? skillGroupId,
+            optionalSkills: memberships
+              .filter((membership) => membership.relevance === "optional")
+              .map(
+                (membership) =>
+                  content.skills.find((skill) => skill.id === membership.skillId)?.name ??
+                  membership.skillId,
+              ),
+          };
         };
-      };
-      const resolvedPackage = resolveProfessionGrantPackage(content, profession.id);
+        const resolvedPackage = resolveProfessionGrantPackage(content, profession.id);
+
+        return {
+          coreGroups: grants
+            .filter((grant) => grant.isCore && grant.skillGroupId)
+            .map((grant) => mapGroup(grant.skillGroupId ?? "")),
+          optionalGroups: grants
+            .filter((grant) => !grant.isCore && grant.skillGroupId)
+            .map((grant) => mapGroup(grant.skillGroupId ?? "")),
+          professionName,
+          reachableSkills: uniqueSorted(
+            resolvedPackage.reachableSkillIds.map(
+              (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId,
+            ),
+          ),
+        };
+      });
 
       return {
-        coreGroups: grants
-          .filter((grant) => grant.isCore && grant.skillGroupId)
-          .map((grant) => mapGroup(grant.skillGroupId ?? "")),
-        optionalGroups: grants
-          .filter((grant) => !grant.isCore && grant.skillGroupId)
-          .map((grant) => mapGroup(grant.skillGroupId ?? "")),
-        professionName,
-        reachableSkills: uniqueSorted(
-          resolvedPackage.reachableSkillIds.map(
-            (skillId) => content.skills.find((skill) => skill.id === skillId)?.name ?? skillId
-          )
-        )
+        baseEducation: societyRow.baseEducation,
+        baselineLanguages,
+        canonicalSocietyLevel: society?.societyLevel,
+        directOnlySkills: societyRow.directOnlySkills,
+        directSkillGroups: societyRow.directSkillGroups,
+        directSkills: societyRow.directSkills,
+        dieRange: societyRow.dieRange,
+        effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
+        glantriExamples: society?.glantriExamples,
+        historicalReference: society?.historicalReference,
+        id: societyRow.id,
+        literacyAccessSummary,
+        notes: societyRow.notes,
+        professionFans,
+        reachableProfessions: societyRow.reachableProfessions,
+        shortDescription: society?.shortDescription ?? "",
+        society: societyRow.society,
+        societyClassName: societyRow.societyClassName,
+        societyLevel: societyRow.societyLevel,
+        totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills,
       };
-    });
-
-    return {
-      baseEducation: societyRow.baseEducation,
-      baselineLanguages,
-      canonicalSocietyLevel: society?.societyLevel,
-      directOnlySkills: societyRow.directOnlySkills,
-      directSkillGroups: societyRow.directSkillGroups,
-      directSkills: societyRow.directSkills,
-      dieRange: societyRow.dieRange,
-      effectiveProfessionSkills: societyRow.effectiveProfessionSkills,
-      glantriExamples: society?.glantriExamples,
-      historicalReference: society?.historicalReference,
-      id: societyRow.id,
-      literacyAccessSummary,
-      notes: societyRow.notes,
-      professionFans,
-      reachableProfessions: societyRow.reachableProfessions,
-      shortDescription: society?.shortDescription ?? "",
-      society: societyRow.society,
-      societyClassName: societyRow.societyClassName,
-      societyLevel: societyRow.societyLevel,
-      totalEffectiveReachableSkills: societyRow.totalEffectiveReachableSkills
-    };
-  })
+    })
     .sort(
       (left, right) =>
         left.society.localeCompare(right.society) ||
         (left.canonicalSocietyLevel ?? left.societyLevel) -
           (right.canonicalSocietyLevel ?? right.societyLevel) ||
-        left.societyLevel - right.societyLevel
+        left.societyLevel - right.societyLevel,
     );
 }

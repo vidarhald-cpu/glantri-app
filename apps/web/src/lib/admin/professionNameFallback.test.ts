@@ -11,7 +11,7 @@ vi.mock("@glantri/rules-engine", async (importOriginal) => {
     finalEffectiveGroupIds: [],
     finalEffectiveReachableSkillIds: [],
     finalEffectiveSkillIds: [],
-    reachableSkillIdsThroughGroups: []
+    reachableSkillIdsThroughGroups: [],
   };
 
   return {
@@ -22,16 +22,13 @@ vi.mock("@glantri/rules-engine", async (importOriginal) => {
     }) =>
       input.content.professions.some((profession) => profession.id === input.subtypeId)
         ? actual.resolveEffectiveProfessionPackage(
-            input as Parameters<typeof actual.resolveEffectiveProfessionPackage>[0]
+            input as Parameters<typeof actual.resolveEffectiveProfessionPackage>[0],
           )
-        : { core: emptyPackage, favored: emptyPackage }
+        : { core: emptyPackage, favored: emptyPackage },
   };
 });
 
-import {
-  PROFESSION_UNAVAILABLE_LABEL,
-  resolveProfessionDisplayName
-} from "./view-models/_helpers";
+import { PROFESSION_UNAVAILABLE_LABEL, resolveProfessionDisplayName } from "./view-models/_helpers";
 import { buildSocietyAuditIssues, buildSocietyMatrixRows } from "./viewModels";
 
 const UNAVAILABLE = "Profession unavailable";
@@ -47,7 +44,7 @@ function level(societyLevel: number, professionIds: string[]) {
     socialClass: "Common",
     societyId,
     societyLevel,
-    societyName: "Fallback Society"
+    societyName: "Fallback Society",
   };
 }
 
@@ -59,24 +56,26 @@ function withProfessions(levelOneIds: string[], levelTwoIds: string[]): Canonica
     ...defaultCanonicalContent,
     professions: [
       ...defaultCanonicalContent.professions,
-      { ...defaultCanonicalContent.professions[0], id: resolvableId, name: resolvableName }
+      { ...defaultCanonicalContent.professions[0], id: resolvableId, name: resolvableName },
     ],
     societies: [
       ...defaultCanonicalContent.societies,
-      { id: societyId, name: "Fallback Society", shortDescription: "", societyLevel: 2 }
+      { id: societyId, name: "Fallback Society", shortDescription: "", societyLevel: 2 },
     ],
     societyLevels: [
       ...defaultCanonicalContent.societyLevels,
       level(1, levelOneIds),
-      level(2, levelTwoIds)
-    ]
+      level(2, levelTwoIds),
+    ],
   } as unknown as CanonicalContent;
 }
 
 const matrixRow = (content: CanonicalContent) =>
   buildSocietyMatrixRows(content).find((row) => row.id === `${societyId}:1`);
 const regressionIssue = (content: CanonicalContent) =>
-  buildSocietyAuditIssues(content).find((issue) => issue.id === `profession-regression:${societyId}:2`);
+  buildSocietyAuditIssues(content).find(
+    (issue) => issue.id === `profession-regression:${societyId}:2`,
+  );
 
 describe("Admin Profession display name fallback", () => {
   it("uses the ruled wording", () => {
@@ -107,7 +106,10 @@ describe("Admin Profession display name fallback", () => {
   it("does not derive a name from the id: a forged id with a name-like tail stays unavailable", () => {
     const fixture = withProfessions(["profession:courier", "profession:messenger"], []);
 
-    for (const shown of [matrixRow(fixture)?.reachableProfessions, regressionIssue(fixture)?.relatedEntries]) {
+    for (const shown of [
+      matrixRow(fixture)?.reachableProfessions,
+      regressionIssue(fixture)?.relatedEntries,
+    ]) {
       const text = JSON.stringify(shown).toLowerCase();
 
       expect(text).not.toContain("courier");
