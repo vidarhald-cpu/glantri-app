@@ -21,6 +21,7 @@ import {
   calculateDistanceObPenalty,
   evaluateCombatExperienceResult,
   evaluatePhaseCombatExperienceResult,
+  getCombatExperienceNextCheckRoundNumber,
   getCombatObservationRequiredRounds,
   getFinalCriticalRollIndexStatus,
   hitLocationSchema,
@@ -315,8 +316,26 @@ describe("rules documentation reader pages render as the elements they are meant
  * - the active/legacy split comes from `REPRESENTATIVE_CRITICAL_FIXTURES` against the catalogue;
  * - the adjudication count comes from `isC1FiveKeyCriticalRuntimeKey`;
  * - the row boundary is executed, so narrowing row creation to the five fails this file;
- * - every published count claim is matched by a pattern that must hit, so rewording the sentence
- *   fails as loudly as changing the number.
+ * - every published count claim is matched by a pattern that must hit an **exact** number of times,
+ *   so rewording the sentence fails as loudly as changing the number.
+ *
+ * Forgejo #651 then moved the counts to one reader location and closed the gap the #611 repair QA
+ * left open. Two things changed here, and both matter:
+ *
+ * 1. **Per-occurrence expected counts.** A claim that was published twice used to be guarded once,
+ *    because the pattern test only required `matches.length > 0`: rewording one of the two
+ *    occurrences passed. Every claim now declares how many times it must appear, so a reworded,
+ *    deleted *or* newly duplicated occurrence fails.
+ * 2. **One authoritative location.** `combat-critical-effects.md` carries the counts and
+ *    `combat-to-hit.md` references its boundary section instead of restating them. `RETIRED_CLAIMS`
+ *    holds the patterns `combat-to-hit.md` used to carry and requires **zero** matches, so the
+ *    duplication cannot creep back; `AUTHORITY_FRAGMENT` requires the reference that replaced it.
+ *    Relocation alone does not close gap 1 — `combat-critical-effects.md` still states the active
+ *    count in four separate sentences — so the per-occurrence counts do the work, and all four are
+ *    now individually guarded where previously one of them matched no pattern at all. The
+ *    adjudication count is published four times on the same page and was still bound once, by the
+ *    key-naming regex that stops at its first match; its four occurrences are per-occurrence
+ *    claims here too, so every published count on the authority page is individually bound.
  */
 describe("published Critical automation counts match the executed fixture and adjudication sets", () => {
   const catalogueKeys = CRITICAL_EFFECTS_TABLE.criticalResults.map((result) => result.critKey);
@@ -343,62 +362,154 @@ describe("published Critical automation counts match the executed fixture and ad
     return word ?? Number(captured);
   }
 
+  /** Any published count, as digits or as one of the number words prose actually uses. */
+  const COUNT = String.raw`\d+|five|four|three|two|one`;
+
   interface CountClaim {
     readonly expected: number;
     readonly label: string;
-    /** Must match at least once; group 1 is the published count, as digits or as a number word. */
+    /**
+     * How many times this claim is published. Matching fewer times means an occurrence was
+     * reworded away from its guard or deleted; matching more means a new unguarded restatement
+     * appeared. Both fail.
+     */
+    readonly occurrences: number;
+    /** Group 1 (or the first defined group) is the published count. */
     readonly pattern: RegExp;
   }
 
+  /**
+   * `combat-critical-effects.md` is the single authoritative reader location for the current-runtime
+   * C1 boundary, so every count claim lives here, and each of its occurrences is guarded separately
+   * rather than through one alternation that only had to hit once.
+   */
   const CLAIMS: Record<string, readonly CountClaim[]> = {
     "combat-critical-effects": [
       {
         expected: activeCount,
         label: "representative C1 Critical definitions frozen",
-        pattern: /freezes (\d+|five|four|three|two|one) representative C1 Critical definitions/g,
+        occurrences: 1,
+        pattern: new RegExp(`freezes (${COUNT}) representative C1 Critical definitions`, "g"),
       },
       {
         expected: catalogueCount,
         label: "whole-catalogue result count",
+        occurrences: 1,
         pattern: /(\d+)-result catalogue/g,
       },
       {
         expected: activeCount,
-        label: "C1-active key count",
-        pattern:
-          /those exact (\d+|five|four|three|two|one) keys|one of the (\d+|five|four|three|two|one)\s*C1 keys/g,
+        label: "C1-active key count, fixture-activation sentence",
+        occurrences: 1,
+        pattern: new RegExp(`those exact (${COUNT}) keys`, "g"),
+      },
+      {
+        expected: activeCount,
+        label: "C1-active key count, specialized-family reachability sentence",
+        occurrences: 1,
+        pattern: new RegExp(`already addresses one of the (${COUNT}) keys`, "g"),
+      },
+      {
+        expected: activeCount,
+        label: "C1-active key count, commit-resolution sentence",
+        occurrences: 1,
+        pattern: new RegExp(`one of the (${COUNT})\\s*C1 keys`, "g"),
       },
       {
         expected: legacyCount,
-        label: "legacy catalogue row count",
-        pattern:
-          /other (\d+|five|four|three|two|one) catalogue rows|the (\d+|five|four|three|two|one) inactive rows/g,
+        label: "legacy catalogue row count, fixture-activation sentence",
+        occurrences: 1,
+        pattern: new RegExp(`other (${COUNT}) catalogue rows`, "g"),
       },
-    ],
-    "combat-to-hit": [
       {
-        expected: activeCount,
-        label: "fixture-carrying Critical key count",
-        pattern:
-          /each of the (\d+|five|four|three|two|one) Critical keys that carries a representative C1 fixture|one of the (\d+|five|four|three|two|one) that carry a representative C1 fixture/g,
+        expected: legacyCount,
+        label: "legacy catalogue row count, commit-resolution sentence",
+        occurrences: 1,
+        pattern: new RegExp(`the (${COUNT}) inactive rows`, "g"),
+      },
+      /*
+       * The adjudication count is published four times on this page and was bound once, by the
+       * `The N active review keys are ...` regex below, which is outside this per-occurrence
+       * machinery and stops at its first match. Measured, that let two sentences publish a wrong
+       * count and pass the whole file: `exactly five keys use the structured canonical-atom
+       * review` reworded to `six`, and `For the five active review keys` to `seven`. Each
+       * occurrence is now bound on its own, so either mutation fails here.
+       */
+      {
+        expected: adjudicationCount,
+        label: "C1-active review key count, post-#393 boundary callout",
+        occurrences: 1,
+        pattern: new RegExp(
+          `exactly (${COUNT}) keys use the structured canonical-atom review`,
+          "g",
+        ),
       },
       {
         expected: adjudicationCount,
-        label: "C1-active review key count gating adjudication",
-        pattern: /available for the (\d+|five|four|three|two|one) C1-active review keys only/g,
+        label: "C1-active review key count, frozen-recovery sentence",
+        occurrences: 1,
+        pattern: new RegExp(`The exact (${COUNT})-key post-#393 recovery`, "g"),
       },
       {
-        expected: legacyCount,
-        label: "legacy catalogue result count",
-        pattern: /remaining (\d+|five|four|three|two|one) catalogue results/g,
+        expected: adjudicationCount,
+        label: "C1-active review key count, key-naming sentence",
+        occurrences: 1,
+        pattern: new RegExp(`The (${COUNT}) active review keys are`, "g"),
       },
       {
-        expected: nonAdjudicationActiveCount,
-        label: "fixture keys that commit rows without adjudication",
-        pattern: /the other (\d+|five|four|three|two|one) fixture keys/g,
+        expected: adjudicationCount,
+        label: "C1-active review key count, Current Action rendering sentence",
+        occurrences: 1,
+        pattern: new RegExp(`For the (${COUNT}) active review keys`, "g"),
       },
     ],
   };
+
+  /**
+   * The link `combat-to-hit.md` carries instead of the counts. The target is the heading on
+   * `combat-critical-effects.md` that owns the boundary; the fragment is the reader renderer's own
+   * heading id, and `MarkdownRenderer.component.test.tsx` renders both pages to prove the anchor
+   * and the id it points at actually exist.
+   */
+  const AUTHORITY_FRAGMENT = "./combat-critical-effects.md#c1-representative-fixture-authority";
+
+  /**
+   * What `combat-to-hit.md` must no longer carry. Forgejo #651 made
+   * `combat-critical-effects.md` the one reader location for these counts; these patterns are the
+   * exact forms `combat-to-hit.md` published before that, plus bare occurrences of each executed
+   * count, so a restatement in any wording fails rather than silently reintroducing a second
+   * authority that can drift against the first.
+   */
+  const RETIRED_CLAIMS: readonly { readonly label: string; readonly pattern: RegExp }[] = [
+    {
+      label: "the executed fixture-carrying key count as a bare number",
+      pattern: new RegExp(`\\b${activeCount}\\b`, "g"),
+    },
+    {
+      label: "the executed legacy catalogue count as a bare number",
+      pattern: new RegExp(`\\b${legacyCount}\\b`, "g"),
+    },
+    {
+      label: "the executed non-adjudication fixture count as a bare number",
+      pattern: new RegExp(`\\b${nonAdjudicationActiveCount}\\b`, "g"),
+    },
+    {
+      label: "a count in front of the C1-active review keys",
+      pattern: new RegExp(`(${COUNT})\\s*C1-active review keys`, "g"),
+    },
+    {
+      label: "a count of the keys carrying a representative C1 fixture",
+      pattern: new RegExp(`(${COUNT}) (?:Critical keys|that carry)`, "g"),
+    },
+    {
+      label: "a count of the remaining catalogue results",
+      pattern: new RegExp(`(${COUNT}) catalogue (?:results|rows)`, "g"),
+    },
+    {
+      label: "a count of the fixture keys outside the review set",
+      pattern: new RegExp(`(${COUNT}) fixture keys`, "g"),
+    },
+  ];
 
   it("builds a Critical runtime definition for every fixture key and for no other catalogue key", () => {
     expect(fixtureKeys).toHaveLength(activeCount);
@@ -469,10 +580,14 @@ describe("published Critical automation counts match the executed fixture and ad
     for (const claim of CLAIMS[id]!) {
       const matches = [...flowed.matchAll(claim.pattern)];
 
+      /*
+       * An exact occurrence count, not `> 0`. The #611 repair QA proved that an alternation
+       * requiring one match lets a claim published twice be reworded once and still pass.
+       */
       expect(
         matches.length,
-        `${id}: no published sentence states the ${claim.label}; the claim was reworded away from its guard`,
-      ).toBeGreaterThan(0);
+        `${id}: expected the ${claim.label} to be published exactly ${claim.occurrences} time(s) but found ${matches.length}; the claim was reworded away from its guard, deleted, or restated somewhere new`,
+      ).toBe(claim.occurrences);
 
       for (const match of matches) {
         const captured = match.slice(1).find((group) => group !== undefined)!;
@@ -485,16 +600,28 @@ describe("published Critical automation counts match the executed fixture and ad
     }
   });
 
-  it("keeps the two registered Critical pages on the same split", async () => {
+  it("keeps one authoritative reader location for the Critical automation split", async () => {
     const toHit = await readFlowedPageText("combat-to-hit");
     const criticalEffects = await readFlowedPageText("combat-critical-effects");
 
-    for (const page of [toHit, criticalEffects]) {
-      expect(page).toContain(String(activeCount));
-      expect(page).toContain(String(legacyCount));
+    /* The authority carries both executed counts. */
+    expect(criticalEffects).toContain(String(activeCount));
+    expect(criticalEffects).toContain(String(legacyCount));
+    expect(activeCount + legacyCount).toBe(catalogueCount);
+
+    /* The referring page carries none of them, in any wording. */
+    for (const retired of RETIRED_CLAIMS) {
+      expect(
+        [...toHit.matchAll(retired.pattern)].map((match) => match[0]),
+        `combat-to-hit.md restates ${retired.label}; combat-critical-effects.md is the single authoritative reader location for the C1 boundary counts`,
+      ).toStrictEqual([]);
     }
 
-    expect(activeCount + legacyCount).toBe(catalogueCount);
+    /* And it points the reader at the section that does carry them. */
+    expect(
+      toHit,
+      "combat-to-hit.md no longer links to the C1 boundary authority section",
+    ).toContain(AUTHORITY_FRAGMENT);
   });
 });
 
@@ -878,6 +1005,77 @@ describe("Combat To Hit, Combat Experience and Parry match their executed lookup
       table,
       valueColumn: 3,
     });
+  });
+
+  /**
+   * Forgejo #651, item 1. `combat-round-and-actions.md` told the reader a Combat Experience check
+   * can fall due "by schedule" without ever stating the schedule, so the rule is now published on
+   * `combat-experience.md` — and bound here, because an unguarded published number is exactly what
+   * failed #611. Every published cell is compared to `getCombatExperienceNextCheckRoundNumber`,
+   * including the top of the band: a result with no duration schedules no next check at all.
+   */
+  it("publishes the next-check schedule the Combat Experience scheduler returns", async () => {
+    const table = findTable(await readPageTables("combat-experience"), [
+      "Result rolled in round",
+      "Duration",
+      "Next check due",
+    ]);
+    const body = tableBody(table);
+
+    expect(body.length, "no published next-check rows").toBeGreaterThan(0);
+
+    /* The published duration cell reads as play text — "1 round", "0 (`21+`)" — not as a bare number. */
+    function publishedDurationRounds(cell: string): number {
+      const leading = /^(\d+)\b/.exec(normalizeCell(cell));
+
+      expect(leading, `published duration "${cell}" does not start with a round count`).not.toBe(
+        null,
+      );
+
+      return Number(leading![1]);
+    }
+
+    let unscheduledRows = 0;
+
+    for (const row of body) {
+      const roundNumber = cellNumber(row[0]!);
+      const durationRounds = publishedDurationRounds(row[1]!);
+      const expected = getCombatExperienceNextCheckRoundNumber({ durationRounds, roundNumber });
+      const published = normalizeCell(row[2]!);
+
+      if (expected === undefined) {
+        unscheduledRows += 1;
+        expect(
+          published.toLowerCase(),
+          `a result of duration ${durationRounds} rolled in round ${roundNumber} schedules no next check`,
+        ).toBe("no next check");
+        continue;
+      }
+
+      expect(
+        cellNumber(row[2]!),
+        `a result of duration ${durationRounds} rolled in round ${roundNumber}`,
+      ).toBe(expected);
+    }
+
+    /* The top of the band must be published, not merely implied by the scheduled rows. */
+    expect(unscheduledRows, "no published row states the result that never becomes due").toBe(1);
+
+    /*
+     * And the scheduled rows must cover the durations the result table itself can produce, so a
+     * duration band cannot be added without the schedule example that goes with it. Panic's
+     * duration is the one rolled value, so the sweep starts above its band.
+     */
+    const publishedDurations = new Set(body.map((row) => publishedDurationRounds(row[1]!)));
+
+    for (const total of range(6, 25)) {
+      const { durationRounds } = evaluateCombatExperienceResult(total, { difficulty: 21 });
+
+      expect(
+        publishedDurations.has(durationRounds),
+        `effective table total ${total} yields a ${durationRounds}-round result, which the next-check table does not illustrate`,
+      ).toBe(true);
+    }
   });
 
   it("publishes the phase-attack outcome the phase evaluator returns", async () => {

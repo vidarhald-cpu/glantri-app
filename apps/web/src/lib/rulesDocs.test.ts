@@ -292,6 +292,33 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("Panic");
     expect(model.selectedDocument.markdown).toContain("`-4`");
     expect(model.selectedDocument.markdown).toContain("does not restrict player action dropdowns");
+    // Forgejo #651, item 1: the scheduled recurrence was implemented and could affect play while
+    // combat-round-and-actions.md told the reader a check falls due "by schedule" and no page said
+    // what the schedule was. The published cells are bound to
+    // getCombatExperienceNextCheckRoundNumber in
+    // apps/web/app/(app)/admin/rules-docs/rulesDocsConformance.test.ts; these pins keep the
+    // section, its heading id and the two claims that are prose rather than cells.
+    expect(model.selectedDocument.markdown).toContain("## When The Next Check Is Due");
+    expect(model.selectedDocument.markdown).toContain("| Result rolled in round | Duration");
+    const combatExperienceFlowed = model.selectedDocument.markdown.replace(/\s+/g, " ");
+    expect(combatExperienceFlowed).toContain(
+      "An Active `21+` result has no duration, so it schedules no next check and never becomes due by schedule.",
+    );
+    // The exclusivity sentence between those two pins was the one claim in this section that no
+    // assertion held, and it reached CI green stating that only a Critical-triggered reset asks a
+    // `21+` participant for Combat Experience again. A phase attack asks whatever band the current
+    // result is in, so the sentence is pinned in two halves: the scope of the exclusivity, and the
+    // phase-attack carve-out with the cross-reference that keeps it consistent with the Phase
+    // Attack Rolls section on the same page.
+    expect(combatExperienceFlowed).toContain(
+      "While a participant is on a `21+` result, only a Critical-triggered reset brings the scheduled check back. That exclusivity is about the schedule alone.",
+    );
+    expect(combatExperienceFlowed).toContain(
+      "a participant on a `21+` result must still resolve Combat Experience whenever the [Phase Attack Rolls](#phase-attack-rolls) conditions are met.",
+    );
+    expect(combatExperienceFlowed).toContain(
+      "Being due is not the same as expiring. The result that is running stays active until the fresh roll replaces it",
+    );
   });
 
   it("loads the equipment encumbrance document with location and formula content", async () => {
@@ -412,8 +439,12 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain(
       "are created as source-linked\ncombat-effect rows when the damage proposal is committed",
     );
+    // Forgejo #651 moved the counts to combat-critical-effects.md, so this page states the
+    // boundary without them and references the section that owns it. The counts themselves stay
+    // bound in rulesDocsConformance.test.ts, which now also requires that this page carry none.
+    // Pinned against the whitespace-collapsed copy below, not the raw wrapping.
     expect(model.selectedDocument.markdown).toContain(
-      "the structured GM adjudication over those atoms is available for\nthe five C1-active review keys only",
+      "./combat-critical-effects.md#c1-representative-fixture-authority",
     );
     expect(model.selectedDocument.markdown).not.toContain("critical effects remain a GM");
     expect(model.selectedDocument.markdown).not.toContain(
@@ -438,6 +469,11 @@ describe("rules documentation registry", () => {
     ]) {
       expect(flowed).not.toContain(staleClaim);
     }
+    // The boundary statement Forgejo #651 left on this page: the mechanism, with the counts moved
+    // to the authority section it now links to.
+    expect(flowed).toContain(
+      "the structured GM adjudication over those atoms is available for the C1-active review keys only",
+    );
     // The runtime subtracts the armor critical modifier (packages/domain critical.ts, the combat
     // round manager, and docs/rules/gm/criticals.md). This page said "+" until Forgejo #620.
     expect(model.selectedDocument.markdown).toContain(
@@ -504,6 +540,29 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain("# Parry \u2014 GM Procedure");
     expect(model.selectedDocument.markdown).toContain("## 1. Validate The Declaration");
     expect(model.selectedDocument.markdown).toContain("Current Operational Boundaries");
+    // Forgejo #651, item 3: this page carried a development-tracker link, which became a live
+    // reader-facing anchor once Markdown links started rendering (#637). The provenance it stood
+    // for is recorded in the unregistered Parry internal notes, which stay the referenced source.
+    expect(model.selectedDocument.markdown).toContain(
+      "[Parry internal notes](../internal/parry-notes.md)",
+    );
+    expect(model.selectedDocument.markdown).not.toContain("issue #211");
+  });
+
+  it("keeps development-tracker links off every registered reader page", async () => {
+    // A tracker link on a reader page is not a stale claim, so no content pin would catch it, and
+    // since Forgejo #637 it renders as a live anchor rather than inert text. Issue tracking belongs
+    // in internal notes and decision records, which are deliberately unregistered.
+    for (const document of getRulesDocuments()) {
+      const markdown = fs.readFileSync(path.join(rulesDocsDirectory, document.fileName), "utf8");
+
+      for (const tracker of ["github.com", "/issues/"]) {
+        expect(
+          markdown.includes(tracker),
+          `registered reader page ${document.fileName} links to development tracking ("${tracker}")`,
+        ).toBe(false);
+      }
+    }
   });
 
   it("loads the GM Criticals value reference with the subtracted armor modifier", async () => {

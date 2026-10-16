@@ -49,9 +49,10 @@ Two things follow from that shape and are worth holding on to:
 - **A round has two attack phases, Phase 1 and Phase 2.** Which phases your declared action attacks
   in is fixed by the action, not chosen separately — see the action table below.
 - **A round opens on the Combat Experience step, before anyone declares.** When a check has become
-  due — by schedule, or after a Critical-triggered reset — it is resolved here and the declaration
-  controls stay closed until it is, so declarations are never made against a superseded result. Due
-  is not expired: the previous Combat Experience stays active until a fresh roll replaces it.
+  due — by [schedule](./combat-experience.md#when-the-next-check-is-due), or after a
+  Critical-triggered reset — it is resolved here and the declaration controls stay closed until it
+  is, so declarations are never made against a superseded result. Due is not expired: the previous
+  Combat Experience stays active until a fresh roll replaces it.
 
 The round ends on the round summary, which is also where declared distance preferences are
 resolved — see [section 6](#6-distance).

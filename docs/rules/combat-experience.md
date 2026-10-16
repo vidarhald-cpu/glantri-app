@@ -139,6 +139,33 @@ behaviour.
 
 Panic duration is rolled at the time of the CE command and stored on the result/effect.
 
+## When The Next Check Is Due
+
+A combat-start Combat Experience result holds for the Duration in the table above, and the next
+check falls due as that duration runs out. Count from the round the result was rolled in and add the
+duration: the check is due as that round opens, so the first round the old result no longer covers
+is the round the participant resolves Combat Experience again.
+
+| Result rolled in round | Duration    | Next check due |
+| ---------------------- | ----------- | -------------- |
+| `7`                    | `1` round   | `8`            |
+| `7`                    | `2` rounds  | `9`            |
+| `7`                    | `4` rounds  | `11`           |
+| `7`                    | `6` rounds  | `13`           |
+| `7`                    | `0` (`21+`) | No next check  |
+
+An Active `21+` result has no duration, so it schedules no next check and never becomes due by
+schedule. A confirmation made without rolling, because the participant's Combat Experience total
+already meets the difficulty, resolves in that same `21+` band and schedules nothing either. While a
+participant is on a `21+` result, only a Critical-triggered reset brings the scheduled check back.
+That exclusivity is about the schedule alone. A phase attack asks separately, and the band of the
+result a participant is holding makes no difference to it, so a participant on a `21+` result must
+still resolve Combat Experience whenever the [Phase Attack Rolls](#phase-attack-rolls) conditions
+are met.
+
+Being due is not the same as expiring. The result that is running stays active until the fresh roll
+replaces it, and that fresh roll schedules the next check its own duration implies.
+
 ## Effect Storage
 
 Combat-start Panic, Passive, and Active penalties are represented as normal combat effect rows:
