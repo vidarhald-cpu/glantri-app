@@ -53,9 +53,10 @@ describe("Chargen review content-integrity error copy (Forgejo #644)", () => {
       progressionWith({
         skills: [
           {
-            gms: 0,
+            category: "ordinary",
             grantedRanks: 0,
             groupId: "basic_melee_training",
+            level: 1,
             primaryRanks: 1,
             ranks: 1,
             secondaryRanks: 0,
@@ -79,11 +80,10 @@ describe("Chargen review content-integrity error copy (Forgejo #644)", () => {
       progressionWith({
         specializations: [
           {
-            gms: 0,
-            grantedRanks: 0,
-            primaryRanks: 1,
+            level: 1,
             ranks: 1,
             secondaryRanks: 0,
+            skillId: UNKNOWN_SKILL_ID,
             specializationId: UNKNOWN_SPECIALIZATION_ID,
           },
         ],
