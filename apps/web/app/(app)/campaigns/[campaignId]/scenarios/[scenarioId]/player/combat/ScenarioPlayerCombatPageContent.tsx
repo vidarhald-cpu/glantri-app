@@ -2500,6 +2500,7 @@ export default function ScenarioPlayerCombatPageContent({
     () =>
       getScenarioCombatEquipmentStatus({
         characterId: selectedParticipant?.characterId,
+        participantSourceType: selectedParticipant?.sourceType,
         resolvedEquipmentState: displayedParticipant?.equipmentState,
         scenarioEquipmentState: selectedParticipant?.snapshot.equipmentState,
       }),
@@ -2508,6 +2509,7 @@ export default function ScenarioPlayerCombatPageContent({
   const controlledEquipmentDiagnostic = formatScenarioCombatEquipmentDiagnostic({
     isGameMaster,
     participantName: selectedParticipant?.snapshot.displayName,
+    participantSourceType: selectedParticipant?.sourceType,
     status: controlledEquipmentStatus,
   });
 

@@ -5582,6 +5582,7 @@ export default function CombatRoundManagerPanel({
     const build = () =>
       measureCombatPerformanceStage("panel_equipment_loadout_presentation", () =>
         resolveScenarioCombatEquipmentState({
+          participantSourceType: selectedScenarioParticipant?.sourceType,
           resolvedEquipmentState:
             resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
               ?.equipmentState,
@@ -5619,6 +5620,7 @@ export default function CombatRoundManagerPanel({
     () =>
       getScenarioCombatEquipmentStatus({
         characterId: selectedScenarioParticipant?.characterId,
+        participantSourceType: selectedScenarioParticipant?.sourceType,
         resolvedEquipmentState:
           resolvedCharacterStateByParticipantId[selectedScenarioParticipant?.id ?? ""]
             ?.equipmentState,
@@ -5629,6 +5631,7 @@ export default function CombatRoundManagerPanel({
   const inspectorEquipmentDiagnostic = formatScenarioCombatEquipmentDiagnostic({
     isGameMaster: true,
     participantName: selectedScenarioParticipant?.snapshot.displayName,
+    participantSourceType: selectedScenarioParticipant?.sourceType,
     status: inspectorEquipmentStatus,
   });
   const inspectorDodgeSkillValue = useMemo(() => {
@@ -8895,6 +8898,7 @@ export default function CombatRoundManagerPanel({
           )
         : undefined;
     const equipmentState = resolveScenarioCombatEquipmentState({
+      participantSourceType: input.scenarioParticipant?.sourceType,
       resolvedEquipmentState: resolvedCharacterState?.equipmentState,
       scenarioEquipmentState: input.scenarioParticipant?.snapshot.equipmentState,
     });

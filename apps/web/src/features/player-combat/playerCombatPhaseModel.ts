@@ -483,15 +483,32 @@ export interface ScenarioCombatEquipmentStatus {
   message?: string;
 }
 
+/**
+ * Names the remedy for a committed-equipment fault — and only ever a remedy that exists for the
+ * participant it is shown for (Forgejo #666).
+ *
+ * The participant assignment grid renders `Update Scenario equipment` only where
+ * `sourceType === "character" && characterId`, because the operation behind it reconciles a
+ * Character equipment aggregate. Sending the GM there for a Template-derived temporary actor
+ * pointed at a control that is not on the page; telling a GM to use a control that is not there
+ * costs more confidence than a plain failure. A temporary actor is instead pointed at the Template
+ * sources control that genuinely does act on it.
+ */
 export function formatScenarioCombatEquipmentDiagnostic(input: {
   isGameMaster: boolean;
   participantName?: string;
+  participantSourceType?: "character" | "entity";
   status: ScenarioCombatEquipmentStatus;
 }): string | undefined {
   if (!input.status.message) return undefined;
   const participantName = input.participantName?.trim() || "This participant";
   const possessive =
     participantName === "This participant" ? "This participant’s" : `${participantName}’s`;
+  if (input.participantSourceType === "entity") {
+    return input.isGameMaster
+      ? `${possessive} committed scenario equipment is incomplete or out of date. Recreate this temporary actor from its Template source on the scenario page.`
+      : `${possessive} committed scenario equipment is incomplete or out of date. Ask the GM to recreate this temporary actor from its Template source.`;
+  }
   return input.isGameMaster
     ? `${possessive} scenario equipment is incomplete or out of date. Refresh it from the participant assignment grid on the scenario page.`
     : `${possessive} scenario equipment is incomplete or out of date. Ask the GM to refresh it from the participant assignment grid on the scenario page.`;
@@ -509,14 +526,37 @@ function getReadyEquipmentItemIds(state: EquipmentFeatureState, characterId: str
   ].filter((itemId): itemId is string => Boolean(itemId));
 }
 
-/** Diagnoses scenario-owned equipment without substituting mutable character item identities. */
+/**
+ * Diagnoses scenario-owned equipment without substituting mutable character item identities.
+ *
+ * `participantSourceType` decides what a *missing* projection means, and that distinction is the
+ * whole of Forgejo #666. A scenario-equipment projection is Character-sourced by construction —
+ * `scenarioParticipantSnapshotSchema.equipmentProjection.provenance.source` is the literal
+ * `"character_equipment_aggregate"`, and the only operation that writes one is the Character-only
+ * `refresh-character-equipment` reconcile. A Template-derived temporary actor (`sourceType:
+ * "entity"`) therefore **never has one, and never can**.
+ *
+ * Reading that structural absence as `incomplete` reported a repairable Character data fault where
+ * none existed. It named a refresh control the participant assignment grid correctly does not
+ * render for a temporary actor, and — because `incomplete` also clears `allowUnarmedFallback` — it
+ * withheld the intrinsic Punch and Kick sources that are such an actor's only legal attack
+ * sources, leaving `Declare action` disabled and the round unable to leave Declaration.
+ *
+ * So a non-Character participant carrying no committed equipment is `unarmed`: a legitimate state
+ * with no diagnostic, not a fault. Nothing is synthesised to reach it — no pseudo-Character, and no
+ * equipment records a template does not have. A template that *does* author an `equipmentState` is
+ * still diagnosed exactly as before, because then there is real committed equipment to judge.
+ */
 export function getScenarioCombatEquipmentStatus(input: {
   characterId?: string;
+  participantSourceType?: "character" | "entity";
   resolvedEquipmentState?: unknown;
   scenarioEquipmentState?: unknown;
 }): ScenarioCombatEquipmentStatus {
+  const hasCharacterEquipmentSource = input.participantSourceType !== "entity";
   const scenarioState = normalizeCombatEquipmentFeatureState(input.scenarioEquipmentState);
   if (!scenarioState) {
+    if (!hasCharacterEquipmentSource) return { kind: "unarmed" };
     return {
       kind: "incomplete",
       message: "Committed equipment data is unavailable. Ask the GM to refresh it.",
@@ -527,6 +567,9 @@ export function getScenarioCombatEquipmentStatus(input: {
     state: scenarioState,
   });
   if (!scenarioCharacterId) {
+    // A template may author an `equipmentState` that carries no loadout owner at all. There is
+    // still nothing a Character refresh could reconcile, so the actor is unarmed rather than faulty.
+    if (!hasCharacterEquipmentSource) return { kind: "unarmed" };
     return {
       kind: "incomplete",
       message: "Committed equipment loadout is unavailable. Ask the GM to refresh it.",
@@ -566,17 +609,43 @@ export function getScenarioCombatEquipmentStatus(input: {
 }
 
 /**
+ * An actor that carries nothing, stated explicitly.
+ *
+ * This is the absence of equipment, not invented equipment: no items, no templates, no loadout
+ * owner, nothing ready. It exists because `null` and "carries nothing" had been the same value, and
+ * the combat loadout derivation treats `null` as *no data to work from* and returns an empty model
+ * — which withholds the intrinsic Punch and Kick rows that `combatStateDerivation` otherwise always
+ * derives, for an actor whose equipment is genuinely and correctly empty (Forgejo #666).
+ */
+export const EMPTY_SCENARIO_COMBAT_EQUIPMENT_STATE: EquipmentFeatureState = {
+  activeLoadoutByCharacterId: {},
+  itemsById: {},
+  locationsById: {},
+  templates: { templatesById: {} },
+};
+
+/**
  * Combat declarations use the committed scenario participant's item and loadout IDs.
  * Current equipment data may only enrich matching template definitions (for example,
  * attack-mode capabilities added after an older scenario snapshot was recorded).
+ *
+ * `participantSourceType` distinguishes *no equipment data* from *carries nothing*, for the reason
+ * given on `getScenarioCombatEquipmentStatus`: a Template-derived temporary actor never has a
+ * Character equipment projection, so its missing state is not a fault to be diagnosed but an empty
+ * loadout to be derived from. A Character keeps returning `null`, so a genuinely stale or missing
+ * Character projection stays diagnosable exactly as before.
  */
 export function resolveScenarioCombatEquipmentState(input: {
+  participantSourceType?: "character" | "entity";
   resolvedEquipmentState?: unknown;
   scenarioEquipmentState?: unknown;
 }): EquipmentFeatureState | null {
   const scenarioState = normalizeCombatEquipmentFeatureState(input.scenarioEquipmentState);
   const resolvedState = normalizeCombatEquipmentFeatureState(input.resolvedEquipmentState);
 
+  if (!scenarioState && !resolvedState && input.participantSourceType === "entity") {
+    return EMPTY_SCENARIO_COMBAT_EQUIPMENT_STATE;
+  }
   if (!scenarioState) return resolvedState;
   if (!resolvedState) return scenarioState;
 
