@@ -205,6 +205,7 @@ export default function ChargenWizard() {
           node: (
             <FinalizeStep
               characterName={state.characterName}
+              coreRouteStatus={state.coreRouteStatus}
               currentUser={state.currentUser}
               handleFinalize={state.handleFinalize}
               isFinalizing={state.isFinalizing}

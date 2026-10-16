@@ -3,6 +3,7 @@ import {
   ProfessionTrainingOverview,
 } from "../components/ProfessionTraining";
 import { getBadgeStyle } from "../chargenWizardHelpers";
+import type { ProfessionTrainingAccess } from "../professionTrainingAccess";
 import type { useChargenWizardState } from "../useChargenWizardState";
 
 type State = ReturnType<typeof useChargenWizardState>;
@@ -38,6 +39,48 @@ const panelStyle = {
    step already uses for secondary prose. Same idiom as `StatsStep.module.css`'s `.placeholder`
    (#577). */
 const placeholderStyle = { ...panelStyle, color: "#5e5a50" } as const;
+
+/**
+ * A Profession this Character can reach no training for (#635).
+ *
+ * It warns and never prevents: the Profession stays selectable, because filtering the target
+ * Professions by availability is forbidden by `chargen-target-professions.md` section 10. The prose
+ * after the situation is the accepted catalogue's own authored reason, quoted verbatim; when the
+ * catalogue attributes none, the situation stands alone rather than acquiring an invented one.
+ */
+function TrainingAccessNotice({
+  access,
+  selectable,
+}: {
+  access: ProfessionTrainingAccess;
+  selectable: boolean;
+}) {
+  return (
+    <div
+      role="note"
+      style={{
+        background: "#fbfaf5",
+        border: "1px solid #e7e2d7",
+        borderLeft: "3px solid #8b7345",
+        borderRadius: 8,
+        color: "#4a4f45",
+        display: "grid",
+        fontSize: "0.9rem",
+        gap: "0.25rem",
+        padding: "0.6rem 0.75rem",
+      }}
+    >
+      <strong>No training available here</strong>
+      <span>{access.situation}</span>
+      {access.authoredReasons.map((reason) => (
+        <span key={reason} style={{ color: "#5e5a50" }}>
+          {reason}
+        </span>
+      ))}
+      {selectable ? <span style={{ color: "#5e5a50" }}>You may still choose it.</span> : null}
+    </div>
+  );
+}
 
 /**
  * Step 5 — choose a Profession, and understand it before any mechanics appear.
@@ -144,6 +187,12 @@ export function ProfessionStep({
                     Change profession
                   </button>
                 </div>
+                {selectedProfessionCard.trainingAccess ? (
+                  <TrainingAccessNotice
+                    access={selectedProfessionCard.trainingAccess}
+                    selectable={false}
+                  />
+                ) : null}
                 {/* 2. What it can train, then 3. how it trains it. */}
                 {selectedProfessionCard.browse ? (
                   <ProfessionTrainingOverview
@@ -247,6 +296,9 @@ export function ProfessionStep({
                             <div style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
                               {profession.description ?? profession.familyDescription ?? ""}
                             </div>
+                            {profession.trainingAccess ? (
+                              <TrainingAccessNotice access={profession.trainingAccess} selectable />
+                            ) : null}
                           </div>
 
                           <button

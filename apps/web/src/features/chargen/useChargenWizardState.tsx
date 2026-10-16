@@ -97,6 +97,7 @@ import {
   type ProfessionBrowseCard,
   type SkillBrowseRow,
 } from "./chargenWizardHelpers";
+import { buildProfessionTrainingAccess } from "./professionTrainingAccess";
 import {
   createTargetCompetencyChargenSource,
   buildTargetRuntimeContent,
@@ -293,6 +294,18 @@ export function useChargenWizardState() {
         name: profession.name,
         profession,
         subtypeName: profession.name,
+        /*
+         * Intentional inaccessibility, made understandable (#635). Absent whenever the Profession
+         * has training this Character can reach, so the card is unchanged for every working
+         * combination.
+         */
+        trainingAccess: buildProfessionTrainingAccess({
+          civilizationName: selectedCivilization?.name,
+          content,
+          professionId: profession.id,
+          socialBand: activeSocialBand,
+          societyId: activeSocietyId,
+        }),
       };
     })
     .sort((left, right) => {

@@ -52,6 +52,7 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
     selectableSkillSummary,
     selectedCivilization,
     selectedProfession,
+    selectedProfessionCard,
     selectedProfile,
     selectedSociety,
     selectedSocietyAccess,
@@ -778,7 +779,47 @@ export function SkillAllocationStep({ state }: SkillAllocationStepProps) {
                 </div>
               ) : null}
             </section>
-          ) : null}
+          ) : (
+            /*
+             * The panel used to render as a heading and nothing else whenever the Profession had no
+             * training this Character could reach (#635). It now says so, in the shape the
+             * experience contract already blesses at section 9.3: show the count, then explain. The
+             * prose after the situation is the accepted catalogue's own authored reason, quoted
+             * verbatim; where the catalogue attributes none, the situation stands alone.
+             */
+            <div
+              role="note"
+              style={{
+                background: "#fbfaf5",
+                border: "1px solid #e7e2d7",
+                borderLeft: "3px solid #8b7345",
+                borderRadius: 10,
+                color: "#4a4f45",
+                display: "grid",
+                gap: "0.3rem",
+                padding: "0.75rem 0.9rem",
+              }}
+            >
+              <strong>Learning Groups: 0</strong>
+              {selectedProfessionCard?.trainingAccess ? (
+                <>
+                  <span>{selectedProfessionCard.trainingAccess.situation}</span>
+                  {selectedProfessionCard.trainingAccess.authoredReasons.map((reason) => (
+                    <span key={reason} style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                      {reason}
+                    </span>
+                  ))}
+                  <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                    Nothing here can be trained, so none of your points are spent on it.
+                  </span>
+                </>
+              ) : (
+                <span style={{ color: "#5e5a50", fontSize: "0.9rem" }}>
+                  No Profession training is available to this Character.
+                </span>
+              )}
+            </div>
+          )}
 
           {specialAccessSection ? (
             <section
