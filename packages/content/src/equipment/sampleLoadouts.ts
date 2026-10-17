@@ -1,8 +1,4 @@
-import type {
-  CharacterLoadout,
-  EquipmentItem,
-  StorageLocation,
-} from "@glantri/domain/equipment";
+import type { CharacterLoadout, EquipmentItem, StorageLocation } from "@glantri/domain/equipment";
 import { createDefaultEquipmentLocations } from "./systemLocations";
 
 export const sampleCharacterId = "char-themistogenes";
@@ -138,7 +134,11 @@ export const sampleEquipmentItems: EquipmentItem[] = [
   {
     id: "shield-item-round-1",
     characterId: sampleCharacterId,
-    templateId: "shield-template-round-shield",
+    // Medium shield rather than Round Shield (#672): Round Shield is a legacy-compatibility
+    // template carrying no `parry` value, so it is not an eligible parry source under #665's
+    // guard, and the sample duel would not exercise Parry at all. Medium shield is authored from
+    // the Themistogenes shield table with `parry: 5`.
+    templateId: "shield-template-medium-shield",
     category: "shield",
     displayName: null,
     specificityType: "generic",

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { AuthService, CampaignService, hashPassword, prisma } from "../src/index";
+import { TRAINING_BANDIT_DEMO_SNAPSHOT } from "./trainingBanditDemoSnapshot";
 
 function loadDatabaseEnv(): void {
   const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -131,12 +132,7 @@ async function ensureSampleEntity(
     kind: "npc",
     name: entityName,
     notes: "Seeded by the local development bootstrap command.",
-    snapshot: {
-      health: {
-        currentHp: 12,
-        maxHp: 12,
-      },
-    },
+    snapshot: TRAINING_BANDIT_DEMO_SNAPSHOT,
   });
 }
 
