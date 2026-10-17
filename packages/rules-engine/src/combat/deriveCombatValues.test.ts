@@ -12,7 +12,9 @@ import {
   getWorkbookOneItemDefensePair,
   getWorkbookShieldRowParry,
   getWorkbookWeaponRowParry,
+  canTemplateParry,
   resolveAttackModeCompetency,
+  resolveTemplateParryModifier,
 } from "./deriveCombatValues";
 import type { CombatStateCharacterInputs } from "./characterInputs";
 
@@ -608,5 +610,58 @@ describe("getWorkbookCombinedRowParry", () => {
         secondaryWeaponTemplate: null,
       }),
     ).toBe("—");
+  });
+});
+
+// Forgejo #665. Parry-source eligibility is a property of the template alone, so that a wielded
+// Item which authors no Parry modifier is never committed as a Parry source the canonical
+// calculation must then refuse.
+describe("Parry source eligibility", () => {
+  it("reads an authored Parry modifier, including a zero one", () => {
+    expect(resolveTemplateParryModifier({ parry: 3 })).toBe(3);
+    // A Long sword authors `parry: 0`. Zero is a real modifier and must not be read as absent.
+    expect(resolveTemplateParryModifier({ parry: 0 })).toBe(0);
+    expect(canTemplateParry({ parry: 0 })).toBe(true);
+  });
+
+  it("treats an absent or null Parry modifier as ineligible", () => {
+    // Thrown and missile modes author `parry: null` deliberately; the two legacy-compatibility
+    // shield templates omit the field entirely. Neither can be scored by any Parry row.
+    expect(resolveTemplateParryModifier({ parry: null })).toBeNull();
+    expect(canTemplateParry({ parry: null })).toBe(false);
+    expect(canTemplateParry({})).toBe(false);
+    expect(canTemplateParry(null)).toBe(false);
+    expect(canTemplateParry(undefined)).toBe(false);
+  });
+
+  it("agrees with the Parry rows it gates", () => {
+    const characterInputs = makeCharacterInputs({ dexterityGm: 0, parryCombatSkillXp: 8 });
+
+    // An ineligible template yields no Parry row, which is exactly why it must not be committed.
+    expect(
+      getWorkbookShieldRowParry({
+        armorTemplate: null,
+        characterInputs,
+        shieldTemplate: { parry: null } as never,
+      }),
+    ).toBe("—");
+    expect(
+      getWorkbookCombinedRowParry({
+        armorTemplate: null,
+        characterInputs,
+        offHandShieldTemplate: { parry: null } as never,
+        primaryWeaponTemplate: { parry: 0 } as never,
+        secondaryWeaponTemplate: null,
+      }),
+    ).toBe("—");
+
+    // An eligible one does, so eligibility never suppresses a Parry that exists.
+    expect(
+      getWorkbookWeaponRowParry({
+        armorTemplate: null,
+        characterInputs,
+        template: { parry: 0 } as never,
+      }),
+    ).not.toBe("—");
   });
 });

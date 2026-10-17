@@ -23387,6 +23387,393 @@ describe("scenarios route contract", () => {
     });
   });
 
+  // Forgejo #665. The Alpha playtest blocker: combat stopped permanently at the first successful
+  // hit, because the committed defence review marked a Round Shield as an included Parry source
+  // although that legacy template authors no Parry modifier, and the canonical resolver then had
+  // to refuse a combined Parry row that cannot exist. The GM's panel, which only offers sources it
+  // can score, displayed a main-hand-only score at the same moment the server refused.
+  //
+  // This walks the real routes in sequence — a connecting attack, the defence review, then the
+  // Parry roll — feeding each step the state the previous real handler produced. It deliberately
+  // does not assert on injected round state: the gap that let the defect reach a playtest was that
+  // no test executed a GM's path through a hit, and the canonical snapshot fixture pairs a Long
+  // sword with a Dagger, which does author a Parry modifier and so always resolved.
+  it("resolves Parry through a connecting hit when an off-hand shield authors no Parry modifier", async () => {
+    const longSword = weaponTemplates.find((candidate) => candidate.name === "Long sword");
+    const roundShield = shieldTemplates.find((candidate) => candidate.name === "Round Shield");
+    if (!longSword || !roundShield) throw new Error("Missing #665 Parry eligibility fixtures.");
+    // The defect is specific to a wielded template that authors no Parry modifier at all.
+    expect(roundShield.parry ?? null).toBeNull();
+    expect(longSword.parry ?? null).not.toBeNull();
+
+    const makeShieldDefenderSnapshot = (characterId: string, displayName: string) => {
+      const base = makeCanonicalCombatCalculationSnapshot({ characterId, displayName });
+      const shieldItemId = `item-${characterId}-${roundShield.id}`;
+      const shieldLocationId = `location-${characterId}-shield`;
+      const templatesById = {
+        ...base.equipmentState.templatesById,
+        [roundShield.id]: roundShield,
+      };
+      return {
+        ...base,
+        equipmentState: {
+          ...base.equipmentState,
+          activeLoadoutByCharacterId: {
+            [characterId]: {
+              ...base.equipmentState.activeLoadoutByCharacterId[characterId],
+              // The blocker configuration: Long sword in hand, Round Shield ready, and no
+              // secondary weapon, so the shield is the only off-hand defence source.
+              activeSecondaryWeaponItemId: null,
+              readyShieldItemId: shieldItemId,
+            },
+          },
+          itemsById: {
+            ...base.equipmentState.itemsById,
+            [shieldItemId]: {
+              acquiredFrom: null,
+              category: "shield",
+              characterId,
+              conditionState: "intact",
+              displayName: null,
+              id: shieldItemId,
+              isFavorite: false,
+              isStackable: false,
+              material: "wood",
+              quality: "standard",
+              quantity: 1,
+              revision: "2026-07-30T07:59:00.000Z",
+              specificityType: "generic",
+              storageAssignment: { carryMode: "equipped", locationId: shieldLocationId },
+              templateId: roundShield.id,
+            },
+          },
+          locationsById: {
+            ...base.equipmentState.locationsById,
+            [shieldLocationId]: {
+              availabilityClass: "with_you",
+              characterId,
+              id: shieldLocationId,
+              isAccessibleInEncounter: true,
+              isMobile: true,
+              name: "Shield",
+              type: "equipped_system",
+            },
+          },
+          templates: { templatesById },
+          templatesById,
+        },
+      };
+    };
+
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    // Each step re-seeds the route with a fresh encounter record, so the revision the handlers
+    // compare against is the fixture's own fixed `updatedAt` rather than anything a prior step
+    // echoed back.
+    const encounterRevision = "2026-01-01T00:00:00.000Z";
+    const baseAttackerSnapshot = makeShieldDefenderSnapshot(
+      "character-participant-1",
+      "The Gladiator",
+    );
+    // The shared combat fixtures are built around a dodge-heavy defender, so an attack against one
+    // reliably misses — the existing defence-review test even asserts `hit === false`. That is the
+    // structural reason no test had ever executed a GM's path through a connecting hit. Giving the
+    // attacker real Brawling ranks raises their canonical OB enough that a mid-range die connects,
+    // which keeps the walk deterministic without pinning an open-ended cascade.
+    const attackerSnapshot = {
+      ...baseAttackerSnapshot,
+      build: {
+        ...baseAttackerSnapshot.build,
+        progression: {
+          ...baseAttackerSnapshot.build.progression,
+          skills: [
+            ...baseAttackerSnapshot.build.progression.skills,
+            {
+              category: "secondary",
+              categoryId: "combat",
+              groupId: "basic_melee_training",
+              secondaryRanks: 60,
+              skillId: "brawling",
+            },
+          ],
+        },
+      },
+    };
+    const defenderSnapshot = makeShieldDefenderSnapshot("character-participant-2", "City guard");
+    const routeParticipants = [
+      { characterId: "character-participant-1", id: "participant-1", snapshot: attackerSnapshot },
+      {
+        characterId: "character-participant-2",
+        controlledByUserId: "other-player",
+        id: "participant-2",
+        snapshot: defenderSnapshot,
+      },
+    ];
+
+    // A connecting attack is the precondition this walk exists to cover, so the die is pinned
+    // rather than left to chance. The value is deliberately mid-range: a d20 of 20 or 1 cascades
+    // into open-ended d10s, and a pinned extreme would roll 10 every time and never terminate.
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    try {
+      // A declared, initiative-resolved Phase 1 with the cursor on the first attack: the state a
+      // GM is actually in when the next thing they do is roll an attack.
+      const declaredStepStatuses = {
+        initiative_phase_1: "submitted",
+        initiative_phase_2: "pending",
+        phase_1_actions: "submitted",
+        phase_2_actions: "pending",
+        review_action_modifiers: "complete",
+        review_phase_2_actions: "pending",
+        review_phase_2_damage: "pending",
+        review_phase_2_modifiers: "pending",
+        round_summary: "pending",
+        select_actions: "submitted",
+      } as const;
+      const declaredRoundState = {
+        commands: [
+          {
+            afterCursor: {
+              participantId: "encounter-participant-1",
+              roundNumber: 1,
+              step: "i1",
+            },
+            beforeCursor: {
+              participantId: "encounter-participant-1",
+              roundNumber: 1,
+              step: "i1",
+            },
+            createdAt: "2026-01-01T00:01:30.000Z",
+            facts: {},
+            id: "command-i1",
+            participantId: "encounter-participant-1",
+            roundNumber: 1,
+            step: "i1",
+            type: "roll_initiative_phase1",
+          },
+        ],
+        currentCursor: {
+          participantId: "encounter-participant-1",
+          roundNumber: 1,
+          step: "A1",
+        },
+        currentStep: "phase_1_actions",
+        participants: [
+          {
+            attackResults: {},
+            declaration: {
+              actionId: "attack_parry",
+              phaseContexts: { phase1: { targetParticipantId: "encounter-participant-2" } },
+              roundNumber: 1,
+              submittedAt: "2026-01-01T00:01:00.000Z",
+              submittedBy: "player",
+            },
+            initiatives: {
+              phase1: {
+                baseInitiative: 0,
+                modifierAdjustment: 0,
+                rolls: [6],
+                rollTotal: 6,
+                total: 6,
+              },
+            },
+            label: "The Gladiator",
+            participantId: "encounter-participant-1",
+            stepStatuses: declaredStepStatuses,
+          },
+          {
+            attackResults: {},
+            initiatives: {
+              phase1: {
+                baseInitiative: 0,
+                modifierAdjustment: 0,
+                rolls: [4],
+                rollTotal: 4,
+                total: 4,
+              },
+            },
+            label: "City guard",
+            participantId: "encounter-participant-2",
+            stepStatuses: declaredStepStatuses,
+          },
+        ],
+        phaseResolutionCursor: {
+          participantId: "encounter-participant-1",
+          phase: "phase1",
+          substep: "attack",
+        },
+        phaseResolutionResults: [],
+        phaseResolutionStatuses: {},
+        roundNumber: 1,
+        stepSnapshots: [],
+      };
+
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: declaredRoundState,
+          participants: encounterParticipants,
+        },
+        participants: routeParticipants,
+        user: mocks.adminUser,
+      });
+      // The attack source identity is taken from the projection rather than hand-written: this
+      // walk is about the defender's Parry sources, so whatever the attacker swings with is
+      // immaterial as long as it connects.
+      const attackTask = buildCombatProgressionProjection(declaredRoundState as never)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "attack");
+      if (!attackTask) throw new Error("Expected a canonical attack task.");
+      const attackIdentity = attackTask.identity as unknown as Record<string, unknown>;
+
+      const attackApp = await buildScenarioTestApp();
+      const attackResponse = await attackApp.inject({
+        method: "POST",
+        payload: {
+          actionId: "attack_parry",
+          attackIndex: attackIdentity.attackIndex ?? 1,
+          attackModeId: attackIdentity.attackModeId,
+          declarationId: attackIdentity.declarationId,
+          defenderScenarioParticipantId: "participant-2",
+          ob: 120,
+          obSkillRaw: 0,
+          opportunityId: attackIdentity.opportunityId,
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+          weaponSourceId: attackIdentity.weaponSourceId,
+          weaponSourceSlot: attackIdentity.weaponSourceSlot,
+          weaponTemplateId: attackIdentity.weaponTemplateId,
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      await attackApp.close();
+      expect(attackResponse.statusCode, JSON.stringify(attackResponse.json())).toBe(200);
+
+      const afterAttack = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session;
+      const attackResult = afterAttack.combatRoundState.participants.find(
+        (entry: { participantId: string }) => entry.participantId === "encounter-participant-1",
+      )?.attackResults?.phase1;
+      // The whole point of the walk: the attack has to connect, or nothing below is reached.
+      expect(attackResult?.hit).toBe(true);
+      const attackId = getCombatRoundAttackResultId({ result: attackResult, roundNumber: 1 });
+
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: afterAttack.combatRoundState,
+          participants: encounterParticipants,
+        },
+        participants: routeParticipants,
+        user: mocks.adminUser,
+      });
+      // The task identity is read back from the encounter the handler will actually load, because
+      // the route re-materializes round state and a task projected from anything else can carry
+      // ids the authorization check then rejects.
+      const reviewEncounter = await mocks.encounterService.getEncounterById("encounter-1");
+      const defenseReviewTask = buildCombatProgressionProjection(
+        reviewEncounter.combatRoundState as never,
+      )
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "defense_review");
+      if (!defenseReviewTask) throw new Error("Expected a canonical defense-review task.");
+      const reviewApp = await buildScenarioTestApp();
+      const reviewResponse = await reviewApp.inject({
+        method: "POST",
+        payload: {
+          attackId,
+          attackerParticipantId: "encounter-participant-1",
+          aware: true,
+          defenderParticipantId: "encounter-participant-2",
+          executionGroupId: defenseReviewTask.executionGroupId,
+          expectedRevision: encounterRevision,
+          phase: "phase1",
+          // No explicit selections, so the commit path applies its own defaults. That default is
+          // exactly what used to commit the shield as an included Parry source.
+          sourceSelections: [],
+          taskId: defenseReviewTask.id,
+        },
+        url: "/encounters/encounter-1/combat-round/commit-defense-review",
+      });
+      await reviewApp.close();
+      expect(reviewResponse.statusCode, JSON.stringify(reviewResponse.json())).toBe(200);
+
+      // The guard, asserted directly: a template with no Parry modifier is not committed as a
+      // Parry source, while the Long sword still is.
+      const committedSources = reviewResponse.json().defenseSnapshot.sources as Array<{
+        included: boolean;
+        kind: string;
+        label: string;
+        slot: string;
+      }>;
+      expect(committedSources).toEqual([
+        expect.objectContaining({
+          included: true,
+          kind: "weapon",
+          label: "Long sword",
+          slot: "mainHand",
+        }),
+      ]);
+      expect(committedSources.some((source) => source.label === "Round Shield")).toBe(false);
+
+      const afterReview = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session;
+      setupCombatDeclarationRoute({
+        encounter: {
+          combatRoundState: afterReview.combatRoundState,
+          participants: encounterParticipants,
+        },
+        participants: routeParticipants,
+        user: mocks.adminUser,
+      });
+      const parryEncounter = await mocks.encounterService.getEncounterById("encounter-1");
+      const parryTask = buildCombatProgressionProjection(parryEncounter.combatRoundState as never)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "parry");
+      if (!parryTask) throw new Error("Expected a canonical parry task.");
+      const parryApp = await buildScenarioTestApp();
+      const parryResponse = await parryApp.inject({
+        method: "POST",
+        payload: {
+          attackResultId: attackId,
+          attackerParticipantId: "encounter-participant-1",
+          commandType: "roll_parry",
+          declarationId: parryTask.identity.declarationId,
+          defenderParticipantId: "encounter-participant-2",
+          effectCutoffInitiativeGroupId: (
+            parryTask.identity as unknown as { initiativeGroupId?: string }
+          ).initiativeGroupId,
+          executionGroupId: parryTask.executionGroupId,
+          expectedRevision: encounterRevision,
+          modifierValidationTaskId: parryTask.id,
+          opportunityId: parryTask.identity.opportunityId,
+          parryPurpose: parryTask.identity.parryPurpose,
+          parrySourceId: parryTask.identity.parrySourceId,
+          phase: "phase1",
+          processId: parryTask.processId,
+          scenarioParticipantId: "participant-2",
+          stageId: parryTask.stageId,
+          taskId: parryTask.id,
+          usedMainHand: true,
+          usedOffHand: false,
+        },
+        url: "/encounters/encounter-1/combat-round/roll-parry",
+      });
+      await parryApp.close();
+
+      // Before the eligibility guard this was HTTP 409 parry_context_unavailable, and the round
+      // could not advance past the first hit.
+      expect(parryResponse.statusCode, JSON.stringify(parryResponse.json())).toBe(200);
+
+      const afterParry = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session;
+      const parryResolution = afterParry.combatRoundState.phaseResolutionResults.find(
+        (resolution: { attackResultId: string }) => resolution.attackResultId === attackId,
+      )?.parryResolution;
+      // The score the server adjudicates is the main-hand-only score the GM's panel presents.
+      expect(parryResolution).toMatchObject({
+        parrySourceLabel: "Long sword",
+        status: "resolved",
+      });
+    } finally {
+      randomSpy.mockRestore();
+    }
+  });
+
   it("commits the canonical current damage review through a narrow GM route", async () => {
     const fixture = makeCriticalRollMutationFixture({ c1: true });
     const attackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
