@@ -7,6 +7,8 @@ import {
   type ScenarioParticipantIncomingAttackSide,
 } from "@glantri/domain";
 
+import { canTemplateParry } from "@glantri/rules-engine";
+
 import { resolveCanonicalParticipantCalculationContext } from "./combatParticipantCalculationResolution";
 import {
   resolveCanonicalParryBase,
@@ -50,7 +52,9 @@ export function buildCanonicalCombatDefenseSnapshot(input: {
     sourceSelectionByItemId.set(selection.itemId, selection.included);
   }
 
-  const candidates = [
+  // Every wielded slot is validated for equipment staleness below, including slots that cannot
+  // parry, so an ineligible source can never hide a changed Item from that guard.
+  const wieldedCandidates = [
     context.loadout?.activePrimaryWeaponItemId
       ? {
           itemId: context.loadout.activePrimaryWeaponItemId,
@@ -75,12 +79,16 @@ export function buildCanonicalCombatDefenseSnapshot(input: {
           }
         : undefined,
   ].filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate));
-  const availableIds = new Set(candidates.map((candidate) => candidate.itemId));
-  if ([...sourceSelectionByItemId].some(([itemId]) => !availableIds.has(itemId))) {
+  // Selections are validated against every wielded Item rather than only the parry-eligible ones.
+  // A selection naming an Item the defender is not wielding is still stale equipment and refused;
+  // a selection naming a wielded Item that cannot parry is simply inert, so a client holding an
+  // older source list does not get an unrefreshable refusal out of it.
+  const wieldedIds = new Set(wieldedCandidates.map((candidate) => candidate.itemId));
+  if ([...sourceSelectionByItemId].some(([itemId]) => !wieldedIds.has(itemId))) {
     throw new RangeError("Defense sources changed. Refresh combat before committing review.");
   }
 
-  const sources = candidates.map((candidate) => {
+  const sources = wieldedCandidates.flatMap((candidate) => {
     const item = context.itemsById.get(candidate.itemId);
     if (
       !item ||
@@ -92,19 +100,27 @@ export function buildCanonicalCombatDefenseSnapshot(input: {
     ) {
       throw new RangeError("Defense sources changed. Refresh combat before committing review.");
     }
+    // Parry-source eligibility (#665). A template that authors no Parry modifier cannot be scored
+    // by any Parry row, so it is not a Parry source and is never committed as one. Recording it as
+    // included is what left the canonical resolver facing a combined row that cannot exist, while
+    // the GM's panel — which only offers sources it can score — displayed a main-hand-only score.
+    // This decides eligibility, never a value: no Parry is substituted, defaulted or derived.
+    if (!canTemplateParry(candidate.template)) return [];
     const explicit = sourceSelectionByItemId.get(candidate.itemId);
     const included = explicit ?? true;
-    return {
-      decision:
-        explicit === undefined ? "default_included" : included ? "gm_included" : "gm_excluded",
-      included,
-      itemId: item.id,
-      itemRevision: item.revision,
-      kind: candidate.kind,
-      label: candidate.template.name,
-      slot: candidate.slot,
-      templateId: candidate.template.id,
-    } as const;
+    return [
+      {
+        decision:
+          explicit === undefined ? "default_included" : included ? "gm_included" : "gm_excluded",
+        included,
+        itemId: item.id,
+        itemRevision: item.revision,
+        kind: candidate.kind,
+        label: candidate.template.name,
+        slot: candidate.slot,
+        templateId: candidate.template.id,
+      } as const,
+    ];
   });
   const awarenessDefault = defaultCombatAttackAwareness(input.attacker);
 
