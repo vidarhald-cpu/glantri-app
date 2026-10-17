@@ -1491,6 +1491,13 @@ export const combatRoundParryResolutionSchema = z.object({
   modifiedParryBeforeRoll: z.number().int().optional(),
   modifierAdjustment: z.number().int().optional(),
   modifierBreakdown: z.array(combatRoundParryModifierBreakdownEntrySchema).optional(),
+  // Forgejo #676. Records that the Parry step was reached and the defender had no eligible Parry
+  // source at all, so the step had nothing to resolve and the attack advanced straight to damage.
+  // This is deliberately a recorded fact rather than an absent record: a GM reading the round
+  // afterwards has to see that the step happened and why it resolved to nothing, rather than find
+  // a gap where a step should have been. It asserts nothing about what any Parry is worth, and it
+  // is never set for a defender who merely holds an eligible source they cannot currently use.
+  noEligibleParrySource: z.boolean().optional(),
   notes: z.string().optional(),
   offHandParryScore: z.number().int().optional(),
   offensiveParryAttemptId: idSchema.optional(),
@@ -10415,7 +10422,12 @@ export function recordCombatRoundParryResolution(input: {
     damageRoll:
       input.attackResult.hit && parryResolution.success !== true
         ? {
-            notes: "Parry resolved unsuccessfully. Damage roll is pending.",
+            // The note the GM reads next has to match what actually happened at the Parry step.
+            // When no eligible Parry source existed (#676) nothing was rolled, so calling that an
+            // unsuccessful Parry would misdescribe the record this very change exists to keep.
+            notes: parryResolution.noEligibleParrySource
+              ? "No Parry was available. Damage roll is pending."
+              : "Parry resolved unsuccessfully. Damage roll is pending.",
             status: "pending",
           }
         : {
@@ -10520,6 +10532,10 @@ function recordCombatRoundParryCommand(input: {
       }),
       attackerParticipantId: input.attackResult.attackerParticipantId,
       defenderParticipantId: input.attackResult.defenderParticipantId,
+      // Forgejo #676. `success: false` alone would make the command log read "failed to parry",
+      // which is not what happened: no Parry was available to attempt. The fact travels with the
+      // command so every projection built from it can tell the two apart.
+      ...(input.parryResolution.noEligibleParrySource ? { noEligibleParrySource: true } : {}),
       success: input.parryResolution.success === true,
       ...(afterCursor.participantId
         ? {
@@ -10577,6 +10593,7 @@ function recordCombatRoundParryCommand(input: {
               contest.status !== "cancelled",
           ),
           declaredOpponentParticipantId: input.parryResolution.declaredOpponentParticipantId,
+          noEligibleParrySource: input.parryResolution.noEligibleParrySource,
           offensiveParryAttemptId: input.parryResolution.offensiveParryAttemptId,
           parryPurpose: input.parryResolution.purpose,
           resultLabel: input.parryResolution.resultLabel,
@@ -10718,6 +10735,149 @@ export function recordCombatRoundParryResult(input: {
         state: defenderOwnedNextRoundState,
       })
     : defenderOwnedNextRoundState;
+}
+
+/**
+ * The recorded outcome label for a Parry step a defender reached with no eligible Parry source.
+ *
+ * It is a constant because the same string is the GM-facing result label on the parry resolution,
+ * on the recorded parry command, and on the step event projected from it; a GM must not be shown
+ * three different accounts of one outcome.
+ */
+export const COMBAT_NO_ELIGIBLE_PARRY_SOURCE_RESULT_LABEL = "No Parry available";
+
+/**
+ * Whether a connected attack's Parry step is finished in a way that hands the attack on to damage.
+ *
+ * Two recorded shapes do that, and the damage path has to accept both:
+ *
+ * - a Parry that was rolled and did not succeed; and
+ * - a Parry step the defender reached with no eligible Parry source (#676), which resolves to
+ *   nothing and advances directly to damage.
+ *
+ * Reading it in one place is deliberate. The canonical progression projection already offered the
+ * hit-location task for the second shape while the recorder still demanded the first, so the two
+ * disagreed — the same client/server disagreement that made #665 a playtest blocker. A successful
+ * Parry is excluded from both shapes: it stops the attack rather than passing it on.
+ */
+export function hasCombatRoundParryStepYieldedToDamage(
+  parryResolution: CombatRoundParryResolution,
+): boolean {
+  if (parryResolution.status === "resolved") return parryResolution.success === false;
+  return (
+    parryResolution.status === "not_applicable" && parryResolution.noEligibleParrySource === true
+  );
+}
+
+/**
+ * Whether a connected attack has reached an ordinary Parry step the defender has no eligible Parry
+ * source for (Forgejo #676).
+ *
+ * The committed defence snapshot is the authority, because it is what the GM committed and what
+ * the canonical resolver reads. Parry-source eligibility is a property of the wielded template
+ * (#665), so an empty `sources` list means the defender wields nothing that any Parry row can
+ * score — a bow, a sling, a firearm, a thrown-only weapon, or nothing at all.
+ *
+ * Three narrowing conditions matter and are deliberate:
+ *
+ * - **Only an ordinary defence.** A declared Offensive Parry or Parry-Disarm takes its Parry base
+ *   from the declared weapon rather than from the defence snapshot, so it is resolved on its own
+ *   terms and is never short-circuited here.
+ * - **Only a still-pending step.** A missed attack, a missile attack and an already-resolved Parry
+ *   all carry a non-pending resolution, so none of them is reopened.
+ * - **Sources empty, not merely nothing included.** A GM who deliberately excludes every eligible
+ *   source has made a choice at a step that did have something to resolve; that is not this case,
+ *   and it keeps its existing refusal.
+ *
+ * This answers only *whether the step has anything to resolve*. It changes no Parry value, and it
+ * adds no second defence: ordinary DB and Dodge have already participated in whether the attack
+ * connected at all.
+ */
+export function hasNoEligibleParrySourceForAttack(input: {
+  attackResult: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+}): boolean {
+  if (!input.attackResult.hit) return false;
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: normalized.roundNumber,
+  });
+  const resolution =
+    getCombatRoundPhaseResolutionResultForAttack({
+      attackResult: input.attackResult,
+      state: normalized,
+    }) ??
+    buildCombatRoundPhaseResolutionResult({
+      attackResult: input.attackResult,
+      roundNumber: normalized.roundNumber,
+      state: normalized,
+      updatedAt: input.attackResult.rolledAt,
+    });
+  if (
+    resolution.parryResolution.status !== "pending" ||
+    resolution.parryResolution.purpose !== "ordinary_defense"
+  ) {
+    return false;
+  }
+  const snapshot = getCombatDefenseSnapshotForAttack(normalized.defenseSnapshots, attackResultId);
+  return snapshot?.status === "committed" && snapshot.sources.length === 0;
+}
+
+/**
+ * Records that an ordinary Parry step was reached with no eligible Parry source, and advances the
+ * attack to damage (Forgejo #676).
+ *
+ * The control-plane ruling of 2026-10-17 settles the previously undefined case: no eligible Parry
+ * source means record that no Parry was available and advance directly to damage. **No Dodge roll,
+ * re-roll or second defence resolution is added**, because ordinary DB and Dodge already
+ * participated in whether the attack connected — resolving a Dodge here would double-count the
+ * same defence and hand the defender a defence they never declared.
+ *
+ * Nothing is rolled. The outcome is written as a `not_applicable` ordinary parry resolution
+ * carrying `noEligibleParrySource`, which flows into the recorded parry command, the step event
+ * and the historical projection, so the step reads as reached-and-empty rather than missing. The
+ * advance itself reuses `recordCombatRoundParryResult`, which already routes a connected attack
+ * whose Parry did not succeed to the defender-owned damage substep, so no second progression path
+ * is introduced for this case.
+ */
+export function recordCombatRoundNoEligibleParrySource(input: {
+  attackResult: CombatRoundAttackRollResult;
+  command?: {
+    commandId?: string;
+    createdAt: string;
+    createdByUserId?: string;
+  };
+  state: CombatRoundState;
+  submittedBy: "gm" | "player";
+  updatedAt: string;
+}): CombatRoundState {
+  if (
+    !hasNoEligibleParrySourceForAttack({ attackResult: input.attackResult, state: input.state })
+  ) {
+    throw new RangeError("This attack's defender has an eligible Parry source.");
+  }
+  return recordCombatRoundParryResult({
+    attackResult: input.attackResult,
+    command: input.command,
+    parryResolution: {
+      attackResultId: getCombatRoundAttackResultId({
+        result: input.attackResult,
+        roundNumber: combatRoundStateSchema.parse(input.state).roundNumber,
+      }),
+      noEligibleParrySource: true,
+      notes:
+        "The defender wielded no Parry-eligible source, so the Parry step had nothing to resolve " +
+        "and the attack advanced to damage. Ordinary DB and Dodge already applied to whether the " +
+        "attack connected, so no further defence is rolled here.",
+      purpose: "ordinary_defense",
+      resultLabel: COMBAT_NO_ELIGIBLE_PARRY_SOURCE_RESULT_LABEL,
+      status: "not_applicable",
+    },
+    state: input.state,
+    submittedBy: input.submittedBy,
+    updatedAt: input.updatedAt,
+  });
 }
 
 function getOffensiveParryDeclarationId(input: {
@@ -12438,8 +12598,7 @@ export function recordCombatRoundHitLocationRoll(input: {
 
   if (
     !resolution ||
-    resolution.parryResolution.status !== "resolved" ||
-    resolution.parryResolution.success !== false ||
+    !hasCombatRoundParryStepYieldedToDamage(resolution.parryResolution) ||
     resolution.damageRoll.status !== "pending" ||
     resolution.damageResult ||
     resolution.hitLocationRoll.status === "rolled"
@@ -12560,8 +12719,7 @@ export function recordCombatRoundDamageResult(input: {
 
   if (
     !resolution ||
-    resolution.parryResolution.status !== "resolved" ||
-    resolution.parryResolution.success !== false ||
+    !hasCombatRoundParryStepYieldedToDamage(resolution.parryResolution) ||
     resolution.damageRoll.status !== "pending"
   ) {
     throw new RangeError("Damage is not pending for this attack.");
@@ -18688,8 +18846,7 @@ export function recordCombatRoundDamageReviewPlaceholder(input: {
 
   if (
     !resolution ||
-    resolution.parryResolution.status !== "resolved" ||
-    resolution.parryResolution.success !== false ||
+    !hasCombatRoundParryStepYieldedToDamage(resolution.parryResolution) ||
     resolution.damageRoll.status !== "pending"
   ) {
     throw new RangeError("Damage review is not pending for this attack.");
@@ -24764,8 +24921,7 @@ function clearCombatRoundStepLegacy(input: {
           : getCombatRoundPostAttackResolutionSubstep(selectedAttackResultForClear)
         : clearsDamageReview
           ? selectedResolutionForClear?.damageRoll.status === "pending" &&
-            selectedResolutionForClear.parryResolution.status === "resolved" &&
-            selectedResolutionForClear.parryResolution.success === false
+            hasCombatRoundParryStepYieldedToDamage(selectedResolutionForClear.parryResolution)
             ? "damage"
             : "parry"
           : selectedAttackResultForClear && clearsPhaseActionRedo
@@ -29404,17 +29560,29 @@ function getCombatRoundLatestEventForCommand(input: {
       participantId: getCombatRoundLatestEventFactString(facts, "attackerParticipantId"),
     });
     const success = getCombatRoundLatestEventFactBoolean(facts, "success");
+    // Forgejo #676. A defender who had no eligible Parry source did not fail to parry — there was
+    // nothing to attempt. Saying "failed to parry" here would put a false account of the step in
+    // front of the GM, which is the opposite of the recorded outcome this case exists to produce.
+    const noEligibleParrySource =
+      getCombatRoundLatestEventFactBoolean(facts, "noEligibleParrySource") === true;
 
     return {
       commandId: command.id,
       phase: command.phase,
       resultId: getCombatRoundLatestEventFactString(facts, "attackResultId"),
       roundNumber: command.roundNumber,
-      shortTitle: success ? "Parry succeeded" : "Parry failed",
+      shortTitle: noEligibleParrySource
+        ? COMBAT_NO_ELIGIBLE_PARRY_SOURCE_RESULT_LABEL
+        : success
+          ? "Parry succeeded"
+          : "Parry failed",
       step: command.step,
-      summaryText: `Round ${command.roundNumber}, ${phaseLabel}: ${defenderLabel} ${
-        success ? "parried" : "failed to parry"
-      } ${attackerLabel}'s attack.`,
+      summaryText: noEligibleParrySource
+        ? `Round ${command.roundNumber}, ${phaseLabel}: ${defenderLabel} had no Parry available ` +
+          `against ${attackerLabel}'s attack, so it advanced to damage.`
+        : `Round ${command.roundNumber}, ${phaseLabel}: ${defenderLabel} ${
+            success ? "parried" : "failed to parry"
+          } ${attackerLabel}'s attack.`,
     };
   }
 

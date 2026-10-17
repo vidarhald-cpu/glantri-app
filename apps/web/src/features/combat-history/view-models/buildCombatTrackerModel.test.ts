@@ -473,6 +473,27 @@ describe("buildCombatTrackerModel", () => {
     expect(cell.hoverText).not.toContain("skipped");
   });
 
+  // Forgejo #676. The domain step outcome normally supplies the sentence for this cell, but the
+  // tracker also derives one from the resolution alone when no outcome is passed. In that path a
+  // Parry step that found no eligible source must not be described as a step that was never
+  // needed, which is what the neighbouring `not_applicable` branch would otherwise say.
+  it("distinguishes a Parry step with no eligible source from one that was never needed", () => {
+    const parryCell = (parryResolution: Record<string, unknown>) =>
+      model([
+        facts({
+          phaseResolutionResult: { parryResolution } as never,
+          status: "pending",
+          step: "review_phase_2_actions",
+        }),
+      ]).cells["1:participant-a:review_phase_2_actions"];
+
+    expect(
+      parryCell({ noEligibleParrySource: true, status: "not_applicable" }).hoverText,
+    ).toContain("no Parry available; advanced to damage.");
+    expect(parryCell({ status: "not_applicable" }).hoverText).toContain("parry not needed.");
+    expect(parryCell({ status: "resolved", success: false }).hoverText).toContain("parry failed.");
+  });
+
   it("keeps inspectability in the projected model", () => {
     const result = model([facts({ inspectable: false })]);
 

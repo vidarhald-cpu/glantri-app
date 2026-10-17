@@ -215,6 +215,7 @@ export type CombatHistoryStepOutcomeReason =
   | "double_attack_cancelled"
   | "incoming_attack_missed"
   | "no_declared_attack"
+  | "no_eligible_parry_source"
   | "no_incoming_attack"
   | "parry_not_required";
 
@@ -546,6 +547,19 @@ export function deriveCombatHistoryStepOutcome(
   const resolution = snapshot.phaseResolutionResult;
 
   if (parryStep && resolution?.parryResolution.status === "not_applicable") {
+    // Forgejo #676. The step was reached on a connected attack and the defender had no eligible
+    // Parry source at all, so it resolved to nothing and the attack advanced to damage. This has
+    // to read as its own outcome: "No parry required" below would tell a GM the step never needed
+    // to happen, when in fact it happened and found nothing to resolve.
+    if (resolution.parryResolution.noEligibleParrySource) {
+      return {
+        category: "not_required",
+        message:
+          "No Parry available. The defender wielded no Parry-eligible source, so the attack " +
+          "advanced to damage.",
+        reason: "no_eligible_parry_source",
+      };
+    }
     if (snapshot.attackResult && !snapshot.attackResult.hit && !snapshot.attackResult.grazing) {
       return {
         category: "not_required",

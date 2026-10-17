@@ -284,6 +284,9 @@ function cellDetail(input: CombatTrackerCellFacts): string {
   const parry = input.phaseResolutionResult?.parryResolution;
   if (input.step === "review_phase_2_actions" || input.step === "review_phase_2_damage") {
     if (parry?.status === "resolved") return parry.success ? "parry succeeded." : "parry failed.";
+    // Forgejo #676. A step that was reached and found no eligible Parry source is not a step that
+    // was never needed, and the tracker has to say which of the two actually happened.
+    if (parry?.noEligibleParrySource) return "no Parry available; advanced to damage.";
     if (
       parry?.status === "not_applicable" ||
       input.status === "skipped" ||
