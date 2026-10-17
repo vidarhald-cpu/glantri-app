@@ -40,7 +40,9 @@ incoming-attack check.
 
 An incoming Parry is a separate defender-owned Current Action. It can occur whether or not the
 defender declared the primary Parry action; that declaration changes the modifier, not who owns the
-roll or how it is resolved.
+roll or how it is resolved. If nothing you are wielding can parry, no Parry was available against
+this attack and the round goes straight on to damage — see
+[When the defender has no Parry source](../gm/parry.md#21-when-the-defender-has-no-parry-source).
 
 1. After an incoming attack hits or grazes, open the Parry Current Action in Player Combat. A miss
    makes Parry not applicable.
