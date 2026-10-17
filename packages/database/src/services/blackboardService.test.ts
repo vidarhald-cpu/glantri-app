@@ -306,15 +306,54 @@ describe("BlackboardService public and privileged projections", () => {
   it("projects public history and keeps retracted or absent history privacy-safe", async () => {
     repositoryMock.loadSafeHistory.mockResolvedValue({
       entry: entry({ entryVersion: 4 }),
+      placementEvents: [
+        {
+          action: "card_added",
+          actorLabelSnapshot: "Game Master",
+          actorUserId: "gm",
+          campaignId,
+          entryId: "entry-1",
+          layoutVersion: 1,
+          occurredAt: new Date("2026-10-17T09:00:00.000Z"),
+        },
+        {
+          action: "card_removed",
+          actorLabelSnapshot: "Campaign player",
+          actorUserId: "player",
+          campaignId,
+          entryId: "entry-1",
+          layoutVersion: 2,
+          occurredAt: new Date("2026-10-17T09:05:00.000Z"),
+        },
+      ],
       revisions: [revision(), revision({ changeKind: "correction", revisionNumber: 2 })],
     });
     await expect(service.getHistory(campaignId, "entry-1", "player")).resolves.toMatchObject({
+      // Section 18.1 attribution projects a label snapshot and a time. The
+      // actor's user id is deliberately not projected into player-safe
+      // history, matching how revisions expose only `changedByLabel`.
+      boardEvents: [
+        {
+          actedByLabel: "Game Master",
+          kind: "card_added",
+          occurredAt: "2026-10-17T09:00:00.000Z",
+        },
+        {
+          actedByLabel: "Campaign player",
+          kind: "card_removed",
+          occurredAt: "2026-10-17T09:05:00.000Z",
+        },
+      ],
       currentEntryVersion: 4,
       revisions: [{ revisionNumber: 1 }, { revisionNumber: 2 }],
     });
+    expect(JSON.stringify(await service.getHistory(campaignId, "entry-1", "player"))).not.toContain(
+      "actorUserId",
+    );
 
     repositoryMock.loadSafeHistory.mockResolvedValueOnce({
       entry: entry({ state: "retracted" }),
+      placementEvents: [],
       revisions: [],
     });
     await expect(service.getHistory(campaignId, "entry-1", "player")).resolves.toMatchObject({
@@ -464,6 +503,15 @@ describe("BlackboardService public and privileged projections", () => {
     expect(repositoryMock.updatePlacement).toHaveBeenCalledOnce();
     expect(repositoryMock.deletePlacement).toHaveBeenCalledOnce();
     expect(repositoryMock.groupPlacements).toHaveBeenCalledOnce();
+
+    // Section 18.1 attribution: removal must carry the acting participant, so
+    // the Change Log can name who took the card off the board. Before this
+    // change deletePlacement received no actor at all. Note this runs as
+    // "player" and still resolves -- PO-SPW-2 proof 7 keeps removal open to
+    // any member, so threading the actor must not gate the call.
+    expect(repositoryMock.deletePlacement).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: expect.objectContaining({ id: "player" }) }),
+    );
   });
 
   it("fails closed for absent access, player recap/GM operations, and repository conflicts", async () => {

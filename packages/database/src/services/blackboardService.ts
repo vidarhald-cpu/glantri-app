@@ -285,6 +285,11 @@ export class BlackboardService {
     if (!history) throw new BlackboardReferenceUnavailableError();
     if (history.entry.state === "retracted") return { entry: mapTombstone(history.entry) };
     return blackboardSafeHistorySchema.parse({
+      boardEvents: history.placementEvents.map((event) => ({
+        actedByLabel: event.actorLabelSnapshot,
+        kind: event.action,
+        occurredAt: event.occurredAt.toISOString(),
+      })),
       currentEntryVersion: history.entry.entryVersion,
       entryId,
       revisions: history.revisions.map((revision) => ({
@@ -496,10 +501,20 @@ export class BlackboardService {
   }
 
   async deletePlacement(campaignId: string, entryId: string, userId: string, rawInput: unknown) {
-    await this.requireCommonAccess(campaignId, userId);
+    // Campaign membership, deliberately. PO-SPW-2 required proof 7 grants any
+    // participant the ability to remove material another participant placed,
+    // and "neither act requires GM authority". The actor is resolved here for
+    // section 18.1 attribution only -- it is not an authorization decision,
+    // and this call must keep succeeding for a non-GM member.
+    const access = await this.requireCommonAccess(campaignId, userId);
     const command = blackboardPlacementDeleteSchema.parse(rawInput);
     try {
-      await this.repository.deletePlacement({ campaignId, entryId, ...command });
+      await this.repository.deletePlacement({
+        actor: access.actor,
+        campaignId,
+        entryId,
+        ...command,
+      });
       return this.getBoard(campaignId, userId);
     } catch (error) {
       this.translateRepositoryError(error);

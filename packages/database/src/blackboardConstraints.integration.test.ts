@@ -92,6 +92,16 @@ if (!prisma) {
       "bb_placement_actor_label_check",
       "bb_placement_bounds_check",
       "bb_placement_entry_fk",
+      // Forgejo #667 section 18.1 attribution. Keyed on layoutVersion rather
+      // than entryVersion, because no placement operation advances
+      // entryVersion and the ordinary first pin would otherwise collide with
+      // the entry's own `initial` event row.
+      "bb_placement_event_action_check",
+      "bb_placement_event_actor_fk",
+      "bb_placement_event_actor_label_check",
+      "bb_placement_event_entry_fk",
+      "bb_placement_event_layout_version_check",
+      "bb_placement_event_pkey",
       "bb_placement_layout_fk",
       "bb_placement_pkey",
       "bb_placement_row_version_check",
@@ -518,6 +528,103 @@ if (!prisma) {
         where: { campaignId: campaign.id, entryId: entryA.entry.id },
       }),
     ).toBe(6);
+  });
+
+  /**
+   * Forgejo #667. Binds the key choice behind the section 18.1 attribution
+   * table: placement events are keyed on layoutVersion, not entryVersion.
+   *
+   * The second half is the reason the sibling CampaignBlackboardEntryEvent
+   * table could not be reused. Pin, unpin and re-pin all happen at one
+   * entryVersion, so that table's ("campaignId", "entryId", "entryVersion")
+   * primary key cannot hold them -- and its very first row would already
+   * collide with the `initial` event createEntry writes at entryVersion 1.
+   */
+  it("keys placement attribution on the layout sequence so repeated pin and unpin never collide", async () => {
+    const gm = await createTestUser(prisma, {
+      displayName: "Constraint GM",
+      roles: ["game_master"],
+    });
+    const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+    const entry = (await service.createEntry(campaign.id, gm.id, {
+      category: "clue_fact",
+      fact: "Pinned repeatedly",
+      title: "Churn",
+    })) as { entry: { id: string } };
+
+    // Pin, unpin and pin again. The entry stays at entryVersion 1 throughout.
+    let layoutVersion = 0;
+    for (const _cycle of [0, 1]) {
+      await service.createPlacement(campaign.id, gm.id, {
+        entryId: entry.entry.id,
+        expectedLayoutVersion: layoutVersion,
+        height: 180,
+        layer: 1,
+        width: 260,
+        x: 0,
+        y: 0,
+      });
+      layoutVersion += 1;
+      await service.deletePlacement(campaign.id, entry.entry.id, gm.id, {
+        expectedLayoutVersion: layoutVersion,
+        expectedRowVersion: 1,
+      });
+      layoutVersion += 1;
+    }
+
+    const events = await prisma.campaignBlackboardPlacementEvent.findMany({
+      orderBy: { layoutVersion: "asc" },
+      where: { campaignId: campaign.id, entryId: entry.entry.id },
+    });
+    expect(events.map((event) => event.action)).toEqual([
+      "card_added",
+      "card_removed",
+      "card_added",
+      "card_removed",
+    ]);
+    // Four events, all at one entryVersion, each on its own layoutVersion.
+    expect(events.map((event) => event.layoutVersion)).toEqual([1, 2, 3, 4]);
+    expect(
+      await prisma.campaignBlackboardEntry.findUnique({ where: { id: entry.entry.id } }),
+    ).toMatchObject({ entryVersion: 1 });
+
+    const insertRawPlacementEvent = (
+      eventLayoutVersion: number,
+      action: string,
+      actorLabel = "Constraint GM",
+    ) =>
+      prisma.$executeRaw(Prisma.sql`
+        INSERT INTO "CampaignBlackboardPlacementEvent" (
+          "campaignId",
+          "layoutVersion",
+          "entryId",
+          "action",
+          "actorUserId",
+          "actorLabelSnapshot"
+        ) VALUES (
+          ${campaign.id},
+          ${eventLayoutVersion},
+          ${entry.entry.id},
+          ${action},
+          ${gm.id},
+          ${actorLabel}
+        )
+      `);
+
+    // The primary key is what makes the sequence collision-free.
+    await expect(insertRawPlacementEvent(2, "card_added")).rejects.toThrow();
+    // Only the two section 18.1 kinds are storable. A drag or a grouping has
+    // no representation here, so section 18.2 cannot be logged by accident.
+    await expect(insertRawPlacementEvent(90, "card_moved")).rejects.toThrow();
+    await expect(insertRawPlacementEvent(91, "card_grouped")).rejects.toThrow();
+    // layoutVersion 0 is the pre-first-placement layout, never an event.
+    await expect(insertRawPlacementEvent(0, "card_added")).rejects.toThrow();
+    // Attribution must name somebody.
+    await expect(insertRawPlacementEvent(92, "card_added", "   ")).rejects.toThrow();
+
+    expect(
+      await prisma.campaignBlackboardPlacementEvent.count({ where: { campaignId: campaign.id } }),
+    ).toBe(4);
   });
 
   it("rejects headless/mismatched grant audit and partial membership deletion at commit", async () => {

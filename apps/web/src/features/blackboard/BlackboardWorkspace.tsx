@@ -1470,6 +1470,32 @@ export function BlackboardWorkspace({
                       </li>
                     ))}
                   </ol>
+                  <h4>Board activity</h4>
+                  {history.boardEvents.length > 0 ? (
+                    <ol className={styles.historyList}>
+                      {[...history.boardEvents].reverse().map((boardEvent, index) => (
+                        <li
+                          className={styles.historyItem}
+                          key={`${boardEvent.occurredAt}-${boardEvent.kind}-${index}`}
+                        >
+                          <strong>
+                            {boardEvent.kind === "card_added"
+                              ? "Pinned to the board"
+                              : "Removed from the board"}
+                          </strong>
+                          <span className={`${styles.muted} glantri-helper-text`}>
+                            {boardEvent.actedByLabel} · {displayDate(boardEvent.occurredAt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className={`${styles.muted} glantri-helper-text`}>
+                      No board activity has been recorded for this reference. Pinning and removal
+                      started being attributed only recently, so this does not mean nobody pinned or
+                      removed it: earlier board changes were never recorded and cannot be recovered.
+                    </p>
+                  )}
                 </section>
               ) : null}
             </>
