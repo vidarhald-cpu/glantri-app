@@ -40,6 +40,28 @@ function isTableSeparator(line: string): boolean {
   return /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line.trim());
 }
 
+const UNORDERED_ITEM_PATTERN = /^[-*]\s+(.+)$/;
+const ORDERED_ITEM_PATTERN = /^\d+\.\s+(.+)$/;
+
+/**
+ * Whether `lines[index]` opens a block of its own rather than continuing the text above it.
+ *
+ * One predicate for two callers, deliberately: it decides both where a paragraph stops and where a
+ * wrapped list item stops, so the two can never drift apart. A blank line is not consulted here —
+ * each caller already treats it as the end of what it is collecting.
+ */
+function startsNewBlock(lines: string[], index: number): boolean {
+  const candidate = lines[index].trim();
+
+  return (
+    candidate.startsWith("```") ||
+    /^(#{1,6})\s+/.test(candidate) ||
+    UNORDERED_ITEM_PATTERN.test(candidate) ||
+    ORDERED_ITEM_PATTERN.test(candidate) ||
+    (candidate.includes("|") && index + 1 < lines.length && isTableSeparator(lines[index + 1]))
+  );
+}
+
 export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: MarkdownBlock[] = [];
@@ -100,23 +122,40 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
       continue;
     }
 
-    const unorderedList = /^[-*]\s+(.+)$/.exec(trimmed);
-    const orderedList = /^\d+\.\s+(.+)$/.exec(trimmed);
-    if (unorderedList || orderedList) {
-      const ordered = Boolean(orderedList);
+    const orderedList = ORDERED_ITEM_PATTERN.test(trimmed);
+    if (orderedList || UNORDERED_ITEM_PATTERN.test(trimmed)) {
+      const ordered = orderedList;
+      const itemPattern = ordered ? ORDERED_ITEM_PATTERN : UNORDERED_ITEM_PATTERN;
       const items: string[] = [];
 
       while (index < lines.length) {
-        const itemMatch = ordered
-          ? /^\d+\.\s+(.+)$/.exec(lines[index].trim())
-          : /^[-*]\s+(.+)$/.exec(lines[index].trim());
+        const itemMatch = itemPattern.exec(lines[index].trim());
 
         if (!itemMatch) {
           break;
         }
 
-        items.push(itemMatch[1]);
+        /**
+         * GFM lazy continuation: the item owns every following non-blank line until something
+         * opens a block of its own. `docs/rules` prose is Prettier-wrapped at 100 columns, so a
+         * sentence longer than that arrives as an indented continuation line, and before this the
+         * list ended at the wrap — truncating the item, emitting its tail as a stray paragraph,
+         * and restarting the next `<ol>` at 1.
+         *
+         * Lazy continuation is enough for this corpus: no registered reader page nests a list or
+         * puts a blank line inside an item, and nesting is unchanged by this loop because an
+         * indented marker still matches `itemPattern` and is collected as a sibling, exactly as it
+         * was before.
+         */
+        const itemLines = [itemMatch[1]];
         index += 1;
+
+        while (index < lines.length && lines[index].trim() && !startsNewBlock(lines, index)) {
+          itemLines.push(lines[index].trim());
+          index += 1;
+        }
+
+        items.push(itemLines.join(" "));
       }
 
       blocks.push({
@@ -131,14 +170,7 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
     while (index < lines.length) {
       const candidate = lines[index].trim();
 
-      if (
-        !candidate ||
-        candidate.startsWith("```") ||
-        /^(#{1,6})\s+/.test(candidate) ||
-        /^[-*]\s+/.test(candidate) ||
-        /^\d+\.\s+/.test(candidate) ||
-        (candidate.includes("|") && index + 1 < lines.length && isTableSeparator(lines[index + 1]))
-      ) {
+      if (!candidate || startsNewBlock(lines, index)) {
         break;
       }
 

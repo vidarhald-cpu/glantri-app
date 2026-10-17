@@ -70,6 +70,145 @@ type ParsedTable = readonly (readonly string[])[];
 /** Any line GFM would accept as a table delimiter row, including ones the renderer refuses. */
 const PLAUSIBLE_DELIMITER_ROW = /^\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?$/;
 
+const SOURCE_ORDERED_ITEM = /^\d+\.\s+(.+)$/;
+const SOURCE_UNORDERED_ITEM = /^[-*]\s+(.+)$/;
+
+/**
+ * Whether a source line opens a block of its own rather than continuing the item above it.
+ *
+ * A fence, a heading, another list marker and a table header all do; anything else non-blank is
+ * the continuation of whatever it follows. The table test uses `PLAUSIBLE_DELIMITER_ROW` above, so
+ * this scan reads a `--:` delimiter as the table GFM says it is even where the renderer refuses it
+ * — a disagreement there is the #612 defect and is reported by the paragraph assertion below.
+ */
+function sourceLineOpensOwnBlock(lines: readonly string[], index: number): boolean {
+  const line = lines[index]!.trim();
+
+  return (
+    line.startsWith("```") ||
+    /^#{1,6}\s+/.test(line) ||
+    SOURCE_ORDERED_ITEM.test(line) ||
+    SOURCE_UNORDERED_ITEM.test(line) ||
+    (line.includes("|") &&
+      index + 1 < lines.length &&
+      PLAUSIBLE_DELIMITER_ROW.test(lines[index + 1]!.trim()))
+  );
+}
+
+interface SourceList {
+  items: string[];
+  ordered: boolean;
+}
+
+/**
+ * Every list a page's raw Markdown contains, each item joined across the continuation lines GFM's
+ * lazy continuation gives it, read from the source with no help from the renderer.
+ *
+ * This is the same stance as `PLAUSIBLE_DELIMITER_ROW` above, for the same reason: a second,
+ * deliberately independent reading of the published source, written against what the Markdown
+ * means rather than against how `parseMarkdownBlocks` happens to walk it. It shares no code with
+ * the renderer, so the renderer is compared to the documents rather than to itself.
+ *
+ * It is deliberately **not** a mirror of the renderer in one respect: it reads a loose list the
+ * way GFM does, as one list, while the renderer still ends a list at a blank line. That
+ * divergence is the point. Forgejo #681's ruling excludes loose-list rendering from the renderer
+ * because no registered page authors one, and makes this scanner the thing that stops such
+ * content entering silently: the first page to author a loose list fails this check by name
+ * instead of quietly shipping a list renumbered from 1.
+ *
+ * An earlier version of this scanner did mirror the renderer's blank-line behaviour, so both
+ * sides independently agreed on "several lists" and a loose list passed. A guard written
+ * alongside a fix can inherit the fix's blind spot and still look independent; comparing two
+ * implementations only catches what one of them does not share.
+ *
+ * The authoring constraint that follows, which is real: two genuinely separate lists of the same
+ * marker type separated only by a blank line read as one loose list here and fail. GFM reads them
+ * as one list too, so this is correct rather than a false positive, but a future author needs a
+ * separator — a heading, a paragraph, or the other marker type — between adjacent same-type
+ * lists. No registered page does this today.
+ *
+ * The defect it exists to prevent: the renderer matched items one line at a time and ended the
+ * list at the first line carrying no marker. `docs/rules` prose is Prettier-wrapped at 100
+ * columns, so every item longer than that was truncated at the wrap, its tail rendered as a
+ * paragraph beneath the list, and the next item opened a fresh `<ol>` numbered from 1. Forgejo
+ * #681 measured 81 wrapped items across 10 of the 14 registered reader pages.
+ */
+function sourceLists(markdown: string): SourceList[] {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const lists: SourceList[] = [];
+  let index = 0;
+  let insideFence = false;
+
+  while (index < lines.length) {
+    const line = lines[index]!.trim();
+
+    if (line.startsWith("```")) {
+      insideFence = !insideFence;
+      index += 1;
+      continue;
+    }
+
+    const ordered = SOURCE_ORDERED_ITEM.test(line);
+
+    if (insideFence || (!ordered && !SOURCE_UNORDERED_ITEM.test(line))) {
+      index += 1;
+      continue;
+    }
+
+    /* A run of same-marker items; a marker of the other type starts a list of its own. */
+    const itemPattern = ordered ? SOURCE_ORDERED_ITEM : SOURCE_UNORDERED_ITEM;
+    const items: string[] = [];
+
+    while (index < lines.length) {
+      const match = itemPattern.exec(lines[index]!.trim());
+
+      if (!match) {
+        break;
+      }
+
+      const item = [match[1]!];
+      index += 1;
+
+      while (
+        index < lines.length &&
+        lines[index]!.trim() &&
+        !sourceLineOpensOwnBlock(lines, index)
+      ) {
+        item.push(lines[index]!.trim());
+        index += 1;
+      }
+
+      items.push(item.join(" "));
+
+      /*
+       * A blank line between two items of the same marker is a loose list, and GFM reads it as
+       * one list. The renderer does not: it ends the list at the blank line and opens a new one,
+       * which is the renumbering symptom this issue exists to remove. Loose-list *rendering* is
+       * deliberately out of scope (Forgejo #681, control-plane ruling of 2026-10-18), so this
+       * scanner reads the GFM meaning while the renderer does not, and the equality below then
+       * fails loudly on the first page that authors one.
+       */
+      let lookahead = index;
+
+      while (lookahead < lines.length && !lines[lookahead]!.trim()) {
+        lookahead += 1;
+      }
+
+      if (
+        lookahead > index &&
+        lookahead < lines.length &&
+        itemPattern.test(lines[lookahead]!.trim())
+      ) {
+        index = lookahead;
+      }
+    }
+
+    lists.push({ items, ordered });
+  }
+
+  return lists;
+}
+
 async function readPageBlocks(id: string) {
   const document = await getRulesDocumentById(id);
   return parseMarkdownBlocks(document.markdown);
@@ -294,8 +433,107 @@ describe("rules documentation reader pages render as the elements they are meant
           );
         }
       }
+
+      /*
+       * Every list the source carries must reach the reader as that same list, with each item
+       * whole. This is one equality rather than a set of spot checks on purpose: a truncated item,
+       * a tail left behind as a stray paragraph, a list split in two so its numbering restarts at
+       * 1, and an item invented or lost all fail it, in either direction.
+       */
+      const document = await getRulesDocumentById(id);
+
+      expect(
+        blocks.flatMap((block) =>
+          block.type === "list" ? [{ items: block.items, ordered: block.ordered }] : [],
+        ),
+        `${fileName}: the rendered lists are not the lists the document's Markdown contains`,
+      ).toEqual(sourceLists(document.markdown));
     },
   );
+});
+
+/**
+ * Forgejo #681 item 4, asserted as a property of the guard itself rather than of any page.
+ *
+ * The ruling excludes loose-list rendering from the renderer and makes this check the thing that
+ * keeps the exclusion safe, so the exclusion is only as good as the check. These cases pin that
+ * directly: they run the same two readings the per-page assertion above compares — the production
+ * renderer and `sourceLists` — over loose-list Markdown, and require them to **disagree**, which
+ * is what makes the per-page assertion fail.
+ *
+ * A reviewer reproduces item 4 by running this block. It needs no fixture, no page and no method
+ * of its own, and it fails the moment someone "fixes" the scanner to agree with the renderer
+ * again — which is exactly how the silent path was reopened once already.
+ */
+describe("a loose list is a loud failure, not silent renumbering", () => {
+  function readings(markdown: string) {
+    return {
+      rendered: parseMarkdownBlocks(markdown).flatMap((block) =>
+        block.type === "list" ? [{ items: block.items, ordered: block.ordered }] : [],
+      ),
+      source: sourceLists(markdown),
+    };
+  }
+
+  it.each([
+    [
+      "ordered",
+      `1. First item.
+
+2. Second item.
+
+3. Third item.
+`,
+    ],
+    [
+      "unordered",
+      `- First item.
+
+- Second item.
+`,
+    ],
+    [
+      "wrapped and loose together",
+      `1. First item that runs past the column limit and
+   continues here.
+
+2. Second item.
+`,
+    ],
+  ])("fails the page check for a %s loose list", (_name, markdown) => {
+    const { rendered, source } = readings(markdown);
+
+    /* The source is one list; the renderer splits it, which is the renumbering symptom. */
+    expect(source).toHaveLength(1);
+    expect(rendered.length).toBeGreaterThan(1);
+    /* So the equality the per-page check makes cannot hold. */
+    expect(rendered).not.toEqual(source);
+  });
+
+  it("does not fire on two separate lists held apart by prose", () => {
+    /* The ordinary authored shape must still pass, or the guard is useless noise. */
+    const markdown = `- First list item.
+
+A paragraph between the two lists.
+
+- Second list item.
+`;
+    const { rendered, source } = readings(markdown);
+
+    expect(source).toHaveLength(2);
+    expect(rendered).toEqual(source);
+  });
+
+  it("does not fire on a list that simply ends", () => {
+    const markdown = `1. Only item.
+
+A following paragraph.
+`;
+    const { rendered, source } = readings(markdown);
+
+    expect(source).toHaveLength(1);
+    expect(rendered).toEqual(source);
+  });
 });
 
 /**
