@@ -436,6 +436,35 @@ export function getWorkbookOneItemDefensePair(input: {
   };
 }
 
+/**
+ * The Parry modifier an Equipment template contributes when it is wielded as a Parry source, or
+ * `null` when the template authors none.
+ *
+ * This is the single eligibility fact behind `canTemplateParry`. Every Parry row below reads the
+ * same `parry` field, so reading it in one place keeps the eligibility test and the calculation
+ * that consumes it from drifting apart.
+ */
+export function resolveTemplateParryModifier(
+  template: { parry?: number | null } | null | undefined,
+): number | null {
+  return template?.parry ?? null;
+}
+
+/**
+ * Whether a wielded Equipment template may participate as a Parry source at all.
+ *
+ * A template with no authored Parry modifier cannot be scored by any Parry row, so committing it
+ * as an included Parry source would record a source the canonical calculation must then refuse.
+ * This is deliberately a property of the template alone: it answers "is this a Parry instrument",
+ * not "can this character parry right now", so a defender who is merely untrained in Parry still
+ * keeps an eligible source and is refused later on the honest, character-level ground.
+ *
+ * Thrown and missile modes author `parry: null` on purpose and are correctly ineligible here.
+ */
+export function canTemplateParry(template: { parry?: number | null } | null | undefined): boolean {
+  return resolveTemplateParryModifier(template) !== null;
+}
+
 export function getWorkbookWeaponRowParry(input: {
   armorTemplate: ArmorTemplate | null;
   characterInputs?: CombatStateCharacterInputs;
