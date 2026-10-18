@@ -7,8 +7,7 @@ import {
 
 import { resolveCanonicalParticipantCalculationContext } from "./combatParticipantCalculationResolution";
 
-export interface CanonicalScenarioParticipantDefenseCalculation
-  extends CompleteCombatDefenseCalculation {
+export interface CanonicalScenarioParticipantDefenseCalculation extends CompleteCombatDefenseCalculation {
   authority: "canonical_scenario_state";
   equipmentLoadoutRevision?: string;
   participantId: string;
@@ -38,6 +37,20 @@ export function resolveCanonicalScenarioParticipantDefense(input: {
 }): ScenarioParticipantDefenseCalculation {
   const context = resolveCanonicalParticipantCalculationContext(input.participant);
   if (context.completeness !== "complete") return context;
+  // #694. This calculation needs an encumbrance level, encumbrance is derived from a carried load,
+  // and a carried load is read from the Character-sourced equipment aggregate. A participant with
+  // no aggregate has no carried-load projection, so the fact is absent and is reported as absent.
+  // It is deliberately not defaulted to an unencumbered load: that would publish a DB and DM
+  // nobody authored, which is the error class #665's ruling forbade for a fallback Parry value.
+  if (context.equipmentProvenance === "absent") {
+    return {
+      authority: "canonical_scenario_state",
+      completeness: "partial",
+      missingFacts: ["character_equipment_aggregate"],
+      participantId: input.participant.id,
+      sourceSnapshotId: context.sourceSnapshotId,
+    };
+  }
   const sourceSnapshotId = context.sourceSnapshotId;
   const missingFacts = new Set<string>();
   if (!context.locationsComplete) missingFacts.add("storage_locations");
@@ -45,7 +58,7 @@ export function resolveCanonicalScenarioParticipantDefense(input: {
     context.locations.map((location) => [location.id, location] as const),
   );
   const movement = resolveCombatMovementBurden({
-    characterId: context.characterId,
+    characterId: context.characterId ?? undefined,
     characteristics: {
       constitution: context.characterInputs.constitution,
       size: context.characterInputs.size,

@@ -371,6 +371,10 @@ import {
   buildActiveInspectorCorePresentation,
   projectGmCombatEvents,
 } from "./view-models/activeInspectorPresentation";
+import {
+  getInspectedDeclarationParticipantAliases,
+  resolveInspectedDeclarationCommandDescriptor,
+} from "./view-models/inspectedDeclarationCommand";
 import { getOrCreateCombatModifierReviewInputSnapshot } from "./view-models/modifierReviewInputSnapshot";
 import { buildCombatStepWorkflowStatusPresentation } from "./view-models/combatStepWorkflowStatus";
 import {
@@ -10002,7 +10006,7 @@ export default function CombatRoundManagerPanel({
   }
 
   async function saveInspectorDeclaration(candidate?: CurrentActionCommandDescriptor) {
-    const descriptor = resolveCombatTaskCommandContext({
+    const cursorDescriptor = resolveCombatTaskCommandContext({
       descriptor: candidate,
       expectedCommandTypes: [
         "declare_action",
@@ -10012,10 +10016,33 @@ export default function CombatRoundManagerPanel({
       presentation: currentActionPresentation,
       requiredFields: ["executionGroupId", "expectedRevision", "participantId", "taskId"],
     });
-    if (!descriptor) {
+    if (!cursorDescriptor) {
       setSaveError("Combat state changed. Review the current action before continuing.");
       return;
     }
+    // #691 — every selector this handler reads below is derived from `selectedScenarioParticipant`
+    // and `inspector.participant`, the participant the GM is editing: `inspectorDraft` (action,
+    // phase targets, attack-source ids), `inspectorPhaseLoadoutSummaries` (`phaseAttackSources`,
+    // `phaseWeaponNames`), `inspectorGeneratedCombatContext`, `combatItemOptions`. The descriptor
+    // came from the cursor task instead, so browsing with "Next participant" mixed three
+    // participant contexts into one request — actor from the cursor, target and attack source from
+    // the browsed row. With a virtual unarmed source, which every participant legitimately owns,
+    // that was accepted and persisted as a declaration targeting its own declarer.
+    //
+    // Declaring out of cursor order is legitimate GM behaviour, not an error:
+    // `isSelectedCombatRoundStepCurrentForGm` keeps declaration open for every participant while
+    // the round is in DE, and the cursor advance is documented as data-entry convenience. So the
+    // descriptor is resolved from the edited participant's own already-projected `declare_action`
+    // task, which makes the submitted actor, source and target the ones on screen. Nothing is
+    // retargeted or invented: with no such task the cursor descriptor is kept unchanged, and the
+    // modifier-review commands are untouched — they keep their own
+    // `selectedParticipantOwnsModifierReview` guard.
+    const descriptor = resolveInspectedDeclarationCommandDescriptor({
+      descriptor: cursorDescriptor,
+      participantAliases: getInspectedDeclarationParticipantAliases(selectedEncounterParticipant),
+      participantId: inspector.participant?.participantId,
+      projection: combatProgressionPresentation,
+    });
     if (
       descriptor.commandType === "resolve_damage" &&
       currentActionPresentation?.taskKind === "damage_roll" &&
@@ -10162,6 +10189,7 @@ export default function CombatRoundManagerPanel({
       : validateCombatDeclarationTargets({
           actingParticipantId: taskEncounterParticipant.id,
           actionId: inspectorDraft.actionId || undefined,
+          disarmPhase: disarmMethod ? inspectorDraft.disarmSelection.phase : undefined,
           movementKind: inspectorDraft.movementIntent.mode,
           participantIdentities: roundState.participants,
           phaseContexts: requestPhaseContexts,

@@ -398,6 +398,7 @@ import { selectCurrentCombatModifierValidationTask } from "./combatModifierValid
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
 import {
   buildCanonicalCombatDefenseSnapshot,
+  getCombatDefenseRefusalMessage,
   resolveCanonicalParryBaseForDefenseSnapshot,
 } from "./combatDefenseSnapshotResolution";
 import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeResolution";
@@ -9740,9 +9741,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
+      // #691 — this runs on the canonicalized declaration, before `nextParticipantState` and
+      // `recordCombatRoundDeclaration`, so a declaration whose attack targets its own attacker is
+      // refused rather than persisted. `disarmPhase` is passed so the invariant also covers the
+      // phase a Disarm turns into an attack opportunity.
       const targetValidation = validateCombatDeclarationTargets({
         actingParticipantId: encounterParticipant.id,
         actionId: body.actionId,
+        disarmPhase: body.disarm?.phase,
         movementKind: submittedMovementIntent?.mode,
         participantIdentities: roundState.participants,
         phaseContexts: declarationPhaseContexts,
@@ -17665,9 +17671,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             participant: defender,
           });
           if (canonicalDefense.completeness !== "complete") {
+            // #694. The refusal condition is unchanged; what the GM is told is not. A missile
+            // shot's defense needs the defender's carried load, which an opponent created from a
+            // Template does not have, and no amount of refreshing will give it one.
             return reply.code(409).send({
               code: "defense_context_unavailable",
-              error: "Required defense context is unavailable. Refresh combat.",
+              error: getCombatDefenseRefusalMessage(canonicalDefense.missingFacts),
             });
           }
           const breakOffConsequence = getCombatBreakOffPairConsequence({
