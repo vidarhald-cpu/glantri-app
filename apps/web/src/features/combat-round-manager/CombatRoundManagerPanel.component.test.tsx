@@ -2922,27 +2922,27 @@ describe("CombatRoundManagerPanel performance fixture", () => {
  * "Next participant", then declares.
  *
  * Every selector in the declaration form is derived from the participant the inspector is browsed
- * to, while the submission was bound to the active declaration descriptor. Pressing Declare across
- * that divergence sent three participant contexts in one request — actor from the descriptor,
- * target and attack source from the browsed row. Measured at the baseline with this very fixture,
- * the request carried `scenarioParticipantId: "scenario-attacker"` and
+ * to, while the command descriptor came from the cursor task. Pressing Declare across that
+ * divergence sent three participant contexts in one request — actor from the cursor, target and
+ * attack source from the browsed row. Measured at the baseline with this very fixture, the request
+ * carried `scenarioParticipantId: "scenario-attacker"` and
  * `phaseContexts.phase1.targetParticipantId: "encounter-attacker"` while the inspector read
  * "Combat inspector — Scyrian cavalry guy", so the declarer targeted itself; with the virtual
  * unarmed source, which every participant legitimately owns, the API accepted and persisted it.
  *
- * "Next participant" is inspection and navigation. It must not change the actor, source or target
- * submitted for the active declaration, so the submission stays bound to the active context and is
- * refused rather than normalised when the panel is not showing it. The sanctioned flow — declare
- * for the participant the inspector is actually on, as the shipped e2e helper does — is unchanged.
+ * Declaring out of cursor order is legitimate GM behaviour, not an error:
+ * `isSelectedCombatRoundStepCurrentForGm` keeps declaration open for every participant while the
+ * round is in DE, and the cursor advance is documented there as data-entry convenience. So the
+ * descriptor is resolved from the edited participant's own projected `declare_action` task, and the
+ * submission carries **one coherent context** — the actor, source and target the GM is looking at.
  */
-describe("CombatRoundManagerPanel declaration bound to the active participant (#691)", () => {
+describe("CombatRoundManagerPanel declaration bound to the edited participant (#691)", () => {
   const participants = () => [
     scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
     scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
   ];
-  const refusal =
-    "The active declaration belongs to The Gladiator. Select that participant in the inspector before declaring.";
 
+  /** The shipped `selectGmInspectorParticipant` pattern: browse with "Next participant". */
   async function browseToDefender(): Promise<void> {
     expect(
       await screen.findByText("Combat inspector — The Gladiator · Round 1 · Declaration"),
@@ -2953,24 +2953,36 @@ describe("CombatRoundManagerPanel declaration bound to the active participant (#
     ).toBeInTheDocument();
   }
 
-  it("refuses an unarmed browse-then-declare and sends no request", async () => {
-    // The unarmed projection: the case that used to be accepted and persisted, because the virtual
-    // source is one both participants legitimately own.
+  it("declares out of cursor order for the browsed participant with one coherent unarmed context", async () => {
+    // Unarmed is the case that previously persisted, and the common case for the seeded Training
+    // Bandit, so it is the one that must come out coherent rather than merely refused.
     mocks.unequippedLoadout.value = true;
+    const scenarioParticipants = participants();
+    const encounter = buildEncounter();
+    // The cursor is on the first participant, so this declaration is explicitly out of order.
+    const activePresentation = buildActiveCombatPresentation({
+      encounterId: encounter.id,
+      encounterRevision: encounter.updatedAt,
+      resolveStepStatus: ({ status }) => status,
+      roundState: combatRoundStateSchema.parse(encounter.combatRoundState),
+      scenarioParticipants,
+    });
+    expect(activePresentation.currentAction?.primaryAction.descriptor?.participantId).toBe(
+      "encounter-attacker",
+    );
+    mocks.submitDeclaration.mockResolvedValue({
+      encounter: { ...encounter, updatedAt: "2026-07-23T10:05:00.000Z" },
+      participant: scenarioParticipants[1],
+    });
 
     render(
-      <CombatRoundManagerPanel
-        encounter={buildEncounter()}
-        scenarioParticipants={participants()}
-      />,
+      <CombatRoundManagerPanel encounter={encounter} scenarioParticipants={scenarioParticipants} />,
     );
     await browseToDefender();
 
     fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
       target: { value: "attack_parry" },
     });
-    // The selectors on screen belong to the browsed participant, and its only opponent is the
-    // active declaration participant — which is how the declaration came to target its declarer.
     const attackSource = (await screen.findAllByRole("combobox", { name: "Attack source" }))[0]!;
     fireEvent.change(attackSource, {
       target: { value: "unarmed:virtual-weapon-template-punch" },
@@ -2981,18 +2993,38 @@ describe("CombatRoundManagerPanel declaration bound to the active participant (#
 
     fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
 
-    expect((await screen.findAllByText(refusal)).length).toBeGreaterThan(0);
-    expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+    const sent = mocks.submitDeclaration.mock.calls[0]?.[0];
+    // One participant context: the actor is the browsed participant, not the cursor participant,
+    // and the target is the opponent the GM chose from the browsed row's own options.
+    expect(sent).toMatchObject({
+      phaseContexts: { phase1: { targetParticipantId: "encounter-attacker" } },
+      scenarioParticipantId: "scenario-defender",
+    });
+    // The attack source is the browsed participant's own choice, and it is not the declarer.
+    expect(sent.phaseAttackSources.phase1).toMatchObject({
+      slot: "virtual",
+      sourceKind: "unarmed",
+      templateId: "virtual-weapon-template-punch",
+    });
+    expect(sent.phaseContexts.phase1.targetParticipantId).not.toBe("encounter-defender");
   });
 
-  it("refuses an armed browse-then-declare and sends no request", async () => {
-    // The armed projection: the API already refused this one as a missing weapon source, which was
-    // recoverable. It is refused here too, so the panel no longer depends on that accident.
+  it("declares out of cursor order for the browsed participant with one coherent armed context", async () => {
+    // The equipped projection: a real weapon source rather than a virtual unarmed one. The API
+    // already refused the armed mixed-context request as a missing weapon source, which was
+    // recoverable; it must now succeed coherently instead of relying on that accident. Which
+    // participant *owns* the item is proven server-side in the declaration integration suite,
+    // where ownership is real; this fixture's loadout helper is shared across participants.
+    const scenarioParticipants = participants();
+    const encounter = buildEncounter();
+    mocks.submitDeclaration.mockResolvedValue({
+      encounter: { ...encounter, updatedAt: "2026-07-23T10:05:00.000Z" },
+      participant: scenarioParticipants[1],
+    });
+
     render(
-      <CombatRoundManagerPanel
-        encounter={buildEncounter()}
-        scenarioParticipants={[participants()[0]!, scenarioParticipantWithDefenseLoadout()]}
-      />,
+      <CombatRoundManagerPanel encounter={encounter} scenarioParticipants={scenarioParticipants} />,
     );
     await browseToDefender();
 
@@ -3005,13 +3037,22 @@ describe("CombatRoundManagerPanel declaration bound to the active participant (#
 
     fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
 
-    expect((await screen.findAllByText(refusal)).length).toBeGreaterThan(0);
-    expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+    const sent = mocks.submitDeclaration.mock.calls[0]?.[0];
+    expect(sent).toMatchObject({
+      phaseContexts: { phase1: { targetParticipantId: "encounter-attacker" } },
+      scenarioParticipantId: "scenario-defender",
+    });
+    // A real weapon source, chosen from the browsed row, submitted under that row's own name —
+    // the divergence this repaired sent exactly this source under the cursor participant's name.
+    expect(sent.phaseAttackSources.phase1).toMatchObject({
+      scenarioItemId: "long-sword-primary",
+      slot: "primary",
+      sourceKind: "weapon",
+    });
   });
 
-  it("still declares for the participant the inspector is actually on", async () => {
-    // The sanctioned flow the shipped e2e helper uses: browse to the participant whose declaration
-    // is active, then declare. Nothing about it changes.
+  it("still declares for the participant the inspector is on, when that is the cursor participant", async () => {
     mocks.unequippedLoadout.value = true;
     const scenarioParticipants = participants();
     const encounter = buildEncounter();
@@ -3041,12 +3082,9 @@ describe("CombatRoundManagerPanel declaration bound to the active participant (#
     fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
 
     await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
-    // One participant context throughout: the actor, the target and the source all belong to the
-    // participant the inspector is showing.
     expect(mocks.submitDeclaration.mock.calls[0]?.[0]).toMatchObject({
       phaseContexts: { phase1: { targetParticipantId: "encounter-defender" } },
       scenarioParticipantId: "scenario-attacker",
     });
-    expect(screen.queryByText(refusal)).toBeNull();
   });
 });
