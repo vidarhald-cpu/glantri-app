@@ -19,8 +19,10 @@ import {
 } from "./combatManualCalculationResolution";
 import {
   buildCanonicalCombatDefenseSnapshot,
+  getCombatDefenseRefusalMessage,
   resolveCanonicalParryBaseForDefenseSnapshot,
 } from "./combatDefenseSnapshotResolution";
+import { resolveCanonicalParticipantCalculationContext } from "./combatParticipantCalculationResolution";
 
 function buildParticipant(): ScenarioParticipant {
   const characterId = "character-defender";
@@ -739,5 +741,181 @@ describe("server-owned manual combat inputs", () => {
       completeness: "partial",
       missingFacts: ["weapon_source_identity"],
     });
+  });
+});
+
+/**
+ * Forgejo #694. A Template-derived temporary actor has no Character and therefore no
+ * Character-sourced equipment aggregate — `scenarioParticipantSnapshotSchema` types that
+ * projection's provenance as `character_equipment_aggregate`, and #666 settled that deliberately.
+ * The defense-review step used to demand both a Character identifier and that aggregate, so the
+ * same participant was resolvable for the attack step and unresolvable for the next one. These
+ * tests bind the capability that closes the asymmetry, and the boundary that keeps a Character
+ * participant's missing aggregate a refusal.
+ */
+function buildTemporaryActorParticipant(input?: { omitBuild?: boolean }): ScenarioParticipant {
+  const character = buildParticipant();
+  const build = characterBuildSchema.parse(character.snapshot.build);
+  return {
+    controlledByUserId: undefined,
+    createdAt: "2026-08-07T10:00:00.000Z",
+    id: "scenario-temporary-actor",
+    isActive: true,
+    joinSource: "gm_added",
+    role: "npc",
+    scenarioId: "scenario-1",
+    snapshot: {
+      ...(input?.omitBuild ? {} : { build: { ...build, id: "temporary-actor", name: "Bandit" } }),
+      displayName: "Bandit",
+      entity: { kind: "npc", name: "Bandit" },
+      sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+    },
+    sourceType: "entity",
+    state: character.state,
+    updatedAt: "2026-08-07T10:00:00.000Z",
+  } as unknown as ScenarioParticipant;
+}
+
+describe("#694 defense resolution for a participant with no Character equipment aggregate", () => {
+  it("resolves a complete calculation context from the build alone and records the aggregate as absent", () => {
+    const context = resolveCanonicalParticipantCalculationContext(buildTemporaryActorParticipant());
+
+    expect(context.completeness).toBe("complete");
+    if (context.completeness !== "complete") return;
+    // Nothing is synthesised to satisfy a Character-shaped test: the identifier and the aggregate
+    // are reported as the absences they are, and every equipment-derived slot stays empty.
+    expect(context.equipmentProvenance).toBe("absent");
+    expect(context.characterId).toBeNull();
+    expect(context.equipmentState).toBeNull();
+    expect(context.primaryWeaponTemplate).toBeNull();
+    expect(context.secondaryWeaponTemplate).toBeNull();
+    expect(context.readyShieldTemplate).toBeNull();
+    expect(context.armorTemplate).toBeNull();
+    expect(context.loadout).toBeUndefined();
+    expect([...context.itemsById.keys()]).toEqual([]);
+  });
+
+  it("commits a defense review for that participant with no Parry sources", () => {
+    const snapshot = buildCanonicalCombatDefenseSnapshot({
+      attacker: buildArmedParticipant(),
+      attackerCombatantId: "attacker",
+      attackId: "1:opportunity:attack-1",
+      attackOpportunityId: "opportunity-1",
+      aware: true,
+      defender: buildTemporaryActorParticipant(),
+      defenderCombatantId: "defender",
+      phase: "phase1",
+      reviewedAt: "2026-08-07T10:05:00.000Z",
+      reviewedByUserId: "user-gm",
+      roundNumber: 1,
+      sourceSelections: [],
+    });
+
+    expect(snapshot.status).toBe("committed");
+    expect(snapshot.sources).toEqual([]);
+    expect(snapshot.ordinaryDodgeAvailable).toBe(true);
+  });
+
+  it("refuses a Parry source selection naming equipment the participant does not have", () => {
+    expect(() =>
+      buildCanonicalCombatDefenseSnapshot({
+        attacker: buildArmedParticipant(),
+        attackerCombatantId: "attacker",
+        attackId: "1:opportunity:attack-1",
+        attackOpportunityId: "opportunity-1",
+        aware: true,
+        defender: buildTemporaryActorParticipant(),
+        defenderCombatantId: "defender",
+        phase: "phase1",
+        reviewedAt: "2026-08-07T10:05:00.000Z",
+        roundNumber: 1,
+        sourceSelections: [{ included: true, itemId: "item-primary" }],
+      }),
+    ).toThrow(/Defense sources changed/);
+  });
+
+  it("reports the absent carried load rather than defaulting the defender to an unencumbered one", () => {
+    const calculation = resolveCanonicalScenarioParticipantDefense({
+      defenderResolution: resolution([]),
+      participant: buildTemporaryActorParticipant(),
+    });
+
+    // Encumbrance is derived from a carried load, and there is no carried-load projection to
+    // derive it from. An unencumbered default here would publish a DB and DM nobody authored.
+    expect(calculation).toMatchObject({
+      authority: "canonical_scenario_state",
+      completeness: "partial",
+      missingFacts: ["character_equipment_aggregate"],
+      participantId: "scenario-temporary-actor",
+    });
+  });
+
+  it("still refuses a participant that has no build at all", () => {
+    const context = resolveCanonicalParticipantCalculationContext(
+      buildTemporaryActorParticipant({ omitBuild: true }),
+    );
+
+    expect(context).toMatchObject({
+      completeness: "partial",
+      missingFacts: ["character_build"],
+    });
+  });
+
+  it("keeps a Character participant's missing equipment aggregate a refusal", () => {
+    const character = buildParticipant();
+    const withoutAggregate = {
+      ...character,
+      snapshot: { ...character.snapshot, equipmentState: undefined },
+    } as ScenarioParticipant;
+
+    const context = resolveCanonicalParticipantCalculationContext(withoutAggregate);
+
+    // The participant has a Character, so it has an aggregate to read: a missing one is a missing
+    // fact, not an absent one. Defining absence by the equipment state alone would resolve this
+    // participant `complete` and silently drop its real equipment from the calculation.
+    expect(context).toMatchObject({
+      completeness: "partial",
+      missingFacts: ["equipment_items", "equipment_state"],
+    });
+  });
+
+  it("keeps the aggregate Character-sourced when only the loadout map names the Character", () => {
+    const character = buildArmedParticipant();
+    const withoutParticipantCharacterId = {
+      ...character,
+      characterId: undefined,
+    } as ScenarioParticipant;
+
+    const context = resolveCanonicalParticipantCalculationContext(withoutParticipantCharacterId);
+
+    expect(context.completeness).toBe("complete");
+    if (context.completeness !== "complete") return;
+    // Defining absence by the participant's own `characterId` alone would call this aggregate
+    // absent and discard the equipment it actually carries.
+    expect(context.equipmentProvenance).toBe("character_equipment_aggregate");
+    expect(context.characterId).toBe("character-defender");
+    expect(context.primaryWeaponTemplate?.name).toBe("Long sword");
+  });
+});
+
+describe("#694 GM-facing wording for a defense that cannot be resolved", () => {
+  it("never tells the GM to refresh for a condition refreshing cannot repair", () => {
+    const noBuild = getCombatDefenseRefusalMessage(["character_build"]);
+    const noAggregate = getCombatDefenseRefusalMessage(["character_equipment_aggregate"]);
+
+    for (const message of [noBuild, noAggregate]) {
+      expect(message.toLowerCase()).not.toContain("refresh");
+      expect(message).toContain("Nothing was recorded.");
+    }
+    expect(noBuild).toContain("characteristics or skills");
+    expect(noAggregate).toContain("reloading will not add any");
+  });
+
+  it("names the control that does repair a Character's stale scenario equipment", () => {
+    const message = getCombatDefenseRefusalMessage(["equipment_state", "equipment_items"]);
+
+    expect(message).toContain("participant assignment grid on the scenario page");
+    expect(message).toContain("Nothing was recorded.");
+    expect(message.toLowerCase()).not.toContain("refresh combat");
   });
 });

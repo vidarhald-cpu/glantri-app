@@ -398,6 +398,7 @@ import { selectCurrentCombatModifierValidationTask } from "./combatModifierValid
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
 import {
   buildCanonicalCombatDefenseSnapshot,
+  getCombatDefenseRefusalMessage,
   resolveCanonicalParryBaseForDefenseSnapshot,
 } from "./combatDefenseSnapshotResolution";
 import { resolveCanonicalCombatInitiativeBaseForTask } from "./combatInitiativeResolution";
@@ -17665,9 +17666,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             participant: defender,
           });
           if (canonicalDefense.completeness !== "complete") {
+            // #694. The refusal condition is unchanged; what the GM is told is not. A missile
+            // shot's defense needs the defender's carried load, which an opponent created from a
+            // Template does not have, and no amount of refreshing will give it one.
             return reply.code(409).send({
               code: "defense_context_unavailable",
-              error: "Required defense context is unavailable. Refresh combat.",
+              error: getCombatDefenseRefusalMessage(canonicalDefense.missingFacts),
             });
           }
           const breakOffConsequence = getCombatBreakOffPairConsequence({

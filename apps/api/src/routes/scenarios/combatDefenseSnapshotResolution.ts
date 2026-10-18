@@ -25,6 +25,29 @@ export function defaultCombatAttackAwareness(attacker: ScenarioParticipant): boo
   return visibility !== "hidden" && visibility !== "gm_only";
 }
 
+/**
+ * The GM-facing sentence for a defence the server cannot work out (#694).
+ *
+ * The single sentence this replaces said *"Refresh combat"* for every cause. After #694 the
+ * remaining causes are genuinely different, and only one of them is repaired by reloading
+ * anything, so they are reported apart — the same treatment #690 applied at the attack-roll
+ * refusal, for the same reason: an instruction to refresh that cannot repair the condition sends
+ * a solo GM round a loop with nothing to show for it.
+ *
+ * Each sentence says what is actually missing, that nothing was recorded, and what would change
+ * it — or, where nothing the GM can do would change it, it says that plainly instead of
+ * suggesting an action that would not work.
+ */
+export function getCombatDefenseRefusalMessage(missingFacts: readonly string[]): string {
+  if (missingFacts.includes("character_build")) {
+    return "This opponent has no characteristics or skills recorded, so its defense cannot be worked out. Nothing was recorded. Give the opponent its characteristics and skills, then resolve this attack again.";
+  }
+  if (missingFacts.includes("character_equipment_aggregate")) {
+    return "This opponent carries no equipment recorded for this scenario, and this defense is worked out from what the defender carries, so it cannot be resolved. Nothing was recorded. An opponent created from a Template carries no scenario equipment, and reloading will not add any.";
+  }
+  return "This opponent's equipment for this scenario is incomplete or out of date, so its defense sources cannot be read. Nothing was recorded. Update the opponent's scenario equipment from the participant assignment grid on the scenario page, then resolve this attack again.";
+}
+
 export function buildCanonicalCombatDefenseSnapshot(input: {
   attackDirection?: ScenarioParticipantIncomingAttackSide;
   attacker: ScenarioParticipant;
@@ -42,7 +65,7 @@ export function buildCanonicalCombatDefenseSnapshot(input: {
 }): CombatDefenseSnapshot {
   const context = resolveCanonicalParticipantCalculationContext(input.defender);
   if (context.completeness !== "complete") {
-    throw new RangeError("Required defense context is unavailable. Refresh combat.");
+    throw new RangeError(getCombatDefenseRefusalMessage(context.missingFacts));
   }
   const sourceSelectionByItemId = new Map<string, boolean>();
   for (const selection of input.sourceSelections) {
