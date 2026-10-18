@@ -563,4 +563,63 @@ describe("BlackboardWorkspace", () => {
     expect(container).not.toHaveTextContent("foreign-artifact-entry");
     expect(artifactMocks.fetchArtifactBlob).not.toHaveBeenCalled();
   });
+
+  /**
+   * Forgejo #667. Where a GM actually looks for "who took my card off the
+   * board": the existing per-entry History panel. Section 18.1 attribution is
+   * surfaced there rather than in a new board-level Change Log panel, which is
+   * out of scope for Alpha.
+   */
+  it("names who pinned and who removed a card in the History panel", async () => {
+    const user = userEvent.setup();
+    mocks.loadBlackboardHistory.mockResolvedValue({
+      boardEvents: [
+        { actedByLabel: "Board GM", kind: "card_added", occurredAt: "2026-10-17T09:00:00.000Z" },
+        {
+          actedByLabel: "Board Player",
+          kind: "card_removed",
+          occurredAt: "2026-10-17T09:30:00.000Z",
+        },
+      ],
+      currentEntryVersion: 1,
+      entryId: "entry-clue",
+      revisions: [],
+    });
+
+    render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster routeEntryId="entry-clue" />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Bell signal" })).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: "History" }));
+
+    const history = await screen.findByRole("region", { name: "Reference history" });
+    expect(within(history).getByText("Removed from the board")).toBeVisible();
+    expect(within(history).getByText(/Board Player/)).toBeVisible();
+    expect(within(history).getByText("Pinned to the board")).toBeVisible();
+    expect(within(history).getByText(/Board GM/)).toBeVisible();
+  });
+
+  /**
+   * Forgejo #667. Attribution is prospective, so a card pinned before the
+   * migration has no events. The panel must say that plainly: a bare empty
+   * list would read as an assertion that nobody ever pinned or removed it.
+   */
+  it("says board activity was never recorded rather than letting an empty list imply nobody acted", async () => {
+    const user = userEvent.setup();
+    mocks.loadBlackboardHistory.mockResolvedValue({
+      boardEvents: [],
+      currentEntryVersion: 1,
+      entryId: "entry-clue",
+      revisions: [],
+    });
+
+    render(<BlackboardWorkspace campaignId="campaign-1" isGameMaster routeEntryId="entry-clue" />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Bell signal" })).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: "History" }));
+
+    const history = await screen.findByRole("region", { name: "Reference history" });
+    expect(within(history).getByText(/No board activity has been recorded/)).toBeVisible();
+    // The distinction the ruling asked to be made explicit in the UI.
+    expect(within(history).getByText(/does not mean nobody pinned or removed it/)).toBeVisible();
+    expect(within(history).queryByText("Pinned to the board")).toBeNull();
+    expect(within(history).queryByText("Removed from the board")).toBeNull();
+  });
 });

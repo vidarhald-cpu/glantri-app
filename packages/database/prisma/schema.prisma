@@ -1022,6 +1022,31 @@ model CampaignBlackboardPlacement {
   @@index([campaignId, groupId])
 }
 
+/// Campaign Blackboard V1 section 18.1 requires the Change Log to record
+/// "card added" and "card removed". Those are placement operations, so they
+/// cannot live in CampaignBlackboardEntryEvent: its primary key is
+/// [campaignId, entryId, entryVersion], no placement operation advances
+/// entryVersion, and the ordinary first pin would therefore collide with the
+/// `initial` row createEntry writes at a hardcoded entryVersion 1.
+///
+/// layoutVersion is the key because every placement operation already
+/// consumes exactly one new layoutVersion atomically, through advanceLayout's
+/// guarded increment inside the operation's own transaction. Gaps left by the
+/// section 18.2 operations that stay unlogged (drag, stacking, grouping) are
+/// harmless and preserve ordering.
+model CampaignBlackboardPlacementEvent {
+  campaignId         String
+  layoutVersion      Int
+  entryId            String
+  action             String
+  actorUserId        String
+  actorLabelSnapshot String
+  occurredAt         DateTime @default(now())
+
+  @@id([campaignId, layoutVersion], map: "bb_placement_event_pkey")
+  @@index([campaignId, entryId, occurredAt], map: "bb_placement_event_entry_idx")
+}
+
 model ScenarioEventLog {
   id            String   @id @default(cuid())
   scenarioId     String

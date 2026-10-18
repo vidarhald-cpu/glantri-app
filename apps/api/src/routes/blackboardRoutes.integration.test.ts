@@ -615,5 +615,271 @@ if (!hasTaskApplicationDatabase) {
       expect(missingCapabilities.body).toBe(anonymousCapabilities.body);
       expect(foreignCapabilities.json()).toEqual({ error: "Blackboard unavailable." });
     });
+
+    /**
+     * Forgejo #667. Two obligations held together, deliberately in one test
+     * because they constrain each other:
+     *
+     *  - Campaign Blackboard V1 section 18.1 requires "card added" and "card
+     *    removed" to be logged. Before this change no placement operation
+     *    wrote an event and `deletePlacement` took no actor at all, so a card
+     *    vanished from the GM's board with nobody attributed.
+     *  - PO-SPW-2 required proof 7 keeps all four placement routes open to any
+     *    campaign member: a non-GM "can remove material another participant
+     *    placed", and "neither act requires GM authority". Over-restriction is
+     *    therefore a failure here, not a safe default.
+     *
+     * Everything below is asserted against the raw API response -- status code
+     * and JSON body -- never a rendered page.
+     */
+    it("attributes card added and card removed while keeping every placement route open to a player", async () => {
+      const gm = await createTestUser(prisma, {
+        displayName: "Board GM",
+        roles: ["game_master"],
+      });
+      const player = await createTestUser(prisma, { displayName: "Board Player" });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const character = await createTestCharacter(prisma, player.id, { name: "Pin Ari" });
+      await prisma.campaignRosterEntry.create({
+        data: {
+          campaignId: campaign.id,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const gmCookie = await sessionCookie(gm.id);
+      const playerCookie = await sessionCookie(player.id);
+
+      const board = async (cookie: string) => {
+        const response = await app.inject({
+          headers: { cookie },
+          method: "GET",
+          url: `/campaigns/${campaign.id}/blackboard`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response.json<{
+          catalogue: Array<{ id: string }>;
+          layout: {
+            placements: Array<{ entryId: string; rowVersion: number; x: number }>;
+            version: number;
+          };
+        }>();
+      };
+      const liveVersions = async (entryId: string) => {
+        const current = await board(playerCookie);
+        const placement = current.layout.placements.find((item) => item.entryId === entryId);
+        return { layoutVersion: current.layout.version, placement };
+      };
+      const historyFor = async (entryId: string, cookie: string) => {
+        const response = await app.inject({
+          headers: { cookie },
+          method: "GET",
+          url: `/campaigns/${campaign.id}/blackboard/entries/${entryId}/history`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response.json<{
+          boardEvents: Array<{ actedByLabel: string; kind: string; occurredAt: string }>;
+        }>();
+      };
+
+      // The GM authors and pins the card. This is the GM-owned board state the
+      // original report was about.
+      const created = await app.inject({
+        headers: mutationHeaders(gmCookie),
+        method: "POST",
+        payload: {
+          category: "clue_fact",
+          fact: "The warrant bears a forged seal.",
+          title: "Royal Warrant",
+        },
+        url: `/campaigns/${campaign.id}/blackboard/entries`,
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const entryId = created.json<{ entry: { id: string } }>().entry.id;
+
+      const gmPin = await app.inject({
+        headers: mutationHeaders(gmCookie),
+        method: "POST",
+        payload: {
+          entryId,
+          expectedLayoutVersion: 0,
+          height: 180,
+          layer: 1,
+          width: 260,
+          x: 10,
+          y: 10,
+        },
+        url: `/campaigns/${campaign.id}/blackboard/placements`,
+      });
+      expect(gmPin.statusCode, gmPin.body).toBe(200);
+      expect(await historyFor(entryId, gmCookie)).toMatchObject({
+        boardEvents: [{ actedByLabel: "Board GM", kind: "card_added" }],
+      });
+
+      // Route 2 of 4 -- PATCH. A player rearranging the GM's card stays
+      // allowed: Blackboard V1 sections 3, 12 and 13 make position and
+      // z-order shared collaborative state.
+      const beforeMove = await liveVersions(entryId);
+      const playerMove = await app.inject({
+        headers: mutationHeaders(playerCookie),
+        method: "PATCH",
+        payload: {
+          expectedLayoutVersion: beforeMove.layoutVersion,
+          expectedRowVersion: beforeMove.placement!.rowVersion,
+          height: 180,
+          layer: 2,
+          width: 260,
+          x: 120,
+          y: 60,
+        },
+        url: `/campaigns/${campaign.id}/blackboard/placements/${entryId}`,
+      });
+      expect(playerMove.statusCode, playerMove.body).toBe(200);
+      expect((await liveVersions(entryId)).placement!.x).toBe(120);
+
+      // Route 3 of 4 -- the group operation, also still open to a player.
+      const beforeGroup = await liveVersions(entryId);
+      const playerGroup = await app.inject({
+        headers: mutationHeaders(playerCookie),
+        method: "POST",
+        payload: {
+          entryIds: [entryId],
+          expectedLayoutVersion: beforeGroup.layoutVersion,
+          expectedRowVersions: { [entryId]: beforeGroup.placement!.rowVersion },
+        },
+        url: `/campaigns/${campaign.id}/blackboard/placements/group`,
+      });
+      expect(playerGroup.statusCode, playerGroup.body).toBe(200);
+
+      // Neither PATCH nor group may be logged: section 18.2 keeps drag,
+      // stacking and grouping out of the Change Log. So the only event so far
+      // is still the GM's pin.
+      expect((await historyFor(entryId, gmCookie)).boardEvents).toHaveLength(1);
+
+      // Route 4 of 4 -- DELETE. The operation originally filed as a security
+      // defect. PO-SPW-2 proof 7 requires it to succeed for a player.
+      const beforeUnpin = await liveVersions(entryId);
+      const playerUnpin = await app.inject({
+        headers: mutationHeaders(playerCookie),
+        method: "DELETE",
+        payload: {
+          expectedLayoutVersion: beforeUnpin.layoutVersion,
+          expectedRowVersion: beforeUnpin.placement!.rowVersion,
+        },
+        url: `/campaigns/${campaign.id}/blackboard/placements/${entryId}`,
+      });
+      expect(playerUnpin.statusCode, playerUnpin.body).toBe(200);
+
+      // Removal stays non-destructive: the placement is gone, but the entry
+      // survives in the durable catalogue.
+      const afterUnpin = await board(gmCookie);
+      expect(afterUnpin.layout.placements).toHaveLength(0);
+      expect(afterUnpin.catalogue.map((item) => item.id)).toContain(entryId);
+
+      // The attribution the GM was missing. The player who took the GM's card
+      // off the board is now named.
+      expect(await historyFor(entryId, gmCookie)).toMatchObject({
+        boardEvents: [
+          { actedByLabel: "Board GM", kind: "card_added" },
+          { actedByLabel: "Board Player", kind: "card_removed" },
+        ],
+      });
+
+      // Route 1 of 4 -- POST again, re-pinning what was removed. This is both
+      // the fourth route exercised by a player and the proof that removal left
+      // the material re-pinnable.
+      const playerRepin = await app.inject({
+        headers: mutationHeaders(playerCookie),
+        method: "POST",
+        payload: {
+          entryId,
+          expectedLayoutVersion: (await liveVersions(entryId)).layoutVersion,
+          height: 180,
+          layer: 1,
+          width: 260,
+          x: 40,
+          y: 40,
+        },
+        url: `/campaigns/${campaign.id}/blackboard/placements`,
+      });
+      expect(playerRepin.statusCode, playerRepin.body).toBe(200);
+      expect((await board(gmCookie)).layout.placements).toHaveLength(1);
+
+      const finalHistory = await historyFor(entryId, gmCookie);
+      expect(
+        finalHistory.boardEvents.map((event) => `${event.kind}:${event.actedByLabel}`),
+      ).toEqual(["card_added:Board GM", "card_removed:Board Player", "card_added:Board Player"]);
+      // Ordering is total and ascending, so the Change Log can be read in
+      // sequence rather than guessed at.
+      const times = finalHistory.boardEvents.map((event) => Date.parse(event.occurredAt));
+      expect(times).toEqual([...times].sort((left, right) => left - right));
+
+      // The player sees the same attribution the GM does -- this is shared
+      // board state, not a GM-only audit surface, and the per-entry history is
+      // already player-readable.
+      expect(await historyFor(entryId, playerCookie)).toEqual(finalHistory);
+      // Attribution exposes a label snapshot and a time, never actor user ids.
+      expect(JSON.stringify(finalHistory)).not.toContain(player.id);
+      expect(JSON.stringify(finalHistory)).not.toContain(gm.id);
+    });
+
+    /**
+     * Forgejo #667. Attribution is prospective: the migration backfills
+     * nothing, so a placement made before it carries no event. The surface
+     * must report that as "not recorded" rather than silently as "nobody did
+     * it", and must never infer a pinner from `updatedByUserId`, which is the
+     * last mutator rather than the pinner.
+     */
+    it("reports an unattributed pre-existing placement as unrecorded rather than inventing a pinner", async () => {
+      const gm = await createTestUser(prisma, {
+        displayName: "Legacy GM",
+        roles: ["game_master"],
+      });
+      const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
+      const gmCookie = await sessionCookie(gm.id);
+
+      const created = await app.inject({
+        headers: mutationHeaders(gmCookie),
+        method: "POST",
+        payload: { category: "clue_fact", fact: "Pinned long ago.", title: "Old Clue" },
+        url: `/campaigns/${campaign.id}/blackboard/entries`,
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const entryId = created.json<{ entry: { id: string } }>().entry.id;
+
+      // A placement that predates attribution, written straight to the store
+      // with no accompanying event -- exactly the shape the migration leaves
+      // existing rows in.
+      await prisma.campaignBlackboardLayout.create({
+        data: { campaignId: campaign.id, layoutVersion: 7, updatedAt: new Date() },
+      });
+      await prisma.campaignBlackboardPlacement.create({
+        data: {
+          campaignId: campaign.id,
+          entryId,
+          height: 180,
+          layer: 1,
+          rowVersion: 1,
+          updatedAt: new Date(),
+          updatedByLabelSnapshot: "Legacy GM",
+          updatedByUserId: gm.id,
+          width: 260,
+          x: 0,
+          y: 0,
+        },
+      });
+
+      const history = await app.inject({
+        headers: { cookie: gmCookie },
+        method: "GET",
+        url: `/campaigns/${campaign.id}/blackboard/entries/${entryId}/history`,
+      });
+      expect(history.statusCode, history.body).toBe(200);
+      // Honest absence. The empty list is what the UI renders its explicit
+      // "not recorded" note from; a fabricated card_added here would be the
+      // false record the ruling forbids.
+      expect(history.json()).toMatchObject({ boardEvents: [] });
+    });
   });
 }

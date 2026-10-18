@@ -389,8 +389,29 @@ export const blackboardRevisionContentSchema = z.discriminatedUnion("category", 
     .strict(),
 ]);
 
+/**
+ * Campaign Blackboard V1 section 18.1 Change Log events for a card being added
+ * to or removed from the board. These are deliberately a sibling collection of
+ * `revisions` rather than entries in it: a placement change is not a revision,
+ * it carries no content and no revision number, and it can happen any number
+ * of times within one entry version.
+ *
+ * Section 18.2 operations -- drag, stacking, bring-to-front/send-to-back, zoom,
+ * pan and private inspection -- are deliberately absent, and stay absent.
+ */
+export const blackboardBoardEventKindSchema = z.enum(["card_added", "card_removed"]);
+
 export const blackboardSafeHistorySchema = z
   .object({
+    boardEvents: z.array(
+      z
+        .object({
+          actedByLabel: actorLabelSchema,
+          kind: blackboardBoardEventKindSchema,
+          occurredAt: z.string().datetime(),
+        })
+        .strict(),
+    ),
     currentEntryVersion: z.number().int().positive(),
     entryId: idSchema,
     revisions: z.array(

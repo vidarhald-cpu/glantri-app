@@ -18,6 +18,16 @@ import { sendJson } from "./apiClient";
 const mutationHeaders = { "x-glantri-blackboard-mutation": "1" };
 
 export interface BlackboardSafeHistory {
+  /**
+   * Campaign Blackboard V1 section 18.1 "card added" / "card removed" events.
+   * Empty for references whose board changes predate attribution, which the
+   * surface must report as "not recorded" rather than as "nobody did it".
+   */
+  boardEvents: Array<{
+    actedByLabel: string;
+    kind: "card_added" | "card_removed";
+    occurredAt: string;
+  }>;
   currentEntryVersion: number;
   entryId: string;
   revisions: Array<{

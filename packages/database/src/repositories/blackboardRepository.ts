@@ -609,12 +609,18 @@ export class BlackboardRepository {
   async loadSafeHistory(campaignId: string, entryId: string) {
     const entry = await this.client.campaignBlackboardEntry.findUnique({ where: { id: entryId } });
     if (!entry || entry.campaignId !== campaignId || entry.state === "archived") return null;
-    if (entry.state === "retracted") return { entry, revisions: [] };
-    const revisions = await this.client.campaignBlackboardEntryRevision.findMany({
-      orderBy: { revisionNumber: "asc" },
-      where: { campaignId, entryId },
-    });
-    return { entry, revisions };
+    if (entry.state === "retracted") return { entry, placementEvents: [], revisions: [] };
+    const [revisions, placementEvents] = await Promise.all([
+      this.client.campaignBlackboardEntryRevision.findMany({
+        orderBy: { revisionNumber: "asc" },
+        where: { campaignId, entryId },
+      }),
+      this.client.campaignBlackboardPlacementEvent.findMany({
+        orderBy: { layoutVersion: "asc" },
+        where: { campaignId, entryId },
+      }),
+    ]);
+    return { entry, placementEvents, revisions };
   }
 
   async loadGmAudit(campaignId: string, entryId: string) {
@@ -882,6 +888,13 @@ export class BlackboardRepository {
           y: input.y,
         },
       });
+      await this.recordPlacementEvent(tx, {
+        action: "card_added",
+        actor: input.actor,
+        campaignId: input.campaignId,
+        entryId: input.entryId,
+        layoutVersion: layoutVersion + 1,
+      });
     });
   }
 
@@ -933,6 +946,7 @@ export class BlackboardRepository {
   }
 
   async deletePlacement(input: {
+    actor: BlackboardActor;
     campaignId: string;
     entryId: string;
     expectedLayoutVersion: number;
@@ -957,6 +971,13 @@ export class BlackboardRepository {
       });
       if (deleted.count !== 1) throw new BlackboardRepositoryConflictError("stale");
       await this.advanceLayout(tx, input.campaignId, layout.layoutVersion);
+      await this.recordPlacementEvent(tx, {
+        action: "card_removed",
+        actor: input.actor,
+        campaignId: input.campaignId,
+        entryId: input.entryId,
+        layoutVersion: layout.layoutVersion + 1,
+      });
     });
   }
 
@@ -1045,6 +1066,39 @@ export class BlackboardRepository {
     const layout = await this.lockLayout(tx, campaignId);
     if (!layout) throw new BlackboardRepositoryConflictError("reference");
     return layout;
+  }
+
+  /**
+   * Records a Campaign Blackboard V1 section 18.1 Change Log event for a card
+   * being added to or removed from the board. Written inside the placement
+   * operation's own transaction, so the attribution and the board change
+   * commit together or not at all.
+   *
+   * `layoutVersion` is the version the board holds *after* this operation's
+   * advanceLayout, which is unique per operation and gives the events a total
+   * order. Section 18.2 operations (drag, stacking, grouping) stay unlogged.
+   */
+  private async recordPlacementEvent(
+    tx: Prisma.TransactionClient,
+    input: {
+      action: "card_added" | "card_removed";
+      actor: BlackboardActor;
+      campaignId: string;
+      entryId: string;
+      layoutVersion: number;
+    },
+  ) {
+    await tx.campaignBlackboardPlacementEvent.create({
+      data: {
+        action: input.action,
+        actorLabelSnapshot: input.actor.label,
+        actorUserId: input.actor.id,
+        campaignId: input.campaignId,
+        entryId: input.entryId,
+        layoutVersion: input.layoutVersion,
+        occurredAt: new Date(),
+      },
+    });
   }
 
   private async advanceLayout(
