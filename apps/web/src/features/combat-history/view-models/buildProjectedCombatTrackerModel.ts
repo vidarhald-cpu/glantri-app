@@ -202,6 +202,12 @@ export function formatProjectedCombatTrackerHoverDetail(
   if (parry) {
     const status = projectedFact(parry, "status");
     if (status === "not_required" || status === "not_needed") return "parry not needed.";
+    // Forgejo #676. A Parry step can now be recorded with nothing to resolve - the defender held
+    // no Parry-eligible source - and the published status says so. The generic fallback below
+    // would call that "parry resolved.", which is the one thing it was not. Why the step had
+    // nothing to resolve stays in the involved-scope facts; this cell only stops asserting a
+    // resolution that did not happen.
+    if (status === "not_applicable") return "no parry resolution.";
     const success = projectedFact(parry, "success");
     if (typeof success === "boolean") return success ? "parry succeeded." : "parry failed.";
     return status === "pending" ? "parry pending." : "parry resolved.";
