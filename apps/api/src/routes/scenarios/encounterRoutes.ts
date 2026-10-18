@@ -1695,6 +1695,22 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
   };
 }
 
+/**
+ * Refusals for an attack that genuinely cannot be resolved (#690).
+ *
+ * The guards themselves are correct and unchanged: an attack with no derivable defence for the
+ * defender, or no resolvable attack for the attacker, cannot be rolled. What #690 corrects is what
+ * the GM is told. The two causes are kept apart deliberately, because the honest answer differs:
+ * one is about the defender's missing defensive skill, the other about the attacker's missing
+ * weapon or combat skill. Neither is repaired by reloading combat, so neither message asks for
+ * that.
+ */
+const ATTACK_DEFENDER_DEFENSE_UNAVAILABLE_MESSAGE =
+  "This opponent has no defensive skill, so an attack against them cannot be resolved. Nothing was rolled. Give the opponent a defensive skill such as Dodge, then attack again.";
+
+const ATTACK_OFFENSE_UNAVAILABLE_MESSAGE =
+  "The attacker has no weapon or combat skill this attack can use, so it cannot be resolved. Nothing was rolled. Check the attacker's weapon and combat skill before attacking again.";
+
 const MODIFIER_REVIEW_BUCKETS = [
   ["general", "general"],
   ["situationInitiative", "initiative"],
@@ -17074,10 +17090,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           ? baseDefenderDb
           : breakOffDefenderTrace?.finalValue;
 
-      if (!weaponName || (!canonicalWeaponFacts.isMissileAttack && defenderDb === undefined)) {
+      // Same refusal conditions as before, split only so each cause can be reported honestly
+      // (#690). The attacker check stays first, as it did when the two shared one branch.
+      if (!weaponName) {
         return reply.code(409).send({
           code: "attack_context_unavailable",
-          error: "Required attack context is unavailable. Refresh combat before rolling.",
+          error: ATTACK_OFFENSE_UNAVAILABLE_MESSAGE,
+        });
+      }
+      if (!canonicalWeaponFacts.isMissileAttack && defenderDb === undefined) {
+        return reply.code(409).send({
+          code: "attack_defender_defense_unavailable",
+          error: ATTACK_DEFENDER_DEFENSE_UNAVAILABLE_MESSAGE,
         });
       }
 
@@ -17107,7 +17131,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (canonicalOffense.completeness !== "complete") {
         return reply.code(409).send({
           code: "attack_context_unavailable",
-          error: "Required attack context is unavailable. Refresh combat before rolling.",
+          error: ATTACK_OFFENSE_UNAVAILABLE_MESSAGE,
         });
       }
       // Canonical pre-opponent OB already contains the committed round modifiers. Observation is

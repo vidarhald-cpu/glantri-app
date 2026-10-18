@@ -1,5 +1,10 @@
 import { characterBuildSchema } from "@glantri/domain";
 import { defaultCanonicalContent } from "@glantri/content";
+import {
+  buildCharacterSheetSummary,
+  buildCombatStateCharacterInputs,
+  resolveCombatDefenseCalculation,
+} from "@glantri/rules-engine";
 import { describe, expect, it } from "vitest";
 
 import { buildEquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
@@ -129,5 +134,70 @@ describe("the seeded Training Bandit Template can fight (#672)", () => {
     // materially larger bonus, so dropping the rank count fails here too.
     expect(Number(punch?.ob1)).toBeGreaterThan(1);
     expect(Number(kick?.ob1)).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * #690 — the seeded *"Training Bandit"* Template must stay able to be **attacked**, not only to
+ * declare an attack of its own.
+ *
+ * #672 made the opponent declaration-capable, and that is as far as its proof reached. Attack
+ * resolution additionally needs a **defence** for the defender: `encounterRoutes.ts` refuses the
+ * roll outright when no defender DB can be derived, which is how every attack against the seeded
+ * Bandit became a 409. That derivation runs through `resolveCombatDefenseCalculation`, which needs
+ * `dodgeCombatSkillXp` — and `buildCombatStateCharacterInputs` reads that from the build's own
+ * Dodge competency, by name, with no default.
+ *
+ * As with #672, this has to be a unit test: CI never runs the local development seed, so no test
+ * over the seeded database row can protect it.
+ *
+ * **The mutation this guards against:** deleting the authored Dodge competency from
+ * `TRAINING_BANDIT_DEMO_SNAPSHOT.build.progression.skills` (the snapshot's state before #690, when
+ * it carried Brawling alone), or setting its rank count to a value the sheet does not project.
+ * `combatSkillXpByName["Dodge"]` is then absent, `dodgeCombatSkillXp` is `null`,
+ * `resolveCombatDefenseCalculation` returns `completeness: "partial"` with
+ * `missingFacts: ["character_inputs"]`, and the server guard refuses the attack. Both assertions
+ * below fail on exactly that.
+ */
+describe("the seeded Training Bandit Template can be attacked (#690)", () => {
+  function buildSeededBanditCombatInputs() {
+    const build = characterBuildSchema.parse(TRAINING_BANDIT_DEMO_SNAPSHOT.build);
+    return buildCombatStateCharacterInputs(
+      buildCharacterSheetSummary({ build, content: defaultCanonicalContent }),
+    );
+  }
+
+  it("carries the authored Dodge competency and projects it as combat skill XP", () => {
+    const build = characterBuildSchema.parse(TRAINING_BANDIT_DEMO_SNAPSHOT.build);
+    const dodge = build.progression.skills.find((skill) => skill.skillId === "dodge");
+
+    expect(dodge).toBeDefined();
+    expect(dodge?.ranks).toBe(9);
+    expect(dodge?.grantedRanks).toBe(9);
+    expect(dodge?.level).toBe(9);
+    // Canonical skill identity, not an invented one: only the rank count above is authored.
+    expect(defaultCanonicalContent.skills.some((skill) => skill.id === "dodge")).toBe(true);
+
+    // The projection the defence calculation actually consumes. Without the competency this is
+    // `null`, which is the whole of the #690 defect.
+    expect(buildSeededBanditCombatInputs().dodgeCombatSkillXp).toBe(9);
+  });
+
+  it("derives a complete defence, so an attack against it can be resolved", () => {
+    const defense = resolveCombatDefenseCalculation({
+      characterInputs: buildSeededBanditCombatInputs(),
+      // Unencumbered and unequipped: the seeded Template carries no items at all.
+      encumbranceLevel: 0,
+      primaryWeaponTemplate: null,
+      readyShieldTemplate: null,
+      secondaryWeaponTemplate: null,
+    });
+
+    expect(defense.completeness).toBe("complete");
+    // The server guard refuses the attack whenever no defender DB can be derived at all, so the
+    // load-bearing fact is that one exists and is usable rather than its exact figure.
+    expect(defense.completeness === "complete" ? defense.effectiveDb : undefined).toBeGreaterThan(
+      0,
+    );
   });
 });

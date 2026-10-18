@@ -3744,10 +3744,18 @@ export default function ScenarioPlayerCombatPageContent({
         "code" in caughtError.payload
           ? (caughtError.payload as { code?: unknown }).code
           : undefined;
-      if (code === "attack_context_unavailable") {
+      // #690: neither of these refusals is repaired by reloading or re-opening anything, so the
+      // player is told what is actually missing. The two causes stay apart because the honest
+      // answer differs — one is the opponent's defence, the other this character's own attack.
+      if (code === "attack_defender_defense_unavailable") {
         setCombatActionError(undefined);
         setAttackContextFailure(
-          "Required attack context is unavailable. Ask the GM to reopen the modifier checkpoint.",
+          "This opponent has no defensive skill, so an attack against them cannot be resolved. Nothing was rolled. Ask the GM to give the opponent a defensive skill such as Dodge.",
+        );
+      } else if (code === "attack_context_unavailable") {
+        setCombatActionError(undefined);
+        setAttackContextFailure(
+          "This attack needs a weapon or combat skill that is missing, so it cannot be resolved. Nothing was rolled. Ask the GM to check your weapon and combat skill.",
         );
       } else {
         setCombatActionError(
