@@ -2916,3 +2916,137 @@ describe("CombatRoundManagerPanel performance fixture", () => {
     process.stdout.write(`COMBAT_PERF_FIXTURE ${JSON.stringify(rows)}\n`);
   });
 });
+
+/**
+ * #691 — the exact Alpha smoke-test sequence: the GM browses to a non-active participant with
+ * "Next participant", then declares.
+ *
+ * Every selector in the declaration form is derived from the participant the inspector is browsed
+ * to, while the submission was bound to the active declaration descriptor. Pressing Declare across
+ * that divergence sent three participant contexts in one request — actor from the descriptor,
+ * target and attack source from the browsed row. Measured at the baseline with this very fixture,
+ * the request carried `scenarioParticipantId: "scenario-attacker"` and
+ * `phaseContexts.phase1.targetParticipantId: "encounter-attacker"` while the inspector read
+ * "Combat inspector — Scyrian cavalry guy", so the declarer targeted itself; with the virtual
+ * unarmed source, which every participant legitimately owns, the API accepted and persisted it.
+ *
+ * "Next participant" is inspection and navigation. It must not change the actor, source or target
+ * submitted for the active declaration, so the submission stays bound to the active context and is
+ * refused rather than normalised when the panel is not showing it. The sanctioned flow — declare
+ * for the participant the inspector is actually on, as the shipped e2e helper does — is unchanged.
+ */
+describe("CombatRoundManagerPanel declaration bound to the active participant (#691)", () => {
+  const participants = () => [
+    scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+    scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+  ];
+  const refusal =
+    "The active declaration belongs to The Gladiator. Select that participant in the inspector before declaring.";
+
+  async function browseToDefender(): Promise<void> {
+    expect(
+      await screen.findByText("Combat inspector — The Gladiator · Round 1 · Declaration"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next participant" }));
+    expect(
+      await screen.findByText("Combat inspector — Scyrian cavalry guy · Round 1 · Declaration"),
+    ).toBeInTheDocument();
+  }
+
+  it("refuses an unarmed browse-then-declare and sends no request", async () => {
+    // The unarmed projection: the case that used to be accepted and persisted, because the virtual
+    // source is one both participants legitimately own.
+    mocks.unequippedLoadout.value = true;
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={buildEncounter()}
+        scenarioParticipants={participants()}
+      />,
+    );
+    await browseToDefender();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "attack_parry" },
+    });
+    // The selectors on screen belong to the browsed participant, and its only opponent is the
+    // active declaration participant — which is how the declaration came to target its declarer.
+    const attackSource = (await screen.findAllByRole("combobox", { name: "Attack source" }))[0]!;
+    fireEvent.change(attackSource, {
+      target: { value: "unarmed:virtual-weapon-template-punch" },
+    });
+    for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+      fireEvent.change(targetSelector, { target: { value: "encounter-attacker" } });
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+    expect((await screen.findAllByText(refusal)).length).toBeGreaterThan(0);
+    expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+  });
+
+  it("refuses an armed browse-then-declare and sends no request", async () => {
+    // The armed projection: the API already refused this one as a missing weapon source, which was
+    // recoverable. It is refused here too, so the panel no longer depends on that accident.
+    render(
+      <CombatRoundManagerPanel
+        encounter={buildEncounter()}
+        scenarioParticipants={[participants()[0]!, scenarioParticipantWithDefenseLoadout()]}
+      />,
+    );
+    await browseToDefender();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "attack_parry" },
+    });
+    for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+      fireEvent.change(targetSelector, { target: { value: "encounter-attacker" } });
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+    expect((await screen.findAllByText(refusal)).length).toBeGreaterThan(0);
+    expect(mocks.submitDeclaration).not.toHaveBeenCalled();
+  });
+
+  it("still declares for the participant the inspector is actually on", async () => {
+    // The sanctioned flow the shipped e2e helper uses: browse to the participant whose declaration
+    // is active, then declare. Nothing about it changes.
+    mocks.unequippedLoadout.value = true;
+    const scenarioParticipants = participants();
+    const encounter = buildEncounter();
+    mocks.submitDeclaration.mockResolvedValue({
+      encounter: { ...encounter, updatedAt: "2026-07-23T10:05:00.000Z" },
+      participant: scenarioParticipants[0],
+    });
+
+    render(
+      <CombatRoundManagerPanel encounter={encounter} scenarioParticipants={scenarioParticipants} />,
+    );
+    expect(
+      await screen.findByText("Combat inspector — The Gladiator · Round 1 · Declaration"),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Action" }), {
+      target: { value: "attack_parry" },
+    });
+    const attackSource = (await screen.findAllByRole("combobox", { name: "Attack source" }))[0]!;
+    fireEvent.change(attackSource, {
+      target: { value: "unarmed:virtual-weapon-template-punch" },
+    });
+    for (const targetSelector of screen.getAllByRole("combobox", { name: "Target" })) {
+      fireEvent.change(targetSelector, { target: { value: "encounter-defender" } });
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "Declare action" }));
+
+    await waitFor(() => expect(mocks.submitDeclaration).toHaveBeenCalledTimes(1));
+    // One participant context throughout: the actor, the target and the source all belong to the
+    // participant the inspector is showing.
+    expect(mocks.submitDeclaration.mock.calls[0]?.[0]).toMatchObject({
+      phaseContexts: { phase1: { targetParticipantId: "encounter-defender" } },
+      scenarioParticipantId: "scenario-attacker",
+    });
+    expect(screen.queryByText(refusal)).toBeNull();
+  });
+});

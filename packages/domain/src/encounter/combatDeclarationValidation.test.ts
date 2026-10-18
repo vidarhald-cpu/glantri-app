@@ -457,4 +457,137 @@ describe("combat declaration target validation", () => {
       valid: true,
     });
   });
+  /**
+   * #691 — the pair invariant `createCombatParticipantPairKey` enforces on read must also hold on
+   * write. An attack whose phase target resolves to its own attacker is impossible round state,
+   * and before this it was only detected once the round was read back.
+   */
+  describe("#691 — an attack cannot target its own attacker", () => {
+    const participantIdentities = [
+      { id: "gladiator", participantId: "gladiator", scenarioParticipantId: "scenario-gladiator" },
+      { id: "guard", participantId: "guard", scenarioParticipantId: "scenario-guard" },
+    ];
+
+    it("refuses a Phase 1 attack whose target is the acting participant", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "gladiator",
+          actionId: "attack_parry",
+          participantIdentities,
+          phaseContexts: {
+            ...phaseContexts,
+            phase1: { ...phaseContexts.phase1, targetParticipantId: "gladiator" },
+          },
+        }),
+      ).toMatchObject({
+        message: "An attack cannot target its own attacker.",
+        valid: false,
+      });
+    });
+
+    it("refuses a Phase 2 attack whose target is the acting participant", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "guard",
+          actionId: "parry_attack",
+          participantIdentities,
+          phaseContexts: {
+            ...phaseContexts,
+            phase2: { ...phaseContexts.phase2, targetParticipantId: "guard" },
+          },
+        }),
+      ).toMatchObject({
+        message: "An attack cannot target its own attacker.",
+        valid: false,
+      });
+    });
+
+    /**
+     * The target arrives as a scenario-participant alias in the request body, which is exactly how
+     * the measured mixed-context submission expressed it, so alias resolution must not let a
+     * self-target slip past as a different id.
+     */
+    it("resolves aliases before comparing, so a scenario-participant alias of the actor is refused", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "gladiator",
+          actionId: "attack_parry",
+          participantIdentities,
+          phaseContexts: {
+            ...phaseContexts,
+            phase1: { ...phaseContexts.phase1, targetParticipantId: "scenario-gladiator" },
+          },
+        }),
+      ).toMatchObject({
+        message: "An attack cannot target its own attacker.",
+        valid: false,
+      });
+    });
+
+    it("compares the raw ids when no participant identities are supplied", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "gladiator",
+          actionId: "attack_parry",
+          phaseContexts: {
+            ...phaseContexts,
+            phase1: { ...phaseContexts.phase1, targetParticipantId: "gladiator" },
+          },
+        }),
+      ).toMatchObject({
+        message: "An attack cannot target its own attacker.",
+        valid: false,
+      });
+    });
+
+    it("covers the phase a Disarm declaration turns into an attack opportunity", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "gladiator",
+          actionId: "disarm",
+          disarmPhase: "phase1",
+          participantIdentities,
+          phaseContexts: {
+            ...phaseContexts,
+            phase1: { ...phaseContexts.phase1, targetParticipantId: "gladiator" },
+          },
+        }),
+      ).toMatchObject({
+        message: "An attack cannot target its own attacker.",
+        valid: false,
+      });
+    });
+
+    it("never turns `disarmPhase` into a new missing-target refusal", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "gladiator",
+          actionId: "disarm",
+          disarmPhase: "phase1",
+          participantIdentities,
+          phaseContexts,
+        }),
+      ).toMatchObject({
+        missingPhases: [],
+        valid: true,
+      });
+    });
+
+    it("accepts the same declaration once it targets a distinct participant", () => {
+      expect(
+        validateCombatDeclarationTargets({
+          actingParticipantId: "gladiator",
+          actionId: "attack_parry",
+          participantIdentities,
+          phaseContexts: {
+            ...phaseContexts,
+            phase1: { ...phaseContexts.phase1, targetParticipantId: "guard" },
+          },
+        }),
+      ).toMatchObject({
+        missingPhases: [],
+        valid: true,
+      });
+    });
+  });
 });

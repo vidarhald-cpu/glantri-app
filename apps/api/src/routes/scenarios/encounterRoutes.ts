@@ -9724,9 +9724,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
 
+      // #691 — this runs on the canonicalized declaration, before `nextParticipantState` and
+      // `recordCombatRoundDeclaration`, so a declaration whose attack targets its own attacker is
+      // refused rather than persisted. `disarmPhase` is passed so the invariant also covers the
+      // phase a Disarm turns into an attack opportunity.
       const targetValidation = validateCombatDeclarationTargets({
         actingParticipantId: encounterParticipant.id,
         actionId: body.actionId,
+        disarmPhase: body.disarm?.phase,
         movementKind: submittedMovementIntent?.mode,
         participantIdentities: roundState.participants,
         phaseContexts: declarationPhaseContexts,

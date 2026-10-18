@@ -146,6 +146,12 @@ function formatMissingTargetMessage(
 export function validateCombatDeclarationTargets(input: {
   actingParticipantId?: string;
   actionId?: string;
+  /**
+   * #691 — supplied only so the self-target invariant below also covers the phase a Disarm
+   * declaration turns into an attack opportunity. It deliberately does not widen `attackPhases`,
+   * so it can never produce a new "Select a target" refusal.
+   */
+  disarmPhase?: CombatDeclarationPhaseKey;
   movementKind?: string;
   participantIdentities?: readonly CombatDeclarationParticipantIdentity[];
   phaseContexts?: CombatRoundPhaseContexts;
@@ -200,7 +206,7 @@ export function validateCombatDeclarationTargets(input: {
   const secondaryContextMismatch =
     Boolean(input.secondaryActionContext) &&
     input.secondaryActionContext?.action !== input.secondaryActionId;
-  const resolvedObserveActor = input.participantIdentities
+  const resolvedActingParticipant = input.participantIdentities
     ? resolveCombatDeclarationParticipantIdentity({
         participantId: input.actingParticipantId,
         participants: input.participantIdentities,
@@ -220,31 +226,63 @@ export function validateCombatDeclarationTargets(input: {
   const observeTargetsSelf =
     input.secondaryActionId === "observe_opponent" &&
     Boolean(input.actingParticipantId) &&
-    (resolvedObserveActor && resolvedObserveTarget
-      ? resolvedObserveActor.canonicalParticipantId === resolvedObserveTarget.canonicalParticipantId
+    (resolvedActingParticipant && resolvedObserveTarget
+      ? resolvedActingParticipant.canonicalParticipantId ===
+        resolvedObserveTarget.canonicalParticipantId
       : input.secondaryActionContext?.targetParticipantId === input.actingParticipantId);
+  /**
+   * #691 — an attack whose phase target resolves to its own attacker is impossible round state,
+   * not a recoverable mistake. A participant pair requires two distinct participants, and that
+   * rule was enforced only when the round was *read*: a declaration that targets its declarer was
+   * accepted and persisted whenever nothing else detected the mismatch (a virtual unarmed source
+   * is owned by every participant, so weapon-ownership resolution never fired), after which every
+   * read of the encounter raised `409 "A participant pair requires two distinct participants."`
+   * and the round could not advance. Enforcing the same invariant before persistence closes it for
+   * every caller, not only for the GM inspector path that exposed it.
+   */
+  const selfTargetedAttackPhases = [
+    ...new Set([...attackPhases, ...(input.disarmPhase ? [input.disarmPhase] : [])]),
+  ].filter((phaseKey) => {
+    const targetParticipantId = input.phaseContexts?.[phaseKey]?.targetParticipantId?.trim();
+    if (!targetParticipantId || !input.actingParticipantId) {
+      return false;
+    }
+    const resolvedTarget = input.participantIdentities
+      ? resolveCombatDeclarationParticipantIdentity({
+          participantId: targetParticipantId,
+          participants: input.participantIdentities,
+        })
+      : undefined;
+    return resolvedActingParticipant && resolvedTarget
+      ? resolvedActingParticipant.canonicalParticipantId === resolvedTarget.canonicalParticipantId
+      : targetParticipantId === input.actingParticipantId.trim();
+  });
+  const attackTargetsSelf = selfTargetedAttackPhases.length > 0;
 
   return {
     missingPhases,
     message: !compatibility.valid
       ? compatibility.message
-      : observeTargetMissing
-        ? "Select an opponent to observe."
-        : secondaryContextMismatch
-          ? "The secondary action context does not match the selected secondary action."
-          : observeTargetUnavailable
-            ? "Select an active opponent to observe."
-            : observeTargetsSelf
-              ? "Observe Opponent cannot target the acting participant."
-              : offensiveParryOpponentMissing
-                ? "Select an opponent to counter with Offensive Parry."
-                : doubleAttackTargetsDiffer
-                  ? "Double Attack must target the same opponent in both phases."
-                  : feintTargetDiffers
-                    ? "Feint and attack must target the same opponent."
-                    : formatMissingTargetMessage(missingPhases),
+      : attackTargetsSelf
+        ? "An attack cannot target its own attacker."
+        : observeTargetMissing
+          ? "Select an opponent to observe."
+          : secondaryContextMismatch
+            ? "The secondary action context does not match the selected secondary action."
+            : observeTargetUnavailable
+              ? "Select an active opponent to observe."
+              : observeTargetsSelf
+                ? "Observe Opponent cannot target the acting participant."
+                : offensiveParryOpponentMissing
+                  ? "Select an opponent to counter with Offensive Parry."
+                  : doubleAttackTargetsDiffer
+                    ? "Double Attack must target the same opponent in both phases."
+                    : feintTargetDiffers
+                      ? "Feint and attack must target the same opponent."
+                      : formatMissingTargetMessage(missingPhases),
     valid:
       missingPhases.length === 0 &&
+      !attackTargetsSelf &&
       !doubleAttackTargetsDiffer &&
       !feintTargetDiffers &&
       !offensiveParryOpponentMissing &&

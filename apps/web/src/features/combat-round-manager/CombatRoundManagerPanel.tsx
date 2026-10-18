@@ -10016,6 +10016,34 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
+    // #691 — the submission is bound to the active declaration participant named by `descriptor`,
+    // while every selector this handler reads below — `inspectorDraft` (action, target, attack
+    // source ids), `inspectorPhaseLoadoutSummaries`, `inspectorGeneratedCombatContext`,
+    // `combatItemOptions` — is derived from `selectedScenarioParticipant`, the participant the GM
+    // has browsed to. Browsing with "Next participant" therefore used to mix three participant
+    // contexts into one request: the actor from the descriptor, the target and the attack source
+    // from the browsed row. With real weapons the API refused it; with a virtual unarmed source,
+    // which every participant legitimately owns, it was accepted and persisted as a declaration
+    // targeting its own declarer, after which every read of the encounter raised a 409 and the
+    // round could not advance. "Next participant" is inspection and navigation: it must not change
+    // the actor, source or target submitted for the active declaration. So the submission stays
+    // bound to the active context and is refused — never normalised — when the panel is not
+    // showing that context. The modifier-review path already guards exactly this through
+    // `selectedParticipantOwnsModifierReview`; the declaration path did not.
+    const selectedParticipantOwnsActiveDeclaration = Boolean(
+      selectedEncounterParticipant &&
+      descriptor.participantId &&
+      getCombatDistanceParticipantAliases(selectedEncounterParticipant).includes(
+        descriptor.participantId,
+      ),
+    );
+    if (!selectedParticipantOwnsActiveDeclaration) {
+      setSaveError(
+        `The active declaration belongs to ${taskEncounterParticipant.label}. Select that participant in the inspector before declaring.`,
+      );
+      return;
+    }
+
     if (inspectorCombatExperienceRequired) {
       setSaveError("Roll Combat Experience before declaring an action.");
       return;
@@ -10145,6 +10173,7 @@ export default function CombatRoundManagerPanel({
       : validateCombatDeclarationTargets({
           actingParticipantId: taskEncounterParticipant.id,
           actionId: inspectorDraft.actionId || undefined,
+          disarmPhase: disarmMethod ? inspectorDraft.disarmSelection.phase : undefined,
           movementKind: inspectorDraft.movementIntent.mode,
           participantIdentities: roundState.participants,
           phaseContexts: requestPhaseContexts,
