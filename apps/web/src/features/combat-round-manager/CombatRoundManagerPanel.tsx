@@ -4299,7 +4299,24 @@ function getCombatMutationConflictCode(error: unknown): string | undefined {
   return error.payload.code;
 }
 
+/**
+ * The GM-facing sentence for a refused combat mutation (#690).
+ *
+ * Most refusals here really are "something moved under you", and for those the honest advice is to
+ * review the refreshed action and try again. Two are not: an attack the server cannot resolve
+ * because the defender has no defensive skill, or because the attacker has no usable weapon or
+ * combat skill, is not repaired by reloading anything. Telling the GM to refresh and retry in
+ * those cases produces an endless loop, which is the #690 defect — so those two say what is
+ * actually missing and what would change it instead. They are kept as separate sentences on
+ * purpose: flattening them into one would make at least one of them untrue.
+ */
 function getCombatMutationRefreshMessage(code: string): string {
+  if (code === "attack_defender_defense_unavailable") {
+    return "This opponent has no defensive skill, so an attack against them cannot be resolved. Nothing was rolled. Give the opponent a defensive skill such as Dodge, then attack again.";
+  }
+  if (code === "attack_context_unavailable") {
+    return "The attacker has no weapon or combat skill this attack can use, so it cannot be resolved. Nothing was rolled. Check the attacker's weapon and combat skill before attacking again.";
+  }
   if (code === "stale_revision") {
     return "Combat changed in another view. The current action was refreshed; review it before retrying.";
   }

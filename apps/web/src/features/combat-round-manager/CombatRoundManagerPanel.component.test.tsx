@@ -2669,6 +2669,53 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Optional Disarm options unavailable.")).not.toBeInTheDocument();
   });
+
+  /**
+   * #690 — a defender with no derivable defence is refused, and the GM must be told why.
+   *
+   * **The mutation this guards against:** removing the `attack_defender_defense_unavailable`
+   * branch from `getCombatMutationRefreshMessage`, or collapsing the server's two attack refusals
+   * back onto one code. The message then falls through to the generic conflict sentence: the first
+   * assertion fails on the missing honest text, and the second fails because "review it before
+   * retrying" is back on screen — which is exactly the refresh-and-retry loop #690 reports.
+   */
+  it("tells the GM a defender has no defensive skill instead of asking for a refresh", async () => {
+    const encounter = buildAttackReadyEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.rollAttack.mockRejectedValue(
+      new (await import("@/lib/api/apiClient")).ApiRequestError(
+        "This opponent has no defensive skill, so an attack against them cannot be resolved.",
+        409,
+        { code: "attack_defender_defense_unavailable" },
+      ),
+    );
+    mocks.loadEncounter.mockResolvedValue(encounter);
+    mocks.loadParticipants.mockResolvedValue(participants);
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Current task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Roll attack" }));
+
+    await waitFor(() => expect(mocks.rollAttack).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText(
+        "This opponent has no defensive skill, so an attack against them cannot be resolved. Nothing was rolled. Give the opponent a defensive skill such as Dodge, then attack again.",
+      ),
+    ).toBeInTheDocument();
+    // This refusal is not repaired by reloading, so the refresh-and-retry instruction must be gone.
+    expect(screen.queryByText(/review it before retrying/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no longer current/)).not.toBeInTheDocument();
+  });
 });
 
 describe("CombatRoundManagerPanel post-mutation task adoption", () => {

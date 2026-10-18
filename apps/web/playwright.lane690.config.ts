@@ -1,0 +1,22 @@
+import { defineConfig, devices } from "@playwright/test";
+
+/**
+ * Lane-scoped configuration for the #690 rendered proof. It runs only that spec, and uses the
+ * lane's own seeded-game-master setup instead of the suite's account bootstrap, which is
+ * incompatible with a seeded database.
+ */
+export default defineConfig({
+  forbidOnly: !!process.env.CI,
+  fullyParallel: false,
+  globalSetup: "./e2e/lane690-global-setup",
+  reporter: "list",
+  retries: 0,
+  testDir: "./e2e",
+  testMatch: /lane690-.*\.spec\.ts/,
+  use: {
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+    trace: "retain-on-failure",
+  },
+  workers: 1,
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+});
