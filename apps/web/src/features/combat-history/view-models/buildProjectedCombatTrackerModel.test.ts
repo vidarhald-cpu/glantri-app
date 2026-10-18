@@ -893,6 +893,9 @@ describe("buildProjectedCombatTrackerModel", () => {
   it.each([
     ["initiative", { total: 8 }, "initiative roll recorded."],
     ["parry", { success: false, status: "resolved" }, "parry failed."],
+    // Forgejo #676. A Parry step that found no eligible source resolved nothing, so the published
+    // cell must stop claiming a resolution. Why it found nothing stays in involved scope.
+    ["parry", { status: "not_applicable" }, "no parry resolution."],
     ["damage_committed", { status: "committed" }, "damage committed."],
   ] as const)("formats projected %s status in tracker hover", (type, outcome, expected) => {
     const projection = history([

@@ -179,6 +179,54 @@ Back to [section 6](#6-distance).
       '<a href="https://example.test/issues/211">issue #211</a>',
     );
   });
+
+  /**
+   * A wrapped list item, rendered rather than parsed.
+   *
+   * `docs/rules` prose is Prettier-wrapped at 100 columns, so an item longer than that reaches the
+   * renderer as a marker line plus a continuation line. The item used to be cut off at the wrap,
+   * its tail used to render as a paragraph of its own beneath the list, and the next item used to
+   * open a second `<ol>` that restarted at 1 — all three are checked here against real HTML.
+   */
+  it("renders a wrapped item as one <li> and keeps the list numbering continuous", () => {
+    const html =
+      render(`1. After an incoming attack hits or grazes, open the Parry Current Action in Player Combat. A miss
+   makes Parry not applicable.
+2. Review the available Parry source and Parry input shown for the defender. The action cannot roll
+   without an available source.
+`);
+
+    /* One list, not one per source line. */
+    expect((html.match(/<ol/g) ?? []).length).toBe(1);
+    expect((html.match(/<li>/g) ?? []).length).toBe(2);
+
+    /* Each item carries its whole sentence, and nothing of it escaped into a paragraph. */
+    expect(html).toContain(
+      "<li>After an incoming attack hits or grazes, open the Parry Current Action in Player Combat. A miss makes Parry not applicable.</li>",
+    );
+    expect(html).toContain(
+      "<li>Review the available Parry source and Parry input shown for the defender. The action cannot roll without an available source.</li>",
+    );
+    expect(html).not.toContain("<p");
+  });
+
+  it("keeps inline markup that falls on a continuation line inside the item", () => {
+    /**
+     * The sharpest form of the defect: `player/parry.md` wrapped an item immediately before its
+     * `Observe Opponent` link, so the only reader-reachable anchor in that step rendered outside
+     * the list entirely.
+     */
+    const html = render(
+      `1. Optionally leave the secondary action open or add
+   [Observe Opponent](../combat-round-and-actions.md#8-observe-opponent), which keeps its own target.
+`,
+      "player/parry.md",
+    );
+
+    expect(html).toContain(
+      '<li>Optionally leave the secondary action open or add <a href="/admin/rules-docs?doc=combat-round-and-actions#8-observe-opponent">Observe Opponent</a>, which keeps its own target.</li>',
+    );
+  });
 });
 
 /**
@@ -241,5 +289,43 @@ describe("the registered reader pages' fragment references resolve when rendered
     expect(html).toContain("Parry internal notes");
     /* The internal notes are deliberately unregistered, so the label stays text, not a dead link. */
     expect(html).not.toContain("internal/parry-notes.md");
+  });
+
+  /**
+   * The two measured pages from the wrapped-list-item defect, rendered end to end.
+   *
+   * Both carry a numbered procedure whose steps wrap, which is why they were the reported
+   * evidence. Each step is asserted whole, so a step that loses its tail to a stray paragraph
+   * fails here, and the `<ol>` count pins the numbering a reader actually sees.
+   */
+  it("renders the GM Parry procedure's wrapped steps as one correctly numbered list", async () => {
+    const html = await renderPage("gm-parry");
+
+    /* Section 2 is the page's only list, and used to render as four lists each numbered 1. */
+    expect((html.match(/<ol/g) ?? []).length).toBe(1);
+    expect(html).toContain(
+      "<li>After a hit or grazing hit, confirm the defender-owned Current Action and its available main-hand and/or off-hand Parry sources.</li>",
+    );
+    expect(html).toContain(
+      "<li>The app combines the Parry/P base with the calculated General/Fatigue, DB/Parry, stored attack-result, and declared-Parry adjustments.</li>",
+    );
+    /* No step's tail may be left behind as prose under the list. */
+    expect(html).not.toContain('<p style="color:#4f4635;line-height:1.7;margin:0">and/or');
+  });
+
+  it("renders the Player Parry procedures whole, link and all", async () => {
+    const html = await renderPage("player-parry");
+
+    /* Two source lists: Declare Parry and Roll Parry. They used to render as six. */
+    expect((html.match(/<ol/g) ?? []).length).toBe(2);
+    expect(html).toContain(
+      '<li>Optionally leave the secondary action open or add <a href="/admin/rules-docs?doc=combat-round-and-actions#8-observe-opponent">Observe Opponent</a>, which keeps its own Phase 1 target and result.</li>',
+    );
+    expect(html).toContain(
+      "<li>Review the available Parry source and Parry input shown for the defender. The action cannot roll without an available source.</li>",
+    );
+    expect(html).toContain(
+      "<li>Confirm the declaration. The declaration is blocked if the participant has no canonical Dodge skill total.</li>",
+    );
   });
 });

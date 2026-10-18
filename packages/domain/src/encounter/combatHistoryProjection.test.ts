@@ -1001,6 +1001,79 @@ describe("combat history projection", () => {
       reason: "double_attack_cancelled",
     });
   });
+
+  // Forgejo #676. A Parry step reached on a connected attack by a defender with no eligible Parry
+  // source resolves to nothing and advances to damage. Historically that has to read as its own
+  // outcome: "No parry required." would tell a GM the step never needed to happen, when in fact it
+  // happened and found nothing to resolve.
+  it("distinguishes a Parry step that found no eligible source from one that was never required", () => {
+    const hit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "aria",
+      defenderDb: 0,
+      defenderParticipantId: "borin",
+      ob: 120,
+      phase: "phase1",
+      rollD20: 15,
+      rollTotal: 15,
+      rolledAt: "2026-01-01T00:01:00.000Z",
+      weaponName: "Long sword",
+    });
+    expect(hit.hit).toBe(true);
+    const pending = buildCombatRoundPhaseResolutionResult({
+      attackResult: hit,
+      roundNumber: 1,
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    });
+    const base = {
+      committedAt: "2026-01-01T00:03:00.000Z",
+      id: "snapshot-no-eligible-parry",
+      participantId: "borin",
+      participantLabel: "Borin",
+      phase: "phase1" as const,
+      roundNumber: 1,
+      step: "review_phase_2_actions" as const,
+    };
+
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        attackResult: hit,
+        phaseResolutionResult: {
+          ...pending,
+          parryResolution: {
+            ...pending.parryResolution,
+            noEligibleParrySource: true,
+            resultLabel: "No Parry available",
+            status: "not_applicable",
+          },
+        },
+      }),
+    ).toEqual({
+      category: "not_required",
+      message:
+        "No Parry available. The defender wielded no Parry-eligible source, so the attack " +
+        "advanced to damage.",
+      reason: "no_eligible_parry_source",
+    });
+
+    // The pre-existing outcome for the same status without the flag is unchanged, so the two
+    // cannot be confused for each other.
+    expect(
+      deriveCombatHistoryStepOutcome({
+        ...base,
+        attackResult: hit,
+        phaseResolutionResult: {
+          ...pending,
+          parryResolution: { ...pending.parryResolution, status: "not_applicable" },
+        },
+      }),
+    ).toEqual({
+      category: "not_required",
+      message: "No parry required.",
+      reason: "parry_not_required",
+    });
+  });
   it("shows attack calculation only to the roller and involved outcome to the defender", () => {
     const attack = event({
       attackerParticipantId: "aria",
