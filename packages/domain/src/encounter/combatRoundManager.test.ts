@@ -103,6 +103,11 @@ import {
   isCombatRoundPhaseInitiativeComplete,
   recordCombatRoundDeclaration,
   recordCombatRoundAttackResult,
+  COMBAT_NO_ELIGIBLE_PARRY_SOURCE_RESULT_LABEL,
+  getCombatRoundPhaseResolutionResultForAttack,
+  hasCombatRoundParryStepYieldedToDamage,
+  hasNoEligibleParrySourceForAttack,
+  recordCombatRoundNoEligibleParrySource,
   recordCombatRoundDamageReviewPlaceholder,
   recordCombatRoundDamageResult,
   recordCombatRoundDefenseReview,
@@ -18913,6 +18918,256 @@ describe("combat round manager", () => {
       substep: "attack",
     });
     expect(afterDone.selectedParticipantId).toBe("guard");
+  });
+
+  // Forgejo #676, ruled 2026-10-17. A connected attack against a defender with no eligible Parry
+  // source records that no Parry was available and advances directly to damage. No Dodge roll,
+  // re-roll or second defence resolution is added: ordinary DB and Dodge already participated in
+  // whether the attack connected, so resolving one here would double-count the same defence and
+  // hand the defender a defence they never declared.
+  it("records no eligible Parry source and advances the connected attack to damage", () => {
+    const result = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackOpportunityId: "no-eligible-parry-attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    expect(result.hit).toBe(true);
+    const afterAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result,
+      state: initializeCombatRoundPhaseResolutionCursor({
+        phase: "phase1",
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      }),
+      submittedBy: "gm",
+    });
+    // `commitTestDefenseReview` commits a snapshot with no Parry sources, which is exactly what
+    // the canonical commit path now produces for a defender whose only wielded Item cannot parry.
+    const afterDefenseReview = commitTestDefenseReview({
+      attackResult: result,
+      state: afterAttack,
+    });
+
+    expect(
+      hasNoEligibleParrySourceForAttack({ attackResult: result, state: afterDefenseReview }),
+    ).toBe(true);
+
+    const afterNoParry = recordCombatRoundNoEligibleParrySource({
+      attackResult: result,
+      command: { createdAt: "2026-01-01T00:06:00.000Z", createdByUserId: "gm-1" },
+      state: afterDefenseReview,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:06:00.000Z",
+    });
+    const resolution = getCombatRoundPhaseResolutionResultForAttack({
+      attackResult: result,
+      state: afterNoParry,
+    });
+
+    // Recorded, not skipped.
+    expect(resolution?.parryResolution).toMatchObject({
+      noEligibleParrySource: true,
+      purpose: "ordinary_defense",
+      resultLabel: COMBAT_NO_ELIGIBLE_PARRY_SOURCE_RESULT_LABEL,
+      status: "not_applicable",
+    });
+    // Nothing was rolled, so no second defence was resolved at this step.
+    expect(resolution?.parryResolution.openEndedD10s).toEqual([]);
+    expect(resolution?.parryResolution.rollD20).toBeUndefined();
+    expect(resolution?.parryResolution.rollTotal).toBeUndefined();
+    expect(resolution?.parryResolution.success).toBeUndefined();
+    expect(resolution?.parryResolution.combinedParryScore).toBeUndefined();
+    // Advanced directly to damage, with a note that matches what actually happened.
+    expect(resolution?.damageRoll).toEqual({
+      notes: "No Parry was available. Damage roll is pending.",
+      status: "pending",
+    });
+    expect(afterNoParry.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "damage",
+    });
+
+    // And damage really is reachable from here: hit location, the damage result, and the damage
+    // review all accept the recorded outcome. Before this change each of them required a Parry
+    // that had been rolled and failed, so the canonical projection offered the hit-location task
+    // while the recorder refused it.
+    const afterLocation = recordTestHitLocation({
+      attackResult: result,
+      hitLocationRolls: [17],
+      state: afterNoParry,
+    });
+    expect(
+      getCombatRoundPhaseResolutionResultForAttack({ attackResult: result, state: afterLocation })
+        ?.hitLocationRoll.status,
+    ).toBe("rolled");
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: result,
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:07:00.000Z",
+    });
+    expect(
+      getCombatRoundPhaseResolutionResultForAttack({ attackResult: result, state: afterDamage })
+        ?.damageResult,
+    ).toBeDefined();
+    expect(() =>
+      recordCombatRoundDamageReviewPlaceholder({
+        attackResult: result,
+        state: afterNoParry,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:07:00.000Z",
+      }),
+    ).not.toThrow();
+  });
+
+  // The narrowing conditions, each of which keeps an existing behaviour rather than widening the
+  // new one. A defender who holds an eligible source is never short-circuited, however the step
+  // then resolves.
+  it("does not treat an excluded eligible source, a miss, or a declared Parry as no eligible source", () => {
+    const hit = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackOpportunityId: "eligible-parry-narrowing-attack",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 12,
+      rollTotal: 12,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    expect(hit.hit).toBe(true);
+    const afterAttack = recordCombatRoundAttackResult({
+      participantId: "gladiator",
+      result: hit,
+      state: initializeCombatRoundPhaseResolutionCursor({
+        phase: "phase1",
+        state: declareRoundAction({
+          actionId: "attack_parry",
+          participantId: "gladiator",
+          state: initializeCombatRoundState({ encounter: encounter() }),
+        }),
+        updatedAt: "2026-01-01T00:04:00.000Z",
+      }),
+      submittedBy: "gm",
+    });
+    const attackId = getCombatRoundAttackResultId({
+      result: hit,
+      roundNumber: afterAttack.roundNumber,
+    });
+    const committed = commitTestDefenseReview({ attackResult: hit, state: afterAttack });
+
+    // A GM who deliberately excluded every eligible source made a choice at a step that did have
+    // something to resolve. That is not this case, and it keeps its existing refusal.
+    const withExcludedSource = combatRoundStateSchema.parse({
+      ...committed,
+      defenseSnapshots: committed.defenseSnapshots.map((snapshot) =>
+        snapshot.attackId === attackId
+          ? {
+              ...snapshot,
+              sources: [
+                {
+                  decision: "gm_excluded",
+                  included: false,
+                  itemId: "item-long-sword",
+                  itemRevision: "2026-07-30T07:59:00.000Z",
+                  kind: "weapon",
+                  label: "Long sword",
+                  slot: "mainHand",
+                  templateId: "weapon-template-long-sword",
+                },
+              ],
+            }
+          : snapshot,
+      ),
+    });
+    expect(
+      hasNoEligibleParrySourceForAttack({ attackResult: hit, state: withExcludedSource }),
+    ).toBe(false);
+    expect(() =>
+      recordCombatRoundNoEligibleParrySource({
+        attackResult: hit,
+        state: withExcludedSource,
+        submittedBy: "gm",
+        updatedAt: "2026-01-01T00:06:00.000Z",
+      }),
+    ).toThrow("This attack's defender has an eligible Parry source.");
+
+    // A missed attack never reaches the Parry step as something to resolve.
+    const miss = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackOpportunityId: "eligible-parry-narrowing-miss",
+      attackerParticipantId: "gladiator",
+      defenderDb: 10,
+      defenderParticipantId: "guard",
+      ob: 10,
+      phase: "phase1",
+      rollD20: 2,
+      rollTotal: 2,
+      rolledAt: "2026-01-01T00:05:00.000Z",
+      weaponName: "Broad sword",
+    });
+    expect(miss.hit).toBe(false);
+    expect(hasNoEligibleParrySourceForAttack({ attackResult: miss, state: committed })).toBe(false);
+  });
+
+  // The predicate the damage path reads, stated directly: a successful Parry stops the attack, a
+  // Parry that was rolled and failed passes it on, and so does a step with no eligible source.
+  it("recognises both recorded shapes that hand a connected attack on to damage", () => {
+    const base = buildCombatRoundPhaseResolutionResult({
+      attackResult: buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackOpportunityId: "parry-yield-predicate-attack",
+        attackerParticipantId: "gladiator",
+        defenderDb: 10,
+        defenderParticipantId: "guard",
+        ob: 10,
+        phase: "phase1",
+        rollD20: 12,
+        rollTotal: 12,
+        rolledAt: "2026-01-01T00:05:00.000Z",
+        weaponName: "Broad sword",
+      }),
+      roundNumber: 1,
+      updatedAt: "2026-01-01T00:02:00.000Z",
+    }).parryResolution;
+
+    expect(
+      hasCombatRoundParryStepYieldedToDamage({ ...base, status: "resolved", success: false }),
+    ).toBe(true);
+    expect(
+      hasCombatRoundParryStepYieldedToDamage({
+        ...base,
+        noEligibleParrySource: true,
+        status: "not_applicable",
+      }),
+    ).toBe(true);
+    expect(
+      hasCombatRoundParryStepYieldedToDamage({ ...base, status: "resolved", success: true }),
+    ).toBe(false);
+    expect(hasCombatRoundParryStepYieldedToDamage({ ...base, status: "pending" })).toBe(false);
+    // A `not_applicable` Parry without the flag is the pre-existing shape - a missed attack, or a
+    // missile attack with no ordinary Parry selected - and must not reach damage through here.
+    expect(hasCombatRoundParryStepYieldedToDamage({ ...base, status: "not_applicable" })).toBe(
+      false,
+    );
   });
 
   it("clear A1/P1/D1 returns to the redo point in the phase1 dependency chain", () => {

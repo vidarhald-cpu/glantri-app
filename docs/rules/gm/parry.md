@@ -19,7 +19,9 @@ replaces the row; declaration undo removes it.
 
 ## 2. Proxy Or Review An Incoming Parry
 
-P1 follows a Phase 1 attack and P2 follows a Phase 2 attack.
+P1 follows a Phase 1 attack and P2 follows a Phase 2 attack. If the defender has no Parry source at
+all, resolve the step as [2.1](#21-when-the-defender-has-no-parry-source) describes rather than by
+the steps below.
 
 1. If the attack missed, mark Parry not applicable; no damage resolution is required for that miss.
 2. After a hit or grazing hit, confirm the defender-owned Current Action and its available main-hand
@@ -41,6 +43,21 @@ The app performs the workbook percentage composition. Use the displayed calculat
 final total; do not add the raw percentage inputs directly to the roll. The required-roll value is
 the meaningful pre-roll threshold when all permitted inputs are known; the declaration by itself
 does not have a success chance.
+
+### 2.1 When The Defender Has No Parry Source
+
+Sometimes nothing the defender is wielding can parry. A bow, a sling, a firearm, or a weapon that is
+only thrown offers no Parry, and a Buckler or a Round Shield carries no Parry value of its own, so a
+defender holding only those has no Parry source against the incoming attack.
+
+After a hit or grazing hit, record that no Parry was available and continue straight to damage
+resolution. Nothing is rolled at this step, and nothing takes the Parry roll's place: the defender's
+Dodge and DB were already applied in deciding whether the attack connected, so that defence has
+already had its effect on this attack and no further defence is resolved here.
+
+Record the outcome rather than passing over the step. Reading the round back afterwards you should be
+able to see that the Parry step was reached and that no Parry was available, instead of finding a gap
+where the step belongs.
 
 ## 3. Clear Or Continue
 

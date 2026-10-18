@@ -549,6 +549,59 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).not.toContain("issue #211");
   });
 
+  it("publishes the no-eligible-Parry-source resolution on the GM Parry procedure", async () => {
+    const model = await getRulesDocumentationPageModel({ selectedDocumentId: "gm-parry" });
+
+    // The settled rule for a defender who cannot parry at all: the step is recorded and the round
+    // continues to damage, and the reason no further defence is rolled is part of the rule, because
+    // it is what stops a reader expecting a Dodge here. Each fragment sits inside one source line.
+    expect(model.selectedDocument.markdown).toContain(
+      "### 2.1 When The Defender Has No Parry Source",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "A bow, a sling, a firearm, or a weapon that",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "a Buckler or a Round Shield carries no Parry value of its own",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "record that no Parry was available and continue straight to damage",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "Dodge and DB were already applied in deciding whether the attack connected",
+    );
+    expect(model.selectedDocument.markdown).toContain("no further defence is resolved here");
+    expect(model.selectedDocument.markdown).toContain(
+      "that the Parry step was reached and that no Parry was available",
+    );
+
+    // The two load-bearing sentences, whole, against a whitespace-flowed form, so a reflow cannot
+    // leave the single-line fragments above matching while the published claim has changed.
+    const flowed = model.selectedDocument.markdown.replace(/\s+/g, " ");
+    expect(flowed).toContain(
+      "After a hit or grazing hit, record that no Parry was available and continue straight to damage resolution.",
+    );
+    expect(flowed).toContain(
+      "Nothing is rolled at this step, and nothing takes the Parry roll's place: the defender's Dodge and DB were already applied in deciding whether the attack connected, so that defence has already had its effect on this attack and no further defence is resolved here.",
+    );
+  });
+
+  it("points the player Parry page at the no-Parry-source resolution", async () => {
+    const model = await getRulesDocumentationPageModel({ selectedDocumentId: "player-parry" });
+
+    expect(model.selectedDocument.markdown).toContain(
+      "If nothing you are wielding can parry, no Parry was available against",
+    );
+    expect(model.selectedDocument.markdown).toContain(
+      "[When the defender has no Parry source](../gm/parry.md#21-when-the-defender-has-no-parry-source)",
+    );
+
+    const flowed = model.selectedDocument.markdown.replace(/\s+/g, " ");
+    expect(flowed).toContain(
+      "If nothing you are wielding can parry, no Parry was available against this attack and the round goes straight on to damage",
+    );
+  });
+
   it("keeps development-tracker links off every registered reader page", async () => {
     // A tracker link on a reader page is not a stale claim, so no content pin would catch it, and
     // since Forgejo #637 it renders as a live anchor rather than inert text. Issue tracking belongs

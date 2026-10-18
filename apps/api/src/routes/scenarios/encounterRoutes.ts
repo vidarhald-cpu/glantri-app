@@ -208,6 +208,8 @@ import {
   combatMissileIncomingAttackSchema,
   progressCombatRoundMissileReadiness,
   interruptCombatRoundMissileReadiness,
+  hasNoEligibleParrySourceForAttack,
+  recordCombatRoundNoEligibleParrySource,
   recordCombatRoundParryResult,
   recordCombatRoundOffensiveParryBrawlingRoll,
   recordCombatObservationRoll,
@@ -17716,7 +17718,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
         }
 
-        const nextRoundState = recordCombatRoundDefenseReview({
+        const reviewedRoundState = recordCombatRoundDefenseReview({
           command: {
             createdAt: reviewedAt,
             createdByUserId: user.id,
@@ -17726,6 +17728,32 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           snapshot,
           state: roundState,
         });
+        // Forgejo #676. The committed review is the moment the eligible Parry sources become
+        // canonical, so it is also the moment it is known whether the Parry step has anything to
+        // resolve. When a connected attack leaves the defender with no eligible Parry source, the
+        // settled rule is to record that no Parry was available and advance directly to damage —
+        // so it is recorded here rather than leaving the GM at a Parry step that cannot complete.
+        // Nothing is rolled and no second defence is resolved: ordinary DB and Dodge already
+        // applied to whether the attack connected. The attack result is re-read from the reviewed
+        // state because a pending missile shot is only resolved into one by the commit above.
+        const reviewedAttackResult = getCombatRoundAttackResultById({
+          attackResultId: body.attackId,
+          state: reviewedRoundState,
+        });
+        const nextRoundState =
+          reviewedAttackResult &&
+          hasNoEligibleParrySourceForAttack({
+            attackResult: reviewedAttackResult,
+            state: reviewedRoundState,
+          })
+            ? recordCombatRoundNoEligibleParrySource({
+                attackResult: reviewedAttackResult,
+                command: { createdAt: reviewedAt, createdByUserId: user.id },
+                state: reviewedRoundState,
+                submittedBy: "gm",
+                updatedAt: reviewedAt,
+              })
+            : reviewedRoundState;
         const committedSnapshot = nextRoundState.defenseSnapshots.find(
           (candidate) => candidate.attackId === body.attackId,
         );
