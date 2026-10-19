@@ -49,7 +49,96 @@ export function applyLocalCors(app: FastifyInstance): void {
   });
 }
 
-const isProduction = process.env.NODE_ENV === "production";
+export type SessionCookieSecurityPosture = {
+  readonly sameSite: "Lax" | "None";
+  readonly secure: boolean;
+};
+
+/**
+ * Cross-site secure posture. Required for an HTTPS deployment where the Web
+ * origin and the API origin are genuinely cross-site (the Azure topology), and
+ * used as the default whenever the browser-facing scheme cannot be established.
+ */
+const SECURE_CROSS_SITE_POSTURE: SessionCookieSecurityPosture = {
+  sameSite: "None",
+  secure: true,
+};
+
+/**
+ * Plain-HTTP posture. `SameSite=None` is rejected without `Secure` in current
+ * browsers, so a non-HTTPS deployment cannot use it and must fall back to
+ * `SameSite=Lax`. That is sufficient for the local production-like topology,
+ * where the Web and API origins differ only by port and are therefore same-site,
+ * and it matches the posture the non-production branch has always emitted. A
+ * genuinely cross-site deployment cannot be served over plain HTTP at all,
+ * because no `SameSite` value carries a cookie cross-site without `Secure`.
+ */
+const PLAIN_HTTP_SAME_SITE_POSTURE: SessionCookieSecurityPosture = {
+  sameSite: "Lax",
+  secure: false,
+};
+
+/**
+ * The session cookie's security posture follows the scheme the browser actually
+ * uses to reach the Web application, not `NODE_ENV`. `NODE_ENV=production` does
+ * not imply HTTPS, and a `Secure` cookie emitted over a plain-HTTP origin is
+ * dropped by any browser that does not grant an explicit localhost exemption.
+ *
+ * The secure posture stays the default: it is relaxed only when a production
+ * deployment explicitly configures an origin whose scheme is `http:`.
+ */
+export function resolveSessionCookieSecurityPosture(
+  nodeEnv: string | undefined,
+  webOrigin: string | undefined,
+): SessionCookieSecurityPosture {
+  if (nodeEnv !== "production") {
+    return PLAIN_HTTP_SAME_SITE_POSTURE;
+  }
+
+  if (webOrigin === undefined || webOrigin.trim() === "") {
+    return SECURE_CROSS_SITE_POSTURE;
+  }
+
+  let scheme: string;
+
+  try {
+    scheme = new URL(webOrigin).protocol;
+  } catch {
+    return SECURE_CROSS_SITE_POSTURE;
+  }
+
+  return scheme === "http:" ? PLAIN_HTTP_SAME_SITE_POSTURE : SECURE_CROSS_SITE_POSTURE;
+}
+
+const sessionCookieSecurityPosture = resolveSessionCookieSecurityPosture(
+  process.env.NODE_ENV,
+  process.env.WEB_ORIGIN,
+);
+
+if (process.env.NODE_ENV === "production" && !sessionCookieSecurityPosture.secure) {
+  process.stderr.write(
+    JSON.stringify({
+      level: "warn",
+      msg: "Session cookies are issued without Secure because WEB_ORIGIN uses the http scheme. Serve the Web application over HTTPS for a public deployment.",
+    }) + "\n",
+  );
+}
+
+function sessionCookieParts(valuePart: string, maxAgePart: string): string[] {
+  const parts = [
+    valuePart,
+    "HttpOnly",
+    "Path=/",
+    `SameSite=${sessionCookieSecurityPosture.sameSite}`,
+    maxAgePart,
+  ];
+
+  if (sessionCookieSecurityPosture.secure) {
+    parts.push("Secure");
+  }
+
+  return parts;
+}
 
 export function buildSessionCookie(token: string, expiresAt: string): string {
   const maxAgeSeconds = Math.max(
@@ -57,35 +146,14 @@ export function buildSessionCookie(token: string, expiresAt: string): string {
     Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000),
   );
 
-  const parts = [
+  return sessionCookieParts(
     `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
-    "HttpOnly",
-    "Path=/",
-    isProduction ? "SameSite=None" : "SameSite=Lax",
     `Max-Age=${maxAgeSeconds}`,
-  ];
-
-  if (isProduction) {
-    parts.push("Secure");
-  }
-
-  return parts.join("; ");
+  ).join("; ");
 }
 
 export function buildExpiredSessionCookie(): string {
-  const parts = [
-    `${SESSION_COOKIE_NAME}=`,
-    "HttpOnly",
-    "Path=/",
-    isProduction ? "SameSite=None" : "SameSite=Lax",
-    "Max-Age=0",
-  ];
-
-  if (isProduction) {
-    parts.push("Secure");
-  }
-
-  return parts.join("; ");
+  return sessionCookieParts(`${SESSION_COOKIE_NAME}=`, "Max-Age=0").join("; ");
 }
 
 export function getSessionTokenFromRequest(request: FastifyRequest): string | undefined {
