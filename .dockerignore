@@ -18,6 +18,10 @@
 # Data som ikke trengs i image
 data/
 docs/
+# Unntak: reader-facing Rules Docs leses fra filsystemet av apps/web i runtime
+# (apps/web/src/lib/rulesDocs.ts), så Web-imaget må pakke dem til /app/docs/rules.
+# Rekkefølgen betyr noe: negasjonen må komme etter docs/.
+!docs/rules/
 
 # Docker selv
 **/Dockerfile

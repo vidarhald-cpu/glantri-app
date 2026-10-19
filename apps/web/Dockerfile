@@ -20,5 +20,14 @@ ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 COPY --from=builder /build/apps/web/.next/standalone ./
 COPY --from=builder /build/apps/web/.next/static ./apps/web/.next/static
+# Next standalone-output inkluderer ikke public/, og serveren serverer statiske filer fra
+# <dir>/public der dir = __dirname = /app/apps/web (apps/web/server.js). Den må derfor kopieres
+# eksplisitt, på samme måte som .next/static over.
+COPY --from=builder /build/apps/web/public ./apps/web/public
+# Rules Docs leses fra filsystemet i runtime; getRulesDocsDirectory() i
+# apps/web/src/lib/rulesDocs.ts resolver til <cwd>/docs/rules, altså /app/docs/rules her.
+# Next standalone-tracing kan ikke følge en sti som bygges i runtime, så den må kopieres
+# eksplisitt. Den autoritative kilden er docs/rules/ i repoet; ingen andre kopier.
+COPY docs/rules ./docs/rules
 EXPOSE 3000
 CMD ["node", "apps/web/server.js"]
