@@ -68,7 +68,7 @@ import {
   saveCharacterToServer,
 } from "@/lib/api/localServiceClient";
 import { loadCanonicalContentFromServer } from "@/lib/api/contentClient";
-import type { ChargenSessionDraft } from "@/lib/offline/glantriDexie";
+import type { CachedContentRecord, ChargenSessionDraft } from "@/lib/offline/glantriDexie";
 import { ChargenSessionRepository } from "@/lib/offline/repositories/chargenSessionRepository";
 import { ContentCacheRepository } from "@/lib/offline/repositories/contentCacheRepository";
 import { LocalCharacterRepository } from "@/lib/offline/repositories/localCharacterRepository";
@@ -101,16 +101,51 @@ import { buildProfessionTrainingAccess } from "./professionTrainingAccess";
 import {
   createTargetCompetencyChargenSource,
   buildTargetRuntimeContent,
+  getTargetCompetencyActivationBlockers,
 } from "./targetCompetencyContent";
+import {
+  CHARGEN_CONTENT_CACHE_KEY,
+  CHARGEN_STALE_CONTENT_DIAGNOSTIC_KEY,
+  EMPTY_CHARGEN_CONTENT,
+  evaluateCachedChargenContent,
+  evaluateChargenContent,
+  formatChargenContentDiagnostics,
+  type ChargenContentDiagnostics,
+} from "./chargenContentAvailability";
 import { useProfessionBrowseModel } from "./components/ProfessionTraining";
 import { persistAuthenticatedFinalizedCharacter } from "./finalizeCharacterAuthority";
 import { ChargenDraftPersistenceCoordinator } from "./chargenDraftPersistenceCoordinator";
 
-const CONTENT_CACHE_KEY = "canonical-content";
+const CONTENT_CACHE_KEY = CHARGEN_CONTENT_CACHE_KEY;
 
 const chargenSessionRepository = new ChargenSessionRepository();
 const contentCacheRepository = new ContentCacheRepository();
 const localCharacterRepository = new LocalCharacterRepository();
+
+/**
+ * Retains a rejected snapshot under a separate diagnostic key so the failure stays reproducible,
+ * then evicts the record Chargen reads from. Preservation never blocks eviction: if the snapshot
+ * cannot be retained the unusable record is still removed, because leaving it in place is what
+ * keeps a profile wedged.
+ */
+async function preserveAndEvictRejectedSnapshot(
+  record: CachedContentRecord,
+  diagnostics: ChargenContentDiagnostics,
+): Promise<void> {
+  console.warn(formatChargenContentDiagnostics(diagnostics, "cached snapshot"));
+
+  try {
+    await contentCacheRepository.save(
+      CHARGEN_STALE_CONTENT_DIAGNOSTIC_KEY,
+      record.value,
+      `rejected:${diagnostics.reason}:${record.version}`,
+    );
+  } catch (error) {
+    console.warn(error);
+  }
+
+  await contentCacheRepository.delete(CONTENT_CACHE_KEY);
+}
 
 export function useChargenWizardState() {
   const router = useRouter();
@@ -127,6 +162,7 @@ export function useChargenWizardState() {
   const [contentSource, setContentSource] = useState(() =>
     createTargetCompetencyChargenSource(defaultCanonicalContent),
   );
+  const [contentUnavailable, setContentUnavailable] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>();
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [feedback, setFeedback] = useState<string[]>([]);
@@ -180,10 +216,27 @@ export function useChargenWizardState() {
   const [buildIncreaseStat, setBuildIncreaseStat] = useState<GlantriCharacteristicKey>("str");
   const [buildDecreaseStat, setBuildDecreaseStat] = useState<GlantriCharacteristicKey>("dex");
 
-  const content: CanonicalContent = useMemo(
-    () => withCompetencyContentV2(buildTargetRuntimeContent(contentSource)),
-    [contentSource],
-  );
+  /**
+   * `buildTargetRuntimeContent` throws by design when the source carries unresolved linked-stat
+   * mappings. Asking the existing activation-blocker guard first keeps that rejection out of the
+   * React render phase: an unusable source yields an explicitly empty catalogue and the wizard
+   * renders its unavailable state instead of tearing the tree down. No other catalogue is
+   * substituted.
+   */
+  const contentProjection = useMemo(() => {
+    const blockers = getTargetCompetencyActivationBlockers(contentSource);
+
+    if (blockers.length > 0) {
+      return { blockers, content: EMPTY_CHARGEN_CONTENT };
+    }
+
+    return {
+      blockers,
+      content: withCompetencyContentV2(buildTargetRuntimeContent(contentSource)),
+    };
+  }, [contentSource]);
+  const content: CanonicalContent = contentProjection.content;
+  const chargenContentUnavailable = contentUnavailable || contentProjection.blockers.length > 0;
   const selectedRolledProfile = selectedProfileId
     ? selectProfile({ profileId: selectedProfileId, profiles: rolledProfiles })
     : undefined;
@@ -694,12 +747,23 @@ export function useChargenWizardState() {
         return;
       }
 
-      const startingContent = cachedContent
-        ? validateCanonicalContent(cachedContent.value)
-        : defaultCanonicalContent;
+      /**
+       * The persisted snapshot is validated with the existing activation-blocker mechanism before
+       * it is used to construct runtime content. A snapshot that cannot be used is retained as
+       * diagnostic evidence, evicted, and replaced by reacquired authoritative content below.
+       */
+      const cachedEvaluation = evaluateCachedChargenContent(cachedContent);
+      const evictedStaleCache = cachedEvaluation?.status === "unusable";
 
-      if (cachedContent) {
-        setContentSource(createTargetCompetencyChargenSource(startingContent));
+      if (cachedEvaluation?.status === "unusable" && cachedContent) {
+        await preserveAndEvictRejectedSnapshot(cachedContent, cachedEvaluation.diagnostics);
+      }
+
+      const startingContent =
+        cachedEvaluation?.status === "usable" ? cachedEvaluation.content : defaultCanonicalContent;
+
+      if (cachedEvaluation?.status === "usable") {
+        setContentSource(cachedEvaluation.source);
       }
 
       setCurrentUser(sessionUser);
@@ -710,9 +774,12 @@ export function useChargenWizardState() {
         primaryPoolTotal: activeRuleSet.ordinarySkillPoints,
       }));
 
-      const activeCatalogue = withCompetencyContentV2(
-        buildTargetRuntimeContent(createTargetCompetencyChargenSource(startingContent)),
-      ).chargenCatalogue;
+      const startingEvaluation = evaluateChargenContent(startingContent);
+      const activeCatalogue =
+        startingEvaluation.status === "usable"
+          ? withCompetencyContentV2(buildTargetRuntimeContent(startingEvaluation.source))
+              .chargenCatalogue
+          : undefined;
       const isHistoricalDraft =
         savedDraft &&
         ((savedDraft.selectedProfessionId &&
@@ -735,10 +802,32 @@ export function useChargenWizardState() {
         }
 
         const normalizedContent = validateCanonicalContent(freshContent);
+        const freshEvaluation = evaluateChargenContent(normalizedContent);
 
-        setContentSource(createTargetCompetencyChargenSource(normalizedContent));
-        await contentCacheRepository.save(CONTENT_CACHE_KEY, normalizedContent, "v1");
+        if (freshEvaluation.status === "unusable") {
+          // The current authoritative content itself cannot be activated. Chargen reports that
+          // rather than keeping itself operational on an older or bundled catalogue.
+          console.warn(
+            formatChargenContentDiagnostics(
+              freshEvaluation.diagnostics,
+              "current authoritative content",
+            ),
+          );
+          setContentUnavailable(true);
+          return;
+        }
+
+        setContentSource(freshEvaluation.source);
+        setContentUnavailable(false);
+        await contentCacheRepository.save(CONTENT_CACHE_KEY, freshEvaluation.content, "v1");
       } catch {
+        if (evictedStaleCache) {
+          // The persisted snapshot was unusable and authoritative content could not be reacquired,
+          // so there is no content this profile can be trusted to build a Character from.
+          setContentUnavailable(true);
+          return;
+        }
+
         // Seed and cache already cover the local-first case.
       }
     }
@@ -1785,6 +1874,7 @@ export function useChargenWizardState() {
   }
 
   return {
+    contentUnavailable: chargenContentUnavailable,
     historicalDraft,
     resumableDraft,
     activeProfessionPreviewId,
