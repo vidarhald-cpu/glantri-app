@@ -147,6 +147,49 @@ describe("approved target Learning Groups", () => {
     expect(catalogue.grouplessBaseSkillIds.every((id) => !grouped.has(id))).toBe(true);
     expect(new Set([...grouped, ...catalogue.grouplessBaseSkillIds]).size).toBe(133);
   });
+  describe("authored description delimiting", () => {
+    const g01 = (markdown: string) =>
+      parseTargetLearningGroupPages(markdown, "test", "test").find((group) => group.id === "G01")!;
+    const authored = g01(fullLearningGroupsSource);
+    const start = fullLearningGroupsSource.indexOf(authored.description);
+    const marker = fullLearningGroupsSource.indexOf(
+      "**Member competencies and ordinary training**",
+      start,
+    );
+    const withDescription = (replacement: string) =>
+      fullLearningGroupsSource.slice(0, start) +
+      replacement +
+      fullLearningGroupsSource.slice(marker);
+
+    it("preserves multi-paragraph text exactly and stops at the following marker", () => {
+      const paragraphs = "Alpha paragraph one.\n\nBeta paragraph two.\n\nGamma paragraph three.";
+      const parsed = g01(withDescription(`${paragraphs}\n\n`));
+      expect(parsed.description).toBe(paragraphs);
+      expect(parsed.description.split(/\n[ \t]*\n/)).toHaveLength(3);
+      expect(parsed.description).not.toContain("Member competencies");
+      expect(parsed.shortDescription).toBe(authored.shortDescription);
+      // Everything the block parses positionally is untouched by the paragraph break. `endLine`
+      // is excluded only because this fixture's replacement text is a different number of lines.
+      const structure = ({ description, provenance, ...rest }: typeof parsed) => ({
+        ...rest,
+        provenance: { ...provenance, endLine: 0 },
+      });
+      expect(structure(parsed)).toEqual(structure(authored));
+    });
+
+    it("keeps a single-line description with and without a following blank line", () => {
+      expect(g01(withDescription("Only one line.\n\n")).description).toBe("Only one line.");
+      expect(g01(withDescription("Only one line.\n")).description).toBe("Only one line.");
+    });
+
+    it("still fails on a missing description and a missing short-description marker", () => {
+      expect(() => g01(withDescription(""))).toThrow(/empty\/duplicate group G01/);
+      expect(() =>
+        g01(fullLearningGroupsSource.replace("**Short description.**", "**Short note.**")),
+      ).toThrow(/missing short description in G01/);
+    });
+  });
+
   it("rejects unknown IDs, changed types, parents and duplicate membership instead of guessing", () => {
     for (const source of [
       fullLearningGroupsSource.replace("`nursing` — Nursing", "`invented` — Nursing"),

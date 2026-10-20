@@ -23,6 +23,41 @@ function fail(message: string): never {
   throw new Error(`Invalid target Learning Group source: ${message}`);
 }
 
+const shortDescriptionMarker = "**Short description.**";
+
+/**
+ * The next `**Label**` marker opening a line, matching the boundary `sectionText` and `inlineField`
+ * already use in `fullSkillCatalogueProposal.ts`.
+ */
+const nextLabelMarker = /\n\*\*[^*\n]+\*\*/;
+
+/**
+ * Split the authored prose that follows `**Short description.**` into the short-description
+ * paragraph and the remaining description paragraphs. The region ends at the next `**Label**`
+ * marker rather than at the first newline or the first blank line, so a description holds and
+ * preserves multi-paragraph authored text without the surrounding positional parse of member rows,
+ * boundaries and provenance depending on where paragraph breaks fall.
+ */
+function parseDescriptionSections(
+  block: string,
+  groupId: string,
+): { shortDescription: string; description: string } {
+  const start = block.indexOf(shortDescriptionMarker);
+  if (start < 0) fail(`missing short description in ${groupId}`);
+  const tail = block.slice(start + shortDescriptionMarker.length);
+  const nextLabel = tail.search(nextLabelMarker);
+  const sections = (nextLabel < 0 ? tail : tail.slice(0, nextLabel)).trim();
+  const paragraphBreak = sections.search(/\n[ \t]*\n/);
+  const shortDescription = (
+    paragraphBreak < 0 ? sections : sections.slice(0, paragraphBreak)
+  ).trim();
+  if (!shortDescription) fail(`missing short description in ${groupId}`);
+  return {
+    shortDescription,
+    description: paragraphBreak < 0 ? "" : sections.slice(paragraphBreak).trim(),
+  };
+}
+
 /** Parse only explicit group pages; reverse indexes and historical assertions are not memberships. */
 export function parseTargetLearningGroupPages(
   markdown: string,
@@ -38,11 +73,7 @@ export function parseTargetLearningGroupPages(
       .split(/\n## /)[0]!
       .replace(/\n<a id="[^"\n]+"><\/a>\s*$/, "")
       .trim();
-    const short =
-      block.match(/\*\*Short description\.\*\* ([^\n]+)\n+/) ??
-      fail(`missing short description in ${heading[1]}`);
-    const afterShort = block.slice(short.index! + short[0].length);
-    const description = afterShort.split(/\n\n+\*\*/)[0]!.trim();
+    const { shortDescription, description } = parseDescriptionSections(block, heading[1]!);
     const boundaryMarker = block.includes("**Exclusions and boundaries**")
       ? "**Exclusions and boundaries**"
       : "**Explicit exclusions**";
@@ -96,7 +127,7 @@ export function parseTargetLearningGroupPages(
     return {
       id: heading[1]!,
       name: heading[2]!,
-      shortDescription: short[1]!,
+      shortDescription,
       description,
       equipment: block.match(/\*\*Equipment and taught practice\.\*\* ([^\n]+)/)?.[1],
       boundaries: boundarySection

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { targetProfessionSource } from "./targetProfessionSource";
 import { readFileSync } from "node:fs";
 import {
+  parseTargetProfessionDescription,
   targetProfessionCatalogue,
   TARGET_PROFESSION_SOURCE_DIGEST,
   withTargetLearningGroupsAndProfessions,
@@ -43,8 +44,13 @@ describe("approved target Profession projection", () => {
        added or removed. */
     expect(content.skillGroups.flatMap((g) => g.skillMemberships ?? [])).toHaveLength(153);
     expect(content.skillGroups.flatMap((g) => g.specializationIds ?? [])).toHaveLength(7);
+    /* Digest OF THE PARSED OUTPUT, not of the source text: TARGET_PROFESSION_SOURCE_DIGEST above is
+       unchanged. It moved once, with #722, because the description field is now delimited by the
+       following `**Label**` marker instead of the first newline, so each family keeps the authored
+       continuation paragraph the single-line capture dropped. Every other parsed value is
+       byte-identical. */
     expect(targetProfessionCatalogue.manifest.digest).toBe(
-      "sha256:a0309587ccf27e7e96cac4a09c2c13a9f24fc16e142142fe2b9415113d22cfd0",
+      "sha256:7e8f20aeeeffc55aa251c3988539a3fcb187a5772411106c2c072a1525badccf",
     );
   });
   it("retains additive P01 and distinct archer and longbow packages", () => {
@@ -97,6 +103,57 @@ describe("approved target Profession projection", () => {
     for (const path of gameFacingDocuments) {
       const contents = readFileSync(new URL(path, import.meta.url), "utf8");
       expect(contents, path).not.toMatch(/\bS\d{2}\b/);
+    }
+  });
+});
+
+describe("authored Profession description delimiting", () => {
+  const block = (description: string, next = "\n\n**Typical activities**\n\n- Something.\n") =>
+    `### P99 — Fixture\n\n**Working ID:** \`profession:fixture\`.\n\n**Short description:** ${description}${next}`;
+
+  it("preserves multi-paragraph text exactly and stops at the following marker", () => {
+    const paragraphs = "Alpha paragraph one.\n\nBeta paragraph two.\n\nGamma paragraph three.";
+    const parsed = parseTargetProfessionDescription(block(paragraphs), "profession:fixture");
+    expect(parsed).toBe(paragraphs);
+    expect(parsed.split(/\n[ \t]*\n/)).toHaveLength(3);
+    expect(parsed).not.toContain("Typical activities");
+  });
+
+  it("keeps a single-line description with and without a following blank line", () => {
+    expect(parseTargetProfessionDescription(block("One line only."), "id")).toBe("One line only.");
+    expect(
+      parseTargetProfessionDescription(
+        block("One line only.", "\n**Typical activities**\n\n- Something.\n"),
+        "id",
+      ),
+    ).toBe("One line only.");
+  });
+
+  it("still fails on a missing marker and on an empty description", () => {
+    expect(() =>
+      parseTargetProfessionDescription("**Typical activities**\n\n- Something.\n", "id"),
+    ).toThrow(/Invalid approved Profession source: id/);
+    expect(() => parseTargetProfessionDescription(block(""), "id")).toThrow(
+      /Invalid approved Profession source: id/,
+    );
+  });
+
+  it("keeps the authored continuation paragraph the single-line capture dropped", () => {
+    const families = targetProfessionCatalogue.families;
+    expect(families).toHaveLength(84);
+    expect(families.filter((f) => /\n[ \t]*\n/.test(f.description))).toHaveLength(84);
+    const hunter = families.find((f) => f.code === "P01")!;
+    expect(hunter.description.split(/\n[ \t]*\n/)).toHaveLength(2);
+    expect(hunter.description.split(/\n[ \t]*\n/)[0]).toBe(
+      "A hunter or trapper finds game and obtains it through a practised method suited to the quarry.",
+    );
+    expect(hunter.description.endsWith("distinct training routes within this livelihood.")).toBe(
+      true,
+    );
+    // No family absorbs a following section marker or a list item into its description.
+    for (const family of families) {
+      expect(family.description).not.toContain("**");
+      expect(family.description.split("\n").filter((line) => line.startsWith("- "))).toEqual([]);
     }
   });
 });
