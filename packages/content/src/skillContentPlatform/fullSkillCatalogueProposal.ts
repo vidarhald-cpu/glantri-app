@@ -4,8 +4,8 @@ import { fullSkillCatalogueProposalSourceMarkdown } from "./fullSkillCataloguePr
 export const FULL_SKILL_CATALOGUE_PROPOSAL_SCHEMA_VERSION =
   "full-skill-catalogue-proposal/v1" as const;
 export const FULL_SKILL_CATALOGUE_SOURCE_SHA256 =
-  "d8f3d3e256cf2d8bbcd516ca84f842928b3cf02056efeda7fed9220f40d1eb91" as const;
-export const FULL_SKILL_CATALOGUE_SOURCE_SIZE = 357_081;
+  "c5728e2af8907ce9749d0525fe6ecab72188eb98a6e60faa2f8917fefb12df56" as const;
+export const FULL_SKILL_CATALOGUE_SOURCE_SIZE = 370_111;
 
 export type FullSkillCatalogueCompetencyType =
   | "base-skill"

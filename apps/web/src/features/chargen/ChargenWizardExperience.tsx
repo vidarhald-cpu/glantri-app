@@ -25,6 +25,20 @@ export default function ChargenWizard() {
   const state = useChargenWizardState();
   const [requestedStepIndex, setRequestedStepIndex] = useState(0);
 
+  /**
+   * Chargen cannot build a Character without an activatable catalogue. This reports that plainly
+   * instead of letting the catalogue rejection throw during render, and it deliberately carries no
+   * identifiers or internal terminology; those stay in the development/GM console diagnostics.
+   */
+  if (state.contentUnavailable) {
+    return (
+      <section>
+        <h1>Chargen is unavailable</h1>
+        <p role="status">Character creation is not available right now. Please try again later.</p>
+      </section>
+    );
+  }
+
   if (state.historicalDraft) {
     const draft = state.historicalDraft;
     return (
