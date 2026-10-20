@@ -40,7 +40,22 @@ export function getSatisfiedCompetencyV2CoreRouteIds(input: {
     .map((core) => core.id);
 }
 
-/** An available path must still satisfy at least one alternative defining core route. */
+/**
+ * Resolves what a Character of this Society Level and Social Band can actually reach on a
+ * Profession path.
+ *
+ * Forgejo #731: availability aggregates the path's *whole* authored route set. Each route keeps its
+ * own authored `minSocietyLevel` / `minSocialBand` bound and is filtered on it individually; what a
+ * closed route must not do is close the routes beside it. The authored principle
+ * (`docs/product/proposals/competency-content-v2/society-level-route-availability.md:36`, "A route
+ * being unavailable does not make a Skill unavailable.") is the Skill-level statement of the same
+ * rule, and a Profession is the same case one level up.
+ *
+ * `satisfiedCoreRouteIds` still reports which defining core routes are reachable, because core-route
+ * selection and completion consume it. It no longer decides availability: before this repair a
+ * restricted core route emptied the available group, direct-Skill and Specialization sets, which
+ * turned a restriction on one training route into an exclusion from the occupation.
+ */
 export function resolveCompetencyV2PathAvailability(input: {
   content: V2ContentShape;
   professionId: string;
@@ -101,7 +116,12 @@ export function resolveCompetencyV2PathAvailability(input: {
   });
   return {
     pathId: path.id,
-    valid: satisfiedCoreRouteIds.length > 0,
+    /*
+     * At least one authored training route is valid for this Character. This is not a pass-through:
+     * the bound filter above is unchanged, so a path whose every authored route is closed by its own
+     * authored bound yields no routes and stays unavailable.
+     */
+    valid: routes.length > 0,
     availableGroupIds: groupIds,
     availableDirectSkillIds: directSkillIds,
     availableSpecializationIds: specializationIds,

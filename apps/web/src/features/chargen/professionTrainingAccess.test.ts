@@ -14,11 +14,17 @@ import {
 /**
  * Forgejo #635 — intentional inaccessibility, made understandable.
  *
- * The Product Owner ruling of 2026-10-15 keeps the accepted access behaviour unchanged: 569 of the
- * 5504 Civilization x social-class x Profession combinations reach no Profession training, and the
- * remedy is explanation, not a mechanics change. These cases bind the explanation to the accepted
+ * The Product Owner ruling of 2026-10-15 keeps the accepted access behaviour unchanged: the remedy
+ * is explanation, not a mechanics change. These cases bind the explanation to the accepted
  * catalogue and hold the two bounds the ruling names: no invented reason, and no raw identifier or
  * implementation vocabulary in anything a reader sees.
+ *
+ * The population the explanation covers is re-measured under Forgejo #731 (control-plane ruling,
+ * 2026-10-20). 569 of the 5504 combinations used to reach no training; 509 of those did have an
+ * authored route valid for the Character, and were reported as closed only because
+ * `resolveCompetencyV2PathAvailability` discarded the whole route set whenever no defining core
+ * route was reachable. 60 combinations are closed on the authored content itself and still explain
+ * themselves here. Not one bound changed, and nothing a reader is shown was reworded.
  */
 const content = withCompetencyContentV2(
   buildTargetRuntimeContent(createTargetCompetencyChargenSource(defaultCanonicalContent)),
@@ -65,18 +71,28 @@ describe("Profession training access explanation", () => {
   it("explains exactly the combinations that reach no training, and no others", () => {
     expect(civilizations).toHaveLength(16);
     expect(paths).toHaveLength(86);
-    expect(closedCombinations).toHaveLength(569);
+    expect(closedCombinations).toHaveLength(60);
   });
 
-  it("names the reported Scythians and Scribe and Copyist combination at every social class", () => {
+  it("names a Scythian Profession closed by its own authored routes, at every social class", () => {
+    /*
+     * #635 reported Scythians + Scribe and Copyist. Under #731 that pair is no longer closed: the
+     * records office (`G11`) is still out of reach among the Scythians, but the catalogue also
+     * authors "Taught directly in the writing room" with no Society-Level bound, and that route was
+     * valid for the Character all along. Mathematical Practitioner is the Scythian case that is
+     * genuinely closed — all three of its authored routes are bounded at Society Level 3 and it has
+     * no direct route — so it is what the explanation must still name.
+     */
+    expect(accessFor("scythians", "profession:scribe", 1)).toBeUndefined();
+
     for (const socialBand of [1, 2, 3, 4]) {
-      const access = accessFor("scythians", "profession:scribe", socialBand);
+      const access = accessFor("scythians", "profession:mathematical-practitioner", socialBand);
 
       expect(access, `band ${socialBand}`).toBeDefined();
       expect(access!.closedBy).toBe("society");
       expect(access!.situation).toBe("No one among the Scythians trains this Profession.");
       expect(access!.authoredReasons).toEqual([
-        "A records office is a standing bureaucracy keeping written record.",
+        "Applied calculation is kept accounts and measured ground reduced to figures.",
       ]);
     }
   });
@@ -98,9 +114,9 @@ describe("Profession training access explanation", () => {
     }, {});
 
     expect(byClosure).toEqual({
-      society: 329,
-      "social-class": 225,
-      "society-and-social-class": 15,
+      society: 25,
+      "social-class": 32,
+      "society-and-social-class": 3,
     });
   });
 
@@ -121,14 +137,19 @@ describe("Profession training access explanation", () => {
 
   it("states the situation without inventing a rationale when no authored reason is attributable", () => {
     /*
-     * No current combination reaches this branch — every one of the 569 attributes an authored
+     * No current combination reaches this branch — every one of the 60 attributes an authored
      * reason — so it is held against content whose bound carries none. A fabricated rationale is the
      * one thing the ruling forbids outright.
+     *
+     * Two conditions have to hold at once, and #731 separated them: no authored route may be valid
+     * for the Character, which is what makes the Profession closed, and the core route must then
+     * need something no route of the path reaches, which is what leaves the closure unattributed.
      */
     const unattributed = structuredClone(content) as typeof content;
     const scribe = unattributed.competencyV2!.paths.find(
       (path) => path.id === "profession:scribe",
     )!;
+    for (const route of scribe.routes) route.minSocietyLevel = 6;
     scribe.coreRoutes = [
       {
         groupIds: ["group-that-no-route-reaches"],
@@ -154,7 +175,7 @@ describe("Profession training access explanation", () => {
     });
   });
 
-  it("exposes no raw identifier in any of the 569 explanations", () => {
+  it("exposes no raw identifier in any of the 60 explanations", () => {
     const patterns = [
       /\b(?:profession|skill|group|society|civilization|specialization):/i,
       /\b[A-Z]\d{2}\b/,
