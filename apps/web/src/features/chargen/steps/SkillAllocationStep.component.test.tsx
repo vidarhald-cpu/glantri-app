@@ -86,7 +86,12 @@ function renderStep(overrides: Record<string, unknown> = {}) {
     rowActionFeedback: {},
     selectableSkillSummary: { selectionSlots: [] },
     selectedCivilization: scythians,
-    selectedProfession: content.professions.find((row) => row.id === "profession:scribe"),
+    /*
+     * `SkillAllocationStep` renders `Profession: {selectedProfession?.name}` beside the card's
+     * closure prose, so these two must name the same Profession or the fixture states one and
+     * explains another. No assertion reads the name; this keeps it honest for the next reader.
+     */
+    selectedProfession: content.professions.find((row) => row.id === CLOSED_PROFESSION_ID),
     selectedProfessionCard: cardFor(CLOSED_PROFESSION_ID, 1),
     selectedProfile: undefined,
     selectedSociety: { id: scythianSociety.id, name: scythianSociety.name, socialBands: {} },

@@ -21,6 +21,13 @@ import { buildChargenSkillAccessSummary, getAllowedPrimaryGroupIds } from "./pri
  *
  * Measured against the real approved V2 catalogue: a hand-built path object would prove nothing,
  * because the defect is in how the authored routes are aggregated.
+ *
+ * Re-measured after the content ruling of 2026-10-20 (Forgejo #732) removed the mis-encoded
+ * `minSocialBand: "L2"` from F24 Ironmaking and forge apprenticeship. On the corrected catalogue a
+ * Thyatis Common Folk Character reaches 73 available Professions before the repair and 86 after:
+ * the same 13 gains, and Smith and Smelter now open to Band 1 under both, because #732 brings their
+ * core-route Learning Group back within reach. Smith and Smelter are therefore no longer a control
+ * here; the Social-Band control is Building Designer among the Scythians (below).
  */
 const content = getApprovedV2RuntimeContent();
 const paths = content.competencyV2!.paths;
@@ -36,12 +43,23 @@ const BAND_4 = 4;
  * route, and all three are bounded on `minSocietyLevel: 3` alone — not one of them carries any
  * `minSocialBand`. Below Society Level 3 the Character has no authored valid route at any Social
  * Band, so the Profession must remain unavailable, and no Social-Band ruling can open it. That is
- * why it is the control rather than Smith or Smelter: those two are closed on the Social Band, and
- * the separate content ruling (#732) owns that.
+ * why it is the control rather than Smith or Smelter: the separate content ruling (#732) has since
+ * opened those two at Band 1, and this control is untouched by it.
  */
 const CONTROL_PATH_ID = "profession:mathematical-practitioner";
 /** Society Level 2: below the control's authored `minSocietyLevel: 3`. */
 const CONTROL_SOCIETY_ID = "pastoral_clan_nomadic";
+/**
+ * The secondary control, replacing Smith and Smelter, which Forgejo #732 opened. Among the
+ * Scythians (Society Level 2) only one of Building Designer's three authored routes is within the
+ * Society Level bound at all — the F28 group route — and that one route carries
+ * `minSocialBand: "L2"`. Common Folk therefore have no authored valid route and the Profession must
+ * stay unavailable, while Band 2 opens it. A pass-through `valid` would wrongly open it at Band 1,
+ * which is what this control catches. The authored bound is asserted first, so a content lane that
+ * changes it breaks the premise loudly instead of silently passing.
+ */
+const BAND_CONTROL_PATH_ID = "profession:building-designer";
+const BAND_CONTROL_SOCIETY_ID = "pastoral_clan_nomadic";
 
 function availability(professionId: string, societyId: string, socialBand: number) {
   return resolveCompetencyV2PathAvailability({ content, professionId, societyId, socialBand })!;
@@ -176,18 +194,35 @@ describe("Profession availability aggregates the authored route set (#731)", () 
     }
   });
 
-  it("keeps Smith and Smelter unavailable for the reported Character", () => {
+  it("keeps a Profession closed by the authored Social Band unavailable at that band", () => {
     /*
-     * Secondary controls. Every authored route for both is a trades-tier Learning Group at
-     * `minSocialBand: "L2"` and neither has a direct route, so they are barred by the authored
-     * content and not by this aggregation. Forgejo #732 owns the content ruling on those bounds;
-     * if it opens them, the content fact asserted on the first line is what changes here.
+     * Secondary control, replacing Smith and Smelter after Forgejo #732 opened them. The content
+     * premise comes first: if a content lane moves either authored bound, this is what fails.
      */
-    for (const pathId of ["profession:smith", "profession:smelter"]) {
-      expect(openRoutes(pathId, THYATIS_SOCIETY_ID, BAND_1), pathId).toEqual([]);
-      expect(availability(pathId, THYATIS_SOCIETY_ID, BAND_1).valid, pathId).toBe(false);
-      expect(normalAccess(pathId, THYATIS_SOCIETY_ID, BAND_1).primaryGroupIds, pathId).toEqual([]);
-    }
+    const path = paths.find((candidate) => candidate.id === BAND_CONTROL_PATH_ID)!;
+    const society = content.societies!.find((row) => row.id === BAND_CONTROL_SOCIETY_ID)!;
+
+    expect(society.societyLevel).toBe(2);
+    expect(path.routes.map((route) => route.minSocietyLevel)).toEqual([2, 3, 3]);
+    expect(path.routes.map((route) => route.minSocialBand)).toEqual(["L2", undefined, undefined]);
+
+    // Exactly one authored route is within the Society Level bound here, and it is band-bounded.
+    expect(openRoutes(BAND_CONTROL_PATH_ID, BAND_CONTROL_SOCIETY_ID, BAND_1)).toEqual([]);
+    expect(
+      openRoutes(BAND_CONTROL_PATH_ID, BAND_CONTROL_SOCIETY_ID, 2).map((route) => route.id),
+    ).toEqual(["profession:building-designer/group/F28"]);
+
+    const closed = availability(BAND_CONTROL_PATH_ID, BAND_CONTROL_SOCIETY_ID, BAND_1);
+
+    expect(closed.valid).toBe(false);
+    expect(closed.availableGroupIds).toEqual([]);
+    expect(closed.availableDirectSkillIds).toEqual([]);
+    expect(closed.availableSpecializationIds).toEqual([]);
+    expect(
+      normalAccess(BAND_CONTROL_PATH_ID, BAND_CONTROL_SOCIETY_ID, BAND_1).primaryGroupIds,
+    ).toEqual([]);
+    // ...and the next band up opens it, so the Social Band is demonstrably what closed it.
+    expect(availability(BAND_CONTROL_PATH_ID, BAND_CONTROL_SOCIETY_ID, 2).valid).toBe(true);
   });
 
   it("gains exactly the 13 reported Professions and loses none", () => {
@@ -198,7 +233,10 @@ describe("Profession availability aggregates the authored route set (#731)", () 
       })
       .map((path) => path.id);
 
-    /* The 15 the defect measured, less Smith and Smelter, which no open route reaches. */
+    /*
+     * The 15 the defect measured, less Smith and Smelter, whose gain is a reachable core route
+     * rather than an aggregated alternative: measured at 13 again on the Forgejo #732 catalogue.
+     */
     expect([...gained].sort()).toEqual(
       [
         "profession:armorer",
@@ -216,11 +254,17 @@ describe("Profession availability aggregates the authored route set (#731)", () 
         "profession:weapon-instructor",
       ].sort(),
     );
+    /*
+     * Nothing is left unavailable for this Character. Before Forgejo #732 this was Smith and
+     * Smelter, closed by the `minSocialBand: "L2"` that ruling removed from F24; the content premise
+     * is that the surviving trades-tier bounds no longer close anything at Band 1 in a Society
+     * Level 5 society. The Social-Band control above holds the closed direction, among the Scythians.
+     */
     expect(
       paths
         .filter((path) => !availability(path.id, THYATIS_SOCIETY_ID, BAND_1).valid)
         .map((p) => p.id),
-    ).toEqual(["profession:smith", "profession:smelter"]);
+    ).toEqual([]);
   });
 
   it("makes availability the authored route set across the whole catalogue, and nothing looser", () => {

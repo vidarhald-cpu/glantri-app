@@ -19,12 +19,19 @@ import {
  * catalogue and hold the two bounds the ruling names: no invented reason, and no raw identifier or
  * implementation vocabulary in anything a reader sees.
  *
+ * The Product Owner content ruling of 2026-10-20 (Forgejo #732) corrected one authored bound: F24
+ * Ironmaking and forge apprenticeship keeps its furnace requirement as a Society Level bound and no
+ * longer carries a trades-tier Social Band, because Social Band 1 alone must not exclude the Smith
+ * and the Smelter. The explanation behaviour the 2026-10-15 ruling settled is untouched; only the
+ * count of cases it explains moves.
+ *
  * The population the explanation covers is re-measured under Forgejo #731 (control-plane ruling,
- * 2026-10-20). 569 of the 5504 combinations used to reach no training; 509 of those did have an
- * authored route valid for the Character, and were reported as closed only because
- * `resolveCompetencyV2PathAvailability` discarded the whole route set whenever no defining core
- * route was reachable. 60 combinations are closed on the authored content itself and still explain
- * themselves here. Not one bound changed, and nothing a reader is shown was reworded.
+ * 2026-10-20) on top of that corrected content. 539 of the 5504 combinations used to reach no
+ * training; 509 of those did have an authored route valid for the Character, and were reported as
+ * closed only because `resolveCompetencyV2PathAvailability` discarded the whole route set whenever
+ * no defining core route was reachable. 30 combinations are closed on the authored content itself
+ * and still explain themselves here. Not one bound changed, and nothing a reader is shown was
+ * reworded.
  */
 const content = withCompetencyContentV2(
   buildTargetRuntimeContent(createTargetCompetencyChargenSource(defaultCanonicalContent)),
@@ -71,7 +78,21 @@ describe("Profession training access explanation", () => {
   it("explains exactly the combinations that reach no training, and no others", () => {
     expect(civilizations).toHaveLength(16);
     expect(paths).toHaveLength(86);
-    expect(closedCombinations).toHaveLength(60);
+    expect(closedCombinations).toHaveLength(30);
+  });
+
+  /*
+   * Forgejo #732. The corrected F24 bound opens the Smith and the Smelter to Band 1 wherever the
+   * society runs furnaces, and the Society Level 1 Civilization still closes both occupations at
+   * every social class — the furnace requirement, not the stratum, is what excludes them now.
+   */
+  it("opens the Smith and the Smelter to Common Folk only where the society runs furnaces", () => {
+    for (const professionId of ["profession:smith", "profession:smelter"]) {
+      expect(accessFor("thyatis", professionId, 1), professionId).toBeUndefined();
+      const closed = accessFor("san_forager_bands", professionId, 1);
+      expect(closed, professionId).toBeDefined();
+      expect(closed!.closedBy).toBe("society");
+    }
   });
 
   it("names a Scythian Profession closed by its own authored routes, at every social class", () => {
@@ -113,10 +134,17 @@ describe("Profession training access explanation", () => {
       return totals;
     }, {});
 
+    /*
+     * Measured at the merged head. Forgejo #732 moves the 30 Band 1 Smith and Smelter cells out of
+     * `social-class` entirely, and moves the two Society Level 1 Band 1 cells from
+     * `society-and-social-class` to `society`: the society still closes them, the stratum no longer
+     * does. What is left is 27 closed on the society alone, 2 on the social class alone and 1 on
+     * both.
+     */
     expect(byClosure).toEqual({
-      society: 25,
-      "social-class": 32,
-      "society-and-social-class": 3,
+      society: 27,
+      "social-class": 2,
+      "society-and-social-class": 1,
     });
   });
 
@@ -137,7 +165,7 @@ describe("Profession training access explanation", () => {
 
   it("states the situation without inventing a rationale when no authored reason is attributable", () => {
     /*
-     * No current combination reaches this branch — every one of the 60 attributes an authored
+     * No current combination reaches this branch — every one of the 30 attributes an authored
      * reason — so it is held against content whose bound carries none. A fabricated rationale is the
      * one thing the ruling forbids outright.
      *
@@ -175,7 +203,7 @@ describe("Profession training access explanation", () => {
     });
   });
 
-  it("exposes no raw identifier in any of the 60 explanations", () => {
+  it("exposes no raw identifier in any of the 30 explanations", () => {
     const patterns = [
       /\b(?:profession|skill|group|society|civilization|specialization):/i,
       /\b[A-Z]\d{2}\b/,

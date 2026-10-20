@@ -4389,6 +4389,21 @@ export const competencyContentV2GroupAvailability: Readonly<Record<string, V2Rou
     minSocietyLevel: 2,
     reason: "Fighting from the saddle requires kept riding stock, exactly as mounted travel does.",
   },
+  /*
+   * F24 carried a trades-tier Social Band until the Product Owner content ruling of 2026-10-20
+   * (Forgejo #732). The authored reason was always an infrastructure argument — the Society Level 1
+   * forager and ritual-tribal society runs no furnaces — and the ruling holds that Social Band 1
+   * alone must not exclude the Smith and the Smelter. The furnace requirement is kept, as the
+   * Society Level bound that actually encodes it; the stratum bound is withdrawn.
+   */
+  F24: {
+    minSocietyLevel: 2,
+    reason:
+      "Ore furnace and forge work is taught at a furnace and a forge. The Society Level 1 forager " +
+      "and ritual-tribal society runs none, so the practice has nothing to be taught at. From " +
+      "Society Level 2 it is ordinary work at every band: the common folk who keep the furnace are " +
+      "the people who learn it.",
+  },
 
   /* --- The training also belongs to the trades stratum (canonical trades tier) ------------- */
   C01: {
@@ -4432,13 +4447,6 @@ export const competencyContentV2GroupAvailability: Readonly<Record<string, V2Rou
     minSocietyLevel: 2,
     minSocialBand: "L2",
     reason: "A yard laying down vessels is a timber trade with the yard behind it.",
-  },
-  F24: {
-    minSocietyLevel: 2,
-    minSocialBand: "L2",
-    reason:
-      "Ore furnace and forge work is a metal trade. The Society Level 1 forager and ritual-tribal " +
-      "society runs no furnaces.",
   },
   F25: {
     minSocietyLevel: 2,
