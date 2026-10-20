@@ -68,6 +68,28 @@ const slug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+const shortDescriptionMarker = "**Short description:**";
+
+/**
+ * The next `**Label**` marker opening a line, matching the boundary `sectionText` and `inlineField`
+ * already use in `skillContentPlatform/fullSkillCatalogueProposal.ts`.
+ */
+const nextLabelMarker = /\n\*\*[^*\n]+\*\*/;
+
+/**
+ * Delimit the authored description by the following `**Label**` marker rather than by the first
+ * newline, so the field holds and preserves multi-paragraph authored text. A missing or empty
+ * description still fails, exactly as the single-line capture did. Exported for this parser's own
+ * tests, as `parseTargetLearningGroupPages` is.
+ */
+export function parseTargetProfessionDescription(block: string, id: string): string {
+  const start = block.indexOf(shortDescriptionMarker);
+  if (start < 0) fail(id);
+  const tail = block.slice(start + shortDescriptionMarker.length);
+  const nextLabel = tail.search(nextLabelMarker);
+  return (nextLabel < 0 ? tail : tail.slice(0, nextLabel)).trim() || fail(id);
+}
+
 export function buildTargetProfessionCatalogue() {
   if (sha256(targetProfessionSource) !== TARGET_PROFESSION_SOURCE_DIGEST) fail("digest mismatch");
   const groups = new Set(targetLearningGroupCatalogue.groups.map((g) => g.id));
@@ -106,7 +128,7 @@ export function buildTargetProfessionCatalogue() {
       id,
       code: h[1]!,
       name: h[2]!,
-      description: block.match(/\*\*Short description:\*\* ([^\n]+)/)?.[1] ?? fail(id),
+      description: parseTargetProfessionDescription(block, id),
       sourceText: block.trim(),
       sourceLine: targetProfessionSource.slice(0, h.index).split("\n").length,
       opportunities,
