@@ -8549,6 +8549,7 @@
           "C05",
           "F27",
           "C06",
+          "F24",
           "C14",
           "F21",
           "C10",
@@ -8596,6 +8597,8 @@
           "P33",
           "P34",
           "P35",
+          "P36",
+          "P37",
           "P39",
           "P42",
           "P43",
@@ -8620,8 +8623,8 @@
           "P83",
           "P84"
         ],
-        "validPaths": 50,
-        "reachableBaseSkills": 96,
+        "validPaths": 52,
+        "reachableBaseSkills": 98,
         "unreachableBaseSkillIds": [
           "alchemy",
           "astrology",
@@ -8654,8 +8657,6 @@
           "skill:shipbuilding",
           "skill:siege-engine-operation",
           "skill:siege-engineering",
-          "skill:smelting",
-          "skill:smithing",
           "skill:teaching",
           "skill:trade",
           "skill:winemaking",
@@ -9223,6 +9224,7 @@
           "C05",
           "F27",
           "C06",
+          "F24",
           "C14",
           "F21",
           "C10",
@@ -9291,6 +9293,8 @@
           "P33",
           "P34",
           "P35",
+          "P36",
+          "P37",
           "P39",
           "P42",
           "P43",
@@ -9331,8 +9335,8 @@
           "P83",
           "P84"
         ],
-        "validPaths": 71,
-        "reachableBaseSkills": 120,
+        "validPaths": 73,
+        "reachableBaseSkills": 121,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -9344,7 +9348,6 @@
           "skill:poisons",
           "skill:sailmaking",
           "skill:shipbuilding",
-          "skill:smithing",
           "skill:trade",
           "skill:winemaking"
         ],
@@ -9973,6 +9976,7 @@
           "C05",
           "F27",
           "C06",
+          "F24",
           "C14",
           "F21",
           "C10",
@@ -10041,6 +10045,8 @@
           "P33",
           "P34",
           "P35",
+          "P36",
+          "P37",
           "P39",
           "P42",
           "P43",
@@ -10081,8 +10087,8 @@
           "P83",
           "P84"
         ],
-        "validPaths": 71,
-        "reachableBaseSkills": 120,
+        "validPaths": 73,
+        "reachableBaseSkills": 121,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -10094,7 +10100,6 @@
           "skill:poisons",
           "skill:sailmaking",
           "skill:shipbuilding",
-          "skill:smithing",
           "skill:trade",
           "skill:winemaking"
         ],
@@ -10723,6 +10728,7 @@
           "C05",
           "F27",
           "C06",
+          "F24",
           "C14",
           "F21",
           "C10",
@@ -10791,6 +10797,8 @@
           "P33",
           "P34",
           "P35",
+          "P36",
+          "P37",
           "P39",
           "P42",
           "P43",
@@ -10831,8 +10839,8 @@
           "P83",
           "P84"
         ],
-        "validPaths": 71,
-        "reachableBaseSkills": 120,
+        "validPaths": 73,
+        "reachableBaseSkills": 121,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -10844,7 +10852,6 @@
           "skill:poisons",
           "skill:sailmaking",
           "skill:shipbuilding",
-          "skill:smithing",
           "skill:trade",
           "skill:winemaking"
         ],
@@ -11473,6 +11480,7 @@
           "C05",
           "F27",
           "C06",
+          "F24",
           "C14",
           "F21",
           "C10",
@@ -11541,6 +11549,8 @@
           "P33",
           "P34",
           "P35",
+          "P36",
+          "P37",
           "P39",
           "P42",
           "P43",
@@ -11581,8 +11591,8 @@
           "P83",
           "P84"
         ],
-        "validPaths": 71,
-        "reachableBaseSkills": 120,
+        "validPaths": 73,
+        "reachableBaseSkills": 121,
         "unreachableBaseSkillIds": [
           "camouflage",
           "captaincy",
@@ -11594,7 +11604,6 @@
           "skill:poisons",
           "skill:sailmaking",
           "skill:shipbuilding",
-          "skill:smithing",
           "skill:trade",
           "skill:winemaking"
         ],
@@ -12309,9 +12318,8 @@
         "groupId": "F24",
         "groupName": "Ironmaking and forge apprenticeship",
         "minSocietyLevel": 2,
-        "minSocialBand": "L2",
-        "reason": "Ore furnace and forge work is a metal trade. The Society Level 1 forager and ritual-tribal society runs no furnaces.",
-        "canonicalTierId": "trades"
+        "minSocialBand": "L1",
+        "reason": "Ore furnace and forge work is taught at a furnace and a forge. The Society Level 1 forager and ritual-tribal society runs none, so the practice has nothing to be taught at. From Society Level 2 it is ordinary work at every band: the common folk who keep the furnace are the people who learn it."
       },
       {
         "groupId": "F25",
