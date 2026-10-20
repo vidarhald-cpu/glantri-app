@@ -1311,7 +1311,15 @@ describe("Society Level and Social Band route availability", () => {
        F30, now unbounded, and Longbow through F41. Ordinary Bow keeps its Society Level 1 route
        through P01's restored direct access, so nothing became absent. */
     expect(cell(1, "L1").reachableBaseSkillIds).toHaveLength(82);
-    expect(cell(2, "L1").reachableBaseSkillIds).toHaveLength(96);
+    /* Smelting and Smithing join the Society Level 2 common-folk cell under the Product Owner
+       content ruling of 2026-10-20 (Forgejo #732): F24 keeps its furnace requirement as a Society
+       Level bound and no longer carries a trades-tier Social Band, so the two Skills that group
+       teaches are reached at Social Band L1 from Society Level 2. Society Level 1 is unchanged. */
+    expect(cell(2, "L1").reachableBaseSkillIds).toHaveLength(98);
+    for (const id of ["skill:smelting", "skill:smithing"]) {
+      expect(cell(2, "L1").reachableBaseSkillIds).toContain(id);
+      expect(cell(1, "L4").reachableBaseSkillIds).not.toContain(id);
+    }
     expect(cell(2, "L2").reachableBaseSkillIds).toHaveLength(112);
     expect(cell(3, "L2").reachableBaseSkillIds).toHaveLength(132);
     for (const id of ["bow", "fencing", "longbow"])
@@ -1319,6 +1327,29 @@ describe("Society Level and Social Band route availability", () => {
     expect(cell(1, "L1").professionCodes).toHaveLength(42);
     expect(cell(2, "L2").professionCodes).toHaveLength(63);
     expect(cell(3, "L2").professionCodes).toHaveLength(84);
+  });
+
+  /*
+   * Product Owner content ruling of 2026-10-20 (Forgejo #732). Social Band 1 alone must not exclude
+   * the Smith and the Smelter, while the metalworking infrastructure requirement is preserved. The
+   * two halves are asserted separately, because the point of the ruling is that they are different
+   * things: the band no longer excludes, the furnace still does.
+   */
+  it("admits the Smith and the Smelter at Social Band L1 wherever the society runs furnaces", () => {
+    for (const pathId of ["profession:smith", "profession:smelter"]) {
+      for (const societyLevel of [2, 3, 4, 5, 6])
+        expect(cell(societyLevel, "L1").validPathIds).toContain(pathId);
+      /* The infrastructure requirement survives: no furnaces, no entry, at any stratum. */
+      for (const band of ["L1", "L2", "L3", "L4"])
+        expect(cell(1, band).validPathIds).not.toContain(pathId);
+    }
+    /* F24 is the group the ruling corrects, and it carries a Society Level bound and no band. */
+    const f24 = availability.groupBounds.find((row) => row.groupId === "F24")!;
+    expect(f24.minSocietyLevel).toBe(2);
+    expect(f24.minSocialBand).toBe("L1");
+    expect(competencyContentV2GroupAvailability.F24!.minSocialBand).toBeUndefined();
+    /* The Miner reaches F24 only as a secondary route, so this does not open that occupation. */
+    expect(cell(2, "L1").validPathIds).not.toContain("profession:miner");
   });
 });
 

@@ -19,6 +19,13 @@ import {
  * remedy is explanation, not a mechanics change. These cases bind the explanation to the accepted
  * catalogue and hold the two bounds the ruling names: no invented reason, and no raw identifier or
  * implementation vocabulary in anything a reader sees.
+ *
+ * The Product Owner content ruling of 2026-10-20 (Forgejo #732) then corrected one authored bound:
+ * F24 Ironmaking and forge apprenticeship keeps its furnace requirement as a Society Level bound
+ * and no longer carries a trades-tier Social Band, because Social Band 1 alone must not exclude the
+ * Smith and the Smelter. 569 therefore becomes 539 — 30 fewer closed combinations, exactly the Band
+ * 1 Smith and Smelter cells in the 15 Civilizations whose society runs furnaces. The explanation
+ * behaviour the 2026-10-15 ruling settled is untouched; only the count of cases it explains moves.
  */
 const content = withCompetencyContentV2(
   buildTargetRuntimeContent(createTargetCompetencyChargenSource(defaultCanonicalContent)),
@@ -65,7 +72,21 @@ describe("Profession training access explanation", () => {
   it("explains exactly the combinations that reach no training, and no others", () => {
     expect(civilizations).toHaveLength(16);
     expect(paths).toHaveLength(86);
-    expect(closedCombinations).toHaveLength(569);
+    expect(closedCombinations).toHaveLength(539);
+  });
+
+  /*
+   * Forgejo #732. The corrected F24 bound shows up here as exactly 30 combinations that no longer
+   * close, and the Society Level 1 Civilization still closes both occupations at every social class
+   * — the furnace requirement, not the stratum, is what excludes them now.
+   */
+  it("opens the Smith and the Smelter to Common Folk only where the society runs furnaces", () => {
+    for (const professionId of ["profession:smith", "profession:smelter"]) {
+      expect(accessFor("thyatis", professionId, 1), professionId).toBeUndefined();
+      const closed = accessFor("san_forager_bands", professionId, 1);
+      expect(closed, professionId).toBeDefined();
+      expect(closed!.closedBy).toBe("society");
+    }
   });
 
   it("names the reported Scythians and Scribe and Copyist combination at every social class", () => {
@@ -97,10 +118,15 @@ describe("Profession training access explanation", () => {
       return totals;
     }, {});
 
+    /*
+     * Forgejo #732 moves 30 Band 1 Smith and Smelter cells out of `social-class` entirely, and
+     * moves the two Society Level 1 Band 1 cells from `society-and-social-class` to `society`: the
+     * society still closes them, the stratum no longer does.
+     */
     expect(byClosure).toEqual({
-      society: 329,
-      "social-class": 225,
-      "society-and-social-class": 15,
+      society: 331,
+      "social-class": 195,
+      "society-and-social-class": 13,
     });
   });
 

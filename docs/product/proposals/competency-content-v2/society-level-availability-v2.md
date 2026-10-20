@@ -97,23 +97,23 @@ reached by the **union** of every valid route.
 |             1 | L2 Trades and Guilds      |              45 |          42 |          42 |                  82 |
 |             1 | L3 Established Households |              45 |          42 |          42 |                  82 |
 |             1 | L4 Court and Elite        |              45 |          42 |          42 |                  82 |
-|             2 | L1 Common Folk            |              56 |          48 |          50 |                  96 |
+|             2 | L1 Common Folk            |              57 |          50 |          52 |                  98 |
 |             2 | L2 Trades and Guilds      |              73 |          63 |          65 |                 112 |
 |             2 | L3 Established Households |              73 |          63 |          65 |                 112 |
 |             2 | L4 Court and Elite        |              73 |          63 |          65 |                 112 |
-|             3 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             3 | L1 Common Folk            |              79 |          71 |          73 |                 121 |
 |             3 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
 |             3 | L3 Established Households |              95 |          84 |          86 |                 132 |
 |             3 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
-|             4 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             4 | L1 Common Folk            |              79 |          71 |          73 |                 121 |
 |             4 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
 |             4 | L3 Established Households |              95 |          84 |          86 |                 132 |
 |             4 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
-|             5 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             5 | L1 Common Folk            |              79 |          71 |          73 |                 121 |
 |             5 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
 |             5 | L3 Established Households |              95 |          84 |          86 |                 132 |
 |             5 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
-|             6 | L1 Common Folk            |              78 |          69 |          71 |                 120 |
+|             6 | L1 Common Folk            |              79 |          71 |          73 |                 121 |
 |             6 | L2 Trades and Guilds      |              95 |          84 |          86 |                 132 |
 |             6 | L3 Established Households |              95 |          84 |          86 |                 132 |
 |             6 | L4 Court and Elite        |              95 |          84 |          86 |                 132 |
@@ -147,7 +147,7 @@ stratum.
 | F13   | Legal study and pleading practice         |             3 | L1          | level only             | Pleading presupposes a standing forum and a stated legal system. Customary settlement is reached through council and mediation practice, which is not restricted.                                                                                                                                                     |
 | F15   | Historical text investigation             |             3 | L1          | level only             | There is no standing corpus of older record, and no scholarly practice of investigating one. This is a bound on the study route, not a claim that nobody below writes: Latial Chiefdoms writes Old Italic at Society Level 2, and its written competency is reached through the Civilization, not through this route. |
 | F23   | Distilling remedy workshop                |             3 | L1          | level only             | The still is equipment a society has to be able to make and keep.                                                                                                                                                                                                                                                     |
-| F24   | Ironmaking and forge apprenticeship       |             2 | L2          | Trades and Guilds tier | Ore furnace and forge work is a metal trade. The Society Level 1 forager and ritual-tribal society runs no furnaces.                                                                                                                                                                                                  |
+| F24   | Ironmaking and forge apprenticeship       |             2 | L1          | level only             | Ore furnace and forge work is taught at a furnace and a forge. The Society Level 1 forager and ritual-tribal society runs none, so the practice has nothing to be taught at. From Society Level 2 it is ordinary work at every band: the common folk who keep the furnace are the people who learn it.                |
 | F25   | Weapon-forge and servicing apprenticeship |             2 | L2          | Trades and Guilds tier | Weapon forging and servicing is the same metal trade, specialised.                                                                                                                                                                                                                                                    |
 | F26   | Forged-metal armor workshop               |             2 | L2          | Trades and Guilds tier | Forged defences are the same metal trade, specialised. Hide and strap defences are reached through the leather workshop, which is not restricted.                                                                                                                                                                     |
 | F27   | Timber millwright apprenticeship          |             2 | L1          | level only             | Timber mechanism work is the making and keeping of machines — mill gear, windlass, lifting frame — and needs a society that builds them. Ordinary woodwork is not this practice.                                                                                                                                      |
