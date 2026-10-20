@@ -310,8 +310,7 @@ export function SocietyInspector({
       {society.archSociety && (
         <p className={styles.prose}>
           <strong>Arch Society:</strong> {society.archSociety.name} —{" "}
-          {society.archSociety.description} Arch Society is setting context; it does not determine
-          competency access.
+          {society.archSociety.description}
         </p>
       )}
       <Block title="What it offers a learner">
