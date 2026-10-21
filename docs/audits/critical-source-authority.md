@@ -12,10 +12,10 @@ against the live toolchain cannot tell an authorized content correction from dri
 | Field                             | Value                                                              |
 | --------------------------------- | ------------------------------------------------------------------ |
 | Workbook                          | `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`    |
-| Workbook SHA-256                  | `9225b3d919b77a0c2f1ace0ff12a25a1af66d74a25e7335869c458b1c64aba6c` |
+| Workbook SHA-256                  | `3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2` |
 | Generated data file               | `packages/domain/src/encounter/criticalEffectsTableData.ts`        |
-| Generated data file SHA-256       | `9957d7148b7794717525dda010452c161c509d9034c52777f1201cd7e229eb50` |
-| Critical results semantic SHA-256 | `22ce973d6e106c031279b37b8839e6b61d37519672b6529660768f2ce7c8a044` |
+| Generated data file SHA-256       | `2e8e86cc3973e3d222df61e65d0f5e8637080b57c1138e6f81dbebd2e70e8fd3` |
+| Critical results semantic SHA-256 | `c1afe09614e0e11d91969b9d0e2b3cae6f3ae3c12bcd0314525ee177075b7578` |
 | Establishing issue                | #747                                                               |
 | Establishing branch               | `builder/747-critical-machine-token-titles`                        |
 | Previous establishing issue       | #741, at workbook `3c368646…`                                      |
@@ -97,19 +97,20 @@ Controlling catalogue `docs/source/combat/target-critical-catalogue-v1/catalogue
   byte-identical.
 - `outcome_name` equals the authoritative dataset `title` for all 15 corrected keys.
 
-## Transition 2 — v14 `3c368646…` to v14 `9225b3d9…` (issue #747)
+## Transition 2 — v14 `3c368646…` to v14 `3b474637…` (issue #747)
 
 | Field                      | Value                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------- |
 | Workbook                   | `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`                 |
 | Previous workbook SHA-256  | `3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c`              |
-| New workbook SHA-256       | `9225b3d919b77a0c2f1ace0ff12a25a1af66d74a25e7335869c458b1c64aba6c`              |
+| New workbook SHA-256       | `3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2`              |
 | Previous data file SHA-256 | `836e66a169d5267235652a139e1ecd307d3f481a482f9a75e721ba3c48213aee`              |
-| New data file SHA-256      | `9957d7148b7794717525dda010452c161c509d9034c52777f1201cd7e229eb50`              |
+| New data file SHA-256      | `2e8e86cc3973e3d222df61e65d0f5e8637080b57c1138e6f81dbebd2e70e8fd3`              |
 | Authority                  | Product Owner rulings of 2026-10-21 recorded on issue #747                      |
 | Generation mode            | `node scripts/generateCriticalEffectsTable.mjs --generate --accept-data-change` |
 
-**This transition edits v14 in place rather than creating a v15.** Ruling 4B directs the change at
+**The retained-artefact pattern was deliberately not applied here: this transition edits v14 in
+place rather than creating a v15.** Ruling 4B directs the change at
 "the current v14 workbook's `CritSlots` sheet", so the pre-#747 v14 bytes are recoverable from git
 history at `dev` `7bcbe508` rather than from a retained file on disk. This differs from Transition
 1, which bumped the version and retained the previous workbook. **v13 is untouched** at
@@ -174,7 +175,7 @@ quoted verbatim:
 
 ### Measured, field by field rather than sampled
 
-Workbook v14 `3c368646…` against v14 `9225b3d9…`, compared independently of the application's own
+Workbook v14 `3c368646…` against v14 `3b474637…`, compared independently of the application's own
 generator — zip entry set, every non-worksheet part byte for byte, `sharedStrings.xml` byte for
 byte, and every cell of every worksheet by address, type, formula flag and decoded value:
 
@@ -212,38 +213,76 @@ Semantic digests, **re-derived by importing the committed data file and recomput
 `sha256(JSON.stringify(export))`**, not read back from this manifest:
 
 - `criticalResultsSemanticSha256` re-derives to
-  `22ce973d6e106c031279b37b8839e6b61d37519672b6529660768f2ce7c8a044`, equal to the recorded value.
+  `c1afe09614e0e11d91969b9d0e2b3cae6f3ae3c12bcd0314525ee177075b7578`, equal to the recorded value.
   It **differs** from the pre-#747 `8acae8c3…` because the 91 title corrections are a genuine
   semantic change.
 - `effectTemplatesSemanticSha256` re-derives to
   `8a6a0e62f85d81219d4929465162ccbc56342706ff1a004214a9a7a330a2991d`, **unchanged from before
   #747**, confirming no effect data moved.
 
-### Clauses omitted rather than substituted
+### Clauses omitted rather than substituted — the ruled set is eight rows
 
-Nine rows carry a machine clause whose meaning is absent from that row's own `bodyText`, so under
+Eight rows carry a machine clause whose meaning is absent from that row's own `bodyText`, so under
 Ruling 3 the clause is dropped and nothing is invented in its place. `bodyText`, effect templates,
-`specialFlag` and every mechanical value are unchanged on all nine.
+`specialFlag` and every mechanical value are unchanged on all eight.
 
-The eight the ruling names: `firearms|arm|08` (both `embedded_shot` and `extraction_risk`; its
-prose/flag contradiction is filed as **#756** and is not decided here), `firearms|chest|06`,
-`firearms|chest|07`, `firearms|abdomen|06`, `firearms|abdomen|07` (`extraction_risk` only — the
-prose does support "shot lodged"), `firearms|upper_leg|05`, `firearms|lower_leg|05`
-(`embedded_shot`), and `fire_energy|whole_body|03`.
+The arithmetic, stated explicitly because this issue's row sets have been miscounted more than once:
+the Product Owner's original list of eight, **minus `fire_energy|whole_body|03`**, **plus
+`firearms|head|07`** — eight rows.
 
-**`firearms|head|07` is a ninth, measured by this lane and not in the ruling's list.** Its prose —
-"Your shot blows off your opponent's nose… the pain and obstruction to vision gives your target a
--10 modifier to all 'to hit' rolls" — never states a Fel loss, unlike its sibling
-`arrows_bolts|head|07`, whose prose says "reduces the character's Fel score by -20 permanently".
-Writing "permanent Fel loss" there would derive prose from `specialFlag`, which Ruling 3 forbids, so
-the clause is omitted and the title reads "Nose destroyed; gunshot". **This is reported for
-ratification rather than treated as settled.**
+| row       | clause omitted |
+| --------- | -------------- | --- | ------------------------------------------ |
+| `firearms | arm            | 08` | both `embedded_shot` and `extraction_risk` |
+| `firearms | chest          | 06` | `extraction_risk`                          |
+| `firearms | chest          | 07` | `extraction_risk`                          |
+| `firearms | abdomen        | 06` | `extraction_risk`                          |
+| `firearms | abdomen        | 07` | `extraction_risk`                          |
+| `firearms | upper_leg      | 05` | `embedded_shot`                            |
+| `firearms | lower_leg      | 05` | `embedded_shot`                            |
+| `firearms | head           | 07` | `permanent_fel_loss`                       |
 
-**`fire_energy|whole_body|03` is the inverse.** Its prose _does_ state the deafening — "If the
-critical was caused by an explosion or lightning, the victim is also deafened for D6 rounds" — so
-the clause is translatable, as it is in the sibling rows 04, 05 and 06 which keep it. The omission
-there is directed by Ruling 3's explicit list, not required by the evidence, and is likewise
-reported.
+On the four `firearms|chest|06/07` and `firearms|abdomen|06/07` rows only `extraction_risk` is
+omitted: the prose does support "shot lodged". `firearms|arm|08`'s prose/flag contradiction remains
+filed as **#756** and is not decided here.
+
+#### `firearms|head|07` — ratified
+
+This row was not on the original list. It was measured by this lane: its prose — "Your shot blows
+off your opponent's nose… the pain and obstruction to vision gives your target a -10 modifier to
+all 'to hit' rolls" — never states a Fel loss, unlike sibling `arrows_bolts|head|07`, whose prose
+says "reduces the character's Fel score by -20 permanently". Writing "permanent Fel loss" there
+would derive prose from `specialFlag`, which Ruling 3 forbids. Product Owner ruling:
+
+> Ratify omission of the `permanent_fel_loss` clause. The row's own `bodyText` does not support
+> that consequence, so **it must not be promoted into reader-facing title prose. Leave the
+> remaining title `Nose destroyed; gunshot` unchanged in #747.**
+>
+> The `gunshot` clause represents a **separate class**: underscore-free tag-derived wording that is
+> readable but potentially awkward. **Do not broaden #747 to remove or rewrite such clauses.** File
+> a follow-up characterization for underscore-free tag-derived title fragments such as `gunshot`,
+> including how many rows are affected and whether the terms add useful reader-facing information
+> or merely expose source tags. **Do not hold #747 on that follow-up.**
+
+So the title stays `Nose destroyed; gunshot`, and **no underscore-free tag-derived fragment anywhere
+in the 91 was removed or rewritten** — `gunshot`, `mauling`, `pinned` and `unconscious` are
+preserved exactly where they already stood. That class is characterized separately and does not
+hold this lane.
+
+#### `fire_energy|whole_body|03` — removed from the omission set
+
+This lane executed the directed omission while reporting that the clause looked derivable, and that
+reading was upheld. Product Owner ruling:
+
+> Remove this row from the non-derivable omission set. **Preserve the clause in the reader-facing
+> title as: `deafened by blast or lightning`.** The row's own authored `bodyText` explicitly
+> supports it, and sibling rows 04/05 already use the same wording. **This is not a new rule or an
+> override of the prior principle; it corrects the factual premise used to classify this one row.**
+
+The row's prose reads "If the critical was caused by an explosion or lightning, the victim is also
+deafened for D6 rounds", exactly parallel to 04's "deafened for D10 rounds". The clause was always
+derivable and the row should never have been classified as non-derivable. Its title now reads
+`Concussion or blast shock; no action / unconscious; deafened by blast or lightning; whole-body
+trauma`, matching siblings 04 and 05 word for word in that clause.
 
 ### `CritSlots` title equivalence — achieved narrowly, with one inherited divergence
 
@@ -266,17 +305,33 @@ The guard was falsified three ways, each by exit code: restoring `lower_arm` in 
 of the 91, altering a tolerated row to a different stale string, and drifting an unrelated
 `CritSlots` title.
 
-### A third mechanical consequence, outside the two the rulings authorized
+### `criticalInjuryFixtures.ts` pulls content live while asserting frozen v13 provenance — #758
 
-`criticalInjuryFixtures.ts`'s `fixtureSource` embeds the live Critical table's whole `result`
-object, and one of its six fixture keys — `sharp|arm|11` — is among the 91. So
-`criticalInjuryDomain.test.ts`'s `DURATION_STRIPPED_FIXTURE_GOLDEN` moved from `39e20427…` to
-`c687935d…`. The new value was measured by running that test's exact strip against both revisions
-rather than copied from the failure output: **1,093 leaf fields compared, exactly one differs**, and
-it is `[4]/outcome/originalSource/criticalResult/title`. The pre-#747 strip reproduced the old
-golden byte for byte, which is what validates the new one. The assertion is unchanged and
-`criticalInjuryFixtures.ts` itself is untouched. **This consequence was not authorized by Ruling 4
-and is reported for ratification.**
+`fixtureSource` in `packages/domain/src/encounter/criticalInjuryFixtures.ts` calls
+`getCriticalResultWithEffects` and spreads the **live** Critical table's whole `result` object into
+the fixture, while the same function **hardcodes** `workbook: …v13.xlsx`,
+`workbookSha256: 47cde37d…` and `tableVersion: "app-facing-v13"` — and
+`criticalInjuryDomain.test.ts` asserts that attribution. The module is a hybrid: **frozen
+provenance, live content.**
+
+One of its six fixture keys is `sharp|arm|11`, which is among #747's 91. So #747 is the first lane
+to move live fixture content, and `DURATION_STRIPPED_FIXTURE_GOLDEN` moves with it. #741 did not hit
+this because none of its 15 keys is a fixture key.
+
+**Updating that golden inside #747 was the wrong fix, and it is not applied here.** It would have
+left the fixture asserting that a title which never existed in v13 "came from workbook v13 at digest
+`47cde37d…`" — a manufactured verifiable falsehood in live code, of exactly the class the
+`source_trace` and `validation-summary.json` rulings exist to prevent. #741's QA reasoned that these
+fixtures "assert against their own constants, never the live file"; that is true of the digest and
+**false of the content**, and the hybrid is what makes the reasoning fail. Three reviewers read the
+file and all three missed the split, because each asked whether the fixture could mask a _title
+regression_ rather than assert a _false provenance_.
+
+The cause is therefore fixed upstream under **#758**, which snapshots the v13 content into the
+fixture, recovered from the preserved v13 artefact and mechanically proved against it. After that the
+fixture no longer reads the live table and this golden does not move at all. **`criticalInjuryDomain.test.ts`
+is byte-identical to `dev` on this branch**, and #747 is rebased onto #758 rather than compensating
+for it.
 
 ### Regression guard against tag-value leakage
 

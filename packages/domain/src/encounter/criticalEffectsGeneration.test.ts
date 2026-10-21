@@ -46,7 +46,7 @@ describe("Critical workbook generation", () => {
       version: "1.1.0",
     });
     expect(manifest.source).toMatchObject({
-      sha256: "9225b3d919b77a0c2f1ace0ff12a25a1af66d74a25e7335869c458b1c64aba6c",
+      sha256: "3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2",
       tables: {
         criticalResults: {
           dataRange: "AppFacing_Crits!A2:X609",
@@ -65,7 +65,7 @@ describe("Critical workbook generation", () => {
       criticalResultsCount: 608,
       effectTemplatesCount: 2179,
       file: "packages/domain/src/encounter/criticalEffectsTableData.ts",
-      fileSha256: "9957d7148b7794717525dda010452c161c509d9034c52777f1201cd7e229eb50",
+      fileSha256: "2e8e86cc3973e3d222df61e65d0f5e8637080b57c1138e6f81dbebd2e70e8fd3",
     });
     expect(manifest.transformations).toContain(
       "No bleed unit, duration, dice formula, Special flag, treatment gate, or stateful mapping is inferred or normalized.",

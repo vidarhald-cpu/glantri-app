@@ -7,7 +7,7 @@ This deterministic report inventories the checked-in Critical source payload wit
 - Workbook: `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`
 - Critical results: `AppFacing_Crits!A1:X609`
 - Effect templates: `AppFacing_Effects!A1:AE2180`
-- Workbook SHA-256: `9225b3d919b77a0c2f1ace0ff12a25a1af66d74a25e7335869c458b1c64aba6c`
+- Workbook SHA-256: `3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2`
 - Generated payload: 608 results / 2179 unique effects
 - Exhaustive effect inventory: PASS
 - Workbook summary breakdowns checked: 39
