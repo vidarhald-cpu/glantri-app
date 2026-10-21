@@ -96,20 +96,55 @@ The last two are frozen fixture snapshots, not pointers to the active workbook: 
 than against the live file. The same reasoning that leaves the four accepted records at v13
 leaves these at v13.
 
-## Open question, not settled here
+## `source_trace` refers to v13 by design, not drift
 
-The per-entry `source_trace` blocks inside `catalogue.jsonl` and `source-dispositions.jsonl`
-still name v13 and `47cde37d…` — 608 and 2,179 digest pins respectively, 608 workbook path
-strings, and for the 15 corrected keys a `source_result.title` holding the old placeholder.
-`validation-summary.json` and the catalogue `README.md` also still pin v13.
+**Historical `source_trace` blocks may refer to v13 and `47cde37d…` while current authority is
+v14 and `3c368646…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
+on #741.
 
-Whether those are historical per-row provenance snapshots of the same kind as the list above,
-or current-state pins that must follow current authority, is **not settled** and is recorded
-as an open question on #741. They were deliberately left untouched rather than half-updated:
-moving a digest pin while leaving the row snapshot it describes would assert that the workbook
-at `3c368646…` contains `Fatal sharp head critical`, which is false.
+Left unchanged, deliberately:
 
-Separately, `catalogue.jsonl` and the authoritative dataset **already disagreed** at Critical
-index 13 before this lane: the entry's `outcome_name` carried the bare machine stem while its
-`source_trace` title carried the longer form that the dataset used. This lane does not
-introduce that disagreement and does not extend it.
+- every `source_trace` block in `docs/source/combat/target-critical-catalogue-v1/catalogue.jsonl`
+  — 608 `workbook` path strings, 608 `workbook_sha256` pins, and for the 15 corrected keys a
+  `source_result.title` still holding the old machine-stem placeholder;
+- every `source` trace block in
+  `docs/source/combat/target-critical-catalogue-v1/source-dispositions.jsonl` — 2,179
+  `workbook_sha256` pins. That file carries effect rows only and no reader-facing prose, so no
+  prose was affected either way.
+
+Those traces describe the source state captured when those catalogue records were produced.
+Rewriting them to v14 would assert that records authored against v13 were derived from v14,
+which is false. **The 2,789 historical trace pins were not updated merely to make every digest
+string in the repository identical.**
+
+A catalogue entry may therefore carry a corrected reader-facing `outcome_name` and
+`player_prose` that follow current v14 authority while its own `source_trace` still shows the
+v13 row it was produced from. Reviewers comparing the two should expect that and should not read
+it as inconsistency.
+
+Current authority moves forward instead through the fields and files that describe current
+state: the v14 workbook, the generated runtime Critical data, this manifest, and the
+controlling catalogue's current-authority declaration in
+`docs/source/combat/target-critical-catalogue-v1/README.md`.
+
+### Pre-existing divergence, not introduced here
+
+`catalogue.jsonl` and the authoritative dataset **already disagreed** at Critical index 13
+before this lane: the entry's `outcome_name` carried the bare machine stem while its own
+`source_trace` title carried the longer form the dataset used. #741 does not introduce that
+disagreement, does not extend it, and does not silently normalize historical traces. It remains
+accounted for under the authority/divergence work on #739.
+
+### Open item carried to the control plane
+
+`docs/source/combat/target-critical-catalogue-v1/validation-summary.json` still records
+`workbook_sha256: 47cde37d…` and has deliberately **not** been moved to v14. Measured reason:
+that file is a self-consistent snapshot of one validation run. Besides the workbook digest it
+records `catalogue_sha256`, `source_dispositions_sha256` and `distribution_sha256` — the digests
+of the artefacts that run validated. Its recorded `catalogue_sha256`
+`39b9af69bb1452c947197be76dbb609564dc37925f70826f8da7c8268f7c5759` matches `catalogue.jsonl`
+exactly as it stood before #741 and no longer matches it after the authorized `outcome_name` and
+`player_prose` corrections. Moving only its workbook digest would describe a validation run that
+never happened, and recomputing all four digests would assert a validation this lane did not
+perform on an approved artefact that nothing in the repository regenerates. The disposition of
+this file is referred to the control plane.
