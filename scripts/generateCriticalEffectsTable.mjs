@@ -55,6 +55,16 @@ const SUMMARY_SOURCE = {
   sheet: "AppFacing_Summary",
   range: "A1:D40",
 };
+/**
+ * `CritSlots` is the hand-maintained sheet the AppFacing_* sheets were derived from. The generator
+ * does not read it for data, but it carries the same `text_display` title strings and can be used
+ * to re-derive them, so Forgejo #747 binds the two together: a re-derivation that silently restores
+ * a machine-token title fails generation instead of reaching the reader.
+ */
+const CRIT_SLOTS_SOURCE = {
+  sheet: "CritSlots",
+  range: "A1:AG609",
+};
 
 const RESULT_HEADERS = [
   "crit_key",
@@ -402,6 +412,7 @@ function loadWorkbook() {
     WORKBOOK_ISSUES_SOURCE.sheet,
     BLEED_REVIEW_SOURCE.sheet,
     SUMMARY_SOURCE.sheet,
+    CRIT_SLOTS_SOURCE.sheet,
   ]) {
     const target = targets.get(sheetName);
     if (!target) {
@@ -676,7 +687,7 @@ function validateTables(results, effects) {
       critKey: "sharp|arm|13",
       result: {
         title:
-          "Amputation; lower_arm unusable; no action / unconscious; external bleed 1d4 hp / round",
+          "Amputation; forearm unusable; no action / unconscious; external bleed 1d4 hp / round",
       },
       effectKeys: Array.from(
         { length: 7 },
@@ -707,6 +718,82 @@ function validateTables(results, effects) {
   }
 
   return representativeCases;
+}
+
+/**
+ * Pre-existing divergences this guard tolerates, recorded with the exact stale string so that
+ * nothing else can hide behind the allowance.
+ *
+ * Forgejo #741 authored reader-facing titles for 15 `Fatal <family> head critical` placeholder
+ * rows in `AppFacing_Crits` but did not carry them into `CritSlots`; that lane is integrated and
+ * those identities are outside #747's authorized scope, so #747 records the divergence instead of
+ * editing another lane's rows. Each entry passes only while `CritSlots` still holds exactly this
+ * string: once the row is synchronized the titles agree and the entry stops applying, and any
+ * *other* change to one of these rows fails here like any other divergence.
+ */
+const TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES = new Map(
+  [
+    ["arrows_bolts", "arrows bolts"],
+    ["blunt", "blunt"],
+    ["firearms", "firearms"],
+    ["sharp", "sharp"],
+    ["teeth_claws", "teeth claws"],
+  ].flatMap(([family, prose]) => [
+    [`${family}|head|13`, `Fatal ${prose} head critical; dying within rounds unless saved`],
+    [`${family}|head|15`, `Fatal ${prose} head critical`],
+    [`${family}|head|16`, `Fatal ${prose} head critical`],
+  ]),
+);
+
+/**
+ * Forgejo #747: `CritSlots` and `AppFacing_Crits` must agree on the title of every Critical
+ * identity they share. Title text only — no other column is compared, and nothing is read from
+ * `CritSlots` into the generated payload.
+ */
+function assertCritSlotTitlesMatch(results, critSlotRows) {
+  const titleByCritKey = new Map(results.map((result) => [result.critKey, result.title]));
+  const mismatches = [];
+  const toleratedDivergences = [];
+  const comparedKeys = new Set();
+  for (const { rowNumber, values } of critSlotRows) {
+    const family = values.family;
+    const location = values.location;
+    const critIndex = values["crit_index(1-16)"];
+    if (!family || !location || critIndex === null || critIndex === undefined) continue;
+    const index = Number(critIndex);
+    if (!Number.isInteger(index)) continue;
+    const critKey = `${family}|${location}|${String(index).padStart(2, "0")}`;
+    const expected = titleByCritKey.get(critKey);
+    if (expected === undefined) continue;
+    comparedKeys.add(critKey);
+    const actual = values.text_display === null ? "" : String(values.text_display);
+    if (actual !== expected) {
+      if (TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES.get(critKey) === actual) {
+        toleratedDivergences.push(critKey);
+        continue;
+      }
+      mismatches.push(
+        `${CRIT_SLOTS_SOURCE.sheet}!E${rowNumber} ${critKey}: AppFacing_Crits has ${JSON.stringify(
+          expected,
+        )}, ${CRIT_SLOTS_SOURCE.sheet} has ${JSON.stringify(actual)}`,
+      );
+    }
+  }
+  if (comparedKeys.size !== results.length) {
+    throw new Error(
+      `${CRIT_SLOTS_SOURCE.sheet} title conformance matched ${comparedKeys.size} of ${results.length} Critical identities; the sheets no longer cover the same rows.`,
+    );
+  }
+  if (toleratedDivergences.length > TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES.size) {
+    throw new Error(
+      `${CRIT_SLOTS_SOURCE.sheet} title conformance tolerated ${toleratedDivergences.length} divergences, more than the ${TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES.size} recorded.`,
+    );
+  }
+  if (mismatches.length > 0) {
+    throw new Error(
+      `${CRIT_SLOTS_SOURCE.sheet} and ${CRITICAL_RESULTS_SOURCE.sheet} disagree on ${mismatches.length} title(s). A re-derivation from ${CRIT_SLOTS_SOURCE.sheet} would reintroduce them:\n- ${mismatches.join("\n- ")}`,
+    );
+  }
 }
 
 function readUnmappedTable(sheets, source) {
@@ -1007,6 +1094,7 @@ async function main() {
   const results = resultsRecords.map(buildCriticalResult);
   const effects = effectsRecords.map(buildEffectTemplate);
   const representativeCases = validateTables(results, effects);
+  assertCritSlotTitlesMatch(results, readUnmappedTable(workbook.sheets, CRIT_SLOTS_SOURCE));
   const summaryVerification = verifyCriticalEffectsSummaryBreakdowns({
     effects,
     results,
