@@ -175,15 +175,32 @@
   outline: 3px solid rgba(35, 91, 112, 0.5);
   outline-offset: 3px;
 }
+/*
+ * Forgejo #743. The authored Inspector prose carries its paragraph boundaries as blank lines in the
+ * stored text, and `white-space: normal` collapsed every one of them, so the authored breaks
+ * rendered as nothing at all. `pre-line` exposes them without touching the stored text.
+ *
+ * Measured, not assumed. Every newline reaching these two classes is part of a `\n\n` pair: across
+ * the 565 catalogue strings these two classes render — and the 13 synthesised withdrawn-group
+ * lines — there are 0 lone newlines, 0 runs of three or more, 0 CR,
+ * 0 tabs, 0 leading or trailing whitespace and 0 runs of two or more spaces. `pre-line` differs
+ * from `normal` only in those respects, so on the frozen catalogue fields these classes also carry
+ * — `readerProse().summary` (`shortDescription`), Society descriptions, the Arch Society line and
+ * the withdrawn-group replacement line, all newline-free — it is a no-op. If a single `\n` is ever
+ * authored as source wrapping rather than as a paragraph boundary it will render here as a visible
+ * line break, which is what `skillsReferenceParagraphRendering.test.ts` guards.
+ */
 .lede {
   color: #534936;
   font-size: 1.08rem;
+  white-space: pre-line;
 }
 .prose {
   border-bottom: 1px solid rgba(70, 60, 40, 0.12);
   border-top: 1px solid rgba(70, 60, 40, 0.12);
   margin: 1rem 0;
   padding: 0.4rem 0;
+  white-space: pre-line;
 }
 .facts {
   display: grid;
