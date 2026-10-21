@@ -46,7 +46,7 @@ describe("Critical workbook generation", () => {
       version: "1.1.0",
     });
     expect(manifest.source).toMatchObject({
-      sha256: "47cde37df62c8bafd94535d194cc476b5ae6a366271e18ad94e3e1e62c41f09f",
+      sha256: "3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c",
       tables: {
         criticalResults: {
           dataRange: "AppFacing_Crits!A2:X609",
@@ -59,13 +59,13 @@ describe("Critical workbook generation", () => {
           rowCount: 2179,
         },
       },
-      workbook: "docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx",
+      workbook: "docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx",
     });
     expect(manifest.output).toMatchObject({
       criticalResultsCount: 608,
       effectTemplatesCount: 2179,
       file: "packages/domain/src/encounter/criticalEffectsTableData.ts",
-      fileSha256: "7308ca47622650c2a7f78cf3a6986ce16d269ef2c546e15038d4ee9d1891edf2",
+      fileSha256: "836e66a169d5267235652a139e1ecd307d3f481a482f9a75e721ba3c48213aee",
     });
     expect(manifest.transformations).toContain(
       "No bleed unit, duration, dice formula, Special flag, treatment gate, or stateful mapping is inferred or normalized.",
