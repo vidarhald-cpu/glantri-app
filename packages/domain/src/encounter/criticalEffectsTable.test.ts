@@ -45,8 +45,7 @@ describe("critical effects table helpers", () => {
       critKey: "sharp|arm|13",
       hasExternalBleed: true,
       hasStun: true,
-      title:
-        "Amputation; lower_arm unusable; no action / unconscious; external bleed 1d4 hp / round",
+      title: "Amputation; forearm unusable; no action / unconscious; external bleed 1d4 hp / round",
     });
     expect(result?.effects.map((effect) => effect.effectKey)).toEqual([
       "sharp|arm|13|01",
@@ -261,5 +260,91 @@ describe("critical effects table helpers", () => {
       commands: ["roll_critical"],
       currentCursor: { participantId: "defender", step: "D1" },
     });
+  });
+});
+
+/**
+ * Forgejo #747: machine/internal tokens must not reach the reader through `title`.
+ *
+ * The #734 publication ruling bars `sourceSpecialTags` and per-effect `specialFlag` from
+ * publication, and both of #734's exclusion suites enforce that for the field *names* plus the
+ * 608 `critKey` literals. Neither forbids the tag and flag *values*, and 18 of them reached the
+ * reader inside the authoritative `title` field of 91 rows — the bar satisfied for columns and
+ * defeated in the published text. These assertions close that gap at the value level.
+ *
+ * They are deliberately derived from the dataset itself rather than from a list of the 20 tokens
+ * #747 happened to find: a newly authored row carrying a new tag whose value leaks into its title
+ * must fail here too.
+ */
+describe("published Critical titles carry no machine or internal token values", () => {
+  const results = CRITICAL_EFFECTS_TABLE.criticalResults;
+  const effects = CRITICAL_EFFECTS_TABLE.effectTemplates;
+
+  /** Any `snake_case` run: the shape every leaked tag and flag value has. */
+  const SNAKE_CASE_RUN = /[A-Za-z]+(?:_[A-Za-z]+)+/g;
+
+  it("no title contains a snake_case run", () => {
+    const offenders = results
+      .filter((result) => SNAKE_CASE_RUN.test(result.title))
+      .map((result) => `${result.critKey}: ${result.title}`);
+
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * Only underscored values are machine-shaped. Several tag and flag values are single ordinary
+   * English words — `unconscious`, `collapse`, `death`, `dying`, `scar`, `amputation` — which the
+   * authored titles publish deliberately and correctly ("no action / unconscious", "instant
+   * death"). Matching those would indict 399 titles that are not defective, so the guard is bound
+   * to the shape that is never reader-facing: a value carrying an underscore.
+   */
+  const isMachineShaped = (value: string) => value.includes("_");
+
+  it("no title contains any underscored sourceSpecialTags value used anywhere in the table", () => {
+    const tagValues = [
+      ...new Set(results.flatMap((result) => result.sourceSpecialTags ?? [])),
+    ].filter(isMachineShaped);
+    const offenders = results.flatMap((result) =>
+      tagValues
+        .filter((tag) => result.title.includes(tag))
+        .map((tag) => `${result.critKey} leaks tag '${tag}' in '${result.title}'`),
+    );
+
+    expect(tagValues).toContain("permanent_dex_loss");
+    expect(tagValues.length).toBeGreaterThan(20);
+    expect(offenders).toEqual([]);
+  });
+
+  it("no title contains any underscored per-effect specialFlag value used in the table", () => {
+    const flagValues = [
+      ...new Set(
+        effects
+          .map((effect) => effect.specialFlag)
+          .filter((flag): flag is string => typeof flag === "string" && flag.length > 0),
+      ),
+    ].filter(isMachineShaped);
+    const offenders = results.flatMap((result) =>
+      flagValues
+        .filter((flag) => result.title.includes(flag))
+        .map((flag) => `${result.critKey} leaks flag '${flag}' in '${result.title}'`),
+    );
+
+    expect(flagValues).toContain("embedded_missile");
+    expect(flagValues.length).toBeGreaterThan(20);
+    expect(offenders).toEqual([]);
+  });
+
+  it("no title contains a location enum value in its raw underscored form", () => {
+    const rawLocations = [...new Set(results.map((result) => result.location))].filter((location) =>
+      location.includes("_"),
+    );
+    const offenders = results.flatMap((result) =>
+      rawLocations
+        .filter((location) => result.title.includes(location))
+        .map((location) => `${result.critKey} leaks location '${location}' in '${result.title}'`),
+    );
+
+    expect(rawLocations).toContain("whole_body");
+    expect(offenders).toEqual([]);
   });
 });

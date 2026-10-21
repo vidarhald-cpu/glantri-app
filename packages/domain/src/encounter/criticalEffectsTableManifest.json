@@ -10,7 +10,7 @@
   },
   "source": {
     "workbook": "docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx",
-    "sha256": "3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c",
+    "sha256": "9225b3d919b77a0c2f1ace0ff12a25a1af66d74a25e7335869c458b1c64aba6c",
     "tables": {
       "criticalResults": {
         "sheet": "AppFacing_Crits",
@@ -365,11 +365,11 @@
   },
   "output": {
     "criticalResultsCount": 608,
-    "criticalResultsSemanticSha256": "8acae8c32f60a39f221225aa0f06fed163e73e523bf9a0c551f275cea5d940a4",
+    "criticalResultsSemanticSha256": "22ce973d6e106c031279b37b8839e6b61d37519672b6529660768f2ce7c8a044",
     "effectTemplatesCount": 2179,
     "effectTemplatesSemanticSha256": "8a6a0e62f85d81219d4929465162ccbc56342706ff1a004214a9a7a330a2991d",
     "file": "packages/domain/src/encounter/criticalEffectsTableData.ts",
-    "fileSha256": "836e66a169d5267235652a139e1ecd307d3f481a482f9a75e721ba3c48213aee",
+    "fileSha256": "9957d7148b7794717525dda010452c161c509d9034c52777f1201cd7e229eb50",
     "manifest": "packages/domain/src/encounter/criticalEffectsTableManifest.json"
   },
   "transformations": [

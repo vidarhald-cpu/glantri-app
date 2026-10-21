@@ -421,8 +421,20 @@ describe("[#215 S6] the five source identifiers bind to one canonical vocabulary
 describe("[#215 S6] Critical-D carries its rolled D4-hour duration canonically", () => {
   // Both constants were measured by running the identical strip against the fixtures as they stood
   // immediately before this change, at `7048ef6496ee02264115f2328e4d3f6e416e5d36`.
+  //
+  // Forgejo #747 moved this golden from `39e20427c704d34955b30b0ce373cfef2570d0c46fa1219d1051235570cdf291`.
+  // `fixtureSource` embeds the live Critical table's `result` object, so `sharp|arm|11` — one of
+  // #747's 91 reader-facing title corrections, and the only fixture key among them — carries its
+  // `title` into these fixtures. Measured by running this exact strip against both revisions:
+  // 1,093 leaf fields compared, exactly one differs, and it is
+  // `[4]/outcome/originalSource/criticalResult/title`
+  // ("Finger loss; hand unusable; permanent_dex_loss; manual_skill_penalty" ->
+  // "Finger loss; hand unusable; permanent Dex loss; manual skills penalised").
+  // The pre-#747 strip reproduced the old golden byte for byte, which is what validates the new
+  // one. No duration, label, projection or provenance range moved, so the invariant this test
+  // states is intact and the assertion is unchanged.
   const DURATION_STRIPPED_FIXTURE_GOLDEN =
-    "39e20427c704d34955b30b0ce373cfef2570d0c46fa1219d1051235570cdf291";
+    "c687935daa517ee35d18ec50584bc121691c23c6650237543b1cdee1b390c271";
   const ROUND_BASED_FIXTURE_DURATION_COUNT = 4;
 
   const effect = criticalInjuryFixtureD.operationalEffects.find(

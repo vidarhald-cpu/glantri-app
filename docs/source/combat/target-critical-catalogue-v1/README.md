@@ -14,10 +14,10 @@ The executable authoring contract is Forgejo #216 at accepted baseline
 workbook and existing conformance reports are provenance and calibration evidence. They do not
 override the approved target rules.
 
-Current authoritative Critical source, per #741:
+Current authoritative Critical source, per #741 and the #747 title cleanup:
 
 - path: `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`;
-- SHA-256: `3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c`;
+- SHA-256: `9225b3d919b77a0c2f1ace0ff12a25a1af66d74a25e7335869c458b1c64aba6c`;
 - result range: `AppFacing_Crits!A1:X609`;
 - effect range: `AppFacing_Effects!A1:AE2180`.
 
