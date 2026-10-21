@@ -230,16 +230,16 @@ The arithmetic, stated explicitly because this issue's row sets have been miscou
 the Product Owner's original list of eight, **minus `fire_energy|whole_body|03`**, **plus
 `firearms|head|07`** — eight rows.
 
-| row       | clause omitted |
-| --------- | -------------- | --- | ------------------------------------------ |
-| `firearms | arm            | 08` | both `embedded_shot` and `extraction_risk` |
-| `firearms | chest          | 06` | `extraction_risk`                          |
-| `firearms | chest          | 07` | `extraction_risk`                          |
-| `firearms | abdomen        | 06` | `extraction_risk`                          |
-| `firearms | abdomen        | 07` | `extraction_risk`                          |
-| `firearms | upper_leg      | 05` | `embedded_shot`                            |
-| `firearms | lower_leg      | 05` | `embedded_shot`                            |
-| `firearms | head           | 07` | `permanent_fel_loss`                       |
+| row                       | clause omitted                             |
+| ------------------------- | ------------------------------------------ |
+| `firearms\|arm\|08`       | both `embedded_shot` and `extraction_risk` |
+| `firearms\|chest\|06`     | `extraction_risk`                          |
+| `firearms\|chest\|07`     | `extraction_risk`                          |
+| `firearms\|abdomen\|06`   | `extraction_risk`                          |
+| `firearms\|abdomen\|07`   | `extraction_risk`                          |
+| `firearms\|upper_leg\|05` | `embedded_shot`                            |
+| `firearms\|lower_leg\|05` | `embedded_shot`                            |
+| `firearms\|head\|07`      | `permanent_fel_loss`                       |
 
 On the four `firearms|chest|06/07` and `firearms|abdomen|06/07` rows only `extraction_risk` is
 omitted: the prose does support "shot lodged". `firearms|arm|08`'s prose/flag contradiction remains
@@ -344,7 +344,8 @@ dataset, so a newly authored row leaking a new tag fails too.
 **The guard is bound to underscored values deliberately.** Several tag and flag values are single
 ordinary English words — `unconscious`, `collapse`, `death`, `dying`, `scar`, `amputation` — which
 the authored titles publish correctly ("no action / unconscious", "instant death"). A first,
-unrestricted form of this guard indicted **399** such titles, none of them defective; the data was
+unrestricted form of this guard indicted **399 title-and-value pairs across 349 distinct titles**,
+none of them defective — 12 of the tag and flag values are single ordinary words; the data was
 right and the check was wrong. Underscore-bearing is the shape that is never reader-facing.
 
 Falsified by reintroducing each of `lower_arm unusable`, `permanent_dex_loss`,
@@ -377,8 +378,12 @@ leaves these at v13.
 ## `source_trace` refers to v13 by design, not drift
 
 **Historical `source_trace` blocks may refer to v13 and `47cde37d…` while current authority is
-v14 and `3c368646…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
-on #741.
+v14 and `3b474637…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
+on #741. The ruling's principle is about the _relationship_ between historical traces and current
+authority, not about any one digest: it was issued under the previous workbook recorded in
+Transition 1, and #747 moved current authority forward without changing what the ruling says.
+**The digest in that sentence tracks current authority and must be updated by every transition** —
+it was missed once, under #747, and caught by independent QA.
 
 Left unchanged, deliberately:
 

@@ -280,8 +280,18 @@ describe("published Critical titles carry no machine or internal token values", 
   const results = CRITICAL_EFFECTS_TABLE.criticalResults;
   const effects = CRITICAL_EFFECTS_TABLE.effectTemplates;
 
-  /** Any `snake_case` run: the shape every leaked tag and flag value has. */
-  const SNAKE_CASE_RUN = /[A-Za-z]+(?:_[A-Za-z]+)+/g;
+  /**
+   * Any `snake_case` run: the shape every leaked tag and flag value has.
+   *
+   * Deliberately NOT `g`-flagged. A global regex reused with `.test()` carries `lastIndex`
+   * between calls, so a match in one title makes the scan of the next title start partway in
+   * and miss an offender. The size of the loss depends on where the tokens sit, so it is not a
+   * fixed fraction: measured on this dataset, two consecutive leaking titles reported 1, the
+   * real pre-#747 91-of-608 state reported 79, and all 608 leaking reported 360. It never
+   * reported zero, so the assertion still failed correctly — but the offender list is the
+   * diagnostic the next lane reads, and it silently dropped part of it.
+   */
+  const SNAKE_CASE_RUN = /[A-Za-z]+(?:_[A-Za-z]+)+/;
 
   it("no title contains a snake_case run", () => {
     const offenders = results
