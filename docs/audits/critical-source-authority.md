@@ -14,11 +14,11 @@ against the live toolchain cannot tell an authorized content correction from dri
 | Workbook                          | `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`    |
 | Workbook SHA-256                  | `3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c` |
 | Generated data file               | `packages/domain/src/encounter/criticalEffectsTableData.ts`        |
-| Generated data file SHA-256       | `954ad00d9fa258ea489e5f965c7dcf222c146a60c06939607e31b2afbd63c810` |
+| Generated data file SHA-256       | `836e66a169d5267235652a139e1ecd307d3f481a482f9a75e721ba3c48213aee` |
 | Critical results semantic SHA-256 | `8acae8c32f60a39f221225aa0f06fed163e73e523bf9a0c551f275cea5d940a4` |
 | Establishing issue                | #741                                                               |
 | Establishing branch               | `builder/741-critical-head-titles`                                 |
-| Establishing commit               | `3054c41d9d91f8094a8438b641d216bc64c5bb63`                         |
+| Establishing commit               | `733496cbfe79915ece6937e5f71507b251b7c0a7`                         |
 
 The digests above are the values the generator wrote into
 `packages/domain/src/encounter/criticalEffectsTableManifest.json`. They were read from that
@@ -32,10 +32,15 @@ regenerated manifest, not transcribed from any failure output.
 | Previous workbook SHA-256  | `47cde37df62c8bafd94535d194cc476b5ae6a366271e18ad94e3e1e62c41f09f`              |
 | New workbook               | `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`                 |
 | New workbook SHA-256       | `3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c`              |
-| Previous data file SHA-256 | `63bb12c2ae0765acd64c70ba4abcc8ebf5d89a71026f70ca2199dd56de0f1673`              |
-| New data file SHA-256      | `954ad00d9fa258ea489e5f965c7dcf222c146a60c06939607e31b2afbd63c810`              |
+| Previous data file SHA-256 | `7308ca47622650c2a7f78cf3a6986ce16d269ef2c546e15038d4ee9d1891edf2`              |
+| New data file SHA-256      | `836e66a169d5267235652a139e1ecd307d3f481a482f9a75e721ba3c48213aee`              |
 | Authority                  | Product Owner ruling of 2026-10-21 recorded on issue #741                       |
 | Generation mode            | `node scripts/generateCriticalEffectsTable.mjs --generate --accept-data-change` |
+
+The generated data file's digest reflects two compounding causes: the 15 title corrections in
+this transition, and the canonical Prettier formatting of generated generator output introduced
+by #749, onto which this change is rebased. The semantic digests isolate the first from the
+second — see below.
 
 **v13 is preserved on disk byte-unchanged** at its original digest. v14 is v13 plus the
 authorized corrections and nothing else.
@@ -64,6 +69,24 @@ Authoritative dataset, against `dev` `112747f0`:
 - 608 of 608 Critical results and 2,179 of 2,179 effect templates compared; **15 changed
   fields, every one of them `title`**, on exactly those 15 keys; **0 changed effect rows**;
   no row identity, index, family or location moved.
+
+Semantic digests, **re-derived by importing the committed data file and recomputing
+`sha256(JSON.stringify(export))`**, not read back from this manifest. The manifest's values are
+computed from the workbook parse upstream of rendering, so a matching manifest field alone would
+corroborate only that the workbook parse was unchanged; re-deriving from the committed module
+also covers rendering fidelity:
+
+- `criticalResultsSemanticSha256` re-derives to
+  `8acae8c32f60a39f221225aa0f06fed163e73e523bf9a0c551f275cea5d940a4`, equal to the recorded
+  value. It **differs** from the pre-transition `39d36f98…` because the 15 title corrections are
+  a genuine semantic change.
+- `effectTemplatesSemanticSha256` re-derives to
+  `8a6a0e62f85d81219d4929465162ccbc56342706ff1a004214a9a7a330a2991d`, equal to the recorded
+  value, confirming no effect data moved.
+
+Neither semantic digest is asserted by any test in the repository — `criticalEffectsGeneration.test.ts`
+checks `output` with `toMatchObject` over the counts, `file` and `fileSha256` only — so this
+explicit re-derivation is the only evidence covering them.
 
 Controlling catalogue `docs/source/combat/target-critical-catalogue-v1/catalogue.jsonl`:
 
