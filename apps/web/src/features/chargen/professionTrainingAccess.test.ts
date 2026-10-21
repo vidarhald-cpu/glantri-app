@@ -14,18 +14,24 @@ import {
 /**
  * Forgejo #635 — intentional inaccessibility, made understandable.
  *
- * The Product Owner ruling of 2026-10-15 keeps the accepted access behaviour unchanged: 569 of the
- * 5504 Civilization x social-class x Profession combinations reach no Profession training, and the
- * remedy is explanation, not a mechanics change. These cases bind the explanation to the accepted
+ * The Product Owner ruling of 2026-10-15 keeps the accepted access behaviour unchanged: the remedy
+ * is explanation, not a mechanics change. These cases bind the explanation to the accepted
  * catalogue and hold the two bounds the ruling names: no invented reason, and no raw identifier or
  * implementation vocabulary in anything a reader sees.
  *
- * The Product Owner content ruling of 2026-10-20 (Forgejo #732) then corrected one authored bound:
- * F24 Ironmaking and forge apprenticeship keeps its furnace requirement as a Society Level bound
- * and no longer carries a trades-tier Social Band, because Social Band 1 alone must not exclude the
- * Smith and the Smelter. 569 therefore becomes 539 — 30 fewer closed combinations, exactly the Band
- * 1 Smith and Smelter cells in the 15 Civilizations whose society runs furnaces. The explanation
- * behaviour the 2026-10-15 ruling settled is untouched; only the count of cases it explains moves.
+ * The Product Owner content ruling of 2026-10-20 (Forgejo #732) corrected one authored bound: F24
+ * Ironmaking and forge apprenticeship keeps its furnace requirement as a Society Level bound and no
+ * longer carries a trades-tier Social Band, because Social Band 1 alone must not exclude the Smith
+ * and the Smelter. The explanation behaviour the 2026-10-15 ruling settled is untouched; only the
+ * count of cases it explains moves.
+ *
+ * The population the explanation covers is re-measured under Forgejo #731 (control-plane ruling,
+ * 2026-10-20) on top of that corrected content. 539 of the 5504 combinations used to reach no
+ * training; 509 of those did have an authored route valid for the Character, and were reported as
+ * closed only because `resolveCompetencyV2PathAvailability` discarded the whole route set whenever
+ * no defining core route was reachable. 30 combinations are closed on the authored content itself
+ * and still explain themselves here. Not one bound changed, and nothing a reader is shown was
+ * reworded.
  */
 const content = withCompetencyContentV2(
   buildTargetRuntimeContent(createTargetCompetencyChargenSource(defaultCanonicalContent)),
@@ -72,13 +78,13 @@ describe("Profession training access explanation", () => {
   it("explains exactly the combinations that reach no training, and no others", () => {
     expect(civilizations).toHaveLength(16);
     expect(paths).toHaveLength(86);
-    expect(closedCombinations).toHaveLength(539);
+    expect(closedCombinations).toHaveLength(30);
   });
 
   /*
-   * Forgejo #732. The corrected F24 bound shows up here as exactly 30 combinations that no longer
-   * close, and the Society Level 1 Civilization still closes both occupations at every social class
-   * — the furnace requirement, not the stratum, is what excludes them now.
+   * Forgejo #732. The corrected F24 bound opens the Smith and the Smelter to Band 1 wherever the
+   * society runs furnaces, and the Society Level 1 Civilization still closes both occupations at
+   * every social class — the furnace requirement, not the stratum, is what excludes them now.
    */
   it("opens the Smith and the Smelter to Common Folk only where the society runs furnaces", () => {
     for (const professionId of ["profession:smith", "profession:smelter"]) {
@@ -89,15 +95,25 @@ describe("Profession training access explanation", () => {
     }
   });
 
-  it("names the reported Scythians and Scribe and Copyist combination at every social class", () => {
+  it("names a Scythian Profession closed by its own authored routes, at every social class", () => {
+    /*
+     * #635 reported Scythians + Scribe and Copyist. Under #731 that pair is no longer closed: the
+     * records office (`G11`) is still out of reach among the Scythians, but the catalogue also
+     * authors "Taught directly in the writing room" with no Society-Level bound, and that route was
+     * valid for the Character all along. Mathematical Practitioner is the Scythian case that is
+     * genuinely closed — all three of its authored routes are bounded at Society Level 3 and it has
+     * no direct route — so it is what the explanation must still name.
+     */
+    expect(accessFor("scythians", "profession:scribe", 1)).toBeUndefined();
+
     for (const socialBand of [1, 2, 3, 4]) {
-      const access = accessFor("scythians", "profession:scribe", socialBand);
+      const access = accessFor("scythians", "profession:mathematical-practitioner", socialBand);
 
       expect(access, `band ${socialBand}`).toBeDefined();
       expect(access!.closedBy).toBe("society");
       expect(access!.situation).toBe("No one among the Scythians trains this Profession.");
       expect(access!.authoredReasons).toEqual([
-        "A records office is a standing bureaucracy keeping written record.",
+        "Applied calculation is kept accounts and measured ground reduced to figures.",
       ]);
     }
   });
@@ -119,14 +135,16 @@ describe("Profession training access explanation", () => {
     }, {});
 
     /*
-     * Forgejo #732 moves 30 Band 1 Smith and Smelter cells out of `social-class` entirely, and
-     * moves the two Society Level 1 Band 1 cells from `society-and-social-class` to `society`: the
-     * society still closes them, the stratum no longer does.
+     * Measured at the merged head. Forgejo #732 moves the 30 Band 1 Smith and Smelter cells out of
+     * `social-class` entirely, and moves the two Society Level 1 Band 1 cells from
+     * `society-and-social-class` to `society`: the society still closes them, the stratum no longer
+     * does. What is left is 27 closed on the society alone, 2 on the social class alone and 1 on
+     * both.
      */
     expect(byClosure).toEqual({
-      society: 331,
-      "social-class": 195,
-      "society-and-social-class": 13,
+      society: 27,
+      "social-class": 2,
+      "society-and-social-class": 1,
     });
   });
 
@@ -147,14 +165,19 @@ describe("Profession training access explanation", () => {
 
   it("states the situation without inventing a rationale when no authored reason is attributable", () => {
     /*
-     * No current combination reaches this branch — every one of the 569 attributes an authored
+     * No current combination reaches this branch — every one of the 30 attributes an authored
      * reason — so it is held against content whose bound carries none. A fabricated rationale is the
      * one thing the ruling forbids outright.
+     *
+     * Two conditions have to hold at once, and #731 separated them: no authored route may be valid
+     * for the Character, which is what makes the Profession closed, and the core route must then
+     * need something no route of the path reaches, which is what leaves the closure unattributed.
      */
     const unattributed = structuredClone(content) as typeof content;
     const scribe = unattributed.competencyV2!.paths.find(
       (path) => path.id === "profession:scribe",
     )!;
+    for (const route of scribe.routes) route.minSocietyLevel = 6;
     scribe.coreRoutes = [
       {
         groupIds: ["group-that-no-route-reaches"],
@@ -180,7 +203,7 @@ describe("Profession training access explanation", () => {
     });
   });
 
-  it("exposes no raw identifier in any of the 569 explanations", () => {
+  it("exposes no raw identifier in any of the 30 explanations", () => {
     const patterns = [
       /\b(?:profession|skill|group|society|civilization|specialization):/i,
       /\b[A-Z]\d{2}\b/,
