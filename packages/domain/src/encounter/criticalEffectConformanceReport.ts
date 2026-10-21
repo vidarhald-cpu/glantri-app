@@ -72,7 +72,7 @@ export function renderCriticalEffectConformanceReport(input: {
     "",
     "## Provenance and reconciliation",
     "",
-    "- Workbook: `docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx`",
+    "- Workbook: `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`",
     "- Critical results: `AppFacing_Crits!A1:X609`",
     "- Effect templates: `AppFacing_Effects!A1:AE2180`",
     `- Workbook SHA-256: \`${input.sourceSha256}\``,

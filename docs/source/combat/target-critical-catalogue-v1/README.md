@@ -14,12 +14,27 @@ The executable authoring contract is Forgejo #216 at accepted baseline
 workbook and existing conformance reports are provenance and calibration evidence. They do not
 override the approved target rules.
 
-Source workbook:
+Current authoritative Critical source, per #741:
+
+- path: `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`;
+- SHA-256: `3c368646ed0c50da8e18d2fa04774d18f6ad9c991adcd8e2fe3c2515f3c14c8c`;
+- result range: `AppFacing_Crits!A1:X609`;
+- effect range: `AppFacing_Effects!A1:AE2180`.
+
+The reader-facing `outcome_name` and `player_prose` of the 15 Critical head results corrected
+under #741 follow this current source. See
+[Critical source authority](../../../audits/critical-source-authority.md).
+
+Source workbook this catalogue was produced from, retained as provenance and not rewritten:
 
 - path: `docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx`;
 - SHA-256: `47cde37df62c8bafd94535d194cc476b5ae6a366271e18ad94e3e1e62c41f09f`;
 - result range: `AppFacing_Crits!A1:X609`;
 - effect range: `AppFacing_Effects!A1:AE2180`.
+
+Every `source_trace` block in `catalogue.jsonl` and `source-dispositions.jsonl` refers to that
+v13 source. Those traces describe the source state captured when the records were produced and
+are deliberately not rewritten to v14.
 
 ## Package
 
@@ -35,7 +50,9 @@ Source workbook:
 - `distribution-report.md` explains the distribution review and normalization.
 - `canonical-examples.md` provides future implementation/QA fixture authority.
 - `unresolved-items.md` distinguishes catalogue completeness from external activation boundaries.
-- `validation-summary.json` records exact counts, source coverage, and payload hashes.
+- `validation-summary.json` records exact counts, source coverage, and payload hashes **of the
+  pre-#741 validation run**. It is historical evidence and not a current validation statement;
+  see [Critical source authority](../../../audits/critical-source-authority.md).
 
 The linked rule summary is [Target Critical catalogue V1](../../../rules/target-critical-catalogue-v1.md).
 The linked verification record is
@@ -171,7 +188,16 @@ dispositions.
 ## Review and validation
 
 The checked-in validation record proves exact key count, approved combinations, prose coverage,
-structured coverage, source accounting, and payload hashes. `distribution.csv` and the distribution
-report review incidence and burden without imposing quotas. Later implementation must consume this
-package through a separately authorized design and must not silently copy historical source prose or
-current runtime mappings as target mechanics.
+structured coverage, source accounting, and payload hashes.
+
+**That record describes the pre-#741, v13 validation state and is not a current validation
+statement for v14 or post-#741 authority.** Its `catalogue_sha256` matches `catalogue.jsonl` as
+it stood before the authorized #741 `outcome_name` and `player_prose` corrections, so it no
+longer matches the current file; `validation-summary.json` is deliberately left whole as the
+record of the run that was actually performed. See
+[Critical source authority](../../../audits/critical-source-authority.md), and #739 for how
+current catalogue validation should be reproducibly regenerated.
+
+`distribution.csv` and the distribution report review incidence and burden without imposing
+quotas. Later implementation must consume this package through a separately authorized design and
+must not silently copy historical source prose or current runtime mappings as target mechanics.

@@ -23,7 +23,7 @@ const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(dirname(SCRIPT_PATH), "..");
 const WORKBOOK_PATH = resolve(
   REPO_ROOT,
-  "docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx",
+  "docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx",
 );
 const DATA_PATH = resolve(REPO_ROOT, "packages/domain/src/encounter/criticalEffectsTableData.ts");
 const MANIFEST_PATH = resolve(
@@ -743,7 +743,7 @@ function renderDataFile(results, effects) {
   return `import type { CriticalEffectTemplate, CriticalResult } from "./criticalEffectsTable";
 
 export const CRITICAL_EFFECTS_TABLE_SOURCE = {
-  workbook: "docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx",
+  workbook: "docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx",
   criticalResultsRange: "AppFacing_Crits!A1:X609",
   effectTemplatesRange: "AppFacing_Effects!A1:AE2180",
 } as const;

@@ -19,7 +19,7 @@ describe("critical effects table helpers", () => {
     expect(CRITICAL_EFFECTS_TABLE.source).toMatchObject({
       criticalResultsRange: "AppFacing_Crits!A1:X609",
       effectTemplatesRange: "AppFacing_Effects!A1:AE2180",
-      workbook: "docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx",
+      workbook: "docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx",
     });
   });
 
@@ -72,7 +72,7 @@ describe("critical effects table helpers", () => {
     expect(getCriticalResult("blunt", "head", 16)).toMatchObject({
       critKey: "blunt|head|16",
       mortalityState: "instant_death",
-      title: "Fatal blunt head critical",
+      title: "Head struck clean off and flung clear; instant death",
     });
     expect(getCriticalResultWithEffects("fire_energy", "whole_body", 8)).toMatchObject({
       effects: expect.arrayContaining([
