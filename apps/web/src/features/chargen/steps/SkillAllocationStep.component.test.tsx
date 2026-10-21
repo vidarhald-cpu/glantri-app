@@ -16,14 +16,21 @@ import { SkillAllocationStep } from "./SkillAllocationStep";
  *
  * Before this change the panel rendered its heading and nothing else — the 52px heading-only box
  * the #630 smoke test measured — because `coreProfessionSections.length > 0` had no alternative
- * branch. The reported combination is Scythians + Scribe and Copyist, intentionally closed under
- * accepted content, and these cases hold both halves: the closed case explains itself, and a
- * working Profession on the same Civilization is untouched.
+ * branch. These cases hold both halves: the closed case explains itself, and a working Profession
+ * on the same Civilization is untouched.
+ *
+ * #635 reported Scythians + Scribe and Copyist. Forgejo #731 found that pair is not closed — the
+ * catalogue authors a direct writing-room route with no Society-Level bound — so the closed case is
+ * now Scythians + Mathematical Practitioner, whose three authored routes are all bounded at Society
+ * Level 3 and which has no direct route. Nothing the panel renders changed; only which combination
+ * is the genuinely closed one.
  */
 const content = withCompetencyContentV2(
   buildTargetRuntimeContent(createTargetCompetencyChargenSource(defaultCanonicalContent)),
 );
 
+/** Closed among the Scythians on the Society Level alone, at every Social Band. */
+const CLOSED_PROFESSION_ID = "profession:mathematical-practitioner";
 const scythians = content.civilizations.find((row) => row.id === "scythians")!;
 const scythianSociety = content.societies!.find((row) => row.id === scythians.linkedSocietyId)!;
 
@@ -79,8 +86,13 @@ function renderStep(overrides: Record<string, unknown> = {}) {
     rowActionFeedback: {},
     selectableSkillSummary: { selectionSlots: [] },
     selectedCivilization: scythians,
-    selectedProfession: content.professions.find((row) => row.id === "profession:scribe"),
-    selectedProfessionCard: cardFor("profession:scribe", 1),
+    /*
+     * `SkillAllocationStep` renders `Profession: {selectedProfession?.name}` beside the card's
+     * closure prose, so these two must name the same Profession or the fixture states one and
+     * explains another. No assertion reads the name; this keeps it honest for the next reader.
+     */
+    selectedProfession: content.professions.find((row) => row.id === CLOSED_PROFESSION_ID),
+    selectedProfessionCard: cardFor(CLOSED_PROFESSION_ID, 1),
     selectedProfile: undefined,
     selectedSociety: { id: scythianSociety.id, name: scythianSociety.name, socialBands: {} },
     selectedSocietyAccess: { professionIds: [], socialClass: "Commoner" },
@@ -132,7 +144,9 @@ describe("Step 6 Profession skills panel with no reachable training", () => {
       screen.getByText("No one among the Scythians trains this Profession."),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("A records office is a standing bureaucracy keeping written record."),
+      screen.getByText(
+        "Applied calculation is kept accounts and measured ground reduced to figures.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -150,7 +164,7 @@ describe("Step 6 Profession skills panel with no reachable training", () => {
   it("falls back to the honest generic state when the catalogue attributes no reason", () => {
     renderStep({
       selectedProfessionCard: {
-        ...cardFor("profession:scribe", 1),
+        ...cardFor(CLOSED_PROFESSION_ID, 1),
         trainingAccess: {
           authoredReasons: [],
           closedBy: "unattributed",

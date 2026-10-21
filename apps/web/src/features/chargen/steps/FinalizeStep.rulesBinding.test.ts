@@ -24,12 +24,22 @@ import { CORE_ROUTE_SELECTION_ERROR } from "./FinalizeStep";
  * test binds the constant to what the engine actually emits, against the real
  * Chargen runtime catalogue the wizard builds. It makes no rules change: it only
  * reads `buildChargenCoreRouteStatus` and `reviewChargenDraft`.
+ *
+ * Forgejo #731 moved which pair reaches the first situation, and not the binding.
+ * Scribe and Copyist at Society Level 1 is no longer it: the catalogue authors
+ * "Taught directly in the writing room" with no Society-Level bound, so that
+ * route is valid for the Character and the path is available with no reachable
+ * core route — `isSelectionValid` is then true, nothing is owed, and the engine
+ * emits no core-route message to withhold. The first situation now needs a
+ * Profession no authored route reaches at all, which is Mathematical
+ * Practitioner below Society Level 3.
  */
-const SCRIBE_PROFESSION_ID = "profession:scribe";
-/** Zero applicable routes: `resolveCompetencyV2PathAvailability` is not valid for this pair. */
-const NO_ROUTE_SOCIETY_ID = "forager_ritual_tribal";
 /** One applicable, incomplete route: the genuinely actionable blocked state. */
+const ACTIONABLE_PROFESSION_ID = "profession:scribe";
 const ACTIONABLE_SOCIETY_ID = "bronze_age_palace_state";
+/** Zero applicable routes: `resolveCompetencyV2PathAvailability` is not valid for this pair. */
+const NO_ROUTE_PROFESSION_ID = "profession:mathematical-practitioner";
+const NO_ROUTE_SOCIETY_ID = "forager_ritual_tribal";
 
 function runtimeContent() {
   return withCompetencyContentV2(
@@ -37,7 +47,7 @@ function runtimeContent() {
   );
 }
 
-function evaluate(societyId: string) {
+function evaluate(professionId: string, societyId: string) {
   const content = runtimeContent();
   const progression = {
     primaryPoolSpent: 0,
@@ -48,7 +58,7 @@ function evaluate(societyId: string) {
   } as never;
   const coreRouteStatus = buildChargenCoreRouteStatus({
     content: content as never,
-    professionId: SCRIBE_PROFESSION_ID,
+    professionId,
     progression,
     societyId,
     socialBand: 1,
@@ -56,7 +66,7 @@ function evaluate(societyId: string) {
   const review = reviewChargenDraft({
     civilizationId: "scythians",
     content: content as never,
-    professionId: SCRIBE_PROFESSION_ID,
+    professionId,
     profile: { socialClassRoll: 1 } as never,
     progression,
     societyId,
@@ -68,7 +78,7 @@ function evaluate(societyId: string) {
 
 describe("Finalize step binding to the rules engine", () => {
   it("still recognises the engine's core-route message when no route is applicable", () => {
-    const { coreRouteStatus, review } = evaluate(NO_ROUTE_SOCIETY_ID);
+    const { coreRouteStatus, review } = evaluate(NO_ROUTE_PROFESSION_ID, NO_ROUTE_SOCIETY_ID);
 
     expect(coreRouteStatus.applicableRoutes).toEqual([]);
     expect(coreRouteStatus.isSelectionValid).toBe(false);
@@ -79,7 +89,7 @@ describe("Finalize step binding to the rules engine", () => {
   });
 
   it("produces a different, genuinely actionable reason when a route is applicable", () => {
-    const { coreRouteStatus, review } = evaluate(ACTIONABLE_SOCIETY_ID);
+    const { coreRouteStatus, review } = evaluate(ACTIONABLE_PROFESSION_ID, ACTIONABLE_SOCIETY_ID);
 
     expect(coreRouteStatus.applicableRoutes.length).toBeGreaterThan(0);
     expect(coreRouteStatus.isSelectionValid).toBe(true);

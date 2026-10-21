@@ -17,15 +17,17 @@ import { resolveCompetencyV2PathAvailability } from "@glantri/rules-engine";
  *
  * This reads access state. It never changes it: the Product Owner ruling of 2026-10-15 on Forgejo
  * #635 keeps the accepted `minSocialBand` and `minSocietyLevel` behaviour exactly as it is, and
- * says the defect was the silence rather than the gating. 569 of the 5504
+ * says the defect was the silence rather than the gating. 30 of the 5504
  * Civilization x social-class x Profession combinations reach no Profession training at all, and
- * until now the application said nothing about any of them.
+ * until now the application said nothing about any of them. The census was 569 when #635 was
+ * written; Forgejo #731 corrected the availability aggregation and #732 corrected one authored F24
+ * bound, and the figures below are re-measured at that content and that resolver.
  *
  * Two separate world facts produce them, and they are different sentences to a reader:
  *
- * - the society itself has nothing to be trained in (329 combinations);
- * - the training exists in the society but not for a Character of this social class (225);
- * - both at once (15).
+ * - the society itself has nothing to be trained in (27 combinations);
+ * - the training exists in the society but not for a Character of this social class (2);
+ * - both at once (1).
  *
  * The explanation quotes the catalogue's own authored prose and never writes a justification of its
  * own. Where the catalogue attributes no reason, the reader gets the situation and nothing more.
