@@ -109,12 +109,29 @@ describe("Competency Content V2 reader prose", () => {
     /*
      * The 51 pages were authored on 2026-09-26, before #389 widened both missile candidate pools.
      * Publication corrected exactly those two sentences and nothing else.
+     *
+     * Forgejo #744 re-sited the mention. It used to sit in a trailing `What it teaches.`
+     * accounting paragraph — the fourth of these two records, and the last two such paragraphs
+     * left in the 95 after #718 — which was the only place either record named the longbow. The
+     * substance assertion below therefore passed only because that paragraph existed. The mention
+     * now sits in each record's ordinary scope prose, and the two assertions that follow it make
+     * the test say so: the longbow may be named in any paragraph, but it must be named by ordinary
+     * prose, and no reinstated accounting paragraph may supply it. Nothing was relaxed — both
+     * original assertions are kept verbatim, so anything the old test rejected this one rejects.
      */
     for (const id of ["M04", "M05"]) {
       const group = competencyContentV2LearningGroups.find((row) => row.id === id)!;
       const candidates = group.selectionSlots![0]!.candidateSkillIds;
       expect(candidates, id).toContain("longbow");
-      expect(competencyContentV2GroupReaderProse[id]!.fullDescription, id).toContain("the longbow");
+      const fullDescription = competencyContentV2GroupReaderProse[id]!.fullDescription;
+      expect(fullDescription, id).toContain("the longbow");
+      /* Position-independent: whichever paragraph carries the mention, it is ordinary prose. */
+      const paragraphs = fullDescription.split("\n\n");
+      const carriers = paragraphs.filter((paragraph) => paragraph.includes("the longbow"));
+      expect(carriers.length, id).toBeGreaterThan(0);
+      for (const carrier of carriers) expect(carrier.startsWith("What it teaches"), id).toBe(false);
+      const accounting = paragraphs.filter((paragraph) => paragraph.startsWith("What it teaches"));
+      expect(accounting, id).toEqual([]);
     }
   });
 
