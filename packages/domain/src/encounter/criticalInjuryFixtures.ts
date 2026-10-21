@@ -5,11 +5,8 @@ import {
   type CriticalInjuryCase,
   type CriticalOperationalProjection,
 } from "./criticalInjuryDomain";
-import {
-  getCriticalResultWithEffects,
-  type CriticalFamily,
-  type CriticalLocationScope,
-} from "./criticalEffectsTable";
+import type { CriticalFamily, CriticalLocationScope } from "./criticalEffectsTable";
+import { CRITICAL_INJURY_FIXTURE_V13_SOURCES } from "./criticalInjuryFixtureV13Source";
 
 const WORKBOOK = "docs/source/combat/Glantri_CriticalEffects_AppFacing_v13.xlsx";
 const WORKBOOK_SHA256 = "47cde37df62c8bafd94535d194cc476b5ae6a366271e18ad94e3e1e62c41f09f";
@@ -23,20 +20,27 @@ interface FixtureSourceInput {
   sourceResultRange: string;
 }
 
+/**
+ * These fixtures are an accepted historical fixture set, not a live projection of the current
+ * Critical table. Their content is read from the frozen v13 snapshot in
+ * `criticalInjuryFixtureV13Source.ts` so that the content always matches the v13 attribution below;
+ * authorized changes to the current Critical table must not move these fixtures.
+ */
 function fixtureSource(input: FixtureSourceInput): AcceptedCriticalOutcome["originalSource"] {
-  const source = getCriticalResultWithEffects(input.family, input.location, input.criticalIndex);
+  const critKey = `${input.family}|${input.location}|${input.criticalIndex
+    .toString()
+    .padStart(2, "0")}`;
+  const source = CRITICAL_INJURY_FIXTURE_V13_SOURCES[critKey];
   if (!source) {
-    throw new Error(
-      `Missing Critical fixture source ${input.family}|${input.location}|${input.criticalIndex}.`,
-    );
+    throw new Error(`Missing Critical fixture source ${critKey}.`);
   }
 
   return {
     criticalResult: {
-      ...source.result,
-      sourceSpecialTags: [...source.result.sourceSpecialTags],
+      ...source.criticalResult,
+      sourceSpecialTags: [...source.criticalResult.sourceSpecialTags],
     },
-    effectTemplates: source.effects.map((effect) => ({ ...effect })),
+    effectTemplates: source.effectTemplates.map((effect) => ({ ...effect })),
     sourceEffectRange: input.sourceEffectRange,
     sourceResultRange: input.sourceResultRange,
     tableVersion: "app-facing-v13",
