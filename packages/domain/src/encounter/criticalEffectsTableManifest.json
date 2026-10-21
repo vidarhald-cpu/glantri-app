@@ -369,7 +369,7 @@
     "effectTemplatesCount": 2179,
     "effectTemplatesSemanticSha256": "8a6a0e62f85d81219d4929465162ccbc56342706ff1a004214a9a7a330a2991d",
     "file": "packages/domain/src/encounter/criticalEffectsTableData.ts",
-    "fileSha256": "63bb12c2ae0765acd64c70ba4abcc8ebf5d89a71026f70ca2199dd56de0f1673",
+    "fileSha256": "7308ca47622650c2a7f78cf3a6986ce16d269ef2c546e15038d4ee9d1891edf2",
     "manifest": "packages/domain/src/encounter/criticalEffectsTableManifest.json"
   },
   "transformations": [

@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync } from "node:zlib";
-import { format as formatWithPrettier } from "prettier";
+import { format as formatWithPrettier, resolveConfig as resolvePrettierConfig } from "prettier";
 
 import {
   formatCriticalEffectsSummaryDiscrepancies,
@@ -766,6 +766,20 @@ export const CRITICAL_EFFECT_TEMPLATES = JSON.parse(
 `;
 }
 
+// The generated data file is committed, so it must satisfy the repository formatting gate as
+// well as byte-reproducible verification. Rendering and then formatting with the canonical
+// repository Prettier configuration makes both true of the same bytes: the committed artefact is
+// Prettier-clean, and --verify compares against the identical formatted output. Prettier is
+// idempotent, so repeated generation is byte-stable.
+async function formatGeneratedDataFile(renderedSource) {
+  const repositoryOptions = (await resolvePrettierConfig(DATA_PATH)) ?? {};
+  return formatWithPrettier(renderedSource, {
+    ...repositoryOptions,
+    filepath: DATA_PATH,
+    parser: "typescript",
+  });
+}
+
 function warningEntry(effect, rowNumber, fields) {
   return {
     effectKey: effect.effectKey,
@@ -998,7 +1012,7 @@ async function main() {
     results,
     summaryRows,
   });
-  const dataFile = renderDataFile(results, effects);
+  const dataFile = await formatGeneratedDataFile(renderDataFile(results, effects));
   const manifest = buildManifest({
     dataFile,
     effects,

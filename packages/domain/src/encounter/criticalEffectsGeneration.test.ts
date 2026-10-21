@@ -65,7 +65,7 @@ describe("Critical workbook generation", () => {
       criticalResultsCount: 608,
       effectTemplatesCount: 2179,
       file: "packages/domain/src/encounter/criticalEffectsTableData.ts",
-      fileSha256: "63bb12c2ae0765acd64c70ba4abcc8ebf5d89a71026f70ca2199dd56de0f1673",
+      fileSha256: "7308ca47622650c2a7f78cf3a6986ce16d269ef2c546e15038d4ee9d1891edf2",
     });
     expect(manifest.transformations).toContain(
       "No bleed unit, duration, dice formula, Special flag, treatment gate, or stateful mapping is inferred or normalized.",
