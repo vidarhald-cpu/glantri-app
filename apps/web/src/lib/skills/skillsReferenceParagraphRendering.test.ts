@@ -140,9 +140,15 @@ describe("#743 paragraph rendering — every authored newline is a paragraph bou
     const skills = allRendered.filter((row) => row.site.startsWith("SkillInspector skill"));
     const groups = allRendered.filter((row) => row.site.includes("prose.full (Learning Group)"));
     const professions = allRendered.filter((row) => row.site.includes("prose.full (Profession)"));
-    /* Floors, not exact counts: later editorial lanes add paragraphs, they do not remove them. */
+    /* Floors, not exact counts, so any legitimate addition passes. They are deliberately
+       maintained rather than monotonic: an editorial lane may also REMOVE a paragraph under an
+       explicit ruling, and the floor is then lowered to the newly measured count in the same
+       change. #744 was the first to do so — it struck the trailing accounting paragraph from M04
+       and M05 on an accepted ruling, taking the Learning Group count from 194 to 192. So a number
+       below the floor is a regression; a ruled reduction arrives as an edit to the floor itself,
+       recorded here, and never as a failure. */
     expect(breaks(skills)).toBeGreaterThanOrEqual(353);
-    expect(breaks(groups)).toBeGreaterThanOrEqual(194);
+    expect(breaks(groups)).toBeGreaterThanOrEqual(192);
     expect(breaks(professions)).toBeGreaterThanOrEqual(2);
   });
 });
