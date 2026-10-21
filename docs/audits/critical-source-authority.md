@@ -18,6 +18,7 @@ against the live toolchain cannot tell an authorized content correction from dri
 | Critical results semantic SHA-256 | `8acae8c32f60a39f221225aa0f06fed163e73e523bf9a0c551f275cea5d940a4` |
 | Establishing issue                | #741                                                               |
 | Establishing branch               | `builder/741-critical-head-titles`                                 |
+| Establishing commit               | `3054c41d9d91f8094a8438b641d216bc64c5bb63`                         |
 
 The digests above are the values the generator wrote into
 `packages/domain/src/encounter/criticalEffectsTableManifest.json`. They were read from that
