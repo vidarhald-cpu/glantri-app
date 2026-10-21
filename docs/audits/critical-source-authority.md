@@ -135,16 +135,39 @@ before this lane: the entry's `outcome_name` carried the bare machine stem while
 disagreement, does not extend it, and does not silently normalize historical traces. It remains
 accounted for under the authority/divergence work on #739.
 
-### Open item carried to the control plane
+### `validation-summary.json` — historical validation evidence, not a current statement
 
-`docs/source/combat/target-critical-catalogue-v1/validation-summary.json` still records
-`workbook_sha256: 47cde37d…` and has deliberately **not** been moved to v14. Measured reason:
-that file is a self-consistent snapshot of one validation run. Besides the workbook digest it
-records `catalogue_sha256`, `source_dispositions_sha256` and `distribution_sha256` — the digests
-of the artefacts that run validated. Its recorded `catalogue_sha256`
-`39b9af69bb1452c947197be76dbb609564dc37925f70826f8da7c8268f7c5759` matches `catalogue.jsonl`
-exactly as it stood before #741 and no longer matches it after the authorized `outcome_name` and
-`player_prose` corrections. Moving only its workbook digest would describe a validation run that
-never happened, and recomputing all four digests would assert a validation this lane did not
-perform on an approved artefact that nothing in the repository regenerates. The disposition of
-this file is referred to the control plane.
+**`docs/source/combat/target-critical-catalogue-v1/validation-summary.json` is left completely
+unchanged.** Product Owner ruling of 2026-10-21 on #741. Three statements govern how it is to be
+read:
+
+1. **It describes the pre-#741, v13 validation state.**
+2. **It remains valid historical evidence** of the validation run that was actually performed.
+3. **It is not a current validation statement for v14 or post-#741 authority.** Nothing in it may
+   be read as asserting that the v14 workbook, or the catalogue as corrected under #741, has been
+   validated. No such validation has been run.
+
+It is a self-consistent snapshot of one validation run: its workbook, catalogue, disposition and
+distribution digests describe the inputs and outputs that were actually validated together at
+that time.
+
+| Field                        | Recorded                                                           | Describes                                                 |
+| ---------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `workbook_sha256`            | `47cde37df62c8bafd94535d194cc476b5ae6a366271e18ad94e3e1e62c41f09f` | v13, the source that run validated                        |
+| `catalogue_sha256`           | `39b9af69bb1452c947197be76dbb609564dc37925f70826f8da7c8268f7c5759` | `catalogue.jsonl` as it stood before the #741 corrections |
+| `source_dispositions_sha256` | `ac554ef96a59e09df4bd6995e88ed4636f364ee95ccd05f41feaf28f3705051f` | `source-dispositions.jsonl`, which #741 did not change    |
+| `distribution_sha256`        | `bef8d2c18808f0fed0ce66cd0aa1deaeb81821ceebba3bafd695ff8628b1b139` | `distribution.csv`, which #741 did not change             |
+
+Because the four digests belong to one run, editing any single field inside the file would
+falsify the record rather than update it. Under the ruling, #741 does not change only
+`workbook_sha256`, does not recompute the four digests by hand, does not change the artefact
+shape — so no current-authority field is added to it — and does not imply that v14 together with
+the post-#741 catalogue was validated.
+
+The `catalogue_sha256` divergence is caused by **#741's own authorized `outcome_name` and
+`player_prose` corrections**, not by the v13-to-v14 version bump; it would have arisen even had
+the workbook been edited in place.
+
+**The architectural question** — how current catalogue validation should be reproducibly
+regenerated and recorded — belongs to **#739 and the canonical-authority work**, where the
+measurement above is recorded. It is not addressed here, and #741 is not blocked on it.
