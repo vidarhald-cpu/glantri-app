@@ -50,7 +50,9 @@ are deliberately not rewritten to v14.
 - `distribution-report.md` explains the distribution review and normalization.
 - `canonical-examples.md` provides future implementation/QA fixture authority.
 - `unresolved-items.md` distinguishes catalogue completeness from external activation boundaries.
-- `validation-summary.json` records exact counts, source coverage, and payload hashes.
+- `validation-summary.json` records exact counts, source coverage, and payload hashes **of the
+  pre-#741 validation run**. It is historical evidence and not a current validation statement;
+  see [Critical source authority](../../../audits/critical-source-authority.md).
 
 The linked rule summary is [Target Critical catalogue V1](../../../rules/target-critical-catalogue-v1.md).
 The linked verification record is
@@ -186,7 +188,16 @@ dispositions.
 ## Review and validation
 
 The checked-in validation record proves exact key count, approved combinations, prose coverage,
-structured coverage, source accounting, and payload hashes. `distribution.csv` and the distribution
-report review incidence and burden without imposing quotas. Later implementation must consume this
-package through a separately authorized design and must not silently copy historical source prose or
-current runtime mappings as target mechanics.
+structured coverage, source accounting, and payload hashes.
+
+**That record describes the pre-#741, v13 validation state and is not a current validation
+statement for v14 or post-#741 authority.** Its `catalogue_sha256` matches `catalogue.jsonl` as
+it stood before the authorized #741 `outcome_name` and `player_prose` corrections, so it no
+longer matches the current file; `validation-summary.json` is deliberately left whole as the
+record of the run that was actually performed. See
+[Critical source authority](../../../audits/critical-source-authority.md), and #739 for how
+current catalogue validation should be reproducibly regenerated.
+
+`distribution.csv` and the distribution report review incidence and burden without imposing
+quotas. Later implementation must consume this package through a separately authorized design and
+must not silently copy historical source prose or current runtime mappings as target mechanics.

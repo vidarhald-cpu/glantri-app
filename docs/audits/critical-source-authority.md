@@ -64,7 +64,7 @@ every cell of every worksheet by address, type, formula flag and decoded value:
 - **No mechanical or rule content differs**: no body text, effect, damage, Stun, Bleed,
   duration, urgency, treatment, mortality or tag cell is among the differences.
 
-Authoritative dataset, against `dev` `112747f0`:
+Authoritative dataset, against `dev` `f67bd8bc`:
 
 - 608 of 608 Critical results and 2,179 of 2,179 effect templates compared; **15 changed
   fields, every one of them `title`**, on exactly those 15 keys; **0 changed effect rows**;
@@ -137,7 +137,7 @@ Left unchanged, deliberately:
 
 Those traces describe the source state captured when those catalogue records were produced.
 Rewriting them to v14 would assert that records authored against v13 were derived from v14,
-which is false. **The 2,789 historical trace pins were not updated merely to make every digest
+which is false. **The 2,787 historical trace pins were not updated merely to make every digest
 string in the repository identical.**
 
 A catalogue entry may therefore carry a corrected reader-facing `outcome_name` and
