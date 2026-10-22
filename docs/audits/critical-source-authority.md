@@ -460,8 +460,8 @@ control, a negative control and a positive control:
 | F9   | `AppFacing_Crits!O30` urgency `4` → `3`                            | fail     | failed                        |
 | F10  | first `sharedStrings.xml` entry rewritten                          | fail     | failed                        |
 | F11  | `CritSlots!E30` style index `4` → `7`                              | fail     | failed                        |
-| F13  | `CritSlots!E33` synchronized to a near-miss (trailing period)      | fail     | failed                        |
-| F14  | `CritSlots!E417` left unsynchronized (14 of 15)                    | fail     | failed, naming `E417`         |
+| F12  | `CritSlots!E33` synchronized to a near-miss (trailing period)      | fail     | failed                        |
+| F13  | `CritSlots!E417` left unsynchronized (14 of 15)                    | fail     | failed, naming `E417`         |
 | P1   | positive control — the real before/after pair                      | pass     | passed                        |
 
 F3b is recorded because it first ran as a falsification case and the differ did not fail it. The
