@@ -36,6 +36,46 @@ describe("Critical workbook generation", () => {
     expect(output).toContain("AppFacing_Summary!C16 Group / Special: expected 546, actual 1035.");
   });
 
+  it("keeps the current-authority digests in critical-source-authority.md equal to the manifest", () => {
+    // Forgejo #759. The present-tense current-authority digest in this document was missed by the
+    // #747 transition and again by the #759 transition, caught by independent QA both times. The
+    // document states the invariant itself; this asserts it instead of relying on a reader to
+    // classify the sentence correctly during a digest sweep.
+    const sourceSha256 = readManifest().source.sha256;
+    const document = readFileSync(resolve(repoRoot, "docs/audits/critical-source-authority.md"), {
+      encoding: "utf8",
+    });
+
+    const tableRows = document.match(/^\| Workbook SHA-256 +\| `([0-9a-f]{64})` +\|$/gm) ?? [];
+    expect(tableRows).toHaveLength(1);
+    expect(tableRows[0]).toContain(sourceSha256);
+
+    // The prose sentence wraps, so compare against whitespace-normalised text. Both short-form
+    // digests in it are asserted: the historical v13 one, which the ruling fixes, and the
+    // current-authority one, which every transition must move.
+    const prose = document.replace(/\s+/gu, " ");
+    const sentences =
+      prose.match(
+        /\*\*Historical `source_trace` blocks may refer to v13 and `([0-9a-f]{8})…` while current authority is v14 and `([0-9a-f]{8})…`\./gu,
+      ) ?? [];
+    expect(sentences).toHaveLength(1);
+    expect(sentences[0]).toContain("`47cde37d…`");
+    expect(sentences[0]).toContain(`\`${sourceSha256.slice(0, 8)}…\``);
+
+    // The controlling catalogue declares current authority too, and its v14 bullet is keyed by the
+    // workbook path, so the v13 provenance bullet below it cannot be matched by mistake.
+    const catalogueReadme = readFileSync(
+      resolve(repoRoot, "docs/source/combat/target-critical-catalogue-v1/README.md"),
+      { encoding: "utf8" },
+    );
+    const catalogueBullets =
+      catalogueReadme.match(
+        /- path: `docs\/source\/combat\/Glantri_CriticalEffects_AppFacing_v14\.xlsx`;\n- SHA-256: `([0-9a-f]{64})`;/gu,
+      ) ?? [];
+    expect(catalogueBullets).toHaveLength(1);
+    expect(catalogueBullets[0]).toContain(sourceSha256);
+  });
+
   it("records deterministic source coordinates, transformations, and digests", () => {
     const manifest = readManifest();
 

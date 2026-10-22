@@ -509,12 +509,40 @@ leaves these at v13.
 ## `source_trace` refers to v13 by design, not drift
 
 **Historical `source_trace` blocks may refer to v13 and `47cde37d…` while current authority is
-v14 and `3b474637…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
+v14 and `276f8d5b…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
 on #741. The ruling's principle is about the _relationship_ between historical traces and current
 authority, not about any one digest: it was issued under the previous workbook recorded in
-Transition 1, and #747 moved current authority forward without changing what the ruling says.
+Transition 1, and #747 and then #759 moved current authority forward without changing what the
+ruling says.
 **The digest in that sentence tracks current authority and must be updated by every transition** —
-it was missed once, under #747, and caught by independent QA.
+it was missed under #747 and again under #759, caught by independent QA both times. Under #759 the
+evidence was present and misclassified rather than absent: the short-form sweep printed this line,
+and a reader classified a present-tense assertion as a historical reference.
+
+It is therefore no longer left to a reader to classify.
+`packages/domain/src/encounter/criticalEffectsGeneration.test.ts` asserts, against the manifest's
+`source.sha256` rather than against a second literal, the digest at each of the three
+present-tense current-authority sites that exist today:
+
+1. the `Workbook SHA-256` row of this document's Current-authority table — **full** 64-hex form;
+2. the sentence opening this section — **short** `8-hex + …` form, which is where both misses
+   occurred and which a full-hex-only pattern would silently fail to match;
+3. the `v14` bullet pair of `docs/source/combat/target-critical-catalogue-v1/README.md` — full
+   form, keyed by the workbook path so the v13 provenance bullet beneath it cannot match instead.
+
+Each site's anchor must be found exactly once or the assertion fails, so renaming a heading or a
+table label fails loudly rather than passing on nothing.
+
+**What this does not do.** It does not prove this document internally consistent, and it does not
+protect a fourth present-tense claim added later — that site would be unprotected until it is
+added to the list above. The mitigation is that the assertion **names** the sites it covers, so
+introducing an unprotected one is a visible omission in this list rather than a silent gap.
+
+The historical pins are deliberately **not** covered, because they must not move. After #759 the
+previous digest `3b474637…` still occurs at eight places in this document besides this paragraph,
+every one of them correct: lines 21, 100, 106 and 178 record what #747 accepted, and lines 360,
+365, 379 and 432 are Transition 3's own _previous_-state fields. An assertion that classified
+digests by proximity to the words "current authority" would have indicted all eight.
 
 Left unchanged, deliberately:
 
