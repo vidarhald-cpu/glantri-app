@@ -46,7 +46,7 @@ describe("Critical workbook generation", () => {
       version: "1.1.0",
     });
     expect(manifest.source).toMatchObject({
-      sha256: "3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2",
+      sha256: "276f8d5b4cd0963569273276a20f5cb7d336f222c1b029906d014b3de697280a",
       tables: {
         criticalResults: {
           dataRange: "AppFacing_Crits!A2:X609",
