@@ -22,6 +22,17 @@ import {
 
 const READER_FACING_FIELDS = ["boundaries", "description", "fullDescription", "shortDescription"];
 
+/** PostgreSQL `jsonb` key order: shorter keys first, then bytewise. */
+function compareKeysAsJsonb(left: string, right: string): number {
+  return left.length !== right.length
+    ? left.length - right.length
+    : left < right
+      ? -1
+      : left > right
+        ? 1
+        : 0;
+}
+
 /**
  * PostgreSQL `jsonb` key order: shorter keys first, then bytewise. Applied at every depth,
  * with array order left alone — which is what `jsonb` itself does.
@@ -33,18 +44,42 @@ function reorderKeysAsJsonb<T>(value: T): T {
   if (typeof value !== "object" || value === null) return value;
 
   const source = value as Record<string, unknown>;
-  const keys = Object.keys(source).sort((left, right) =>
-    left.length !== right.length
-      ? left.length - right.length
-      : left < right
-        ? -1
-        : left > right
-          ? 1
-          : 0,
-  );
+  const keys = Object.keys(source).sort(compareKeysAsJsonb);
   const reordered: Record<string, unknown> = {};
   for (const key of keys) reordered[key] = reorderKeysAsJsonb(source[key]);
   return reordered as unknown as T;
+}
+
+/**
+ * Reports the first object, at any depth, whose keys are **not** in `jsonb` order.
+ *
+ * This exists to fail closed on the way integration coverage for defect A goes vacuous: if
+ * anything normalizes the value before the comparison sees it — a `characterProgressionSchema`
+ * parse, a spread through a Zod-typed builder — the keys come back in schema-declaration order
+ * and this reports it. A test that reorders a fixture and then lets it be normalized away is
+ * measuring nothing.
+ */
+function findJsonbKeyOrderViolation(value: unknown, path = "$"): string | undefined {
+  if (Array.isArray(value)) {
+    for (const [index, element] of value.entries()) {
+      const violation = findJsonbKeyOrderViolation(element, `${path}[${index}]`);
+      if (violation !== undefined) return violation;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object" || value === null) return undefined;
+
+  const source = value as Record<string, unknown>;
+  const keys = Object.keys(source);
+  const expected = [...keys].sort(compareKeysAsJsonb);
+  if (JSON.stringify(keys) !== JSON.stringify(expected)) {
+    return `${path}: keys ${JSON.stringify(keys)} are not in jsonb order ${JSON.stringify(expected)}`;
+  }
+  for (const key of keys) {
+    const violation = findJsonbKeyOrderViolation(source[key], `${path}.${key}`);
+    if (violation !== undefined) return violation;
+  }
+  return undefined;
 }
 
 /** An editorial re-wording: every reader-facing field, at every depth, gets new prose. */
@@ -113,6 +148,59 @@ function progressionWithSkill(targetDefinition: unknown): CharacterProgression {
   });
 }
 
+/**
+ * The persisted value exactly as `jsonb` hands it back, with **no `characterProgressionSchema`
+ * parse anywhere in front of it**.
+ *
+ * `progressionWithGroup` / `progressionWithSkill` above parse, and a parse rebuilds every object
+ * in schema-declaration order — which erases a `jsonb` reordering before the comparison can see
+ * it. The repair must not depend on that incidental normalization staying in front of it
+ * (#764 contract: "the ordering repair must not rely on the Zod normalization remaining in front
+ * of the comparison [...] the comparison must be order-insensitive at every nesting depth on the
+ * raw value"), so these fixtures are cast, never parsed. `jsonb` canonicalizes the whole stored
+ * document, so the reordering is applied to the whole progression, not only to the snapshot.
+ */
+function rawJsonbProgression(persisted: {
+  skillGroups?: readonly unknown[];
+  skills?: readonly unknown[];
+}): CharacterProgression {
+  return reorderKeysAsJsonb({
+    chargenMode: "standard",
+    educationPoints: 0,
+    flexiblePointFactor: 1,
+    level: 1,
+    primaryPoolSpent: 0,
+    primaryPoolTotal: 60,
+    secondaryPoolSpent: 0,
+    secondaryPoolTotal: 0,
+    skillGroups: persisted.skillGroups ?? [],
+    skills: persisted.skills ?? [],
+    specializations: [],
+  }) as unknown as CharacterProgression;
+}
+
+function rawGroupRow(targetDefinition: unknown): Record<string, unknown> {
+  return {
+    grantedRanks: 0,
+    gms: 0,
+    groupId: groupWithProseAndSlots!.id,
+    primaryRanks: 0,
+    ranks: 0,
+    secondaryRanks: 0,
+    targetDefinition,
+  };
+}
+
+function rawSkillRow(targetDefinition: unknown): Record<string, unknown> {
+  const skill = skillWithProse!;
+  return {
+    groupId: skill.groupId,
+    groupIds: skill.groupIds,
+    skillId: skill.id,
+    targetDefinition,
+  };
+}
+
 describe("fixture construction actually reproduces both #764 defects", () => {
   it("has a catalogue entry with prose, boundaries, memberships and selection slots", () => {
     expect(groupWithProseAndSlots).toBeDefined();
@@ -137,6 +225,13 @@ describe("fixture construction actually reproduces both #764 defects", () => {
   });
 });
 
+/**
+ * The POST-PARSE path only. `progressionWithGroup` / `progressionWithSkill` parse, so the
+ * reordering these two cases apply is rebuilt in schema-declaration order before the comparison
+ * sees it — which is why both of them also pass on the unrepaired baseline. They are kept because
+ * they are the production `mapCharacterRecord` sequence, but the order coverage that actually
+ * measures the repair is the RAW block below, not this one.
+ */
 describe("object key order across a store that does not preserve it (#764 defect A)", () => {
   it("does not invalidate a Learning Group snapshot", () => {
     expect(
@@ -152,6 +247,123 @@ describe("object key order across a store that does not preserve it (#764 defect
         progressionWithSkill(reorderKeysAsJsonb(skillWithProse!)),
       ),
     ).toEqual([]);
+  });
+});
+
+/**
+ * The path integrity actually has to survive on: the unparsed, `jsonb`-ordered column value.
+ *
+ * Everything in this block reaches `getTargetProgressionValidationErrors` without
+ * `characterProgressionSchema.parse`, and each case asserts — before it asserts anything about
+ * the errors — that the value it hands over is still in `jsonb` key order and still byte-different
+ * from the live catalogue entry. Both halves are needed: the order assertion proves nothing
+ * normalized the fixture, and the byte-difference assertion proves the fixture still reproduces
+ * the defect.
+ */
+describe("the RAW jsonb-ordered progression, with no normalizing parse in front (#764 defect A)", () => {
+  const groupError = `Learning Group ${groupWithProseAndSlots!.id} does not match the approved target definition.`;
+  const skillError = `Skill ${skillWithProse!.id} does not match the approved target definition.`;
+
+  function handedGroupDefinition(progression: CharacterProgression): unknown {
+    expect(findJsonbKeyOrderViolation(progression)).toBeUndefined();
+    const handed = progression.skillGroups[0]!.targetDefinition;
+    expect(handed).toBeDefined();
+    expect(JSON.stringify(handed)).not.toBe(JSON.stringify(groupWithProseAndSlots));
+    return handed;
+  }
+
+  it("hands the comparison a value no parse has touched: jsonb order, byte-different, same content", () => {
+    const progression = rawJsonbProgression({
+      skillGroups: [rawGroupRow(groupWithProseAndSlots!)],
+    });
+    const handed = handedGroupDefinition(progression);
+
+    // Byte-different, and specifically different in key ORDER rather than in content.
+    expect(Object.keys(handed as Record<string, unknown>)).not.toEqual(
+      Object.keys(groupWithProseAndSlots!),
+    );
+    expect(Object.keys(handed as Record<string, unknown>).sort()).toEqual(
+      Object.keys(groupWithProseAndSlots!).sort(),
+    );
+    // And the pre-repair predicate — raw `JSON.stringify` equality — fails on it, which is the
+    // defect. This is the assertion that goes red if the fixture ever stops reproducing it.
+    expect(
+      JSON.stringify(handed) === JSON.stringify(groupWithProseAndSlots),
+      "the pre-repair raw-stringify comparison must fail on the value actually handed over",
+    ).toBe(false);
+  });
+
+  it("does not invalidate a Learning Group snapshot", () => {
+    const progression = rawJsonbProgression({
+      skillGroups: [rawGroupRow(groupWithProseAndSlots!)],
+    });
+    handedGroupDefinition(progression);
+    expect(getTargetProgressionValidationErrors(progression)).toEqual([]);
+  });
+
+  it("does not invalidate a Learning Group snapshot that is also prose-stale", () => {
+    const progression = rawJsonbProgression({
+      skillGroups: [rawGroupRow(rewriteReaderFacingProse(groupWithProseAndSlots!))],
+    });
+    handedGroupDefinition(progression);
+    expect(getTargetProgressionValidationErrors(progression)).toEqual([]);
+  });
+
+  it("still catches a mechanical divergence on the raw value", () => {
+    const progression = rawJsonbProgression({
+      skillGroups: [
+        rawGroupRow({
+          ...groupWithProseAndSlots!,
+          sortOrder: groupWithProseAndSlots!.sortOrder + 1,
+        }),
+      ],
+    });
+    expect(findJsonbKeyOrderViolation(progression)).toBeUndefined();
+    expect(getTargetProgressionValidationErrors(progression)).toEqual([groupError]);
+  });
+
+  it("still catches a reordered semantic array on the raw value", () => {
+    const [slot, ...rest] = groupWithProseAndSlots!.selectionSlots!;
+    expect(slot.candidateSkillIds.length).toBeGreaterThan(1);
+    const progression = rawJsonbProgression({
+      skillGroups: [
+        rawGroupRow({
+          ...groupWithProseAndSlots!,
+          selectionSlots: [
+            { ...slot, candidateSkillIds: [...slot.candidateSkillIds].reverse() },
+            ...rest,
+          ],
+        }),
+      ],
+    });
+    expect(findJsonbKeyOrderViolation(progression)).toBeUndefined();
+    expect(getTargetProgressionValidationErrors(progression)).toEqual([groupError]);
+  });
+
+  it("does not invalidate a raw Skill snapshot, and still catches a mechanical divergence", () => {
+    const skill = skillWithProse!;
+    const clean = rawJsonbProgression({ skills: [rawSkillRow(skill)] });
+    expect(findJsonbKeyOrderViolation(clean)).toBeUndefined();
+    expect(JSON.stringify(clean.skills[0]!.targetDefinition)).not.toBe(JSON.stringify(skill));
+    expect(getTargetProgressionValidationErrors(clean)).toEqual([]);
+
+    const diverged = rawJsonbProgression({
+      skills: [rawSkillRow({ ...skill, sortOrder: skill.sortOrder + 1 })],
+    });
+    expect(findJsonbKeyOrderViolation(diverged)).toBeUndefined();
+    expect(getTargetProgressionValidationErrors(diverged)).toEqual([skillError]);
+  });
+
+  it("does not mutate the raw persisted value it was handed", () => {
+    const progression = rawJsonbProgression({
+      skillGroups: [
+        rawGroupRow(reorderKeysAsJsonb(rewriteReaderFacingProse(groupWithProseAndSlots!))),
+      ],
+    });
+    const before = JSON.stringify(progression);
+    expect(getTargetProgressionValidationErrors(progression)).toEqual([]);
+    expect(JSON.stringify(progression)).toBe(before);
+    expect(findJsonbKeyOrderViolation(progression)).toBeUndefined();
   });
 });
 
@@ -362,7 +574,7 @@ describe("no read-path write and no self-heal", () => {
     );
   });
 
-  it("throws rather than writing when handed a deeply frozen progression", () => {
+  it("completes without throwing when handed a deeply frozen progression, so it wrote nothing", () => {
     const freezeDeep = (value: unknown): void => {
       if (typeof value !== "object" || value === null || Object.isFrozen(value)) return;
       Object.freeze(value);

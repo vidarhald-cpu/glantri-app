@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import {
   CATALOGUE_SNAPSHOT_FIELD_CLASSIFICATIONS,
@@ -59,6 +60,59 @@ const CLASSIFIED_SHAPES = [
   ],
 ] as const;
 
+/**
+ * Collects every object shape reachable from `schema`, keyed by the path it was reached on,
+ * descending through the wrappers these catalogue schemas actually use (`optional`, `default`,
+ * `nullable`, arrays, `preprocess`/`transform`, unions, `lazy`, records).
+ */
+function collectObjectShapes(
+  schema: z.ZodTypeAny,
+  path: string,
+  into: Map<string, readonly string[]>,
+  seen: Set<z.ZodTypeAny>,
+): void {
+  if (seen.has(schema)) return;
+  seen.add(schema);
+
+  if (schema instanceof z.ZodObject) {
+    const shape = schema.shape as z.ZodRawShape;
+    into.set(path, Object.keys(shape).sort());
+    for (const [field, child] of Object.entries(shape)) {
+      collectObjectShapes(child, `${path}.${field}`, into, seen);
+    }
+    return;
+  }
+  if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) {
+    collectObjectShapes(schema.unwrap(), path, into, seen);
+    return;
+  }
+  if (schema instanceof z.ZodDefault) {
+    collectObjectShapes(schema._def.innerType, path, into, seen);
+    return;
+  }
+  if (schema instanceof z.ZodArray) {
+    collectObjectShapes(schema.element, `${path}[]`, into, seen);
+    return;
+  }
+  if (schema instanceof z.ZodEffects) {
+    collectObjectShapes(schema.innerType(), path, into, seen);
+    return;
+  }
+  if (schema instanceof z.ZodUnion) {
+    for (const [index, option] of (schema.options as z.ZodTypeAny[]).entries()) {
+      collectObjectShapes(option, `${path}|${index}`, into, seen);
+    }
+    return;
+  }
+  if (schema instanceof z.ZodLazy) {
+    collectObjectShapes(schema.schema as z.ZodTypeAny, path, into, seen);
+    return;
+  }
+  if (schema instanceof z.ZodRecord) {
+    collectObjectShapes(schema.valueSchema, `${path}{}`, into, seen);
+  }
+}
+
 describe("catalogue snapshot field classification is total and guarded", () => {
   for (const [name, schema, classification] of CLASSIFIED_SHAPES) {
     it(`classifies every ${name} field, with no unclassified field permitted`, () => {
@@ -107,6 +161,40 @@ describe("catalogue snapshot field classification is total and guarded", () => {
 
   it("classifies boundaries as reader-facing, explicitly and not by omission", () => {
     expect(SKILL_GROUP_DEFINITION_FIELD_CLASSIFICATION.boundaries).toBe("reader-facing");
+  });
+
+  /**
+   * The totality guard above checks only the shapes listed in `CLASSIFIED_SHAPES`, while
+   * `canonicalize` omits by field NAME at every depth of any object. A nested object shape
+   * introduced later — `z.object({ description, cost })` on one of these schemas — therefore
+   * escaped both guards: classifying the parent field satisfied the per-shape check and the
+   * `Record<keyof …>` type, while a divergence on the nested `description` went undetected
+   * because the name is in the dropped set. This walks every nested object shape reachable
+   * from a compared catalogue shape and fails if one is not itself a registered classified
+   * shape, so introducing such a shape is a loud failure rather than a silent exclusion.
+   */
+  it("classifies every NESTED object shape reachable from a compared catalogue shape", () => {
+    const reachable = new Map<string, readonly string[]>();
+    for (const [name, schema] of CLASSIFIED_SHAPES) {
+      collectObjectShapes(schema, name, reachable, new Set());
+    }
+
+    const registeredFieldSets = Object.values(CATALOGUE_SNAPSHOT_FIELD_CLASSIFICATIONS).map(
+      (classification) => JSON.stringify(Object.keys(classification).sort()),
+    );
+    const unregistered = [...reachable.entries()]
+      .filter(([, fields]) => !registeredFieldSets.includes(JSON.stringify(fields)))
+      .map(([path, fields]) => `${path} { ${fields.join(", ")} }`);
+
+    // Every nested object shape must have its own entry in
+    // CATALOGUE_SNAPSHOT_FIELD_CLASSIFICATIONS and its own row in CLASSIFIED_SHAPES. Classifying
+    // only the parent field is not enough: reader-facing names are dropped at every depth.
+    expect(unregistered).toEqual([]);
+    // Positive control: the walk really does descend into nested shapes rather than reporting an
+    // empty set, which would make the assertion above vacuous.
+    expect([...reachable.keys()]).toContain("skillGroupDefinition.selectionSlots[]");
+    expect([...reachable.keys()]).toContain("targetSkillDefinition.meleeCrossTraining");
+    expect(reachable.size).toBeGreaterThan(CLASSIFIED_SHAPES.length);
   });
 });
 
@@ -168,6 +256,75 @@ describe("catalogueIntegrityKey", () => {
     );
     expect(catalogueIntegrityKey({ chooseCount: 1 })).not.toBe(
       catalogueIntegrityKey({ chooseCount: 2 }),
+    );
+  });
+
+  /**
+   * `canonicalJsonKey` has its own order-invariance test above, but `catalogueIntegrityKey` is
+   * the function the snapshot comparisons actually call, and it had none of its own. Removing
+   * the key sort from `canonicalize` left the comparison order-sensitive again while every
+   * `catalogueIntegrityKey` assertion in this file still passed.
+   */
+  it("is invariant under object key reordering at every nesting depth", () => {
+    const declared = {
+      id: "M01",
+      name: "Mounted Warfare",
+      description: "declared-order prose",
+      skillMemberships: [{ skillId: "riding", relevance: "core" }],
+      selectionSlots: [
+        {
+          candidateSkillIds: ["lance", "polearms"],
+          chooseCount: 1,
+          id: "slot",
+          label: "Pick one",
+          required: true,
+        },
+      ],
+      specializationIds: ["F07"],
+      sortOrder: 24,
+    };
+    // The same value after a PostgreSQL `jsonb` round-trip: keys by length, then bytewise, at
+    // every depth, with array order left intact.
+    const jsonbOrdered = {
+      id: "M01",
+      name: "Mounted Warfare",
+      sortOrder: 24,
+      description: "declared-order prose",
+      selectionSlots: [
+        {
+          id: "slot",
+          label: "Pick one",
+          required: true,
+          chooseCount: 1,
+          candidateSkillIds: ["lance", "polearms"],
+        },
+      ],
+      skillMemberships: [{ skillId: "riding", relevance: "core" }],
+      specializationIds: ["F07"],
+    };
+
+    expect(JSON.stringify(declared)).not.toBe(JSON.stringify(jsonbOrdered));
+    expect(catalogueIntegrityKey(declared)).toBe(catalogueIntegrityKey(jsonbOrdered));
+  });
+
+  it("still separates a mechanical divergence carried on a reordered value", () => {
+    const declared = {
+      id: "M01",
+      selectionSlots: [{ chooseCount: 1, id: "slot", required: true }],
+      sortOrder: 24,
+    };
+    const reorderedAndDiverged = {
+      sortOrder: 24,
+      selectionSlots: [{ id: "slot", required: true, chooseCount: 2 }],
+      id: "M01",
+    };
+
+    expect(catalogueIntegrityKey(declared)).not.toBe(catalogueIntegrityKey(reorderedAndDiverged));
+  });
+
+  it("does NOT normalize array order", () => {
+    expect(catalogueIntegrityKey({ ids: ["a", "b"] })).not.toBe(
+      catalogueIntegrityKey({ ids: ["b", "a"] }),
     );
   });
 });
