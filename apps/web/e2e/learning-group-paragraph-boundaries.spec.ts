@@ -19,6 +19,11 @@ import { expect, test } from "@playwright/test";
  * `normalizedProse` below was measured at `233b39c6`, BEFORE this lane's edit, which is why
  * matching it proves the words did not move.
  *
+ * K25 was added after the fact, by a Product Owner ruling on this lane's independent QA finding
+ * F2: its third paragraph announced two other things, delivered two, and then ran a third subject
+ * on behind them. Its `normalizedProse` is likewise the `233b39c6` baseline, so this case proves
+ * the correction moved a boundary and not a word.
+ *
  * The last case is a record this lane considered and deliberately left as one paragraph. It is
  * here so that the floor this lane raised cannot be mistaken for a mandate to split everything:
  * a regression that splits it fails this spec.
@@ -66,6 +71,16 @@ const CASES: Case[] = [
     paragraphsAfter: 4,
     normalizedProse:
       "Diving and underwater work practice is training in working safely and effectively below the surface using breath control, ropes and careful observation. Diving for work is taught by divers, in the water, on a short line and then a longer one. The learner descends, does something deliberate below the surface and comes up, and is corrected on all of it: the breath, the descent, the handling of the line, and above all on the discipline of coming up before having to. It is repetitive, deliberately unexciting training, because the practice being built is the ability to work calmly at depth rather than to reach it. Most of what a diver does below the surface is done with a rope. A line commonly serves as signal, lifeline and working tackle at once — objects may be secured and sent up on it, and it is the diver's link to the surface. Handling rope well is not an adjacent convenience here; it is half the work, and it is taught to a working standard. The other half is seeing: water gives poor light, deceptive distance and little time, and a diver is trained to find and recognize a thing under those conditions rather than to look around.",
+  },
+  {
+    id: "K25",
+    name: "Street theft practice",
+    slug: "street-theft-practice",
+    why: "added by Product Owner ruling on independent QA finding F2: the paragraph announces TWO other things, delivers two, and then a fourth sentence opens a third subject the announcement does not govern \u2014 the structure K11 was already split on",
+    paragraphsBefore: 3,
+    paragraphsAfter: 4,
+    normalizedProse:
+      "Street theft practice is what a company of thieves teaches: trained hands, a glance that judges what is worth taking, and the means of reaching it. This is learned from people who do it, usually young and usually in company, and the correction is entirely practical. Hands are trained first: small objects palmed, passed and exchanged until the movement disappears, practised against each other and then in the street, with the failures discussed. Nobody teaches it as a course, but it is unmistakably taught — by demonstration, by repetition, and by the sharp instruction of someone who has been caught and does not intend to be again. Two other things are learned in the same company. Knowing what is worth taking is half the trade, and it is taught: what that is, what it will fetch, what is traceable and what is not worth the risk, judged at a glance and corrected afterwards by what it actually fetched. And reaching things is the other half — walls, roofs, sills and stairs, ascended and descended using whatever supports are there. The particular specialist practice of lifting from what somebody is carrying, with its own demands of access, timing and unobtrusive handling, is taught within this same company.",
   },
   {
     id: "N01",

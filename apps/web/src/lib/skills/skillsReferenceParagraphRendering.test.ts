@@ -153,9 +153,15 @@ describe("#743 paragraph rendering — every authored newline is a paragraph bou
        paragraph ran two unrelated subjects together, and removed none. Its own instrument is the
        whitespace-normalized text digest in
        `packages/content/src/proposals/competencyContentV2/competencyContentV2ReaderProse.test.ts`,
-       which holds the prose itself byte-identical while this floor records the new structure. */
+       which holds the prose itself byte-identical while this floor records the new structure.
+
+       A Product Owner ruling on #745's independent QA finding F2 then added one further boundary
+       in K25, splitting its trailing specialist-practice sentence off an enumeration that
+       announces two items and delivers two — the same structure K11 was already split on. That
+       takes the Learning Group floor from 218 to 219. The normalized digest above does not move,
+       because a paragraph boundary is all that changed. */
     expect(breaks(skills)).toBeGreaterThanOrEqual(353);
-    expect(breaks(groups)).toBeGreaterThanOrEqual(218);
+    expect(breaks(groups)).toBeGreaterThanOrEqual(219);
     expect(breaks(professions)).toBeGreaterThanOrEqual(2);
   });
 });
