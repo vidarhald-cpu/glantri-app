@@ -484,6 +484,27 @@ now has no allowance to fall back on, so it asserts strictly more than before. M
 - the **anti-vacuity check still fires**: blanking the `crit_index(1-16)` of one `CritSlots` row
   makes the guard throw `matched 607 of 608 Critical identities` rather than passing on 607 rows.
 
+### Verification at this head
+
+Full local gate run at `b40b13be`, offline against a warm pnpm store. All exit 0:
+
+- `pnpm install --frozen-lockfile` — resolved from the local store, no network;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm test` — 11 suites;
+- `pnpm build`;
+- `node scripts/generateCriticalEffectsTable.mjs --verify`.
+
+The three-site current-authority invariant added this round **executed** rather than being
+merely present: `criticalEffectsGeneration.test.ts` reports **5 tests**, up from 4, the added
+one being that assertion.
+
+CI's `application-docker-test` failed twice at this branch, from two unrelated environmental
+causes: a registry connect timeout fetching `pnpm-10.6.0.tgz`, and then repeated Postgres
+`40001 could not serialize access due to concurrent update`. Both are environmental, not a
+defect in this work. `application-ci` — typecheck, lint, test and build — was green on both
+CI runs.
+
 ## Records that keep citing v13, by design
 
 The following remain unchanged and keep citing v13 and `47cde37d…`, because that is the
