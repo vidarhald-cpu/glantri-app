@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import { getCompetencyV2ReferenceSource } from "../../competencyV2Reference";
@@ -227,5 +229,33 @@ describe("Competency Content V2 reader prose", () => {
     for (const group of competencyContentV2Catalogue.groups) {
       expect(Object.keys(group)).not.toContain("fullDescription");
     }
+  });
+
+  /**
+   * Forgejo #745 — the instrument that makes a paragraph-boundary editorial lane provable.
+   *
+   * #745 permits exactly one kind of edit to the Learning Group prose above: the insertion or
+   * removal of a `\n\n` paragraph boundary. The standard it is verified against is that the prose
+   * with its paragraph whitespace normalized must be textually identical before and after. This
+   * digest IS that standard, recorded. It is taken over all 95 records' full descriptions with
+   * every whitespace run collapsed to a single space, so adding or removing a paragraph boundary
+   * does not move it, while one changed word, one reordered sentence or one dropped clause does.
+   *
+   * Measured at `233b39c6` — the text as #396, #718 and #744 left it — and unchanged at #745's
+   * head, which is what proves #745 changed paragraph boundaries and nothing else.
+   *
+   * This is deliberately not a floor and not a count. A later lane authorized to actually reword
+   * an entry re-measures this value as part of that change and records the authority here; a lane
+   * that was only supposed to re-paragraph and moves it has exceeded its contract.
+   */
+  it("keeps the whitespace-normalized Learning Group prose textually identical", () => {
+    const ids = Object.keys(competencyContentV2GroupReaderProse).sort();
+    expect(ids).toHaveLength(95);
+    const normalized = ids.map((id) => {
+      const prose = competencyContentV2GroupReaderProse[id]!.fullDescription;
+      return `${id}\u0000${prose.replace(/\s+/g, " ").trim()}`;
+    });
+    const digest = createHash("sha256").update(normalized.join("\u0001"), "utf8").digest("hex");
+    expect(digest).toBe("485e42af595f0ccc905ae80c444e5218e8993f02113c2241ec74d90c1e35cd9e");
   });
 });
