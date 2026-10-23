@@ -549,9 +549,8 @@ async function main() {
  * never generate or verify anything.
  */
 /*
- * No top-level await: this module's exported labels are imported by both the Vitest conformance
- * suite and the Playwright spec, and Playwright's CommonJS loader cannot require an ESM graph that
- * contains one.
+ * No top-level await: this module's exported labels are imported by the Vitest conformance suite,
+ * and that import must not block on, or trigger, any generation or verification work.
  */
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   main().catch((error) => {

@@ -238,7 +238,7 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
      */
     audience: "Players, GMs, and rules reviewers",
     description:
-      "Every current Critical result, grouped by attack family and hit location and listed by result number, with its effects, damage floor, conditions, treatment, and additional effects.",
+      "Every current Critical result, grouped by attack family and hit location and listed by result number, with its effects, damage floor, conditions, treatment, additional effects, and GM notes.",
     fileName: "critical-table.md",
     id: "critical-table",
     order: 65,
