@@ -146,9 +146,16 @@ describe("#743 paragraph rendering — every authored newline is a paragraph bou
        change. #744 was the first to do so — it struck the trailing accounting paragraph from M04
        and M05 on an accepted ruling, taking the Learning Group count from 194 to 192. So a number
        below the floor is a regression; a ruled reduction arrives as an edit to the floor itself,
-       recorded here, and never as a failure. */
+       recorded here, and never as a failure.
+
+       #745 then raised the Learning Group floor from 192 to 218 — the count measured at its head.
+       It added 26 paragraph boundaries across 24 of the 95 records, inserting them where a
+       paragraph ran two unrelated subjects together, and removed none. Its own instrument is the
+       whitespace-normalized text digest in
+       `packages/content/src/proposals/competencyContentV2/competencyContentV2ReaderProse.test.ts`,
+       which holds the prose itself byte-identical while this floor records the new structure. */
     expect(breaks(skills)).toBeGreaterThanOrEqual(353);
-    expect(breaks(groups)).toBeGreaterThanOrEqual(192);
+    expect(breaks(groups)).toBeGreaterThanOrEqual(218);
     expect(breaks(professions)).toBeGreaterThanOrEqual(2);
   });
 });
