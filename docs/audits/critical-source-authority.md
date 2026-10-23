@@ -12,13 +12,13 @@ against the live toolchain cannot tell an authorized content correction from dri
 | Field                             | Value                                                              |
 | --------------------------------- | ------------------------------------------------------------------ |
 | Workbook                          | `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`    |
-| Workbook SHA-256                  | `3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2` |
+| Workbook SHA-256                  | `276f8d5b4cd0963569273276a20f5cb7d336f222c1b029906d014b3de697280a` |
 | Generated data file               | `packages/domain/src/encounter/criticalEffectsTableData.ts`        |
 | Generated data file SHA-256       | `2e8e86cc3973e3d222df61e65d0f5e8637080b57c1138e6f81dbebd2e70e8fd3` |
 | Critical results semantic SHA-256 | `c1afe09614e0e11d91969b9d0e2b3cae6f3ae3c12bcd0314525ee177075b7578` |
-| Establishing issue                | #747                                                               |
-| Establishing branch               | `builder/747-critical-machine-token-titles`                        |
-| Previous establishing issue       | #741, at workbook `3c368646…`                                      |
+| Establishing issue                | #759                                                               |
+| Establishing branch               | `content/759b-critslots-sync`                                      |
+| Previous establishing issue       | #747, at workbook `3b474637…`                                      |
 
 The digests above are the values the generator wrote into
 `packages/domain/src/encounter/criticalEffectsTableManifest.json`. They were read from that
@@ -301,6 +301,10 @@ tolerated divergences pinned to their exact stale strings rather than edited by 
 stops applying the moment the row is synchronized, and any _other_ change to one of those rows fails
 like any other divergence. **The remaining synchronization needs its own issue.**
 
+That issue is **#759**, and it is now done: Transition 3 below synchronizes all 15 rows and removes
+the tolerated-divergence allowance entirely. The statement above describes the state #747 left, not
+the current state.
+
 The guard was falsified three ways, each by exit code: restoring `lower_arm` in `CritSlots` for one
 of the 91, altering a tolerated row to a different stale string, and drifting an unrelated
 `CritSlots` title.
@@ -353,6 +357,154 @@ Falsified by reintroducing each of `lower_arm unusable`, `permanent_dex_loss`,
 the committed data file: all six failed the guard, each mutation verified as applied and then
 reverted byte-identically.
 
+## Transition 3 — v14 `3b474637…` to v14 `276f8d5b…` (issue #759)
+
+| Field                      | Value                                                                                                                                                                        |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Workbook                   | `docs/source/combat/Glantri_CriticalEffects_AppFacing_v14.xlsx`                                                                                                              |
+| Previous workbook SHA-256  | `3b474637e2466e59485c6893ce94da1e125940ff3c6fb98e6c5948d0df6822e2`                                                                                                           |
+| New workbook SHA-256       | `276f8d5b4cd0963569273276a20f5cb7d336f222c1b029906d014b3de697280a`                                                                                                           |
+| Previous data file SHA-256 | `2e8e86cc3973e3d222df61e65d0f5e8637080b57c1138e6f81dbebd2e70e8fd3`                                                                                                           |
+| New data file SHA-256      | `2e8e86cc3973e3d222df61e65d0f5e8637080b57c1138e6f81dbebd2e70e8fd3` — unchanged                                                                                               |
+| Authority                  | Issue #759, authorized; Ruling 4B of #747 quoted below                                                                                                                       |
+| Generation mode            | `node scripts/generateCriticalEffectsTable.mjs --generate` — `--accept-data-change` was **not** required and **not** passed, because the generated data file does not change |
+
+**The generated data file is byte-identical across this transition.** The generator reads only
+`AppFacing_Crits`, `AppFacing_Effects`, `AppFacing_Issues`, `Review Pass` and `AppFacing_Summary`
+for data; `CritSlots` is read solely by the title-equivalence guard. Editing `CritSlots` therefore
+moves the workbook bytes and nothing else. Measured, from the regenerated manifest:
+
+| Manifest field                         | Before                | After                 | Moved |
+| -------------------------------------- | --------------------- | --------------------- | ----- |
+| `source.sha256`                        | `3b474637e2466e5948…` | `276f8d5b4cd0963569…` | yes   |
+| `output.fileSha256`                    | `2e8e86cc3973e3d222…` | `2e8e86cc3973e3d222…` | no    |
+| `output.criticalResultsSemanticSha256` | `c1afe09614e0e11d91…` | `c1afe09614e0e11d91…` | no    |
+| `output.effectTemplatesSemanticSha256` | `8a6a0e62f85d812192…` | `8a6a0e62f85d812192…` | no    |
+
+`source.sha256` is the only changed line in
+`packages/domain/src/encounter/criticalEffectsTableManifest.json`. Both semantic digests were
+additionally re-derived by importing the committed `criticalEffectsTableData.ts` and hashing
+`JSON.stringify` of `CRITICAL_RESULTS` and `CRITICAL_EFFECT_TEMPLATES`; both matched the manifest
+fields. All four values were read from the regenerated manifest, not transcribed from any failure
+output.
+
+### The governing ruling, quoted verbatim
+
+> **B. `CritSlots`.** Update the corresponding title text in the current v14 workbook's
+> `CritSlots` sheet for the #747-affected rows so it agrees with `AppFacing_Crits`. **Do not leave
+> `CritSlots` carrying the machine-token titles when it can later be used to
+> re-derive/reintroduce them.** Scope is title/text synchronization only: same affected Critical
+> identities; same approved titles; **no effect/mechanical columns; no row identity/index/family/
+> location changes; no edits to historical v13.**
+
+#747 could satisfy that ruling only for its own 91 identities. The 15 `Fatal <family> head
+critical` rows #741 had retitled in `AppFacing_Crits` were outside #747's scope, so #747 pinned
+them as tolerated divergences instead. #759 closes the gap for exactly those 15 identities.
+
+### What changed in the workbook
+
+15 cells of `CritSlots!E` (`text_display`), each set to the string its own `AppFacing_Crits!F`
+(`title`) counterpart already carried. Nothing was authored here; the titles are #741's, already
+QA-passed. The cells were located by `crit_key` — derived from `CritSlots!A|B|C` and matched against
+`AppFacing_Crits!A` — not by trusting a row number, and each one's pre-existing value was asserted
+to be the expected stale string before being overwritten.
+
+| `crit_key`               | `CritSlots` | `AppFacing_Crits` | Before                                                               | After                                                                              |
+| ------------------------ | ----------- | ----------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `sharp\|head\|13`        | `E30`       | `F30`             | `Fatal sharp head critical; dying within rounds unless saved`        | `Skull cleaved open; collapse; dying within rounds unless saved`                   |
+| `sharp\|head\|15`        | `E32`       | `F32`             | `Fatal sharp head critical`                                          | `Skull split nearly in half; instant death; blade may lodge`                       |
+| `sharp\|head\|16`        | `E33`       | `F33`             | `Fatal sharp head critical`                                          | `Head severed and flung clear; instant death`                                      |
+| `blunt\|head\|13`        | `E126`      | `F126`            | `Fatal blunt head critical; dying within rounds unless saved`        | `Skull smashed; collapse; dying within rounds unless saved`                        |
+| `blunt\|head\|15`        | `E128`      | `F128`            | `Fatal blunt head critical`                                          | `Skull shattered; instant death`                                                   |
+| `blunt\|head\|16`        | `E129`      | `F129`            | `Fatal blunt head critical`                                          | `Head struck clean off and flung clear; instant death`                             |
+| `teeth_claws\|head\|13`  | `E222`      | `F222`            | `Fatal teeth claws head critical; dying within rounds unless saved`  | `Skull cracked open; collapse; dying within rounds unless saved`                   |
+| `teeth_claws\|head\|15`  | `E224`      | `F224`            | `Fatal teeth claws head critical`                                    | `Neck bitten through; spinal cord severed; instant death`                          |
+| `teeth_claws\|head\|16`  | `E225`      | `F225`            | `Fatal teeth claws head critical`                                    | `Head torn off; instant death`                                                     |
+| `arrows_bolts\|head\|13` | `E318`      | `F318`            | `Fatal arrows bolts head critical; dying within rounds unless saved` | `Shot through the nose into the brain; collapse; dying within rounds unless saved` |
+| `arrows_bolts\|head\|15` | `E320`      | `F320`            | `Fatal arrows bolts head critical`                                   | `Eye shot into the brain; instant death`                                           |
+| `arrows_bolts\|head\|16` | `E321`      | `F321`            | `Fatal arrows bolts head critical`                                   | `Shot between the eyes; instant death`                                             |
+| `firearms\|head\|13`     | `E414`      | `F414`            | `Fatal firearms head critical; dying within rounds unless saved`     | `Gunshot through the brain; collapse; dying within rounds unless saved`            |
+| `firearms\|head\|15`     | `E416`      | `F416`            | `Fatal firearms head critical`                                       | `Gunshot through the eye into the brain; instant death`                            |
+| `firearms\|head\|16`     | `E417`      | `F417`            | `Fatal firearms head critical`                                       | `Gunshot between the eyes; instant death`                                          |
+
+### Measured, field by field rather than sampled
+
+Workbook v14 `3b474637…` against v14 `276f8d5b…`, compared independently of the application's own
+generator — zip entry list, every non-worksheet part byte for byte, `sharedStrings.xml` entry for
+entry, the sheet-name-to-part map, and every cell address of all 11 worksheets by cell type,
+formula flag, formula text, style index and decoded value:
+
+- **11 sheets compared; 103,252 cell addresses compared; 2,112 formula cells seen** in `CritSlots`
+  — the same formula count #747 measured, against an earlier instrument that had asserted zero and
+  printed a hardcoded `PASS`;
+- **exactly 15 differences**, all in `CritSlots!E`, each from the recorded stale string to the
+  recorded `AppFacing_Crits!F` string;
+- the 15 post-change `CritSlots!E` values were then compared **character for character** against
+  their `AppFacing_Crits!F` counterparts in the after-workbook: all equal.
+
+The differ is an assertion tool, not a report: it exits non-zero unless the complete difference set
+is exactly those 15 synchronizations. It was falsified by exit code, twelve ways plus a null
+control, a negative control and a positive control:
+
+| Case | Injected into the comparison                                       | Required | Result                        |
+| ---- | ------------------------------------------------------------------ | -------- | ----------------------------- |
+| F1   | null control — identical inputs, no synchronization present        | fail     | failed, naming all 15 missing |
+| F2   | reversed direction (after passed as before)                        | fail     | failed                        |
+| F3   | `AppFacing_Effects!A2` `effect_key` changed                        | fail     | failed                        |
+| F3b  | negative control — semantically null whitespace inside a `<c>` tag | pass     | passed                        |
+| F4   | array formula stripped from `CritSlots!V2`                         | fail     | failed on the formula flag    |
+| F5   | `xl/theme/theme1.xml` dropped from the package                     | fail     | failed on the entry list      |
+| F6   | `CritSlots!C2` cell type `n` → `str`                               | fail     | failed                        |
+| F7   | `AppFacing_Crits!B30` cell deleted                                 | fail     | failed                        |
+| F8   | a cell added to `Severity`                                         | fail     | failed                        |
+| F9   | `AppFacing_Crits!O30` urgency `4` → `3`                            | fail     | failed                        |
+| F10  | first `sharedStrings.xml` entry rewritten                          | fail     | failed                        |
+| F11  | `CritSlots!E30` style index `4` → `7`                              | fail     | failed                        |
+| F12  | `CritSlots!E33` synchronized to a near-miss (trailing period)      | fail     | failed                        |
+| F13  | `CritSlots!E417` left unsynchronized (14 of 15)                    | fail     | failed, naming `E417`         |
+| P1   | positive control — the real before/after pair                      | pass     | passed                        |
+
+F3b is recorded because it first ran as a falsification case and the differ did not fail it. The
+check was wrong, not the differ: adding a space inside a `<c>` start tag changes no cell, and a
+differ that compares parsed cells is correct to pass it. It was reclassified as a negative control
+and replaced by F3, a real value change on the same sheet.
+
+### The guard now asserts equivalence unconditionally
+
+`TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES` and both code paths that consulted it are removed from
+`scripts/generateCriticalEffectsTable.mjs`. The guard retains its anti-vacuity check — it still
+throws when `comparedKeys.size !== results.length`, so it cannot pass by comparing nothing — and
+now has no allowance to fall back on, so it asserts strictly more than before. Measured:
+
+- **zero divergences remain** between `CritSlots!E` and `AppFacing_Crits!F` across all 608 shared
+  Critical identities, measured outside the generator;
+- the guard **still bites**: desynchronizing one `CritSlots!E` cell, with the mutation confirmed
+  applied by re-reading the workbook, fails `critical-effects:verify` by exit code, and the failure
+  names the cell; reverting restores the byte-identical workbook and the pass;
+- the **anti-vacuity check still fires**: blanking the `crit_index(1-16)` of one `CritSlots` row
+  makes the guard throw `matched 607 of 608 Critical identities` rather than passing on 607 rows.
+
+### Verification at this head
+
+Full local gate run at `b40b13be`, offline against a warm pnpm store. All exit 0:
+
+- `pnpm install --frozen-lockfile` — resolved from the local store, no network;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm test` — 11 suites;
+- `pnpm build`;
+- `node scripts/generateCriticalEffectsTable.mjs --verify`.
+
+The three-site current-authority invariant added this round **executed** rather than being
+merely present: `criticalEffectsGeneration.test.ts` reports **5 tests**, up from 4, the added
+one being that assertion.
+
+CI's `application-docker-test` failed twice at this branch, from two unrelated environmental
+causes: a registry connect timeout fetching `pnpm-10.6.0.tgz`, and then repeated Postgres
+`40001 could not serialize access due to concurrent update`. Both are environmental, not a
+defect in this work. `application-ci` — typecheck, lint, test and build — was green on both
+CI runs.
+
 ## Records that keep citing v13, by design
 
 The following remain unchanged and keep citing v13 and `47cde37d…`, because that is the
@@ -378,12 +530,40 @@ leaves these at v13.
 ## `source_trace` refers to v13 by design, not drift
 
 **Historical `source_trace` blocks may refer to v13 and `47cde37d…` while current authority is
-v14 and `3b474637…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
+v14 and `276f8d5b…`. This is by design and is not drift.** Product Owner ruling of 2026-10-21
 on #741. The ruling's principle is about the _relationship_ between historical traces and current
 authority, not about any one digest: it was issued under the previous workbook recorded in
-Transition 1, and #747 moved current authority forward without changing what the ruling says.
+Transition 1, and #747 and then #759 moved current authority forward without changing what the
+ruling says.
 **The digest in that sentence tracks current authority and must be updated by every transition** —
-it was missed once, under #747, and caught by independent QA.
+it was missed under #747 and again under #759, caught by independent QA both times. Under #759 the
+evidence was present and misclassified rather than absent: the short-form sweep printed this line,
+and a reader classified a present-tense assertion as a historical reference.
+
+It is therefore no longer left to a reader to classify.
+`packages/domain/src/encounter/criticalEffectsGeneration.test.ts` asserts, against the manifest's
+`source.sha256` rather than against a second literal, the digest at each of the three
+present-tense current-authority sites that exist today:
+
+1. the `Workbook SHA-256` row of this document's Current-authority table — **full** 64-hex form;
+2. the sentence opening this section — **short** `8-hex + …` form, which is where both misses
+   occurred and which a full-hex-only pattern would silently fail to match;
+3. the `v14` bullet pair of `docs/source/combat/target-critical-catalogue-v1/README.md` — full
+   form, keyed by the workbook path so the v13 provenance bullet beneath it cannot match instead.
+
+Each site's anchor must be found exactly once or the assertion fails, so renaming a heading or a
+table label fails loudly rather than passing on nothing.
+
+**What this does not do.** It does not prove this document internally consistent, and it does not
+protect a fourth present-tense claim added later — that site would be unprotected until it is
+added to the list above. The mitigation is that the assertion **names** the sites it covers, so
+introducing an unprotected one is a visible omission in this list rather than a silent gap.
+
+The historical pins are deliberately **not** covered, because they must not move. After #759 the
+previous digest `3b474637…` still occurs at eight places in this document besides this paragraph,
+every one of them correct: lines 21, 100, 106 and 178 record what #747 accepted, and lines 360,
+365, 379 and 432 are Transition 3's own _previous_-state fields. An assertion that classified
+digests by proximity to the words "current authority" would have indicted all eight.
 
 Left unchanged, deliberately:
 

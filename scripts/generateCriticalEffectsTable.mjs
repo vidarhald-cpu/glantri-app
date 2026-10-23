@@ -721,39 +721,18 @@ function validateTables(results, effects) {
 }
 
 /**
- * Pre-existing divergences this guard tolerates, recorded with the exact stale string so that
- * nothing else can hide behind the allowance.
- *
- * Forgejo #741 authored reader-facing titles for 15 `Fatal <family> head critical` placeholder
- * rows in `AppFacing_Crits` but did not carry them into `CritSlots`; that lane is integrated and
- * those identities are outside #747's authorized scope, so #747 records the divergence instead of
- * editing another lane's rows. Each entry passes only while `CritSlots` still holds exactly this
- * string: once the row is synchronized the titles agree and the entry stops applying, and any
- * *other* change to one of these rows fails here like any other divergence.
- */
-const TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES = new Map(
-  [
-    ["arrows_bolts", "arrows bolts"],
-    ["blunt", "blunt"],
-    ["firearms", "firearms"],
-    ["sharp", "sharp"],
-    ["teeth_claws", "teeth claws"],
-  ].flatMap(([family, prose]) => [
-    [`${family}|head|13`, `Fatal ${prose} head critical; dying within rounds unless saved`],
-    [`${family}|head|15`, `Fatal ${prose} head critical`],
-    [`${family}|head|16`, `Fatal ${prose} head critical`],
-  ]),
-);
-
-/**
  * Forgejo #747: `CritSlots` and `AppFacing_Crits` must agree on the title of every Critical
  * identity they share. Title text only — no other column is compared, and nothing is read from
  * `CritSlots` into the generated payload.
+ *
+ * Forgejo #759 synchronized the last 15 divergent rows — the `Fatal <family> head critical`
+ * placeholders #741 retitled in `AppFacing_Crits` without carrying the titles into `CritSlots` —
+ * and retired the tolerated-divergence allowance #747 had recorded for them. There is no
+ * allowance left: every shared identity must agree unconditionally.
  */
 function assertCritSlotTitlesMatch(results, critSlotRows) {
   const titleByCritKey = new Map(results.map((result) => [result.critKey, result.title]));
   const mismatches = [];
-  const toleratedDivergences = [];
   const comparedKeys = new Set();
   for (const { rowNumber, values } of critSlotRows) {
     const family = values.family;
@@ -768,10 +747,6 @@ function assertCritSlotTitlesMatch(results, critSlotRows) {
     comparedKeys.add(critKey);
     const actual = values.text_display === null ? "" : String(values.text_display);
     if (actual !== expected) {
-      if (TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES.get(critKey) === actual) {
-        toleratedDivergences.push(critKey);
-        continue;
-      }
       mismatches.push(
         `${CRIT_SLOTS_SOURCE.sheet}!E${rowNumber} ${critKey}: AppFacing_Crits has ${JSON.stringify(
           expected,
@@ -782,11 +757,6 @@ function assertCritSlotTitlesMatch(results, critSlotRows) {
   if (comparedKeys.size !== results.length) {
     throw new Error(
       `${CRIT_SLOTS_SOURCE.sheet} title conformance matched ${comparedKeys.size} of ${results.length} Critical identities; the sheets no longer cover the same rows.`,
-    );
-  }
-  if (toleratedDivergences.length > TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES.size) {
-    throw new Error(
-      `${CRIT_SLOTS_SOURCE.sheet} title conformance tolerated ${toleratedDivergences.length} divergences, more than the ${TOLERATED_CRIT_SLOTS_TITLE_DIVERGENCES.size} recorded.`,
     );
   }
   if (mismatches.length > 0) {
