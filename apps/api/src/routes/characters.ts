@@ -80,6 +80,22 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       userId: user.id,
     });
 
+    // Forgejo #764: the list fails soft per Character. A Character whose catalogue snapshot
+    // no longer matches is still returned, marked with `snapshotIntegrity`, so the payload
+    // keeps the invalid state visible; it is also reported here so the condition is not
+    // only observable to whoever reads the response.
+    for (const character of characters) {
+      if (!character.snapshotIntegrity) continue;
+      request.log.warn(
+        {
+          characterId: character.id,
+          reasons: character.snapshotIntegrity.reasons,
+          status: character.snapshotIntegrity.status,
+        },
+        "Character catalogue snapshot does not match the approved catalogue.",
+      );
+    }
+
     return {
       characters,
     };

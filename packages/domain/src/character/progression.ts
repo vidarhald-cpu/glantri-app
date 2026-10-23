@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { catalogueIntegrityKey } from "../content/catalogueSnapshotIntegrity";
 import {
   skillGroupDefinitionSchema,
   inferPlayerFacingSkillCategoryIdFromGroupIds,
@@ -354,18 +355,18 @@ export function validateTargetProgressionMetadata(
   const errors: string[] = [];
   for (const row of progression.skills) {
     if (!row.targetDefinition) continue;
+    // Forgejo #764: resolve the approved entry by identity, then compare mechanical state
+    // with `catalogueIntegrityKey`. The previous form resolved by stringify equality inside
+    // `find` and then repeated the same comparison, which made the predicate both
+    // order-sensitive and prose-sensitive.
     const approved = trustedSkills.find(
-      (definition) =>
-        definition.id === row.skillId &&
-        "catalogueSource" in definition &&
-        JSON.stringify(targetRuntimeSkillDefinitionSchema.safeParse(row.targetDefinition).data) ===
-          JSON.stringify(definition),
+      (definition) => definition.id === row.skillId && "catalogueSource" in definition,
     );
     const parsed = targetRuntimeSkillDefinitionSchema.safeParse(row.targetDefinition);
     if (
       !approved ||
       !parsed.success ||
-      JSON.stringify(parsed.data) !== JSON.stringify(approved) ||
+      catalogueIntegrityKey(parsed.data) !== catalogueIntegrityKey(approved) ||
       row.groupId !== approved.groupId ||
       (row.groupIds ?? []).some((id) => !approved.groupIds.includes(id))
     ) {
@@ -381,7 +382,7 @@ export function validateTargetProgressionMetadata(
     if (
       !approved ||
       !parsed.success ||
-      JSON.stringify(parsed.data) !== JSON.stringify(approved) ||
+      catalogueIntegrityKey(parsed.data) !== catalogueIntegrityKey(approved) ||
       row.skillId !== approved.skillId
     ) {
       errors.push(
