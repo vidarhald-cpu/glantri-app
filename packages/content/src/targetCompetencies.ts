@@ -1,5 +1,5 @@
 import { withCompetencyContentV2 } from "./competencyV2Runtime";
-import { validateTargetProgressionMetadata } from "@glantri/domain";
+import { catalogueIntegrityKey, validateTargetProgressionMetadata } from "@glantri/domain";
 import { defaultCanonicalContent } from "./seeds/defaultContent";
 import type { CharacterProgression } from "@glantri/domain";
 import type { CanonicalContent } from "./types";
@@ -378,10 +378,15 @@ export function getTargetProgressionValidationErrors(progression: CharacterProgr
   );
   const groups = getApprovedV2RuntimeContent().skillGroups;
   for (const row of progression.skillGroups) {
+    if (!row.targetDefinition) continue;
+    // Forgejo #764. This comparison was the only one with no normalizing parse in front of
+    // it, so a `jsonb` key reordering reached it raw; and it compared authored prose, so an
+    // editorial re-wording retroactively invalidated every older Character.
+    // `catalogueIntegrityKey` removes both without weakening the mechanical comparison.
+    const approved = groups.find((group) => group.id === row.groupId);
     if (
-      row.targetDefinition &&
-      JSON.stringify(row.targetDefinition) !==
-        JSON.stringify(groups.find((g) => g.id === row.groupId))
+      !approved ||
+      catalogueIntegrityKey(row.targetDefinition) !== catalogueIntegrityKey(approved)
     )
       errors.push(`Learning Group ${row.groupId} does not match the approved target definition.`);
   }

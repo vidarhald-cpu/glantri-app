@@ -1,4 +1,5 @@
 import { applyRelationshipMinimumGrants } from "../skills/deriveSkillRelationships";
+import { catalogueIntegrityKey } from "@glantri/domain";
 import type { CharacterBuild } from "@glantri/domain";
 import type { CanonicalContentShape } from "./primaryAllocation/_helpers";
 import { buildChargenSkillAccessSummary } from "./primaryAllocation/access";
@@ -112,9 +113,13 @@ export function validateTargetChargenBuild(
   }
   for (const group of p.skillGroups) {
     const approved = content.skillGroups.find((g) => g.id === group.groupId);
+    // Forgejo #764: the same integrity predicate as the read path. A submitted build may
+    // carry a Learning Group snapshot taken from an older catalogue wording; that is inert
+    // reader text, not forged metadata, and must not block the submission.
     if (
       group.targetDefinition &&
-      JSON.stringify(group.targetDefinition) !== JSON.stringify(approved)
+      (!approved ||
+        catalogueIntegrityKey(group.targetDefinition) !== catalogueIntegrityKey(approved))
     )
       errors.push(`Forged Learning Group metadata: ${group.groupId}.`);
     if (!access.normalSkillGroupIds.includes(group.groupId))

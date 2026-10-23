@@ -1,4 +1,5 @@
 import { resolveEffectiveItemTemplate } from "../equipment/itemOverrides";
+import { canonicalJsonKey } from "../content/catalogueSnapshotIntegrity";
 import { z } from "zod";
 
 import { COMBAT_ROUND_STEPS, combatRoundStepSchema, type CombatRoundStep } from "./combatRoundStep";
@@ -2698,11 +2699,17 @@ function isCombatRoundAttackAuthorityRecord(value: unknown): value is Record<str
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Forgejo #764: persisted round state round-trips through `jsonb`, which does not preserve
+ * object key order, so this identity check compares canonical keys rather than raw
+ * `JSON.stringify` output. Array order is preserved, and no field is omitted — unlike a
+ * catalogue snapshot there is no reader-facing text here to exclude.
+ */
 function combatRoundAttackResultsAreIdentical(
   left: CombatRoundAttackRollResult,
   right: CombatRoundAttackRollResult,
 ): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return canonicalJsonKey(left) === canonicalJsonKey(right);
 }
 
 function getCombatRoundCanonicalAttackResultKey(input: {
