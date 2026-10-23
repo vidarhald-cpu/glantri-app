@@ -230,6 +230,21 @@ export const rulesDocumentsRegistry: RulesDocumentRegistryEntry[] = [
     section: "Combat",
     title: "Criticals — GM Value Reference",
   },
+  {
+    /*
+     * An existing player-inclusive audience string, reused verbatim rather than invented: Forgejo
+     * #670 owns the audience taxonomy and requires existing classifications be reused. `audience`
+     * is usefulness, not confidentiality, and this is read-only rules reference material.
+     */
+    audience: "Players, GMs, and rules reviewers",
+    description:
+      "Every current Critical result, grouped by attack family and hit location and listed by result number, with its effects, damage floor, conditions, treatment, additional effects, and GM notes.",
+    fileName: "critical-table.md",
+    id: "critical-table",
+    order: 65,
+    section: "Tables",
+    title: "Critical Table",
+  },
 ];
 
 /**

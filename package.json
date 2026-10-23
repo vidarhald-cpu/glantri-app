@@ -32,6 +32,8 @@
     "coverage": "vitest run --coverage --passWithNoTests",
     "critical-effects:generate": "node scripts/generateCriticalEffectsTable.mjs --generate",
     "critical-effects:verify": "node scripts/generateCriticalEffectsTable.mjs --verify",
+    "critical-table:generate": "node --import tsx scripts/generateCriticalTable.mjs --generate",
+    "critical-table:verify": "node --import tsx scripts/generateCriticalTable.mjs --verify",
     "db:up": "node --import tsx scripts/database/guardedDatabaseCommand.ts up",
     "db:down": "node --import tsx scripts/database/guardedDatabaseCommand.ts down",
     "db:migrate": "node --import tsx scripts/database/guardedDatabaseCommand.ts migrate",

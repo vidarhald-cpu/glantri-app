@@ -168,6 +168,7 @@ describe("rules documentation registry", () => {
       "Parry — Player Rules",
       "Parry — GM Procedure",
       "Criticals — GM Value Reference",
+      "Critical Table",
     ]);
   });
 
