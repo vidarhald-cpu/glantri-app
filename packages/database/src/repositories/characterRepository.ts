@@ -1,4 +1,7 @@
-import { assertApprovedTargetProgression } from "@glantri/content";
+import {
+  assertApprovedTargetProgression,
+  getTargetProgressionValidationErrors,
+} from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 import type { PrismaClient } from "@prisma/client";
 
@@ -47,7 +50,7 @@ export interface CharacterRepository {
   updateVersioned(input: VersionedCharacterRecordInput): Promise<CharacterRecord | null>;
 }
 
-function mapCharacterRecord(character: {
+function projectCharacterRecord(character: {
   build: unknown;
   createdAt: Date;
   id: string;
@@ -68,7 +71,6 @@ function mapCharacterRecord(character: {
   updatedAt: Date;
 }): CharacterRecord {
   const build = characterBuildSchema.parse(character.build);
-  assertApprovedTargetProgression(build.progression);
   const retainedEnvelope = character.currentRetainedRevision?.versionEnvelopeJson as
     | {
         contentRelease?: { digest?: string; id?: string };
@@ -111,6 +113,39 @@ function mapCharacterRecord(character: {
         : null,
     updatedAt: character.updatedAt.toISOString(),
   };
+}
+
+type PersistedCharacterRow = Parameters<typeof projectCharacterRecord>[0];
+
+/**
+ * Single-Character read: a snapshot that does not match the approved catalogue is still an
+ * error, exactly as before.
+ */
+function mapCharacterRecord(character: PersistedCharacterRow): CharacterRecord {
+  const record = projectCharacterRecord(character);
+  assertApprovedTargetProgression(record.build.progression);
+  return record;
+}
+
+/**
+ * List read, fail-soft per Character (Forgejo #764).
+ *
+ * `GET /characters` used to map every row through a throwing assertion, so one Character
+ * whose snapshot no longer matched the catalogue returned 500 for the entire list and the
+ * owner lost access to all of their Characters. The listing mapper instead returns the
+ * Character and **marks** it with the reasons it did not validate. Nothing is swallowed and
+ * nothing is repaired: the persisted build is returned untouched and is never rewritten.
+ *
+ * A build that fails `characterBuildSchema` outright is a different and more severe class
+ * and still throws; only the catalogue-snapshot comparison fails soft here.
+ */
+function mapCharacterRecordForListing(character: PersistedCharacterRow): CharacterRecord {
+  const record = projectCharacterRecord(character);
+  const reasons = getTargetProgressionValidationErrors(record.build.progression);
+
+  return reasons.length > 0
+    ? { ...record, snapshotIntegrity: { reasons, status: "snapshot-mismatch" } }
+    : record;
 }
 
 export function createPrismaCharacterRepository(client?: PrismaClient): CharacterRepository {
@@ -304,7 +339,7 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
         },
       });
 
-      return characters.map(mapCharacterRecord);
+      return characters.map(mapCharacterRecordForListing);
     },
     async listInGmCampaigns(gmUserId) {
       const rosterEntries = await prisma.campaignRosterEntry.findMany({
@@ -348,7 +383,7 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
         },
       });
 
-      return characters.map(mapCharacterRecord);
+      return characters.map(mapCharacterRecordForListing);
     },
     async listByOwner(ownerId) {
       const characters = await prisma.character.findMany({
@@ -377,7 +412,7 @@ export function createPrismaCharacterRepository(client?: PrismaClient): Characte
         },
       });
 
-      return characters.map(mapCharacterRecord);
+      return characters.map(mapCharacterRecordForListing);
     },
     async updateVersioned(input) {
       assertApprovedTargetProgression(characterBuildSchema.parse(input.build).progression);
