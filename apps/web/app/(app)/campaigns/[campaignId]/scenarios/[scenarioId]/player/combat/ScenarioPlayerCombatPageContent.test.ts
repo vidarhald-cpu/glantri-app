@@ -440,6 +440,15 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("setHistoryInspection(undefined)");
     expect(source).toContain("cell.cellKey === playerCombatTrackerModel.operationalCursorCellKey");
     expect(source).toContain("if (!nextCell?.inspectable) return");
+    /*
+     * #771. The `inspectable` guard above stays, and the visible-step wrapper is added in front
+     * of it: this surface still builds a `pre_declaration` cell that can be inspectable through
+     * its `combat_experience` completion evidence, so inspectability alone does not keep the
+     * inspector off a step with no rendered column.
+     */
+    expect(source).toContain("getAdjacentVisibleCombatRoundTimelineStepSelection({");
+    expect(source).toContain("visibleSteps: playerCombatTrackerModel.steps,");
+    expect(source).not.toContain("getAdjacentCombatRoundTimelineStepSelection({");
     expect(source).toContain("PlayerCombatHistoryInspector");
     expect(source).toContain("historyInspection ? (");
     expect(source).not.toContain("commitCurrentCombatPhaseDamageOnServer");
