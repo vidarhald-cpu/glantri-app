@@ -440,7 +440,6 @@ test.describe("Phase-panel composition refinement (#771)", () => {
       defenseByOption[value] = await readDefenseValues();
     }
     const distinctDefenseRows = new Set(Object.values(defenseByOption).map((row) => row.join("|")));
-    // eslint-disable-next-line no-console
     console.log(
       `#771 player source sets: ${JSON.stringify({
         attackModes: await playerPhase1
@@ -452,7 +451,6 @@ test.describe("Phase-panel composition refinement (#771)", () => {
         parrySources: parrySourceLabels,
       })}`,
     );
-    // eslint-disable-next-line no-console
     console.log(`#771 player parry source -> DB/DM/P: ${JSON.stringify(defenseByOption)}`);
     expect(
       distinctDefenseRows.size,
@@ -492,7 +490,6 @@ test.describe("Phase-panel composition refinement (#771)", () => {
       expect(phase.bottomSlack, context).toBeGreaterThan(baseline.bottomSlack);
       expect(phase.contentHeight, context).toBeLessThan(baseline.contentHeight);
     }
-    // eslint-disable-next-line no-console
     console.log(`#771 player phase geometry: ${JSON.stringify(playerGeometry)}`);
 
     // --- Ruling: the parry selector is absent where the parry allocation does nothing. ---
@@ -554,7 +551,6 @@ test.describe("Phase-panel composition refinement (#771)", () => {
       new Set(Object.values(gmDefenseByOption).map((row) => row.join("|"))).size,
       `GM parry source -> DB/DM/P: ${JSON.stringify(gmDefenseByOption)}`,
     ).toBeGreaterThan(1);
-    // eslint-disable-next-line no-console
     console.log(
       `#771 GM source sets: ${JSON.stringify({
         attackModes: await gmPhase1
@@ -566,7 +562,6 @@ test.describe("Phase-panel composition refinement (#771)", () => {
         parrySources: gmParryLabels,
       })}`,
     );
-    // eslint-disable-next-line no-console
     console.log(`#771 GM parry source -> DB/DM/P: ${JSON.stringify(gmDefenseByOption)}`);
 
     const gmGeometry = await measurePhaseGeometry(gmPage);
@@ -589,7 +584,6 @@ test.describe("Phase-panel composition refinement (#771)", () => {
       expect(phase.bottomSlack, context).toBeGreaterThan(baseline.bottomSlack);
       expect(phase.contentHeight, context).toBeLessThan(baseline.contentHeight);
     }
-    // eslint-disable-next-line no-console
     console.log(`#771 GM phase geometry: ${JSON.stringify(gmGeometry)}`);
 
     await gmAction.selectOption("parry");
