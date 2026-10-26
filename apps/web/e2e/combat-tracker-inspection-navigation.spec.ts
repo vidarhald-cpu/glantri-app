@@ -81,18 +81,90 @@ interface Box {
   readonly width: number;
 }
 
-async function box(locator: Locator): Promise<Box> {
-  await expect(locator).toBeVisible();
-  const measured = await locator.boundingBox();
-  if (!measured) throw new Error("The element is rendered but has no layout box.");
-  return {
-    bottom: measured.y + measured.height,
-    height: measured.height,
-    left: measured.x,
-    right: measured.x + measured.width,
-    top: measured.y,
-    width: measured.width,
-  };
+interface HeaderGeometry {
+  readonly currentTask: Box;
+  readonly grid: Box;
+  readonly heading: Box;
+  readonly nav: Box;
+  readonly navButtons: readonly (Box & { readonly label: string | null })[];
+  readonly scrollY: number;
+}
+
+/**
+ * Every box this spec compares is read in **one** `page.evaluate`, in **document** coordinates
+ * (`getBoundingClientRect()` plus the current scroll offset).
+ *
+ * Both halves of that are load-bearing, and getting it wrong is what CI caught on the first head
+ * of this branch (run 1635, task 9389): the assertion below reported a 754 px spread for three
+ * controls that are 30 px apart. `locator.boundingBox()` is viewport-relative, exactly like
+ * `getBoundingClientRect()`, and this page scrolls itself after mount — `CombatLog` runs
+ * `scrollIntoView` on the newest event (`CombatLog.tsx:30-38`), which on the GM surface leaves
+ * `window.scrollY` at 655 with no interaction from the test. Locally that scroll had settled
+ * before the first read, so four sequential reads shared one frame and agreed. In the slower CI
+ * container it landed *between* reads, and every box read after it was offset by the scroll
+ * delta. Measured directly: forcing a 720 px scroll between two sequential reads moved the same
+ * instrument from 30 to 95, while this atomic document-relative reading stayed at 30.
+ *
+ * So the 754 was the instrument, not the layout, and the limit below is unchanged. The replacement
+ * is still sensitive to a real wrap: measured 30 px at 1024 and 768, and 67 px at 700 and 640,
+ * where the header genuinely does wrap.
+ */
+async function readHeaderGeometry(input: {
+  heading: Locator;
+  page: Page;
+}): Promise<HeaderGeometry> {
+  const nav = input.page.getByRole("region", { name: "Tracker inspection navigation" });
+  await expect(nav).toBeVisible();
+  await expect(input.page.locator('[aria-label="Combat round timeline grid"]')).toBeVisible();
+  await expect(input.heading).toBeVisible();
+  const headingHandle = await input.heading.elementHandle();
+  if (!headingHandle) throw new Error("The panel heading is visible but has no element handle.");
+
+  const geometry = await input.page.evaluate((headingElement) => {
+    const docRect = (node: Element) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        bottom: rect.bottom + window.scrollY,
+        height: rect.height,
+        left: rect.left + window.scrollX,
+        right: rect.right + window.scrollX,
+        top: rect.top + window.scrollY,
+        width: rect.width,
+      };
+    };
+    const navSection = document.querySelector(
+      'section[aria-label="Tracker inspection navigation"]',
+    );
+    const grid = document.querySelector('[aria-label="Combat round timeline grid"]');
+    const currentTasks = Array.from(document.querySelectorAll("button")).filter((node) =>
+      ["Current task", "Resume current task"].includes((node.textContent ?? "").trim()),
+    );
+    if (!navSection || !grid || currentTasks.length !== 1 || !(headingElement instanceof Element)) {
+      return {
+        currentTaskCount: currentTasks.length,
+        hasGrid: Boolean(grid),
+        hasNav: Boolean(navSection),
+      };
+    }
+    return {
+      currentTask: docRect(currentTasks[0]!),
+      grid: docRect(grid),
+      heading: docRect(headingElement),
+      nav: docRect(navSection),
+      navButtons: Array.from(navSection.querySelectorAll("button")).map((node) => ({
+        label: node.getAttribute("aria-label"),
+        ...docRect(node),
+      })),
+      scrollY: window.scrollY,
+    };
+  }, headingHandle);
+
+  if (!("nav" in geometry)) {
+    throw new Error(
+      `Tracker header geometry is incomplete: ${JSON.stringify(geometry)}. Exactly one Current task button, one nav region and one tracker grid are expected.`,
+    );
+  }
+  return geometry as HeaderGeometry;
 }
 
 /**
@@ -136,38 +208,38 @@ async function assertRuledNavigationPlacement(input: {
   surface: string;
 }): Promise<void> {
   const { page } = input;
-  const nav = page.getByRole("region", { name: "Tracker inspection navigation" });
-  const trackerGrid = page.locator('[aria-label="Combat round timeline grid"]');
-  const currentTask = page.getByRole("button", { name: /^(Current task|Resume current task)$/ });
-
-  const navBox = await box(nav);
-  const gridBox = await box(trackerGrid);
-  const currentTaskBox = await box(currentTask);
-  const headingBox = await box(input.heading);
+  const geometry = await readHeaderGeometry({ heading: input.heading, page });
 
   // "They belong in the section above": the controls render above the tracker, not below it.
-  expect(navBox.bottom, `${input.surface}: arrows above the tracker grid`).toBeLessThanOrEqual(
-    gridBox.top,
-  );
+  expect(
+    geometry.nav.bottom,
+    `${input.surface}: arrows above the tracker grid (scrollY ${geometry.scrollY})`,
+  ).toBeLessThanOrEqual(geometry.grid.top);
   // "to the left of the current task".
-  expect(navBox.right, `${input.surface}: arrows left of Current task`).toBeLessThanOrEqual(
-    currentTaskBox.left,
+  expect(geometry.nav.right, `${input.surface}: arrows left of Current task`).toBeLessThanOrEqual(
+    geometry.currentTask.left,
   );
   // "on the top line" — the arrows, the panel heading and `Current task` share one row.
   expect(
-    unionHeight([headingBox, navBox, currentTaskBox]),
-    `${input.surface}: top line must not wrap at ${NARROW_VIEWPORT.width}px`,
+    unionHeight([geometry.heading, geometry.nav, geometry.currentTask]),
+    `${input.surface}: top line must not wrap at ${NARROW_VIEWPORT.width}px (scrollY ${geometry.scrollY})`,
   ).toBeLessThan(SINGLE_ROW_HEIGHT_LIMIT);
 
   // The accessible names survive the move to icon-only buttons. Two running e2e specs and one
   // component test resolve these controls this way, and two more specs that use them are silenced
-  // by the `testIgnore` defect (#769), so they would not have reported a break.
+  // by the `testIgnore` defect (#769), so they would not have reported a break. Resolution is
+  // proved through `getByRole`, the way those specs do it; the sizes come from the one atomic
+  // geometry read, and the four labels are required to belong to the nav region itself.
+  expect(
+    geometry.navButtons.map((button) => button.label),
+    `${input.surface}: the nav region holds exactly the four named controls`,
+  ).toEqual([...NAV_NAMES]);
   for (const name of NAV_NAMES) {
     await expect(
       page.getByRole("button", { name, exact: true }),
       `${input.surface}: "${name}" must still resolve by accessible name`,
     ).toHaveCount(1);
-    const navButton = await box(page.getByRole("button", { name, exact: true }));
+    const navButton = geometry.navButtons.find((button) => button.label === name)!;
     // Still a usable hit target after becoming a glyph, and still showing a focus indicator.
     expect(navButton.width, `${input.surface}: "${name}" hit-target width`).toBeGreaterThanOrEqual(
       26,
