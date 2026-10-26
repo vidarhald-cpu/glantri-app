@@ -68,6 +68,52 @@ describe("Adjust Distance-Attack proposal rules", () => {
     ).toBe("combat-adjust-distance:round:2:attacker:scyrian");
   });
 
+  it("#772 resolves an equal requested distance by the unchanged standard table", () => {
+    // Product Owner ruling 2026-10-25: `Adjust distance` may request the current distance. The
+    // resolution mechanics are not altered to accommodate it — the same three table rows apply,
+    // and because `requested === current` both the "requested" and "current" rows land on 2.
+    expect(getCombatAdjustDistanceDirection({ currentDistance: 2, requestedDistance: 2 })).toBe(
+      "unchanged",
+    );
+    expect(
+      resolveCombatAdjustDistanceStandardProposal({
+        currentDistance: 2,
+        defenderAllowed: true,
+        requestedDistance: 2,
+      }),
+    ).toEqual({ outcome: "allowed", proposedDistance: 2, tableRowId: "defender_allows" });
+    expect(
+      resolveCombatAdjustDistanceStandardProposal({
+        attackerTotal: 19,
+        currentDistance: 2,
+        defenderTotal: 18,
+        requestedDistance: 2,
+      }),
+    ).toEqual({
+      difference: 1,
+      outcome: "successful",
+      proposedDistance: 2,
+      tableRowId: "initiator_wins",
+    });
+    expect(
+      resolveCombatAdjustDistanceStandardProposal({
+        attackerTotal: 18,
+        currentDistance: 2,
+        defenderTotal: 18,
+        requestedDistance: 2,
+      }),
+    ).toEqual({
+      difference: 0,
+      outcome: "unsuccessful",
+      proposedDistance: 2,
+      tableRowId: "tie_or_opponent_wins",
+    });
+    // Both Dodge rolls remain required: an equal requested distance does not shortcut the contest.
+    expect(() =>
+      resolveCombatAdjustDistanceStandardProposal({ currentDistance: 2, requestedDistance: 2 }),
+    ).toThrow(RangeError);
+  });
+
   it("preserves the focused persisted lifecycle shape", () => {
     expect(
       combatAdjustDistanceProposalSchema.parse({
@@ -82,6 +128,8 @@ describe("Adjust Distance-Attack proposal rules", () => {
         requestedDistance: 2,
         roundNumber: 1,
       }),
-    ).toEqual(expect.objectContaining({ defenderResponse: "pending", status: "awaiting_action_turn" }));
+    ).toEqual(
+      expect.objectContaining({ defenderResponse: "pending", status: "awaiting_action_turn" }),
+    );
   });
 });
