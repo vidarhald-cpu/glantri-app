@@ -801,7 +801,26 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("<span>Additional</span>");
     expect(source).toContain("roundNumber");
     expect(source).toContain("PlayerCombatParryContextPanel");
-    expect(source).toContain("Parry context");
+    /*
+     * #771 phase-panel composition refinement removed the reader-facing `Parry context` heading
+     * and the hairline that separated the parry controls from the DB/DM/P mini-table above them.
+     *
+     * Asserted on the rendered markup, not on the words: the phrase still occurs in this file's
+     * own comments explaining the removal, so a `toContain("Parry context")` assertion would pass
+     * whether or not the heading exists.
+     */
+    expect(source).not.toContain(">Parry context<");
+    // The one hairline the recomposition keeps belongs to the Defense / Parry group, which draws
+    // it only when an Attack group renders above it. The parry controls sit inside that group,
+    // with no hairline of their own.
+    expect(source).toContain("separatedFromAttack ? phaseGroupSeparatedStyle");
+    expect(source).toContain("PlayerCombatDefenseGroup");
+    expect(source).toContain("PlayerCombatParrySourceSelector");
+    expect(source).toContain('aria-label="Parry source"');
+    expect(source).toContain('aria-label="Attack source"');
+    expect(source).toContain('aria-label="Attack mode"');
+    // Top-aligned and internally packed, so a taller sibling column leaves slack at the bottom.
+    expect(source).toContain('alignContent: "start"');
     expect(source).toContain("PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS");
     expect(source).toContain('itemLabel="Main hand"');
     expect(source).toContain('itemLabel="Off hand"');

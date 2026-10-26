@@ -248,12 +248,13 @@ import {
   PlayerCombatAttackSourceSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
-  PlayerCombatDefenseStatsTable,
+  PlayerCombatDefenseGroup,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
   PlayerCombatOpponentSelector,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
+  playerCombatPhaseGroupStyle,
   playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
@@ -312,6 +313,7 @@ import {
   getPlayerEncounterActionLabel,
   getPlayerEncounterMovementLabel,
   isPlayerEncounterActionId,
+  isPlayerEncounterParryAllocationDeclaration,
   mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
@@ -13423,6 +13425,21 @@ export default function CombatRoundManagerPanel({
                        * context without leaking it into later actor views.
                        */
 
+                      /*
+                       * Whether the Attack group renders any content for this phase, which is
+                       * what the single hairline below separates the Defense / Parry group from
+                       * (#771). The three phase-1 branches named here render offensive content
+                       * without attack stats — Offensive Parry's opponent, Observe opponent, and
+                       * Adjust distance — so they are listed explicitly rather than inferred.
+                       */
+                      const phaseAttackGroupRendered =
+                        phaseModel.showAttackStats ||
+                        phaseModel.showAttackLocationSelector ||
+                        (phaseKey === "phase1" &&
+                          (inspectorDisplayDraft.actionId === "offensive_parry" ||
+                            inspectorDisplayDraft.actionId === "adjust_range_attack" ||
+                            inspectorDisplayDraft.secondaryActionId === "observe_opponent"));
+
                       return (
                         <PlayerCombatPhasePanel
                           key={phaseModel.phaseCard.phaseLabel}
@@ -13434,356 +13451,442 @@ export default function CombatRoundManagerPanel({
                               snapshot={phaseProjection.defenseSnapshot}
                             />
                           ) : null}
-                          {/*
-                           * The historical-without-panel branch still has to short-circuit, so
-                           * historical inspection never falls through to the live controls below.
-                           * It renders nothing now (#771 R2-12): the card only survives this far
-                           * when a committed defense snapshot was recorded, and claiming "no
-                           * information available" beside that snapshot would be false.
-                           */}
-                          {inspectorIsHistorical &&
-                          !historicalPhasePanel ? null : inspectorDisplayDraft.actionId ===
-                              "offensive_parry" && phaseKey === "phase1" ? (
-                            <div style={{ display: "grid", gap: "0.65rem" }}>
-                              <PlayerCombatOpponentSelector
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                onSelectedOpponentChange={(selectedOpponentId) =>
-                                  updateInspectorDraft({
-                                    combatContext: {
-                                      ...inspectorDisplayDraft.combatContext,
-                                      selectedOpponentId: selectedOpponentId || undefined,
-                                    },
-                                  })
-                                }
-                                opponentOptions={inspectorTargetOptions}
-                                readOnly={inspectorIsHistorical}
-                                selectedOpponentId={
-                                  inspectorDisplayDraft.combatContext.selectedOpponentId
-                                }
-                              />
-                            </div>
-                          ) : inspectorDisplayDraft.secondaryActionId === "observe_opponent" &&
-                            phaseKey === "phase1" ? (
-                            <div style={{ display: "grid", gap: "0.65rem" }}>
-                              <PlayerCombatOpponentSelector
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                label="Opponent"
-                                onSelectedOpponentChange={(targetParticipantId) =>
-                                  updateInspectorDraft({
-                                    secondaryActionContext: targetParticipantId
-                                      ? { action: "observe_opponent", targetParticipantId }
-                                      : undefined,
-                                  })
-                                }
-                                opponentOptions={inspectorTargetOptions}
-                                readOnly={inspectorIsHistorical}
-                                selectedOpponentId={
-                                  inspectorDisplayDraft.secondaryActionContext?.targetParticipantId
-                                }
-                              />
-                              <PlayerCombatObservationProgress
-                                relationships={
-                                  inspectorIsHistorical
-                                    ? (archivedInspectorPresentation?.historicalContext
-                                        .observationRelationships ?? [])
-                                    : selectedTimelineRoundState.observationRelationships.filter(
-                                        (relationship) =>
-                                          relationship.observerParticipantId ===
-                                          selectedEncounterParticipant?.id,
-                                      )
-                                }
-                                targetLabels={Object.fromEntries(
-                                  selectedTimelineRoundState.participants.map((participant) => [
-                                    participant.participantId,
-                                    participant.label,
-                                  ]),
-                                )}
-                              />
-                            </div>
-                          ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
-                            phaseKey === "phase1" ? (
-                            <div style={{ display: "grid", gap: "0.65rem" }}>
-                              <PlayerCombatAttackTargetSelector
-                                combatContext={phaseModel.phaseContext}
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                distanceLabel={phaseDistanceLabel}
-                                onCombatContextChange={(combatContext) =>
-                                  updateInspectorDraft({
-                                    phaseContexts: {
-                                      phase1: combatContext,
-                                      phase2: {
-                                        ...inspectorDraft.phaseContexts.phase2,
-                                        targetParticipantId: combatContext.targetParticipantId,
-                                      },
-                                    },
-                                  })
-                                }
-                                readOnly={inspectorIsHistorical}
-                                targetOptions={inspectorTargetOptions}
-                              />
-                              <label style={compactFieldLabelStyle}>
-                                <strong>Requested distance</strong>
-                                {inspectorIsHistorical ? (
-                                  <span style={{ color: "#5e5a50" }}>
-                                    {inspectorDisplayDraft.movementIntent.distancePreferences.find(
-                                      (entry) =>
-                                        entry.targetParticipantId ===
-                                        phaseModel.phaseContext.targetParticipantId,
-                                    )?.desiredDistance ?? "No recorded information"}
-                                  </span>
-                                ) : (
-                                  <select
-                                    disabled={saving}
-                                    onChange={(event) => {
-                                      const targetParticipantId =
-                                        phaseModel.phaseContext.targetParticipantId;
-                                      if (!targetParticipantId) return;
-                                      updateInspectorDraft({
-                                        movementIntent: {
-                                          ...inspectorDraft.movementIntent,
-                                          distancePreferences: [
-                                            ...inspectorDraft.movementIntent.distancePreferences.filter(
-                                              (entry) =>
-                                                entry.targetParticipantId !== targetParticipantId,
-                                            ),
-                                            {
-                                              desiredDistance: Number(event.target.value) as
-                                                | 0
-                                                | 1
-                                                | 2
-                                                | 3
-                                                | 4
-                                                | 5
-                                                | 6
-                                                | 7
-                                                | 8,
-                                              source: "gm_proxy",
-                                              targetParticipantId,
-                                            },
-                                          ],
-                                        },
-                                      });
-                                    }}
-                                    value={
-                                      inspectorDraft.movementIntent.distancePreferences.find(
-                                        (entry) =>
-                                          entry.targetParticipantId ===
-                                          phaseModel.phaseContext.targetParticipantId,
-                                      )?.desiredDistance ??
-                                      inspectorDistancePreferenceOptions.find(
-                                        (option) =>
-                                          option.id === phaseModel.phaseContext.targetParticipantId,
-                                      )?.defaultDistance ??
-                                      2
-                                    }
-                                  >
-                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
-                                      <option key={distance} value={distance}>
-                                        {distance}
-                                      </option>
-                                    ))}
-                                  </select>
-                                )}
-                              </label>
-                              <div>Skill: Dodge</div>
-                              <div>The defender may oppose or allow the maneuver.</div>
-                            </div>
-                          ) : inspectorDisplayDraft.actionId === "feint_attack" &&
-                            phaseKey === "phase1" ? (
-                            <div style={{ display: "grid", gap: "0.65rem" }}>
-                              <PlayerCombatAttackTargetSelector
-                                combatContext={phaseModel.phaseContext}
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                distanceLabel={phaseDistanceLabel}
-                                onCombatContextChange={(combatContext) =>
-                                  updateInspectorDraft({
-                                    phaseContexts: {
-                                      phase1: combatContext,
-                                      phase2: {
-                                        ...inspectorDraft.phaseContexts.phase2,
-                                        targetParticipantId: combatContext.targetParticipantId,
-                                      },
-                                    },
-                                  })
-                                }
-                                readOnly={inspectorIsHistorical}
-                                targetOptions={inspectorTargetOptions}
-                              />
-                              <label style={compactFieldLabelStyle}>
-                                <strong>Feint method</strong>
-                                {inspectorIsHistorical ? (
-                                  <span style={{ color: "#5e5a50" }}>
-                                    {inspectorDisplayDraft.feintMethod === "weapon"
-                                      ? "Weapon"
-                                      : "Movement"}
-                                  </span>
-                                ) : (
-                                  <select
-                                    disabled={saving}
-                                    onChange={(event) => {
-                                      const method =
-                                        event.target.value === "weapon" ? "weapon" : "movement";
-                                      updateInspectorDraft({
-                                        feintMethod: method,
-                                        feintSkillId: "dodge",
-                                      });
-                                    }}
-                                    value={inspectorDisplayDraft.feintMethod}
-                                  >
-                                    <option value="movement">Movement</option>
-                                    <option value="weapon">Weapon</option>
-                                  </select>
-                                )}
-                              </label>
-                              {inspectorIsHistorical ? (
-                                <>
-                                  <div>
-                                    <strong>Skill:</strong>{" "}
-                                    {inspectorResolvedFeintSkill?.label ?? "Unavailable"}
-                                  </div>
-                                  <div>Characteristic: Dexterity</div>
-                                </>
-                              ) : (
-                                <FeintSkillPreview preview={inspectorFeintSkillPreview} />
-                              )}
-                              <div>Defender: highest close-combat skill · Intelligence</div>
-                            </div>
-                          ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
-                            <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                          ) : null}
-                          {(!inspectorIsHistorical || historicalPhasePanel) &&
-                          phaseModel.showAttackLocationSelector &&
-                          !(
-                            inspectorDisplayDraft.actionId === "feint_attack" &&
-                            phaseKey === "phase1"
-                          ) ? (
-                            <>
-                              <PlayerCombatAttackTargetSelector
-                                combatContext={phaseModel.phaseContext}
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                distanceLabel={phaseDistanceLabel}
-                                onCombatContextChange={(combatContext) =>
-                                  updateInspectorDraft({
-                                    phaseContexts:
-                                      (inspectorDisplayDraft.actionId === "feint_attack" ||
-                                        inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                      phaseKey === "phase2"
-                                        ? {
-                                            phase1: {
-                                              ...inspectorDraft.phaseContexts.phase1,
-                                              targetParticipantId:
-                                                combatContext.targetParticipantId,
-                                            },
-                                            phase2: combatContext,
-                                          }
-                                        : {
-                                            ...inspectorDraft.phaseContexts,
-                                            [phaseKey]: combatContext,
-                                          },
-                                  })
-                                }
-                                readOnly={
-                                  inspectorIsHistorical ||
-                                  ((inspectorDisplayDraft.actionId === "feint_attack" ||
-                                    inspectorDisplayDraft.actionId === "adjust_range_attack") &&
-                                    phaseKey === "phase2")
-                                }
-                                targetOptions={
-                                  historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
-                                }
-                              />
-                              <PlayerCombatAttackLocationSelector
-                                combatContext={phaseModel.phaseContext}
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                onCombatContextChange={(combatContext) =>
-                                  updateInspectorDraft({
-                                    phaseContexts: {
-                                      ...inspectorDraft.phaseContexts,
-                                      [phaseKey]: combatContext,
-                                    },
-                                  })
-                                }
-                                readOnly={inspectorIsHistorical}
-                              />
-                              {/*
-                                The GM proxies a player's declaration, so the GM needs the same
-                                explicit attack-source choice the player has (#590). Punch and Kick
-                                reach this list from the shared option helper once the catalogue
-                                authors a legal brawling mode; nothing here special-cases unarmed,
-                                and no source is chosen on the GM's behalf.
-                              */}
-                              {inspectorIsHistorical ? null : (
-                                <PlayerCombatAttackSourceSelector
-                                  controlsDisabled={saving}
-                                  // Without an empty state the row vanishes for an unequipped
-                                  // participant, the one state where naming the attack source
-                                  // explains most. Same copy as the player control.
-                                  emptyState="No ready weapon can be declared as an attack source."
-                                  onChange={(attackSourceId) =>
+                          <div style={playerCombatPhaseGroupStyle}>
+                            {/*
+                             * The historical-without-panel branch still has to short-circuit, so
+                             * historical inspection never falls through to the live controls below.
+                             * It renders nothing now (#771 R2-12): the card only survives this far
+                             * when a committed defense snapshot was recorded, and claiming "no
+                             * information available" beside that snapshot would be false.
+                             */}
+                            {inspectorIsHistorical &&
+                            !historicalPhasePanel ? null : inspectorDisplayDraft.actionId ===
+                                "offensive_parry" && phaseKey === "phase1" ? (
+                              <div style={{ display: "grid", gap: "0.65rem" }}>
+                                <PlayerCombatOpponentSelector
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  onSelectedOpponentChange={(selectedOpponentId) =>
                                     updateInspectorDraft({
-                                      phaseAttackSourceIds: {
-                                        ...inspectorDraft.phaseAttackSourceIds,
-                                        [phaseKey]: attackSourceId,
+                                      combatContext: {
+                                        ...inspectorDisplayDraft.combatContext,
+                                        selectedOpponentId: selectedOpponentId || undefined,
                                       },
                                     })
                                   }
-                                  options={phaseLoadoutSummary.attackSourceOptions}
-                                  selectedAttackSourceId={
-                                    phaseLoadoutSummary.selectedAttackSourceId
+                                  opponentOptions={inspectorTargetOptions}
+                                  readOnly={inspectorIsHistorical}
+                                  selectedOpponentId={
+                                    inspectorDisplayDraft.combatContext.selectedOpponentId
                                   }
                                 />
-                              )}
-                              <PlayerCombatAttackModeSelector
-                                controlsDisabled={saving || inspectorIsHistorical}
-                                emptyState={
-                                  inspectorIsHistorical
-                                    ? undefined
-                                    : phaseLoadoutSummary.attackModeUnavailableMessage
-                                }
-                                onChange={(attackModeId) =>
-                                  updateInspectorDraft({
-                                    phaseContexts: {
-                                      ...inspectorDraft.phaseContexts,
-                                      [phaseKey]: {
-                                        ...inspectorDraft.phaseContexts[phaseKey],
-                                        attackModeId,
+                              </div>
+                            ) : inspectorDisplayDraft.secondaryActionId === "observe_opponent" &&
+                              phaseKey === "phase1" ? (
+                              <div style={{ display: "grid", gap: "0.65rem" }}>
+                                <PlayerCombatOpponentSelector
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  label="Opponent"
+                                  onSelectedOpponentChange={(targetParticipantId) =>
+                                    updateInspectorDraft({
+                                      secondaryActionContext: targetParticipantId
+                                        ? { action: "observe_opponent", targetParticipantId }
+                                        : undefined,
+                                    })
+                                  }
+                                  opponentOptions={inspectorTargetOptions}
+                                  readOnly={inspectorIsHistorical}
+                                  selectedOpponentId={
+                                    inspectorDisplayDraft.secondaryActionContext
+                                      ?.targetParticipantId
+                                  }
+                                />
+                                <PlayerCombatObservationProgress
+                                  relationships={
+                                    inspectorIsHistorical
+                                      ? (archivedInspectorPresentation?.historicalContext
+                                          .observationRelationships ?? [])
+                                      : selectedTimelineRoundState.observationRelationships.filter(
+                                          (relationship) =>
+                                            relationship.observerParticipantId ===
+                                            selectedEncounterParticipant?.id,
+                                        )
+                                  }
+                                  targetLabels={Object.fromEntries(
+                                    selectedTimelineRoundState.participants.map((participant) => [
+                                      participant.participantId,
+                                      participant.label,
+                                    ]),
+                                  )}
+                                />
+                              </div>
+                            ) : inspectorDisplayDraft.actionId === "adjust_range_attack" &&
+                              phaseKey === "phase1" ? (
+                              <div style={{ display: "grid", gap: "0.65rem" }}>
+                                <PlayerCombatAttackTargetSelector
+                                  combatContext={phaseModel.phaseContext}
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  distanceLabel={phaseDistanceLabel}
+                                  onCombatContextChange={(combatContext) =>
+                                    updateInspectorDraft({
+                                      phaseContexts: {
+                                        phase1: combatContext,
+                                        phase2: {
+                                          ...inspectorDraft.phaseContexts.phase2,
+                                          targetParticipantId: combatContext.targetParticipantId,
+                                        },
                                       },
-                                    },
-                                  })
-                                }
-                                options={
-                                  inspectorIsHistorical
-                                    ? phaseCombatContext.attackModeId
-                                      ? [
-                                          {
-                                            id: phaseCombatContext.attackModeId,
-                                            label:
-                                              historicalPhasePanel?.attackModeLabel ??
-                                              phaseCombatContext.attackModeId,
+                                    })
+                                  }
+                                  readOnly={inspectorIsHistorical}
+                                  targetOptions={inspectorTargetOptions}
+                                />
+                                <label style={compactFieldLabelStyle}>
+                                  <strong>Requested distance</strong>
+                                  {inspectorIsHistorical ? (
+                                    <span style={{ color: "#5e5a50" }}>
+                                      {inspectorDisplayDraft.movementIntent.distancePreferences.find(
+                                        (entry) =>
+                                          entry.targetParticipantId ===
+                                          phaseModel.phaseContext.targetParticipantId,
+                                      )?.desiredDistance ?? "No recorded information"}
+                                    </span>
+                                  ) : (
+                                    <select
+                                      disabled={saving}
+                                      onChange={(event) => {
+                                        const targetParticipantId =
+                                          phaseModel.phaseContext.targetParticipantId;
+                                        if (!targetParticipantId) return;
+                                        updateInspectorDraft({
+                                          movementIntent: {
+                                            ...inspectorDraft.movementIntent,
+                                            distancePreferences: [
+                                              ...inspectorDraft.movementIntent.distancePreferences.filter(
+                                                (entry) =>
+                                                  entry.targetParticipantId !== targetParticipantId,
+                                              ),
+                                              {
+                                                desiredDistance: Number(event.target.value) as
+                                                  | 0
+                                                  | 1
+                                                  | 2
+                                                  | 3
+                                                  | 4
+                                                  | 5
+                                                  | 6
+                                                  | 7
+                                                  | 8,
+                                                source: "gm_proxy",
+                                                targetParticipantId,
+                                              },
+                                            ],
                                           },
-                                        ]
-                                      : []
-                                    : phaseLoadoutSummary.attackModeOptions
+                                        });
+                                      }}
+                                      value={
+                                        inspectorDraft.movementIntent.distancePreferences.find(
+                                          (entry) =>
+                                            entry.targetParticipantId ===
+                                            phaseModel.phaseContext.targetParticipantId,
+                                        )?.desiredDistance ??
+                                        inspectorDistancePreferenceOptions.find(
+                                          (option) =>
+                                            option.id ===
+                                            phaseModel.phaseContext.targetParticipantId,
+                                        )?.defaultDistance ??
+                                        2
+                                      }
+                                    >
+                                      {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                                        <option key={distance} value={distance}>
+                                          {distance}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </label>
+                                <div>Skill: Dodge</div>
+                                <div>The defender may oppose or allow the maneuver.</div>
+                              </div>
+                            ) : inspectorDisplayDraft.actionId === "feint_attack" &&
+                              phaseKey === "phase1" ? (
+                              <div style={{ display: "grid", gap: "0.65rem" }}>
+                                <PlayerCombatAttackTargetSelector
+                                  combatContext={phaseModel.phaseContext}
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  distanceLabel={phaseDistanceLabel}
+                                  onCombatContextChange={(combatContext) =>
+                                    updateInspectorDraft({
+                                      phaseContexts: {
+                                        phase1: combatContext,
+                                        phase2: {
+                                          ...inspectorDraft.phaseContexts.phase2,
+                                          targetParticipantId: combatContext.targetParticipantId,
+                                        },
+                                      },
+                                    })
+                                  }
+                                  readOnly={inspectorIsHistorical}
+                                  targetOptions={inspectorTargetOptions}
+                                />
+                                <label style={compactFieldLabelStyle}>
+                                  <strong>Feint method</strong>
+                                  {inspectorIsHistorical ? (
+                                    <span style={{ color: "#5e5a50" }}>
+                                      {inspectorDisplayDraft.feintMethod === "weapon"
+                                        ? "Weapon"
+                                        : "Movement"}
+                                    </span>
+                                  ) : (
+                                    <select
+                                      disabled={saving}
+                                      onChange={(event) => {
+                                        const method =
+                                          event.target.value === "weapon" ? "weapon" : "movement";
+                                        updateInspectorDraft({
+                                          feintMethod: method,
+                                          feintSkillId: "dodge",
+                                        });
+                                      }}
+                                      value={inspectorDisplayDraft.feintMethod}
+                                    >
+                                      <option value="movement">Movement</option>
+                                      <option value="weapon">Weapon</option>
+                                    </select>
+                                  )}
+                                </label>
+                                {inspectorIsHistorical ? (
+                                  <>
+                                    <div>
+                                      <strong>Skill:</strong>{" "}
+                                      {inspectorResolvedFeintSkill?.label ?? "Unavailable"}
+                                    </div>
+                                    <div>Characteristic: Dexterity</div>
+                                  </>
+                                ) : (
+                                  <FeintSkillPreview preview={inspectorFeintSkillPreview} />
+                                )}
+                                <div>Defender: highest close-combat skill · Intelligence</div>
+                              </div>
+                            ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
+                              <PlayerCombatAttackStatsTable
+                                modeSelector={
+                                  <PlayerCombatAttackModeSelector
+                                    controlsDisabled={saving || inspectorIsHistorical}
+                                    emptyState={
+                                      inspectorIsHistorical
+                                        ? undefined
+                                        : phaseLoadoutSummary.attackModeUnavailableMessage
+                                    }
+                                    onChange={(attackModeId) =>
+                                      updateInspectorDraft({
+                                        phaseContexts: {
+                                          ...inspectorDraft.phaseContexts,
+                                          [phaseKey]: {
+                                            ...inspectorDraft.phaseContexts[phaseKey],
+                                            attackModeId,
+                                          },
+                                        },
+                                      })
+                                    }
+                                    options={
+                                      inspectorIsHistorical
+                                        ? phaseCombatContext.attackModeId
+                                          ? [
+                                              {
+                                                id: phaseCombatContext.attackModeId,
+                                                label:
+                                                  historicalPhasePanel?.attackModeLabel ??
+                                                  phaseCombatContext.attackModeId,
+                                              },
+                                            ]
+                                          : []
+                                        : phaseLoadoutSummary.attackModeOptions
+                                    }
+                                    readOnly={inspectorIsHistorical}
+                                    selectedAttackModeId={
+                                      inspectorIsHistorical
+                                        ? phaseCombatContext.attackModeId
+                                        : phaseModel.phaseContext.attackModeId
+                                    }
+                                    variant="cell"
+                                  />
                                 }
-                                selectedAttackModeId={
-                                  inspectorIsHistorical
-                                    ? phaseCombatContext.attackModeId
-                                    : phaseModel.phaseContext.attackModeId
+                                sourceSelector={
+                                  /*
+                                   * The GM proxies a player's declaration, so the GM needs the same
+                                   * explicit attack-source choice the player has (#590). Punch and
+                                   * Kick reach this list from the shared option helper once the
+                                   * catalogue authors a legal brawling mode; nothing here
+                                   * special-cases unarmed, and no source is chosen on the GM's
+                                   * behalf.
+                                   */
+                                  inspectorIsHistorical ? undefined : (
+                                    <PlayerCombatAttackSourceSelector
+                                      controlsDisabled={saving}
+                                      // Without an empty state the cell vanishes for an unequipped
+                                      // participant, the one state where naming the attack source
+                                      // explains most. Same copy as the player control.
+                                      emptyState="No ready weapon can be declared as an attack source."
+                                      onChange={(attackSourceId) =>
+                                        updateInspectorDraft({
+                                          phaseAttackSourceIds: {
+                                            ...inspectorDraft.phaseAttackSourceIds,
+                                            [phaseKey]: attackSourceId,
+                                          },
+                                        })
+                                      }
+                                      options={phaseLoadoutSummary.attackSourceOptions}
+                                      selectedAttackSourceId={
+                                        phaseLoadoutSummary.selectedAttackSourceId
+                                      }
+                                      variant="cell"
+                                    />
+                                  )
                                 }
-                                readOnly={inspectorIsHistorical}
+                                stats={phaseModel.attackStats}
                               />
-                            </>
-                          ) : null}
+                            ) : null}
+                            {(!inspectorIsHistorical || historicalPhasePanel) &&
+                            phaseModel.showAttackLocationSelector &&
+                            !(
+                              inspectorDisplayDraft.actionId === "feint_attack" &&
+                              phaseKey === "phase1"
+                            ) ? (
+                              <>
+                                <PlayerCombatAttackTargetSelector
+                                  combatContext={phaseModel.phaseContext}
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  distanceLabel={phaseDistanceLabel}
+                                  onCombatContextChange={(combatContext) =>
+                                    updateInspectorDraft({
+                                      phaseContexts:
+                                        (inspectorDisplayDraft.actionId === "feint_attack" ||
+                                          inspectorDisplayDraft.actionId ===
+                                            "adjust_range_attack") &&
+                                        phaseKey === "phase2"
+                                          ? {
+                                              phase1: {
+                                                ...inspectorDraft.phaseContexts.phase1,
+                                                targetParticipantId:
+                                                  combatContext.targetParticipantId,
+                                              },
+                                              phase2: combatContext,
+                                            }
+                                          : {
+                                              ...inspectorDraft.phaseContexts,
+                                              [phaseKey]: combatContext,
+                                            },
+                                    })
+                                  }
+                                  readOnly={
+                                    inspectorIsHistorical ||
+                                    ((inspectorDisplayDraft.actionId === "feint_attack" ||
+                                      inspectorDisplayDraft.actionId === "adjust_range_attack") &&
+                                      phaseKey === "phase2")
+                                  }
+                                  targetOptions={
+                                    historicalPhasePanel?.targetOptions ?? inspectorTargetOptions
+                                  }
+                                />
+                                <PlayerCombatAttackLocationSelector
+                                  combatContext={phaseModel.phaseContext}
+                                  controlsDisabled={saving || inspectorIsHistorical}
+                                  onCombatContextChange={(combatContext) =>
+                                    updateInspectorDraft({
+                                      phaseContexts: {
+                                        ...inspectorDraft.phaseContexts,
+                                        [phaseKey]: combatContext,
+                                      },
+                                    })
+                                  }
+                                  readOnly={inspectorIsHistorical}
+                                />
+                                {/*
+                                #771 removed the standalone source and mode dropdowns because the
+                                Attack mini-table now carries them. Without a mini-table they are
+                                not redundant — an unequipped participant has no attack stats to
+                                render, and that is the one state where choosing a source explains
+                                most and the state #575/#583/#590 were filed about — so the
+                                labelled rows remain for exactly that case.
+                              */}
+                                {phaseModel.showAttackStats && phaseModel.attackStats ? null : (
+                                  <>
+                                    {inspectorIsHistorical ? null : (
+                                      <PlayerCombatAttackSourceSelector
+                                        controlsDisabled={saving}
+                                        emptyState="No ready weapon can be declared as an attack source."
+                                        onChange={(attackSourceId) =>
+                                          updateInspectorDraft({
+                                            phaseAttackSourceIds: {
+                                              ...inspectorDraft.phaseAttackSourceIds,
+                                              [phaseKey]: attackSourceId,
+                                            },
+                                          })
+                                        }
+                                        options={phaseLoadoutSummary.attackSourceOptions}
+                                        selectedAttackSourceId={
+                                          phaseLoadoutSummary.selectedAttackSourceId
+                                        }
+                                      />
+                                    )}
+                                    <PlayerCombatAttackModeSelector
+                                      controlsDisabled={saving || inspectorIsHistorical}
+                                      emptyState={
+                                        inspectorIsHistorical
+                                          ? undefined
+                                          : phaseLoadoutSummary.attackModeUnavailableMessage
+                                      }
+                                      onChange={(attackModeId) =>
+                                        updateInspectorDraft({
+                                          phaseContexts: {
+                                            ...inspectorDraft.phaseContexts,
+                                            [phaseKey]: {
+                                              ...inspectorDraft.phaseContexts[phaseKey],
+                                              attackModeId,
+                                            },
+                                          },
+                                        })
+                                      }
+                                      options={
+                                        inspectorIsHistorical
+                                          ? phaseCombatContext.attackModeId
+                                            ? [
+                                                {
+                                                  id: phaseCombatContext.attackModeId,
+                                                  label:
+                                                    historicalPhasePanel?.attackModeLabel ??
+                                                    phaseCombatContext.attackModeId,
+                                                },
+                                              ]
+                                            : []
+                                          : phaseLoadoutSummary.attackModeOptions
+                                      }
+                                      readOnly={inspectorIsHistorical}
+                                      selectedAttackModeId={
+                                        inspectorIsHistorical
+                                          ? phaseCombatContext.attackModeId
+                                          : phaseModel.phaseContext.attackModeId
+                                      }
+                                    />
+                                  </>
+                                )}
+                              </>
+                            ) : null}
+                          </div>
                           {(!inspectorIsHistorical || historicalPhasePanel) &&
                           phaseModel.showDefenseContext ? (
-                            <>
-                              {phaseModel.defenseStats ? (
-                                <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
-                              ) : (
-                                <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                                  Defense information unavailable.
-                                </div>
+                            <PlayerCombatDefenseGroup
+                              controlsDisabled={saving || inspectorIsHistorical}
+                              defaultParrySourceId={phaseLoadoutSummary.defaultParrySourceId}
+                              defenseStats={phaseModel.defenseStats}
+                              parrySourceOptions={phaseLoadoutSummary.parrySourceOptions}
+                              readOnly={inspectorIsHistorical}
+                              separatedFromAttack={phaseAttackGroupRendered}
+                              showParrySourceSelector={isPlayerEncounterParryAllocationDeclaration(
+                                inspectorDisplayDraft.actionId,
                               )}
+                            >
                               <PlayerCombatParryContextPanel
                                 combatContext={phaseModel.phaseContext}
                                 controlsDisabled={saving || inspectorIsHistorical}
@@ -13805,7 +13908,7 @@ export default function CombatRoundManagerPanel({
                                 }
                                 readOnly={inspectorIsHistorical}
                               />
-                            </>
+                            </PlayerCombatDefenseGroup>
                           ) : null}
                         </PlayerCombatPhasePanel>
                       );

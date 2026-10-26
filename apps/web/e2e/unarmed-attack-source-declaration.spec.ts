@@ -93,6 +93,10 @@ async function chooseUnarmedAttackSource(input: { page: Page; value: string }): 
  * Reads the rendered attack stats row (I, OB, DMB, AM, MC — `Range` was removed from this
  * mini-table by Forgejo issue #771 R2-9). Criterion 3: the OB must be a
  * real number derived through the mode's Brawling competency, never `COMBAT_COMPETENCY_REFUSED`.
+ *
+ * The cell indices were **re-measured** after #771 moved the attack source and mode controls into
+ * the mini-table's source/name cell: that cell is a sibling of the `<table>`, not a `<td>`, so the
+ * `<td>` positions below are unchanged.
  */
 async function readRenderedAttackStats(page: Page): Promise<string[]> {
   const row = page.locator("table").filter({ hasText: "OB" }).first().locator("tbody tr").first();
@@ -368,7 +372,13 @@ test.describe("Declarable intrinsic unarmed attack sources (#590)", () => {
     await chooseUnarmedAttackSource({ page: playerPage, value: PUNCH_SOURCE_ID });
     // Criterion 3, rendered: the stats this declaration will use name Punch and resolve through
     // its authored Brawling competency, so the OB is a number rather than a refusal.
-    await expect(playerPage.getByText("Punch", { exact: true }).first()).toBeVisible();
+    //
+    // The source is read from the mini-table's own source/name cell, where #771 put the selector.
+    // A bare `getByText("Punch")` would also match the equipment panel's Weapons table further
+    // down the page, and would therefore keep passing even if the mini-table named nothing.
+    await expect(playerPage.getByRole("combobox", { name: "Attack source" }).first()).toHaveValue(
+      PUNCH_SOURCE_ID,
+    );
     const punchStats = await readRenderedAttackStats(playerPage);
     expect(punchStats.join(" | ")).not.toContain("Refused");
     expect(punchStats[1]).toMatch(/^\d+$/);

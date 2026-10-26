@@ -10,8 +10,10 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionSelectorPanel,
   PlayerCombatAttackModeSelector,
+  PlayerCombatAttackSourceSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatCommittedDefenseReview,
+  PlayerCombatDefenseGroup,
   PlayerCombatCurrentConsequences,
   PlayerCombatModifierPanel,
   PlayerCombatObservationProgress,
@@ -1427,5 +1429,255 @@ describe("PlayerCombatAttackStatsTable", () => {
     expect(gm.container.textContent).not.toContain("Source:");
     expect(gm.container.textContent).not.toContain("Weapon2");
     expect(gm.container.textContent).not.toContain("A12:K12");
+  });
+});
+
+/*
+ * #771 phase-panel composition refinement. The Product Owner's multi-source case: Halgeir "Dunk"
+ * Halgeirsson carrying a Medium metal shield, whose derived defensive modes are Primary `Dunk`
+ * parry 9, Shield `Medium metal shield` parry 14, Combined `Sword / shield` parry 15 and Unarmed
+ * `Brawling` parry 9.
+ */
+const parrySourceOptions = [
+  {
+    db: "12",
+    dm: "−1",
+    id: "Primary|Dunk",
+    label: "Dunk · Primary",
+    parry: "9",
+    sourceName: "Dunk",
+  },
+  {
+    db: "17",
+    dm: "−1",
+    id: "Shield|Medium metal shield",
+    label: "Medium metal shield · Shield",
+    parry: "14",
+    sourceName: "Medium metal shield",
+  },
+  {
+    db: "18",
+    dm: "−1",
+    id: "Combined|Sword / shield",
+    label: "Sword / shield · Combined",
+    parry: "15",
+    sourceName: "Sword / shield",
+  },
+  {
+    db: "11",
+    dm: "−1",
+    id: "Brawling|Brawling",
+    label: "Brawling · Brawling",
+    parry: "9",
+    sourceName: "Brawling",
+  },
+];
+
+const combinedDefenseStats = {
+  db: "18",
+  dm: "−1",
+  parry: "15",
+  sourceName: "Sword / shield",
+};
+
+function readDefenseRow(container: HTMLElement): string[] {
+  const row = container.querySelector("tbody tr");
+  return [...(row?.querySelectorAll("td") ?? [])].map((cell) => cell.textContent ?? "");
+}
+
+describe("PlayerCombatDefenseGroup", () => {
+  it("offers every derived defensive mode in the mini-table's source cell and updates the values immediately", () => {
+    const { container } = render(
+      <PlayerCombatDefenseGroup
+        defaultParrySourceId="Combined|Sword / shield"
+        defenseStats={combinedDefenseStats}
+        parrySourceOptions={parrySourceOptions}
+        separatedFromAttack
+        showParrySourceSelector
+      >
+        <div>Main hand</div>
+      </PlayerCombatDefenseGroup>,
+    );
+
+    const selector = screen.getByRole("combobox", { name: "Parry source" });
+    // The selector is inside the mini-table's source/name cell, as the first element of the row
+    // that holds the DB/DM/P table.
+    expect(selector.parentElement?.nextElementSibling?.tagName).toBe("TABLE");
+    expect([...selector.querySelectorAll("option")].map((option) => option.textContent)).toEqual([
+      "Dunk · Primary",
+      "Medium metal shield · Shield",
+      "Sword / shield · Combined",
+      "Brawling · Brawling",
+    ]);
+    // It opens on what the unchanged derivation already displays.
+    expect((selector as HTMLSelectElement).value).toBe("Combined|Sword / shield");
+    expect(readDefenseRow(container)).toEqual(["18", "−1", "15"]);
+
+    fireEvent.change(selector, { target: { value: "Shield|Medium metal shield" } });
+    expect(readDefenseRow(container)).toEqual(["17", "−1", "14"]);
+    expect(screen.getByRole("combobox", { name: "Parry source" })).toHaveValue(
+      "Shield|Medium metal shield",
+    );
+
+    fireEvent.change(selector, { target: { value: "Primary|Dunk" } });
+    expect(readDefenseRow(container)).toEqual(["12", "−1", "9"]);
+  });
+
+  it("names the source instead of offering a selector where the parry allocation does nothing", () => {
+    const { container } = render(
+      <PlayerCombatDefenseGroup
+        defaultParrySourceId="Combined|Sword / shield"
+        defenseStats={combinedDefenseStats}
+        parrySourceOptions={parrySourceOptions}
+        showParrySourceSelector={false}
+      >
+        <div>Main hand</div>
+      </PlayerCombatDefenseGroup>,
+    );
+
+    expect(screen.queryByRole("combobox", { name: "Parry source" })).not.toBeInTheDocument();
+    expect(container.textContent).toContain("Sword / shield");
+    expect(readDefenseRow(container)).toEqual(["18", "−1", "15"]);
+  });
+
+  it("offers no selector when the character has a single defensive mode", () => {
+    render(
+      <PlayerCombatDefenseGroup
+        defaultParrySourceId="Primary|Dunk"
+        defenseStats={{ db: "12", dm: "−1", parry: "9", sourceName: "Dunk" }}
+        parrySourceOptions={[parrySourceOptions[0]!]}
+        showParrySourceSelector
+      >
+        <div>Main hand</div>
+      </PlayerCombatDefenseGroup>,
+    );
+
+    expect(screen.queryByRole("combobox", { name: "Parry source" })).not.toBeInTheDocument();
+    expect(screen.getByText("Dunk")).toBeInTheDocument();
+  });
+
+  it("draws one hairline above the group only when an Attack group renders above it", () => {
+    const separated = render(
+      <PlayerCombatDefenseGroup defenseStats={combinedDefenseStats} separatedFromAttack>
+        <div>Main hand</div>
+      </PlayerCombatDefenseGroup>,
+    );
+    const separatedGroup = separated.container.firstElementChild as HTMLElement;
+    expect(separatedGroup.style.borderTop).toBe("1px solid #e3e1dc");
+    // Top-aligned and internally packed, so slack falls at the bottom of the panel.
+    expect(separatedGroup.style.alignContent).toBe("start");
+    // The parry controls belong to this group: no hairline of their own, and no heading.
+    expect(separated.container.querySelectorAll("[style*='border-top']")).toHaveLength(1);
+    expect(separated.container.textContent).not.toContain("Parry context");
+    cleanup();
+
+    const alone = render(
+      <PlayerCombatDefenseGroup defenseStats={combinedDefenseStats}>
+        <div>Main hand</div>
+      </PlayerCombatDefenseGroup>,
+    );
+    expect((alone.container.firstElementChild as HTMLElement).style.borderTop).toBe("");
+  });
+
+  it("keeps the group and its hairline when a committed defence review replaces the table", () => {
+    const { container } = render(
+      <PlayerCombatDefenseGroup
+        committedReview={<div>Committed defense</div>}
+        defaultParrySourceId="Combined|Sword / shield"
+        defenseStats={combinedDefenseStats}
+        parrySourceOptions={parrySourceOptions}
+        separatedFromAttack
+        showParrySourceSelector
+      >
+        <div>Main hand</div>
+      </PlayerCombatDefenseGroup>,
+    );
+
+    // The GM's committed review replaces the DB/DM/P table and the parry controls, exactly as it
+    // did before the recomposition. The group wrapper and its single hairline remain.
+    expect(screen.getByText("Committed defense")).toBeInTheDocument();
+    expect(container.querySelector("table")).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Parry source" })).not.toBeInTheDocument();
+    expect(container.textContent).not.toContain("Main hand");
+    expect((container.firstElementChild as HTMLElement).style.borderTop).toBe("1px solid #e3e1dc");
+  });
+});
+
+describe("PlayerCombatAttackStatsTable source cell", () => {
+  it("carries the source and mode controls in the source/name cell, replacing the static name", () => {
+    const stats = {
+      attackMode: "C",
+      dmb: "7",
+      initiative: "4",
+      maxCrits: "FS",
+      ob: "12",
+      weaponName: "Dunk",
+    };
+    const { container } = render(
+      <PlayerCombatAttackStatsTable
+        modeSelector={
+          <PlayerCombatAttackModeSelector
+            onChange={() => {}}
+            options={[
+              { id: "mode-1", label: "Slash" },
+              { id: "mode-2", label: "Thrust" },
+            ]}
+            selectedAttackModeId="mode-1"
+            variant="cell"
+          />
+        }
+        sourceSelector={
+          <PlayerCombatAttackSourceSelector
+            onChange={() => {}}
+            options={[
+              { id: "weapon:dunk", label: "Dunk · Primary" },
+              { id: "unarmed:punch", label: "Punch · Unarmed" },
+            ]}
+            selectedAttackSourceId="weapon:dunk"
+            variant="cell"
+          />
+        }
+        stats={stats}
+      />,
+    );
+
+    const source = screen.getByRole("combobox", { name: "Attack source" });
+    const mode = screen.getByRole("combobox", { name: "Attack mode" });
+    // Both controls sit in the same cell, beside each other, and that cell precedes the table.
+    expect(source.parentElement).toBe(mode.parentElement);
+    expect(source.parentElement?.nextElementSibling?.tagName).toBe("TABLE");
+    // The selected option names the source, so the cell still reads as the source name.
+    expect((source as HTMLSelectElement).value).toBe("weapon:dunk");
+    expect(container.querySelector("strong")).toBeNull();
+    // The mini-table's own cells are unchanged: I, OB, DMB, AM, MC.
+    expect(readDefenseRow(container)).toEqual(["4", "12", "7", "C", "FS"]);
+  });
+
+  it("names a single mode instead of offering a mode selector that cannot change anything", () => {
+    render(
+      <PlayerCombatAttackStatsTable
+        modeSelector={
+          <PlayerCombatAttackModeSelector
+            onChange={() => {}}
+            options={[{ id: "mode-1", label: "Strike" }]}
+            selectedAttackModeId="mode-1"
+            variant="cell"
+          />
+        }
+        stats={{
+          attackMode: "A",
+          dmb: "0",
+          initiative: "0",
+          maxCrits: "AC",
+          ob: "1",
+          weaponName: "Punch",
+        }}
+      />,
+    );
+
+    expect(screen.queryByRole("combobox", { name: "Attack mode" })).not.toBeInTheDocument();
+    expect(screen.getByText("Strike")).toBeInTheDocument();
+    // With no source selector the cell keeps naming the source.
+    expect(screen.getByText("Punch")).toBeInTheDocument();
   });
 });

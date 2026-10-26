@@ -1037,6 +1037,132 @@ describe("player combat phase model", () => {
     expect(summary.reference).toBeNull();
   });
 
+  /*
+   * #771 phase-panel composition. The fixture is the Product Owner's multi-source case: Halgeir
+   * "Dunk" Halgeirsson carrying a Medium metal shield, whose Weapons table reads Primary `Dunk`
+   * parry 9, Shield `Medium metal shield` parry 14, Combined `Sword / shield` parry 15 and
+   * Unarmed `Brawling` parry 9, with Punch carrying no Parry at all.
+   */
+  const multiSourceParryRows: Array<Array<string | number>> = [
+    ["Primary", "Dunk", "4", "Slash", "12", "7", "FS", "—", "C", "12", "−1", "9"],
+    ["Shield", "Medium metal shield", "0", "Strike", "0", "0", "AC", "—", "A", "17", "−1", "14"],
+    ["Combined", "Sword / shield", "—", "—", "—", "—", "—", "—", "—", "18", "−1", "15"],
+    ["Brawling", "Brawling", "0", "Grapple", "1", "—", "—", "—", "—", "11", "−1", "9"],
+    ["Unarmed", "Punch", "0", "Strike", "1", "0", "AC", "—", "A", "—", "—", "—"],
+  ];
+
+  const multiSourceWeaponRows = [
+    {
+      attackModes: [
+        { allowsRepeatedRoundAttack: true, id: "mode-1", isPrimaryAttack: true, label: "Slash" },
+        { allowsRepeatedRoundAttack: true, id: "mode-2", isPrimaryAttack: false, label: "Thrust" },
+      ],
+      attackMode1Id: "mode-1",
+      currentItemLabel: "Dunk",
+      itemId: "scenario-dunk",
+      modeLabel: "Primary",
+      templateId: "weapon-template-dunk",
+    },
+  ];
+
+  it("offers every derived defensive mode that carries a Parry, and nothing else", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: multiSourceParryRows,
+        sourceItemId: "scenario-dunk",
+        valueLabel: "Dunk",
+        weaponRows: multiSourceWeaponRows,
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.parrySourceOptions).toEqual([
+      {
+        db: "12",
+        dm: "−1",
+        id: "Primary|Dunk",
+        label: "Dunk · Primary",
+        parry: "9",
+        sourceName: "Dunk",
+      },
+      {
+        db: "17",
+        dm: "−1",
+        id: "Shield|Medium metal shield",
+        label: "Medium metal shield · Shield",
+        parry: "14",
+        sourceName: "Medium metal shield",
+      },
+      {
+        db: "18",
+        dm: "−1",
+        id: "Combined|Sword / shield",
+        label: "Sword / shield · Combined",
+        parry: "15",
+        sourceName: "Sword / shield",
+      },
+      {
+        db: "11",
+        dm: "−1",
+        id: "Brawling|Brawling",
+        label: "Brawling · Brawling",
+        parry: "9",
+        sourceName: "Brawling",
+      },
+    ]);
+    // Punch carries no Parry, so it is not a parry source. Nothing is added to the derived set.
+    expect(summary.parrySourceOptions?.map((option) => option.sourceName)).not.toContain("Punch");
+  });
+
+  it("defaults the parry source to the row the unchanged defence derivation already displays", () => {
+    const loadoutModel = buildLoadoutModel({
+      rows: multiSourceParryRows,
+      sourceItemId: "scenario-dunk",
+      valueLabel: "Dunk",
+      weaponRows: multiSourceWeaponRows,
+    });
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel,
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+    const defenseStats = buildPlayerCombatDefenseStats({
+      mainHandParryItemLabel: summary.mainHandParryItemLabel,
+      offHandParryItemLabel: summary.offHandParryItemLabel,
+      phaseContext: createEmptyPlayerEncounterCombatContext(),
+      reference: summary.reference,
+    });
+    const defaultOption = summary.parrySourceOptions?.find(
+      (option) => option.id === summary.defaultParrySourceId,
+    );
+
+    // A Combined row exists, so the derivation shows it — and the default option names that row,
+    // with the same DB/DM/Parry the mini-table renders.
+    expect(summary.defaultParrySourceId).toBe("Combined|Sword / shield");
+    expect(defenseStats).toMatchObject({ db: "18", dm: "−1", parry: "15" });
+    expect(defaultOption).toMatchObject({ db: "18", dm: "−1", parry: "15" });
+  });
+
+  it("defaults the parry source to the attack reference row when no Combined row exists", () => {
+    const summary = buildPlayerCombatLoadoutSummary({
+      actionId: "attack_parry",
+      loadoutModel: buildLoadoutModel({
+        rows: multiSourceParryRows.filter((row) => row[0] !== "Combined"),
+        sourceItemId: "scenario-dunk",
+        valueLabel: "Dunk",
+        weaponRows: multiSourceWeaponRows,
+      }),
+      phaseKey: "phase1",
+      secondaryActionId: "",
+    });
+
+    expect(summary.defaultParrySourceId).toBe("Primary|Dunk");
+    expect(summary.reference?.combinedParry).toBe("—");
+  });
+
   it("maps Single attack into phase 1 attack/defense and phase 2 defense", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({

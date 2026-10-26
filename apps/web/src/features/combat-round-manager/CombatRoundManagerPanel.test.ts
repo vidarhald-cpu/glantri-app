@@ -399,7 +399,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("PlayerCombatPhasePanel");
     expect(source).toContain("PlayerCombatAttackStatsTable");
     expect(source).toContain("PlayerCombatAttackTargetSelector");
-    expect(source).toContain("PlayerCombatDefenseStatsTable");
+    // #771: the GM phase panel composes the Defense / Parry group, which owns the DB/DM/P
+    // mini-table, the parry source selector in its source/name cell and the hand/orientation
+    // controls below it. The panel no longer places the mini-table itself.
+    expect(source).toContain("PlayerCombatDefenseGroup");
+    expect(source).not.toContain("<PlayerCombatDefenseStatsTable");
+    expect(source).toContain(
+      "showParrySourceSelector={isPlayerEncounterParryAllocationDeclaration(",
+    );
+    expect(source).toContain("separatedFromAttack={phaseAttackGroupRendered}");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("historicalPhasePanel?.distanceLabel");
     expect(source).toContain('`Distance: ${phaseDistanceRow?.edge.distance ?? "—"}`');

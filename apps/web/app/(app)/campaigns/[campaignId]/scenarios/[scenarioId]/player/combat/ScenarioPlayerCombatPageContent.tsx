@@ -107,7 +107,7 @@ import {
   PlayerCombatActionButtonPanel,
   PlayerCombatActionSelectorPanel,
   type PlayerCombatDistancePreferenceOption,
-  PlayerCombatDefenseStatsTable,
+  PlayerCombatDefenseGroup,
   PlayerCombatCommittedDefenseReview,
   PlayerCombatCurrentConsequences,
   PlayerCombatModifierPanel,
@@ -116,6 +116,7 @@ import {
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
+  playerCombatPhaseGroupStyle,
   playerCombatTopPanelRowStyle,
   sanitizePlayerCombatModifierContext,
 } from "@/features/player-combat/PlayerCombatPanels";
@@ -172,6 +173,7 @@ import {
   evaluatePlayerEncounterParryLegality,
   getPlayerEncounterAccessibleParticipants,
   isPlayerEncounterActionId,
+  isPlayerEncounterParryAllocationDeclaration,
   mergeCombatContextWithCurrentModifierBuckets,
   type PlayerEncounterActionId,
   type PlayerEncounterMovementId,
@@ -5508,25 +5510,63 @@ export default function ScenarioPlayerCombatPageContent({
                 secondaryActionId: selectedSecondaryActionId,
               });
 
+              /*
+               * Whether the Attack group renders any content for this phase, which is what the
+               * single hairline below separates the Defense / Parry group from (#771).
+               *
+               * The phase flags cover the attack mini-table and the Target / Attack location
+               * controls. The three phase-1 branches named here render offensive content without
+               * attack stats — Offensive Parry's opponent, Observe opponent, and Adjust distance —
+               * so they are listed explicitly rather than inferred.
+               */
+              const phaseAttackGroupRendered =
+                phaseModel.showAttackStats ||
+                phaseModel.showAttackLocationSelector ||
+                (phaseKey === "phase1" &&
+                  (selectedActionId === "offensive_parry" ||
+                    selectedActionId === "adjust_range_attack" ||
+                    selectedSecondaryActionId === "observe_opponent"));
+
               return (
                 <PlayerCombatPhasePanel key={phaseModel.phaseCard.phaseLabel} phaseCard={phaseCard}>
-                  {selectedActionId === "offensive_parry" && phaseKey === "phase1" ? (
-                    <div style={{ display: "grid", gap: "0.65rem" }}>
-                      <PlayerCombatOpponentSelector
-                        controlsDisabled={declarationControlsDisabled}
-                        onSelectedOpponentChange={(selectedOpponentId) => {
-                          markCombatDeclarationDraftDirty();
-                          setCombatContextDraft((current) => ({
-                            ...current,
-                            selectedOpponentId: selectedOpponentId || undefined,
-                          }));
-                        }}
-                        opponentOptions={targetOptions}
-                        selectedOpponentId={combatContextDraft.selectedOpponentId}
-                      />
-                      {selectedSecondaryActionId === "observe_opponent" ? (
+                  <div style={playerCombatPhaseGroupStyle}>
+                    {selectedActionId === "offensive_parry" && phaseKey === "phase1" ? (
+                      <div style={{ display: "grid", gap: "0.65rem" }}>
                         <PlayerCombatOpponentSelector
                           controlsDisabled={declarationControlsDisabled}
+                          onSelectedOpponentChange={(selectedOpponentId) => {
+                            markCombatDeclarationDraftDirty();
+                            setCombatContextDraft((current) => ({
+                              ...current,
+                              selectedOpponentId: selectedOpponentId || undefined,
+                            }));
+                          }}
+                          opponentOptions={targetOptions}
+                          selectedOpponentId={combatContextDraft.selectedOpponentId}
+                        />
+                        {selectedSecondaryActionId === "observe_opponent" ? (
+                          <PlayerCombatOpponentSelector
+                            controlsDisabled={declarationControlsDisabled}
+                            label="Opponent"
+                            onSelectedOpponentChange={(targetParticipantId) => {
+                              markCombatDeclarationDraftDirty();
+                              setSecondaryActionContext(
+                                targetParticipantId
+                                  ? { action: "observe_opponent", targetParticipantId }
+                                  : undefined,
+                              );
+                            }}
+                            opponentOptions={targetOptions}
+                            selectedOpponentId={secondaryActionContext?.targetParticipantId}
+                          />
+                        ) : null}
+                      </div>
+                    ) : selectedSecondaryActionId === "observe_opponent" &&
+                      phaseKey === "phase1" ? (
+                      <div style={{ display: "grid", gap: "0.65rem" }}>
+                        <PlayerCombatOpponentSelector
+                          controlsDisabled={declarationControlsDisabled}
+                          emptyLabel="Choose opponent"
                           label="Opponent"
                           onSelectedOpponentChange={(targetParticipantId) => {
                             markCombatDeclarationDraftDirty();
@@ -5539,177 +5579,186 @@ export default function ScenarioPlayerCombatPageContent({
                           opponentOptions={targetOptions}
                           selectedOpponentId={secondaryActionContext?.targetParticipantId}
                         />
-                      ) : null}
-                    </div>
-                  ) : selectedSecondaryActionId === "observe_opponent" && phaseKey === "phase1" ? (
-                    <div style={{ display: "grid", gap: "0.65rem" }}>
-                      <PlayerCombatOpponentSelector
-                        controlsDisabled={declarationControlsDisabled}
-                        emptyLabel="Choose opponent"
-                        label="Opponent"
-                        onSelectedOpponentChange={(targetParticipantId) => {
-                          markCombatDeclarationDraftDirty();
-                          setSecondaryActionContext(
-                            targetParticipantId
-                              ? { action: "observe_opponent", targetParticipantId }
-                              : undefined,
-                          );
-                        }}
-                        opponentOptions={targetOptions}
-                        selectedOpponentId={secondaryActionContext?.targetParticipantId}
-                      />
-                      <PlayerCombatObservationProgress
-                        relationships={
-                          combatRoundState?.observationRelationships.filter(
-                            (relationship) =>
-                              relationship.observerParticipantId ===
-                              selectedRoundParticipant?.participantId,
-                          ) ?? []
-                        }
-                        targetLabels={Object.fromEntries(
-                          (combatRoundState?.participants ?? []).map((participant) => [
-                            participant.participantId,
-                            participant.label,
-                          ]),
-                        )}
-                      />
-                    </div>
-                  ) : selectedActionId === "adjust_range_attack" && phaseKey === "phase1" ? (
-                    <div style={{ display: "grid", gap: "0.65rem" }}>
-                      <PlayerCombatAttackTargetSelector
-                        combatContext={phaseModel.phaseContext}
-                        controlsDisabled={declarationControlsDisabled}
-                        distanceLabel={
-                          targetRoundParticipant
-                            ? `Distance: ${distanceEdge?.distance ?? "—"}`
-                            : undefined
-                        }
-                        onCombatContextChange={(combatContext) => {
-                          markCombatDeclarationDraftDirty();
-                          setPhaseCombatContextDrafts((current) => ({
-                            phase1: combatContext,
-                            phase2: {
-                              ...current.phase2,
-                              targetParticipantId: combatContext.targetParticipantId,
-                            },
-                          }));
-                        }}
-                        targetOptions={targetOptions}
-                      />
-                      <label style={{ display: "grid", gap: "0.25rem" }}>
-                        <strong>Requested distance</strong>
-                        <select
-                          disabled={declarationControlsDisabled}
-                          onChange={(event) => {
-                            const targetParticipantId = phaseModel.phaseContext.targetParticipantId;
-                            if (!targetParticipantId) return;
+                        <PlayerCombatObservationProgress
+                          relationships={
+                            combatRoundState?.observationRelationships.filter(
+                              (relationship) =>
+                                relationship.observerParticipantId ===
+                                selectedRoundParticipant?.participantId,
+                            ) ?? []
+                          }
+                          targetLabels={Object.fromEntries(
+                            (combatRoundState?.participants ?? []).map((participant) => [
+                              participant.participantId,
+                              participant.label,
+                            ]),
+                          )}
+                        />
+                      </div>
+                    ) : selectedActionId === "adjust_range_attack" && phaseKey === "phase1" ? (
+                      <div style={{ display: "grid", gap: "0.65rem" }}>
+                        <PlayerCombatAttackTargetSelector
+                          combatContext={phaseModel.phaseContext}
+                          controlsDisabled={declarationControlsDisabled}
+                          distanceLabel={
+                            targetRoundParticipant
+                              ? `Distance: ${distanceEdge?.distance ?? "—"}`
+                              : undefined
+                          }
+                          onCombatContextChange={(combatContext) => {
                             markCombatDeclarationDraftDirty();
-                            setSelectedMovementIntent((current) => ({
-                              ...current,
-                              distancePreferences: [
-                                ...current.distancePreferences.filter(
-                                  (entry) => entry.targetParticipantId !== targetParticipantId,
-                                ),
-                                {
-                                  desiredDistance: Number(event.target.value) as
-                                    | 0
-                                    | 1
-                                    | 2
-                                    | 3
-                                    | 4
-                                    | 5
-                                    | 6
-                                    | 7
-                                    | 8,
-                                  source: "player_declared",
-                                  targetParticipantId,
-                                },
-                              ],
+                            setPhaseCombatContextDrafts((current) => ({
+                              phase1: combatContext,
+                              phase2: {
+                                ...current.phase2,
+                                targetParticipantId: combatContext.targetParticipantId,
+                              },
                             }));
                           }}
-                          value={
-                            selectedMovementIntent.distancePreferences.find(
-                              (entry) =>
-                                entry.targetParticipantId ===
-                                phaseModel.phaseContext.targetParticipantId,
-                            )?.desiredDistance ??
-                            distancePreferenceOptions.find(
-                              (option) => option.id === phaseModel.phaseContext.targetParticipantId,
-                            )?.defaultDistance ??
-                            2
-                          }
-                        >
-                          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
-                            <option key={distance} value={distance}>
-                              {distance}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <div>Skill: Dodge</div>
-                      <div>The defender may oppose or allow the maneuver.</div>
-                    </div>
-                  ) : selectedActionId === "feint_attack" && phaseKey === "phase1" ? (
-                    <div style={{ display: "grid", gap: "0.65rem" }}>
-                      <PlayerCombatAttackTargetSelector
-                        combatContext={phaseModel.phaseContext}
-                        controlsDisabled={declarationControlsDisabled}
-                        distanceLabel={
-                          targetRoundParticipant
-                            ? `Distance: ${distanceEdge?.distance ?? "—"}`
-                            : undefined
-                        }
-                        onCombatContextChange={(combatContext) => {
-                          markCombatDeclarationDraftDirty();
-                          setPhaseCombatContextDrafts((current) => ({
-                            phase1: combatContext,
-                            phase2: {
-                              ...current.phase2,
-                              targetParticipantId: combatContext.targetParticipantId,
-                            },
-                          }));
-                        }}
-                        targetOptions={targetOptions}
-                      />
-                      <label style={{ display: "grid", gap: "0.25rem" }}>
-                        <strong>Feint method</strong>
-                        <select
-                          disabled={declarationControlsDisabled}
-                          onChange={(event) => {
-                            markCombatDeclarationDraftDirty();
-                            const method = event.target.value === "weapon" ? "weapon" : "movement";
-                            setFeintMethod(method);
-                          }}
-                          value={feintMethod}
-                        >
-                          <option value="movement">Movement</option>
-                          <option value="weapon">Weapon</option>
-                        </select>
-                      </label>
-                      <FeintSkillPreview preview={feintSkillPreview} />
-                      <div>
-                        Defender resists with their highest close-combat skill · Intelligence.
-                      </div>
-                      {feintMethod === "weapon" && phaseModel.attackStats ? (
-                        <>
-                          <PlayerCombatAttackSourceSelector
-                            controlsDisabled={declarationControlsDisabled}
-                            onChange={(attackSourceId) => {
+                          targetOptions={targetOptions}
+                        />
+                        <label style={{ display: "grid", gap: "0.25rem" }}>
+                          <strong>Requested distance</strong>
+                          <select
+                            disabled={declarationControlsDisabled}
+                            onChange={(event) => {
+                              const targetParticipantId =
+                                phaseModel.phaseContext.targetParticipantId;
+                              if (!targetParticipantId) return;
                               markCombatDeclarationDraftDirty();
-                              setPhaseAttackSourceDrafts((current) => ({
+                              setSelectedMovementIntent((current) => ({
                                 ...current,
-                                phase1: attackSourceId,
+                                distancePreferences: [
+                                  ...current.distancePreferences.filter(
+                                    (entry) => entry.targetParticipantId !== targetParticipantId,
+                                  ),
+                                  {
+                                    desiredDistance: Number(event.target.value) as
+                                      | 0
+                                      | 1
+                                      | 2
+                                      | 3
+                                      | 4
+                                      | 5
+                                      | 6
+                                      | 7
+                                      | 8,
+                                    source: "player_declared",
+                                    targetParticipantId,
+                                  },
+                                ],
                               }));
                             }}
-                            options={phaseLoadoutSummary.attackSourceOptions.filter(
-                              // A weapon feint is resolved from a weapon's own combat skill, so
-                              // the API accepts only a weapon source for it.
-                              (option) => option.sourceKind === "weapon",
-                            )}
-                            emptyState="No ready weapon can perform a weapon feint."
-                            selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
+                            value={
+                              selectedMovementIntent.distancePreferences.find(
+                                (entry) =>
+                                  entry.targetParticipantId ===
+                                  phaseModel.phaseContext.targetParticipantId,
+                              )?.desiredDistance ??
+                              distancePreferenceOptions.find(
+                                (option) =>
+                                  option.id === phaseModel.phaseContext.targetParticipantId,
+                              )?.defaultDistance ??
+                              2
+                            }
+                          >
+                            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((distance) => (
+                              <option key={distance} value={distance}>
+                                {distance}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div>Skill: Dodge</div>
+                        <div>The defender may oppose or allow the maneuver.</div>
+                      </div>
+                    ) : selectedActionId === "feint_attack" && phaseKey === "phase1" ? (
+                      <div style={{ display: "grid", gap: "0.65rem" }}>
+                        <PlayerCombatAttackTargetSelector
+                          combatContext={phaseModel.phaseContext}
+                          controlsDisabled={declarationControlsDisabled}
+                          distanceLabel={
+                            targetRoundParticipant
+                              ? `Distance: ${distanceEdge?.distance ?? "—"}`
+                              : undefined
+                          }
+                          onCombatContextChange={(combatContext) => {
+                            markCombatDeclarationDraftDirty();
+                            setPhaseCombatContextDrafts((current) => ({
+                              phase1: combatContext,
+                              phase2: {
+                                ...current.phase2,
+                                targetParticipantId: combatContext.targetParticipantId,
+                              },
+                            }));
+                          }}
+                          targetOptions={targetOptions}
+                        />
+                        <label style={{ display: "grid", gap: "0.25rem" }}>
+                          <strong>Feint method</strong>
+                          <select
+                            disabled={declarationControlsDisabled}
+                            onChange={(event) => {
+                              markCombatDeclarationDraftDirty();
+                              const method =
+                                event.target.value === "weapon" ? "weapon" : "movement";
+                              setFeintMethod(method);
+                            }}
+                            value={feintMethod}
+                          >
+                            <option value="movement">Movement</option>
+                            <option value="weapon">Weapon</option>
+                          </select>
+                        </label>
+                        <FeintSkillPreview preview={feintSkillPreview} />
+                        <div>
+                          Defender resists with their highest close-combat skill · Intelligence.
+                        </div>
+                        {feintMethod === "weapon" && phaseModel.attackStats ? (
+                          <PlayerCombatAttackStatsTable
+                            modeSelector={
+                              <PlayerCombatAttackModeSelector
+                                controlsDisabled={declarationControlsDisabled}
+                                emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}
+                                onChange={(attackModeId) => {
+                                  markCombatDeclarationDraftDirty();
+                                  setPhaseCombatContextDrafts((current) => ({
+                                    ...current,
+                                    phase1: { ...current.phase1, attackModeId },
+                                  }));
+                                }}
+                                options={phaseLoadoutSummary.attackModeOptions}
+                                selectedAttackModeId={phaseModel.phaseContext.attackModeId}
+                                variant="cell"
+                              />
+                            }
+                            sourceSelector={
+                              <PlayerCombatAttackSourceSelector
+                                controlsDisabled={declarationControlsDisabled}
+                                onChange={(attackSourceId) => {
+                                  markCombatDeclarationDraftDirty();
+                                  setPhaseAttackSourceDrafts((current) => ({
+                                    ...current,
+                                    phase1: attackSourceId,
+                                  }));
+                                }}
+                                options={phaseLoadoutSummary.attackSourceOptions.filter(
+                                  // A weapon feint is resolved from a weapon's own combat skill, so
+                                  // the API accepts only a weapon source for it.
+                                  (option) => option.sourceKind === "weapon",
+                                )}
+                                emptyState="No ready weapon can perform a weapon feint."
+                                selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
+                                variant="cell"
+                              />
+                            }
+                            stats={phaseModel.attackStats}
                           />
-                          <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
+                        ) : null}
+                      </div>
+                    ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
+                      <PlayerCombatAttackStatsTable
+                        modeSelector={
                           <PlayerCombatAttackModeSelector
                             controlsDisabled={declarationControlsDisabled}
                             emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}
@@ -5717,108 +5766,143 @@ export default function ScenarioPlayerCombatPageContent({
                               markCombatDeclarationDraftDirty();
                               setPhaseCombatContextDrafts((current) => ({
                                 ...current,
-                                phase1: { ...current.phase1, attackModeId },
+                                [phaseKey]: {
+                                  ...current[phaseKey],
+                                  attackModeId,
+                                },
                               }));
                             }}
                             options={phaseLoadoutSummary.attackModeOptions}
                             selectedAttackModeId={phaseModel.phaseContext.attackModeId}
+                            variant="cell"
                           />
-                        </>
-                      ) : null}
-                    </div>
-                  ) : phaseModel.showAttackStats && phaseModel.attackStats ? (
-                    <PlayerCombatAttackStatsTable stats={phaseModel.attackStats} />
-                  ) : null}
-                  {phaseModel.showAttackLocationSelector &&
-                  !(selectedActionId === "feint_attack" && phaseKey === "phase1") ? (
-                    <>
-                      <PlayerCombatAttackTargetSelector
-                        combatContext={phaseModel.phaseContext}
-                        controlsDisabled={declarationControlsDisabled}
-                        distanceLabel={
-                          targetRoundParticipant
-                            ? `Distance: ${distanceEdge?.distance ?? "—"}`
-                            : undefined
                         }
-                        onCombatContextChange={(combatContext) => {
-                          markCombatDeclarationDraftDirty();
-                          setPhaseCombatContextDrafts((current) =>
+                        sourceSelector={
+                          <PlayerCombatAttackSourceSelector
+                            controlsDisabled={declarationControlsDisabled}
+                            // Without an empty state the whole cell disappears for a character with
+                            // no ready weapon — the one state where naming the attack source
+                            // explains most, and the state #575 was filed about.
+                            emptyState="No ready weapon can be declared as an attack source."
+                            onChange={(attackSourceId) => {
+                              markCombatDeclarationDraftDirty();
+                              setPhaseAttackSourceDrafts((current) => ({
+                                ...current,
+                                [phaseKey]: attackSourceId,
+                              }));
+                            }}
+                            options={phaseLoadoutSummary.attackSourceOptions}
+                            selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
+                            variant="cell"
+                          />
+                        }
+                        stats={phaseModel.attackStats}
+                      />
+                    ) : null}
+                    {phaseModel.showAttackLocationSelector &&
+                    !(selectedActionId === "feint_attack" && phaseKey === "phase1") ? (
+                      <>
+                        <PlayerCombatAttackTargetSelector
+                          combatContext={phaseModel.phaseContext}
+                          controlsDisabled={declarationControlsDisabled}
+                          distanceLabel={
+                            targetRoundParticipant
+                              ? `Distance: ${distanceEdge?.distance ?? "—"}`
+                              : undefined
+                          }
+                          onCombatContextChange={(combatContext) => {
+                            markCombatDeclarationDraftDirty();
+                            setPhaseCombatContextDrafts((current) =>
+                              (selectedActionId === "feint_attack" ||
+                                selectedActionId === "adjust_range_attack") &&
+                              phaseKey === "phase2"
+                                ? {
+                                    phase1: {
+                                      ...current.phase1,
+                                      targetParticipantId: combatContext.targetParticipantId,
+                                    },
+                                    phase2: combatContext,
+                                  }
+                                : { ...current, [phaseKey]: combatContext },
+                            );
+                          }}
+                          readOnly={
                             (selectedActionId === "feint_attack" ||
                               selectedActionId === "adjust_range_attack") &&
                             phaseKey === "phase2"
-                              ? {
-                                  phase1: {
-                                    ...current.phase1,
-                                    targetParticipantId: combatContext.targetParticipantId,
+                          }
+                          targetOptions={targetOptions}
+                        />
+                        <PlayerCombatAttackLocationSelector
+                          combatContext={phaseModel.phaseContext}
+                          controlsDisabled={declarationControlsDisabled}
+                          onCombatContextChange={(combatContext) => {
+                            markCombatDeclarationDraftDirty();
+                            setPhaseCombatContextDrafts((current) => ({
+                              ...current,
+                              [phaseKey]: combatContext,
+                            }));
+                          }}
+                        />
+                        {/*
+                        #771 removed the standalone source and mode dropdowns because the Attack
+                        mini-table now carries them. Without a mini-table they are not redundant —
+                        an unequipped participant has no attack stats to render, and that is the
+                        one state where choosing a source explains most and the state #575/#583
+                        were filed about — so the labelled rows remain for exactly that case.
+                      */}
+                        {phaseModel.showAttackStats && phaseModel.attackStats ? null : (
+                          <>
+                            <PlayerCombatAttackSourceSelector
+                              controlsDisabled={declarationControlsDisabled}
+                              emptyState="No ready weapon can be declared as an attack source."
+                              onChange={(attackSourceId) => {
+                                markCombatDeclarationDraftDirty();
+                                setPhaseAttackSourceDrafts((current) => ({
+                                  ...current,
+                                  [phaseKey]: attackSourceId,
+                                }));
+                              }}
+                              options={phaseLoadoutSummary.attackSourceOptions}
+                              selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
+                            />
+                            <PlayerCombatAttackModeSelector
+                              controlsDisabled={declarationControlsDisabled}
+                              emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}
+                              onChange={(attackModeId) => {
+                                markCombatDeclarationDraftDirty();
+                                setPhaseCombatContextDrafts((current) => ({
+                                  ...current,
+                                  [phaseKey]: {
+                                    ...current[phaseKey],
+                                    attackModeId,
                                   },
-                                  phase2: combatContext,
-                                }
-                              : { ...current, [phaseKey]: combatContext },
-                          );
-                        }}
-                        readOnly={
-                          (selectedActionId === "feint_attack" ||
-                            selectedActionId === "adjust_range_attack") &&
-                          phaseKey === "phase2"
-                        }
-                        targetOptions={targetOptions}
-                      />
-                      <PlayerCombatAttackLocationSelector
-                        combatContext={phaseModel.phaseContext}
-                        controlsDisabled={declarationControlsDisabled}
-                        onCombatContextChange={(combatContext) => {
-                          markCombatDeclarationDraftDirty();
-                          setPhaseCombatContextDrafts((current) => ({
-                            ...current,
-                            [phaseKey]: combatContext,
-                          }));
-                        }}
-                      />
-                      <PlayerCombatAttackSourceSelector
-                        controlsDisabled={declarationControlsDisabled}
-                        // Without an empty state the whole row disappears for a character with no
-                        // ready weapon — the one state where naming the attack source explains
-                        // most, and the state #575 was filed about.
-                        emptyState="No ready weapon can be declared as an attack source."
-                        onChange={(attackSourceId) => {
-                          markCombatDeclarationDraftDirty();
-                          setPhaseAttackSourceDrafts((current) => ({
-                            ...current,
-                            [phaseKey]: attackSourceId,
-                          }));
-                        }}
-                        options={phaseLoadoutSummary.attackSourceOptions}
-                        selectedAttackSourceId={phaseLoadoutSummary.selectedAttackSourceId}
-                      />
-                      <PlayerCombatAttackModeSelector
-                        controlsDisabled={declarationControlsDisabled}
-                        emptyState={phaseLoadoutSummary.attackModeUnavailableMessage}
-                        onChange={(attackModeId) => {
-                          markCombatDeclarationDraftDirty();
-                          setPhaseCombatContextDrafts((current) => ({
-                            ...current,
-                            [phaseKey]: {
-                              ...current[phaseKey],
-                              attackModeId,
-                            },
-                          }));
-                        }}
-                        options={phaseLoadoutSummary.attackModeOptions}
-                        selectedAttackModeId={phaseModel.phaseContext.attackModeId}
-                      />
-                    </>
-                  ) : null}
-                  {committedDefenseReview ? (
-                    <PlayerCombatCommittedDefenseReview review={committedDefenseReview} />
-                  ) : phaseModel.showDefenseContext ? (
-                    <>
-                      {phaseModel.defenseStats ? (
-                        <PlayerCombatDefenseStatsTable stats={phaseModel.defenseStats} />
-                      ) : (
-                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                          Defense information unavailable.
-                        </div>
+                                }));
+                              }}
+                              options={phaseLoadoutSummary.attackModeOptions}
+                              selectedAttackModeId={phaseModel.phaseContext.attackModeId}
+                            />
+                          </>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                  {committedDefenseReview || phaseModel.showDefenseContext ? (
+                    <PlayerCombatDefenseGroup
+                      committedReview={
+                        committedDefenseReview ? (
+                          <PlayerCombatCommittedDefenseReview review={committedDefenseReview} />
+                        ) : undefined
+                      }
+                      controlsDisabled={declarationControlsDisabled}
+                      defaultParrySourceId={phaseLoadoutSummary.defaultParrySourceId}
+                      defenseStats={phaseModel.defenseStats}
+                      parrySourceOptions={phaseLoadoutSummary.parrySourceOptions}
+                      separatedFromAttack={phaseAttackGroupRendered}
+                      showParrySourceSelector={isPlayerEncounterParryAllocationDeclaration(
+                        selectedActionId,
                       )}
+                    >
                       <PlayerCombatParryContextPanel
                         combatContext={phaseModel.phaseContext}
                         controlsDisabled={declarationControlsDisabled}
@@ -5832,7 +5916,7 @@ export default function ScenarioPlayerCombatPageContent({
                           }));
                         }}
                       />
-                    </>
+                    </PlayerCombatDefenseGroup>
                   ) : null}
                 </PlayerCombatPhasePanel>
               );

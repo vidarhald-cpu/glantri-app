@@ -132,6 +132,35 @@ export interface PlayerCombatDefenseStatsView {
   sourceName: string;
 }
 
+/**
+ * One defensive mode of the derived combat state, offered by the parry source selector that the
+ * #771 phase-panel recomposition places in the Defense/Parry mini-table's source/name cell.
+ *
+ * The axis is deliberate. Two different things could be called a "parry source" here:
+ *
+ * 1. the **derived defensive modes** — the rows of `combatStatePanelModel.weaponModeTable` that
+ *    carry `DB`/`DM`/`Parry` (Primary, Shield, Combined, Brawling). These are what the mini-table
+ *    already displays: `buildPlayerCombatDefenseStats` reads the Combined row when one exists and
+ *    the attack reference row otherwise;
+ * 2. `ScenarioParticipantCombatContext.parrySource` (`auto | mainHand | offHand | shield`) — a
+ *    participant-level preference that reaches `evaluatePlayerEncounterParryLegality` and from
+ *    there `CombatAllocationState.defensePosture` / `parry.source`. Measured against this
+ *    baseline, that value never reaches a row's `db`, `dm` or `parry`: `combatStateDerivation`
+ *    consumes the allocation only through `getDefenseRawModifiers` (which reads
+ *    `situationalModifiers.defense` alone) and through the readiness/defense summary notes.
+ *
+ * The selector therefore exposes (1), because (1) is what already governs the displayed values.
+ * No bridge is built between the two axes and `parrySource` is left untouched.
+ */
+export interface PlayerCombatParrySourceOption {
+  db: string;
+  dm: string;
+  id: string;
+  label: string;
+  parry: string;
+  sourceName: string;
+}
+
 interface PlayerCombatModifierPanelProps {
   activeSpecialEffectCount?: number;
   context?: CombatSituationContext;
@@ -276,11 +305,60 @@ export interface PlayerCombatDistancePreferenceOption {
 }
 
 interface PlayerCombatAttackStatsTableProps {
+  /**
+   * Rendered beside the source in the mini-table's source/name cell, where the source has more
+   * than one mode (#771 phase-panel recomposition).
+   */
+  modeSelector?: ReactNode;
+  /**
+   * Rendered in the mini-table's source/name cell, replacing the static source name. The selected
+   * option names the source, so the cell still reads as the source name it always was.
+   */
+  sourceSelector?: ReactNode;
   stats: PlayerCombatAttackStatsView;
 }
 
 interface PlayerCombatDefenseStatsTableProps {
+  /** Rendered in the mini-table's source/name cell, replacing the static source name. */
+  sourceSelector?: ReactNode;
   stats: PlayerCombatDefenseStatsView;
+}
+
+interface PlayerCombatParrySourceSelectorProps {
+  controlsDisabled?: boolean;
+  onChange: (parrySourceId: string) => void;
+  options: readonly PlayerCombatParrySourceOption[];
+  readOnly?: boolean;
+  selectedParrySourceId?: string;
+}
+
+interface PlayerCombatDefenseGroupProps {
+  /** The parry hand/orientation controls. They belong to this group, with no hairline above. */
+  children?: ReactNode;
+  /**
+   * Replaces the DB/DM/P mini-table and the parry controls once the GM has committed a defence
+   * review for the phase. The group wrapper and its separating hairline are kept, so the
+   * recomposition holds in that state instead of disappearing from it.
+   */
+  committedReview?: ReactNode;
+  controlsDisabled?: boolean;
+  defenseStats: PlayerCombatDefenseStatsView | null;
+  /** The option id the unchanged derivation already displays, used as the selector's value. */
+  defaultParrySourceId?: string;
+  parrySourceOptions?: readonly PlayerCombatParrySourceOption[];
+  readOnly?: boolean;
+  /**
+   * Whether an Attack group renders above this one in the same phase panel. Exactly one hairline
+   * separates the two major groups, and none is drawn when this group stands alone.
+   */
+  separatedFromAttack?: boolean;
+  /**
+   * Whether the parry allocation reaches the DB/Parry stack for the current declaration. Callers
+   * pass `isPlayerEncounterParryAllocationDeclaration(actionId)` — the predicate
+   * `evaluatePlayerEncounterParryLegality` itself gates on — so the selector is never offered
+   * where changing it would move nothing (#771, Product Owner ruling of 2026-10-26).
+   */
+  showParrySourceSelector?: boolean;
 }
 
 interface PlayerCombatCommittedDefenseReviewProps {
@@ -310,7 +388,15 @@ interface PlayerCombatAttackModeSelectorProps {
   options: readonly { id: string; label: string }[];
   selectedAttackModeId?: string;
   readOnly?: boolean;
+  /**
+   * `"cell"` renders the bare control for the mini-table's source/name cell, keeping its
+   * accessible name on the element itself. `"row"` keeps the standalone labelled row.
+   */
+  variant?: PlayerCombatSelectorVariant;
 }
+
+/** Where a declaration selector renders: its own labelled row, or a mini-table cell (#771). */
+export type PlayerCombatSelectorVariant = "cell" | "row";
 
 interface PlayerCombatAttackSourceSelectorProps {
   controlsDisabled?: boolean;
@@ -319,6 +405,7 @@ interface PlayerCombatAttackSourceSelectorProps {
   options: readonly { id: string; label: string }[];
   readOnly?: boolean;
   selectedAttackSourceId?: string;
+  variant?: PlayerCombatSelectorVariant;
 }
 
 interface PlayerCombatAttackTargetSelectorProps {
@@ -538,6 +625,55 @@ const compactStatsTableStyle = {
   borderCollapse: "collapse",
   fontSize: "0.88rem",
   width: "100%",
+} as const;
+
+// The source/name cell of a phase mini-table, once the #771 recomposition moved the source and
+// mode selectors into it. The cell wraps rather than overflowing: an overflowing phase-card track
+// is painted outside the card, where the next card's opaque background covers it (#607).
+const compactStatsSourceCellStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.3rem",
+  minWidth: 0,
+} as const;
+
+// The source cell holds up to two controls instead of a short label, so it takes the wider share
+// of the mini-table row.
+const compactStatsSelectorRowStyle = {
+  ...compactStatsRowStyle,
+  gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
+} as const;
+
+const compactInCellSelectStyle = {
+  flex: "1 1 6rem",
+  maxWidth: "100%",
+  minWidth: 0,
+} as const;
+
+/*
+ * A phase panel's major groups. #771 phase-panel composition refinement, Product Owner:
+ * "keep Attack and Defense groups top-aligned and internally packed; do not distribute controls
+ * vertically merely because a sibling panel is taller."
+ *
+ * `alignContent: "start"` is the mechanism. The three phase columns sit in one `display: grid`
+ * row, so the tallest column (the Action selector) sets the row height; a stretched grid
+ * container whose `align-content` resolves to `stretch` grows its auto-sized rows to fill that
+ * height, which is what spread the controls down the column. Packing to the start leaves the
+ * slack at the bottom instead.
+ */
+export const playerCombatPhaseGroupStyle = {
+  alignContent: "start",
+  display: "grid",
+  gap: "0.35rem",
+  minWidth: 0,
+} as const;
+
+// The single hairline between the Attack and the Defense / Parry group.
+const phaseGroupSeparatedStyle = {
+  ...playerCombatPhaseGroupStyle,
+  borderTop: "1px solid #e3e1dc",
+  paddingTop: "0.45rem",
 } as const;
 
 // The label/select/context grid must stay inside its own phase card. Every track is
@@ -2553,11 +2689,24 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
  * guard failed when this comment first spelled it out. Keeping the literal out of this file
  * leaves the guard's meaning intact.
  */
-export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
+export function PlayerCombatAttackStatsTable({
+  modeSelector,
+  sourceSelector,
+  stats,
+}: PlayerCombatAttackStatsTableProps) {
+  const hasCellSelector = Boolean(sourceSelector || modeSelector);
+
   return (
-    <div style={compactStatsRowStyle}>
-      <div style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
-        <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>
+    <div style={hasCellSelector ? compactStatsSelectorRowStyle : compactStatsRowStyle}>
+      <div
+        style={
+          hasCellSelector
+            ? compactStatsSourceCellStyle
+            : { alignItems: "center", display: "flex", gap: "0.45rem" }
+        }
+      >
+        {sourceSelector ?? <strong style={{ fontSize: "0.95rem" }}>{stats.weaponName}</strong>}
+        {modeSelector}
         {stats.provisional ? (
           <span style={{ color: "#5e5a50", fontSize: "0.75rem", fontWeight: 700 }}>
             Provisional
@@ -2603,11 +2752,20 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
   );
 }
 
-export function PlayerCombatDefenseStatsTable({ stats }: PlayerCombatDefenseStatsTableProps) {
+export function PlayerCombatDefenseStatsTable({
+  sourceSelector,
+  stats,
+}: PlayerCombatDefenseStatsTableProps) {
   return (
-    <div style={compactStatsRowStyle}>
-      <div style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
-        <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>
+    <div style={sourceSelector ? compactStatsSelectorRowStyle : compactStatsRowStyle}>
+      <div
+        style={
+          sourceSelector
+            ? compactStatsSourceCellStyle
+            : { alignItems: "center", display: "flex", gap: "0.45rem" }
+        }
+      >
+        {sourceSelector ?? <strong style={{ fontSize: "0.9rem" }}>{stats.sourceName}</strong>}
         {stats.provisional ? (
           <span style={{ color: "#5e5a50", fontSize: "0.75rem", fontWeight: 700 }}>
             Provisional
@@ -2869,9 +3027,13 @@ export function PlayerCombatAttackLocationSelector({
 }
 
 /**
- * The explicit weapon/unarmed choice a player's attack declaration will use (#575). Same label and
- * select treatment as the Attack mode control immediately below it, so the declaration editor
- * gains a control rather than a new idiom.
+ * The explicit weapon/unarmed choice a player's attack declaration will use (#575).
+ *
+ * `variant="cell"` renders it inside the Attack mini-table's source/name cell, which is where the
+ * #771 phase-panel recomposition puts it: that cell already named the source — the Product Owner
+ * observed that `Dunk` there is the weapon name, not the character's — so the control belongs
+ * there rather than being duplicated as a standalone dropdown below. The accessible name moves
+ * onto the element itself, so `Attack source` still identifies the control.
  */
 export function PlayerCombatAttackSourceSelector({
   controlsDisabled = false,
@@ -2880,7 +3042,10 @@ export function PlayerCombatAttackSourceSelector({
   options,
   readOnly = false,
   selectedAttackSourceId,
+  variant = "row",
 }: PlayerCombatAttackSourceSelectorProps) {
+  const inCell = variant === "cell";
+
   if (options.length === 0) {
     return emptyState ? (
       <div
@@ -2899,12 +3064,33 @@ export function PlayerCombatAttackSourceSelector({
   }
 
   if (readOnly) {
-    return (
-      <HistoricalField
-        label="Attack source"
-        value={options.find((option) => option.id === selectedAttackSourceId)?.label}
-      />
+    const selectedLabel = options.find((option) => option.id === selectedAttackSourceId)?.label;
+    return inCell ? (
+      <strong style={{ fontSize: "0.95rem" }}>{selectedLabel ?? "No attack source"}</strong>
+    ) : (
+      <HistoricalField label="Attack source" value={selectedLabel} />
     );
+  }
+
+  const select = (
+    <select
+      aria-label="Attack source"
+      disabled={controlsDisabled}
+      onChange={(event) => onChange(event.target.value)}
+      style={inCell ? compactInCellSelectStyle : compactPhaseContextSelectStyle}
+      value={selectedAttackSourceId ?? ""}
+    >
+      {!selectedAttackSourceId ? <option value="">Select attack source</option> : null}
+      {options.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+
+  if (inCell) {
+    return select;
   }
 
   return (
@@ -2917,23 +3103,18 @@ export function PlayerCombatAttackSourceSelector({
       }}
     >
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack source</span>
-      <select
-        disabled={controlsDisabled}
-        onChange={(event) => onChange(event.target.value)}
-        style={compactPhaseContextSelectStyle}
-        value={selectedAttackSourceId ?? ""}
-      >
-        {!selectedAttackSourceId ? <option value="">Select attack source</option> : null}
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {select}
     </label>
   );
 }
 
+/**
+ * `variant="cell"` renders this beside the source in the Attack mini-table's source/name cell,
+ * "where the source has multiple modes" (#771). With a single mode there is nothing to choose, so
+ * the cell names the mode instead of offering an inert control — the Product Owner's standing
+ * direction is to surface choices where there are choices, and to hide a selector that does
+ * nothing.
+ */
 export function PlayerCombatAttackModeSelector({
   controlsDisabled = false,
   emptyState,
@@ -2941,7 +3122,10 @@ export function PlayerCombatAttackModeSelector({
   options,
   selectedAttackModeId,
   readOnly = false,
+  variant = "row",
 }: PlayerCombatAttackModeSelectorProps) {
+  const inCell = variant === "cell";
+
   if (options.length === 0) {
     return emptyState ? (
       <div
@@ -2959,13 +3143,37 @@ export function PlayerCombatAttackModeSelector({
     ) : null;
   }
 
-  if (readOnly) {
-    return (
-      <HistoricalField
-        label="Attack mode"
-        value={options.find((option) => option.id === selectedAttackModeId)?.label}
-      />
+  const selectedLabel = options.find((option) => option.id === selectedAttackModeId)?.label;
+
+  if (readOnly || (inCell && options.length < 2)) {
+    return inCell ? (
+      <span style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+        {selectedLabel ?? options[0]?.label ?? "No mode"}
+      </span>
+    ) : (
+      <HistoricalField label="Attack mode" value={selectedLabel} />
     );
+  }
+
+  const select = (
+    <select
+      aria-label="Attack mode"
+      disabled={controlsDisabled}
+      onChange={(event) => onChange(event.target.value)}
+      style={inCell ? compactInCellSelectStyle : compactPhaseContextSelectStyle}
+      value={selectedAttackModeId ?? ""}
+    >
+      {!selectedAttackModeId ? <option value="">Select mode</option> : null}
+      {options.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+
+  if (inCell) {
+    return select;
   }
 
   return (
@@ -2978,20 +3186,53 @@ export function PlayerCombatAttackModeSelector({
       }}
     >
       <span style={{ fontSize: "0.86rem", fontWeight: 600 }}>Attack mode</span>
-      <select
-        disabled={controlsDisabled}
-        onChange={(event) => onChange(event.target.value)}
-        style={compactPhaseContextSelectStyle}
-        value={selectedAttackModeId ?? ""}
-      >
-        {!selectedAttackModeId ? <option value="">Select mode</option> : null}
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      {select}
     </label>
+  );
+}
+
+/**
+ * The parry source selector the #771 recomposition places in the Defense / Parry mini-table's
+ * source/name cell. Its options are the defensive modes of the derived combat state — see
+ * `PlayerCombatParrySourceOption` for why that axis and not `parrySource`.
+ *
+ * It renders nothing with fewer than two options: with one defensive mode there is no choice to
+ * surface, and an inert control contradicts "changing a source/mode must update the corresponding
+ * displayed combat values immediately". The separate question of *which declarations* may allocate
+ * a parry at all is gated by the caller (`showParrySourceSelector`).
+ */
+export function PlayerCombatParrySourceSelector({
+  controlsDisabled = false,
+  onChange,
+  options,
+  readOnly = false,
+  selectedParrySourceId,
+}: PlayerCombatParrySourceSelectorProps) {
+  if (options.length < 2) {
+    return null;
+  }
+
+  const selectedLabel = options.find((option) => option.id === selectedParrySourceId)?.label;
+
+  if (readOnly) {
+    return <strong style={{ fontSize: "0.9rem" }}>{selectedLabel ?? "No parry source"}</strong>;
+  }
+
+  return (
+    <select
+      aria-label="Parry source"
+      disabled={controlsDisabled}
+      onChange={(event) => onChange(event.target.value)}
+      style={compactInCellSelectStyle}
+      value={selectedParrySourceId ?? ""}
+    >
+      {!selectedLabel ? <option value="">Select parry source</option> : null}
+      {options.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -3059,6 +3300,14 @@ function ParryDirectionSelector({
   );
 }
 
+/**
+ * The parry hand/orientation controls.
+ *
+ * #771 phase-panel composition refinement removed two things from this block: the reader-facing
+ * `Parry context` heading, and the hairline that separated these controls from the DB/DM/P
+ * mini-table above them. Both belong to one Defense / Parry group — `PlayerCombatDefenseGroup`
+ * owns that group and draws the single hairline that separates it from the Attack group.
+ */
 export function PlayerCombatParryContextPanel({
   combatContext,
   controlsDisabled = false,
@@ -3068,65 +3317,129 @@ export function PlayerCombatParryContextPanel({
   return (
     <div
       style={{
-        borderTop: "1px solid #e3e1dc",
         display: "grid",
-        gap: "0.35rem",
-        paddingTop: "0.45rem",
+        gap: "0.3rem",
       }}
     >
-      <strong style={{ fontSize: "0.9rem" }}>Parry context</strong>
-      <div
-        style={{
-          display: "grid",
-          gap: "0.3rem",
-        }}
-      >
-        {readOnly ? (
-          <>
-            <HistoricalField
-              label="Main hand"
-              value={
-                combatContext.mainHandParryDirection
-                  ? getPlayerEncounterParryDirectionLabel(combatContext.mainHandParryDirection)
-                  : "No recorded information"
-              }
+      {readOnly ? (
+        <>
+          <HistoricalField
+            label="Main hand"
+            value={
+              combatContext.mainHandParryDirection
+                ? getPlayerEncounterParryDirectionLabel(combatContext.mainHandParryDirection)
+                : "No recorded information"
+            }
+          />
+          <HistoricalField
+            label="Off hand"
+            value={
+              combatContext.offHandParryDirection
+                ? getPlayerEncounterParryDirectionLabel(combatContext.offHandParryDirection)
+                : "No recorded information"
+            }
+          />
+        </>
+      ) : (
+        <>
+          <ParryDirectionSelector
+            controlsDisabled={controlsDisabled}
+            direction={combatContext.mainHandParryDirection}
+            itemLabel="Main hand"
+            onChange={(mainHandParryDirection) =>
+              onCombatContextChange({
+                ...combatContext,
+                mainHandParryDirection,
+              })
+            }
+          />
+          <ParryDirectionSelector
+            controlsDisabled={controlsDisabled}
+            direction={combatContext.offHandParryDirection}
+            itemLabel="Off hand"
+            onChange={(offHandParryDirection) =>
+              onCombatContextChange({
+                ...combatContext,
+                offHandParryDirection,
+              })
+            }
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The Defense / Parry major group of a phase panel: the DB/DM/P mini-table, with the parry source
+ * selector in its source/name cell, and the parry hand/orientation controls directly below it with
+ * no hairline between them. One hairline separates this group from the Attack group above
+ * (#771 phase-panel composition refinement).
+ *
+ * The selected defensive mode is presentation state: it chooses which already-derived row of the
+ * combat state the mini-table displays. It changes no persisted declaration field and no
+ * mechanics. With no explicit choice the displayed values are exactly what the unchanged
+ * derivation produces, so the underlying source-selection rules are untouched.
+ */
+export function PlayerCombatDefenseGroup({
+  children,
+  committedReview,
+  controlsDisabled = false,
+  defaultParrySourceId,
+  defenseStats,
+  parrySourceOptions,
+  readOnly = false,
+  separatedFromAttack = false,
+  showParrySourceSelector = false,
+}: PlayerCombatDefenseGroupProps) {
+  const [chosenParrySourceId, setChosenParrySourceId] = useState<string | undefined>(undefined);
+  const options = parrySourceOptions ?? [];
+  const selectedParrySourceId = chosenParrySourceId ?? defaultParrySourceId;
+  const chosenOption = chosenParrySourceId
+    ? options.find((option) => option.id === chosenParrySourceId)
+    : undefined;
+  const displayedStats =
+    defenseStats && chosenOption
+      ? {
+          ...defenseStats,
+          db: chosenOption.db,
+          dm: chosenOption.dm,
+          // The "incomplete" parry state records that no coverage direction has been chosen yet.
+          // Picking a different defensive mode does not complete it.
+          parry: defenseStats.parry === "incomplete" ? "incomplete" : chosenOption.parry,
+          sourceName: chosenOption.sourceName,
+        }
+      : defenseStats;
+  // Only hand the mini-table a selector that will actually render, so the source/name cell falls
+  // back to naming the source rather than rendering empty.
+  const parrySourceSelector =
+    showParrySourceSelector && options.length > 1 ? (
+      <PlayerCombatParrySourceSelector
+        controlsDisabled={controlsDisabled}
+        onChange={setChosenParrySourceId}
+        options={options}
+        readOnly={readOnly}
+        selectedParrySourceId={selectedParrySourceId}
+      />
+    ) : undefined;
+
+  return (
+    <div style={separatedFromAttack ? phaseGroupSeparatedStyle : playerCombatPhaseGroupStyle}>
+      {committedReview ?? (
+        <>
+          {displayedStats ? (
+            <PlayerCombatDefenseStatsTable
+              sourceSelector={parrySourceSelector}
+              stats={displayedStats}
             />
-            <HistoricalField
-              label="Off hand"
-              value={
-                combatContext.offHandParryDirection
-                  ? getPlayerEncounterParryDirectionLabel(combatContext.offHandParryDirection)
-                  : "No recorded information"
-              }
-            />
-          </>
-        ) : (
-          <>
-            <ParryDirectionSelector
-              controlsDisabled={controlsDisabled}
-              direction={combatContext.mainHandParryDirection}
-              itemLabel="Main hand"
-              onChange={(mainHandParryDirection) =>
-                onCombatContextChange({
-                  ...combatContext,
-                  mainHandParryDirection,
-                })
-              }
-            />
-            <ParryDirectionSelector
-              controlsDisabled={controlsDisabled}
-              direction={combatContext.offHandParryDirection}
-              itemLabel="Off hand"
-              onChange={(offHandParryDirection) =>
-                onCombatContextChange({
-                  ...combatContext,
-                  offHandParryDirection,
-                })
-              }
-            />
-          </>
-        )}
-      </div>
+          ) : (
+            <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
+              Defense information unavailable.
+            </div>
+          )}
+          {children}
+        </>
+      )}
     </div>
   );
 }
@@ -3140,6 +3453,9 @@ export function PlayerCombatPhasePanel({
     <section
       style={{
         ...playerCombatPanelCardStyle,
+        // #771: pack the panel's content at the top so the slack a taller sibling column creates
+        // falls at the bottom of the card. See `playerCombatPhaseGroupStyle` for the mechanism.
+        alignContent: "start",
         minHeight: 178,
       }}
     >
