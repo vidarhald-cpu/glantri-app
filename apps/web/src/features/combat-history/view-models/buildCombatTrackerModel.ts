@@ -1,5 +1,6 @@
 import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
+  COMBAT_ROUND_STEPS,
   type CombatRoundStep,
   type CombatRoundStepStatus,
 } from "@glantri/domain";
@@ -19,6 +20,23 @@ import {
   getCombatTrackerPendingMarkerKind,
 } from "./combatTrackerTaskPresentation";
 import { getCombatTrackerStatusCompletionKind } from "./combatTrackerCompletionEvidence";
+
+/*
+ * #771 R2-2. The tracker columns used to be the whole round-step enum, which is the only reason a
+ * `PD` column existed: no issue or ruling ever asked for one, and #465 — the issue that introduced
+ * the `pre_declaration` step — does not contain the word "tracker". The Product Owner has ruled it
+ * out of the visible tracker, on the ground that the `?` marker already appears in the Declaration
+ * column while Combat Experience rolls are outstanding, which is the thing the column would have
+ * shown.
+ *
+ * This is the visible column set and nothing else. `pre_declaration` is untouched in
+ * `combatRoundStep.ts`, in the cursor vocabulary, in `COMBAT_ROUND_STEPS` itself, in the cell map
+ * both tracker builders still populate, and in every Combat Experience mechanic. Both the GM and
+ * the player tracker read this one list, because the Product Owner has also ruled that the two
+ * trackers must have the same structure.
+ */
+export const VISIBLE_COMBAT_ROUND_TRACKER_STEPS: readonly CombatRoundStep[] =
+  COMBAT_ROUND_STEPS.filter((step) => step !== "pre_declaration");
 
 export const COMBAT_TRACKER_MARKER_MEANINGS: readonly CombatTrackerLegendItem[] = [
   {
