@@ -18,6 +18,7 @@ import {
 
 import { kickTemplate, punchTemplate } from "@glantri/content/equipment";
 
+import type { CombatStateTableModel } from "@/features/equipment/combatStatePanel";
 import type { DerivedCombatAttackMode } from "@/features/equipment/combatStateDerivation";
 import type { EquipmentLoadoutModuleModel } from "@/features/equipment/loadoutModule";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
@@ -26,6 +27,7 @@ import type { PlayerEncounterActionId } from "@/lib/campaigns/playerEncounter";
 import type {
   PlayerCombatAttackStatsView,
   PlayerCombatDefenseStatsView,
+  PlayerCombatParrySourceOption,
   PlayerCombatPhaseCardView,
 } from "./PlayerCombatPanels";
 
@@ -211,8 +213,20 @@ export interface PlayerCombatLoadoutSummary {
   attackModeOptions: PlayerCombatAttackModeOption[];
   attackSourceOptions: PlayerCombatAttackSourceOption[];
   attackStats: PlayerCombatAttackStatsView | null;
+  /**
+   * The parry source option the unchanged defence derivation already displays, so the selector in
+   * the Defense / Parry mini-table opens on what is on screen rather than on a blank choice
+   * (#771). Absent when no defensive row could be derived.
+   */
+  defaultParrySourceId?: string;
   mainHandParryItemLabel: string;
   offHandParryItemLabel: string;
+  /**
+   * The defensive modes of the derived combat state that carry a Parry value — what the parry
+   * source selector offers. Absent when no combat state panel model or reference row exists, in
+   * which case there is no defensive row to choose between either.
+   */
+  parrySourceOptions?: PlayerCombatParrySourceOption[];
   passiveInitiative: number;
   reference: PlayerCombatLoadoutReference | null;
   /**
@@ -407,6 +421,68 @@ function buildPlayerCombatAttackSourceOptions(input: {
 
 function hasDisplayValue(value: string): boolean {
   return value.length > 0 && value !== "—";
+}
+
+/**
+ * The defensive modes of the derived combat state, for the parry source selector the #771
+ * phase-panel recomposition places in the Defense / Parry mini-table's source/name cell.
+ *
+ * "The selector must expose all currently valid attack/parry sources without changing the
+ * underlying source-selection rules." The rule reused here is the derivation itself: a row of
+ * `weaponModeTable` is a defensive mode exactly when it carries a Parry value. For a character
+ * holding a weapon and a shield that is Primary, Shield, Combined and Brawling — the Product
+ * Owner's "a weapon or shield in any hand, or both" plus the unarmed row the derivation already
+ * emits. Punch and Kick carry no Parry and are therefore not offered. Nothing is added to or
+ * removed from the derived set here.
+ */
+function buildPlayerCombatParrySourceOptions(
+  table: CombatStateTableModel,
+): PlayerCombatParrySourceOption[] {
+  const options: PlayerCombatParrySourceOption[] = [];
+
+  for (const row of table.rows) {
+    const cell = (label: string) => getCombatTableCell({ columns: table.columns, label, row });
+    const parry = cell("Parry");
+    if (!hasDisplayValue(parry)) continue;
+
+    const mode = cell("Mode");
+    const sourceName = cell("Weapon");
+    const id = `${mode}|${sourceName}`;
+    if (options.some((option) => option.id === id)) continue;
+
+    options.push({
+      db: cell("DB"),
+      dm: cell("DM"),
+      id,
+      label: hasDisplayValue(mode) ? `${sourceName} · ${mode}` : sourceName,
+      parry,
+      sourceName,
+    });
+  }
+
+  return options;
+}
+
+/**
+ * The option the unchanged defence derivation already displays.
+ *
+ * It mirrors `buildPlayerCombatDefenseStats` exactly: the Combined row when one carries a Parry
+ * value, otherwise the attack reference row. Naming that row does not change which row is used.
+ */
+function resolveDefaultPlayerCombatParrySourceId(input: {
+  combinedParry: string;
+  options: readonly PlayerCombatParrySourceOption[];
+  referenceWeaponLabel: string;
+}): string | undefined {
+  if (hasDisplayValue(input.combinedParry)) {
+    const combined = input.options.find((option) => option.id.startsWith("Combined|"));
+    if (combined) return combined.id;
+  }
+
+  return (
+    input.options.find((option) => option.sourceName === input.referenceWeaponLabel)?.id ??
+    input.options[0]?.id
+  );
 }
 
 function parsePassiveInitiative(value: string | undefined): number {
@@ -1164,6 +1240,7 @@ export function buildPlayerCombatLoadoutSummary(input: {
     },
   });
   const selectedDerivedMode = modeResolution.mode;
+  const parrySourceOptions = buildPlayerCombatParrySourceOptions(combatPanelModel.weaponModeTable);
   const selectedIsThrownMode = selectedDerivedMode?.attackType === "thrown";
   const sourceMetadata = selectedDerivedMode?.sourceMetadata;
   const reference = {
@@ -1319,8 +1396,14 @@ export function buildPlayerCombatLoadoutSummary(input: {
       actionId: input.actionId,
       phaseKey: input.phaseKey,
     }),
+    defaultParrySourceId: resolveDefaultPlayerCombatParrySourceId({
+      combinedParry: reference.combinedParry,
+      options: parrySourceOptions,
+      referenceWeaponLabel: referenceWeaponLabel,
+    }),
     mainHandParryItemLabel,
     offHandParryItemLabel,
+    parrySourceOptions,
     passiveInitiative: parsePassiveInitiative(reference.initiative),
     reference,
     referenceUsedUnarmedExecutionFallback,

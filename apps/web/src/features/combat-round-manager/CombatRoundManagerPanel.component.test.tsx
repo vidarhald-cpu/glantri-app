@@ -2444,22 +2444,46 @@ describe("CombatRoundManagerPanel declaration form", () => {
       .find((section): section is HTMLElement =>
         Boolean(section?.textContent?.includes("Feint method")),
       );
+    // Phase 2 is identified by a mini-table heading rather than by the words "Attack mode":
+    // #771 moved the mode control into the mini-table's source/name cell, where "Attack mode" is
+    // the control's accessible name and no longer rendered text.
     const phase2 = screen
       .getAllByText("Phase 2")
       .map((node) => node.closest("section"))
-      .find((section): section is HTMLElement =>
-        Boolean(section?.textContent?.includes("Attack mode")),
-      );
+      .find((section): section is HTMLElement => Boolean(section?.textContent?.includes("DMB")));
     expect(phase1).toBeDefined();
     expect(phase2).toBeDefined();
 
     expect(within(phase1!).queryByText("OB")).not.toBeInTheDocument();
     expect(within(phase1!).queryByText("DMB")).not.toBeInTheDocument();
     expect(within(phase1!).queryByText("DB")).not.toBeInTheDocument();
-    expect(within(phase1!).queryByText("Attack mode")).not.toBeInTheDocument();
-    expect(within(phase1!).queryByText("Parry context")).not.toBeInTheDocument();
+    expect(
+      within(phase1!).queryByRole("combobox", { name: "Attack mode" }),
+    ).not.toBeInTheDocument();
     expect(within(phase2!).getByText("OB")).toBeInTheDocument();
-    expect(within(phase2!).getByText("Attack mode")).toBeInTheDocument();
+
+    /*
+     * #771 phase-panel composition, asserted positively rather than by the absence of the removed
+     * `Parry context` heading — an absence assertion alone would pass simply because the heading
+     * is gone everywhere.
+     *
+     * Phase 2 of a Feint carries both major groups: the Attack mini-table, whose source/name cell
+     * holds the source and mode controls, and the Defense / Parry group, whose DB/DM/P mini-table
+     * is followed directly by the hand/orientation controls with no heading between them. The
+     * parry source selector is absent because `feint_attack` is not a declaration whose parry
+     * allocation reaches the DB/Parry stack.
+     */
+    expect(within(phase2!).getByRole("combobox", { name: "Attack source" })).toBeInTheDocument();
+    expect(within(phase2!).getByRole("combobox", { name: "Attack mode" })).toBeInTheDocument();
+    expect(within(phase2!).getByText("DB")).toBeInTheDocument();
+    expect(within(phase2!).getByText("Main hand")).toBeInTheDocument();
+    expect(within(phase2!).getByText("Off hand")).toBeInTheDocument();
+    expect(within(phase2!).queryByText("Parry context")).not.toBeInTheDocument();
+    expect(
+      within(phase2!).queryByRole("combobox", { name: "Parry source" }),
+    ).not.toBeInTheDocument();
+    // Phase 1 of a Feint is a Skill Contest: no defensive exchange, so no Defense / Parry group.
+    expect(within(phase1!).queryByText("Main hand")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox", { name: "Feint method" }), {
       target: { value: "weapon" },
@@ -2467,7 +2491,6 @@ describe("CombatRoundManagerPanel declaration form", () => {
 
     expect(within(phase1!).queryByText("OB")).not.toBeInTheDocument();
     expect(within(phase1!).queryByText("DMB")).not.toBeInTheDocument();
-    expect(within(phase1!).queryByText("Attack mode")).not.toBeInTheDocument();
     expect(screen.getAllByRole("combobox", { name: "Attack mode" })).toHaveLength(1);
   });
 });

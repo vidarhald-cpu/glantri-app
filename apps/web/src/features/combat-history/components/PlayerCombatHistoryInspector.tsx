@@ -12,7 +12,7 @@ import {
   PlayerCombatAttackModeSelector,
   PlayerCombatAttackStatsTable,
   PlayerCombatAttackTargetSelector,
-  PlayerCombatDefenseStatsTable,
+  PlayerCombatDefenseGroup,
   PlayerCombatCommittedDefenseReview,
   PlayerCombatHistoricalActionSelectorPanel,
   PlayerCombatHistoricalContextPanel,
@@ -21,6 +21,7 @@ import {
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
   playerCombatPanelRowStyle,
+  playerCombatPhaseGroupStyle,
   playerCombatTopPanelRowStyle,
   type PlayerCombatDistancePreferenceOption,
 } from "@/features/player-combat/PlayerCombatPanels";
@@ -70,42 +71,49 @@ function HistoricalPhasePanel(input: {
       phaseCard={{ description: "", phaseLabel: input.phaseLabel, stats: [], title: "" }}
       sourceLabel="History"
     >
-      {input.panel.attackSummary ? (
-        <>
-          <PlayerCombatAttackStatsTable stats={input.panel.attackSummary} />
-          <PlayerCombatAttackTargetSelector
-            combatContext={context}
-            controlsDisabled
-            distanceLabel={input.panel.distanceLabel}
-            onCombatContextChange={noop}
-            readOnly
-            targetOptions={targets}
-          />
-          <PlayerCombatAttackLocationSelector
-            combatContext={context}
-            controlsDisabled
-            onCombatContextChange={noop}
-            readOnly
-          />
-          <PlayerCombatAttackModeSelector
-            controlsDisabled
-            onChange={noop}
-            options={
-              context.attackModeId
-                ? [
-                    {
-                      id: context.attackModeId,
-                      label: input.panel.attackModeLabel ?? context.attackModeId,
-                    },
-                  ]
-                : []
-            }
-            selectedAttackModeId={context.attackModeId}
-            readOnly
-          />
-        </>
-      ) : null}
-      <>
+      {/* Attack group — the recorded source and mode name themselves in the mini-table's
+          source/name cell, as they do on the live surfaces (#771). */}
+      <div style={playerCombatPhaseGroupStyle}>
+        {input.panel.attackSummary ? (
+          <>
+            <PlayerCombatAttackStatsTable
+              modeSelector={
+                <PlayerCombatAttackModeSelector
+                  controlsDisabled
+                  onChange={noop}
+                  options={
+                    context.attackModeId
+                      ? [
+                          {
+                            id: context.attackModeId,
+                            label: input.panel.attackModeLabel ?? context.attackModeId,
+                          },
+                        ]
+                      : []
+                  }
+                  selectedAttackModeId={context.attackModeId}
+                  readOnly
+                  variant="cell"
+                />
+              }
+              stats={input.panel.attackSummary}
+            />
+            <PlayerCombatAttackTargetSelector
+              combatContext={context}
+              controlsDisabled
+              distanceLabel={input.panel.distanceLabel}
+              onCombatContextChange={noop}
+              readOnly
+              targetOptions={targets}
+            />
+            <PlayerCombatAttackLocationSelector
+              combatContext={context}
+              controlsDisabled
+              onCombatContextChange={noop}
+              readOnly
+            />
+          </>
+        ) : null}
         {input.phaseLabel === "Phase 1" &&
         input.actionId === "parry" &&
         input.secondaryActionId === "observe_opponent" ? (
@@ -114,33 +122,32 @@ function HistoricalPhasePanel(input: {
             targetLabels={input.observationTargetLabels}
           />
         ) : null}
-        {input.defenseReviews.length > 0 ? (
-          input.defenseReviews.map((review) => (
-            <PlayerCombatCommittedDefenseReview
-              key={`${review.roundNumber}:${review.eventSequence}`}
-              review={review}
-            />
-          ))
-        ) : (
-          <>
-            {input.panel.defenseSummary ? (
-              <PlayerCombatDefenseStatsTable stats={input.panel.defenseSummary} />
-            ) : (
-              <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                Defense information unavailable.
-              </div>
-            )}
-            <PlayerCombatParryContextPanel
-              combatContext={context}
-              controlsDisabled
-              mainHandItemLabel={input.panel.mainHandParryItemLabel}
-              offHandItemLabel={input.panel.offHandParryItemLabel}
-              onCombatContextChange={noop}
-              readOnly
-            />
-          </>
-        )}
-      </>
+      </div>
+      <PlayerCombatDefenseGroup
+        committedReview={
+          input.defenseReviews.length > 0
+            ? input.defenseReviews.map((review) => (
+                <PlayerCombatCommittedDefenseReview
+                  key={`${review.roundNumber}:${review.eventSequence}`}
+                  review={review}
+                />
+              ))
+            : undefined
+        }
+        controlsDisabled
+        defenseStats={input.panel.defenseSummary ?? null}
+        readOnly
+        separatedFromAttack={Boolean(input.panel.attackSummary)}
+      >
+        <PlayerCombatParryContextPanel
+          combatContext={context}
+          controlsDisabled
+          mainHandItemLabel={input.panel.mainHandParryItemLabel}
+          offHandItemLabel={input.panel.offHandParryItemLabel}
+          onCombatContextChange={noop}
+          readOnly
+        />
+      </PlayerCombatDefenseGroup>
     </PlayerCombatPhasePanel>
   );
 }

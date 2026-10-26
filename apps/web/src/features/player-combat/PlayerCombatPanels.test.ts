@@ -11,6 +11,8 @@ import {
   formatCombatModifierDisplayLine,
   formatCombatModifierScopeLabel,
   isMeaningfulCombatModifierEntry,
+  playerCombatParrySourceSetSignature,
+  resolvePlayerCombatParrySourceSelection,
   sanitizeCombatModifierEntries,
 } from "./PlayerCombatPanels";
 
@@ -801,7 +803,26 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain("<span>Additional</span>");
     expect(source).toContain("roundNumber");
     expect(source).toContain("PlayerCombatParryContextPanel");
-    expect(source).toContain("Parry context");
+    /*
+     * #771 phase-panel composition refinement removed the reader-facing `Parry context` heading
+     * and the hairline that separated the parry controls from the DB/DM/P mini-table above them.
+     *
+     * Asserted on the rendered markup, not on the words: the phrase still occurs in this file's
+     * own comments explaining the removal, so a `toContain("Parry context")` assertion would pass
+     * whether or not the heading exists.
+     */
+    expect(source).not.toContain(">Parry context<");
+    // The one hairline the recomposition keeps belongs to the Defense / Parry group, which draws
+    // it only when an Attack group renders above it. The parry controls sit inside that group,
+    // with no hairline of their own.
+    expect(source).toContain("separatedFromAttack ? phaseGroupSeparatedStyle");
+    expect(source).toContain("PlayerCombatDefenseGroup");
+    expect(source).toContain("PlayerCombatParrySourceSelector");
+    expect(source).toContain('aria-label="Parry source"');
+    expect(source).toContain('aria-label="Attack source"');
+    expect(source).toContain('aria-label="Attack mode"');
+    // Top-aligned and internally packed, so a taller sibling column leaves slack at the bottom.
+    expect(source).toContain('alignContent: "start"');
     expect(source).toContain("PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS");
     expect(source).toContain('itemLabel="Main hand"');
     expect(source).toContain('itemLabel="Off hand"');
@@ -880,5 +901,86 @@ describe("PlayerCombatPanels", () => {
     expect(source).toContain("Dur");
     expect(source).toContain("Details");
     expect(source).not.toContain("General/Fatigue {generalTotal}");
+  });
+});
+
+/**
+ * Forgejo #782, QA finding F1. The derived rows the Defense/Parry mini-table can be asked to
+ * display, as the live panel builds them.
+ */
+const parrySourceOptions = [
+  {
+    db: "12",
+    dm: "\u22121",
+    id: "Primary|Dunk",
+    label: "Dunk \u00b7 Primary",
+    parry: "9",
+    sourceName: "Dunk",
+  },
+  {
+    db: "17",
+    dm: "\u22121",
+    id: "Shield|Medium metal shield",
+    label: "Medium metal shield \u00b7 Shield",
+    parry: "14",
+    sourceName: "Medium metal shield",
+  },
+  {
+    db: "18",
+    dm: "\u22121",
+    id: "Combined|Sword / shield",
+    label: "Sword / shield \u00b7 Combined",
+    parry: "15",
+    sourceName: "Sword / shield",
+  },
+  {
+    db: "11",
+    dm: "\u22121",
+    id: "Brawling|Brawling",
+    label: "Brawling \u00b7 Brawling",
+    parry: "9",
+    sourceName: "Brawling",
+  },
+];
+
+describe("parry source presentation selection resolution (#782 F1)", () => {
+  const signature = playerCombatParrySourceSetSignature(
+    parrySourceOptions,
+    "Combined|Sword / shield",
+  );
+
+  it("changes identity when the offered rows change, even with identical ids", () => {
+    const sameIdsDifferentRows = parrySourceOptions.map((option) => ({
+      ...option,
+      db: `${Number(option.db) - 2}`,
+    }));
+    expect(playerCombatParrySourceSetSignature(parrySourceOptions, "Combined|Sword / shield")).toBe(
+      signature,
+    );
+    expect(
+      playerCombatParrySourceSetSignature(sameIdsDifferentRows, "Combined|Sword / shield"),
+    ).not.toBe(signature);
+    expect(playerCombatParrySourceSetSignature(parrySourceOptions, "Primary|Dunk")).not.toBe(
+      signature,
+    );
+  });
+
+  it("honours a choice only under an open gate and the signature it was made against", () => {
+    const selection = { id: "Brawling|Brawling", signature };
+    expect(
+      resolvePlayerCombatParrySourceSelection(selection, { selectorOffered: true, signature }),
+    ).toBe("Brawling|Brawling");
+    expect(
+      resolvePlayerCombatParrySourceSelection(selection, { selectorOffered: false, signature }),
+    ).toBeUndefined();
+    expect(
+      resolvePlayerCombatParrySourceSelection(selection, {
+        selectorOffered: true,
+        signature: `${signature} `,
+      }),
+    ).toBeUndefined();
+    expect(
+      resolvePlayerCombatParrySourceSelection(undefined, { selectorOffered: true, signature }),
+    ).toBeUndefined();
   });
 });

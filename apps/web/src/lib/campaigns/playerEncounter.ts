@@ -322,6 +322,25 @@ export function getPlayerEncounterCombatModifierTotals(
   };
 }
 
+/**
+ * Whether a declaration's parry allocation reaches the DB/Parry calculation at all.
+ *
+ * This is the single declaration-scope rule behind the first guard of
+ * `evaluatePlayerEncounterParryLegality`, named so UI can gate on it instead of carrying its own
+ * copy of the list. Forgejo #771, Product Owner ruling of 2026-10-26: the parry source selector
+ * must be hidden where it would change nothing, and "the lane must gate on the existing predicate,
+ * not on a hard-coded list of declaration ids. If the allocation is later extended, a
+ * predicate-gated selector appears automatically; a hard-coded list silently stays wrong."
+ *
+ * #777 is the authorized case that will widen it. Widening it here is all that should be needed
+ * for the selector to appear on the declarations it adds.
+ */
+export function isPlayerEncounterParryAllocationDeclaration(
+  actionId: PlayerEncounterActionId | "",
+): boolean {
+  return actionId === "attack_parry";
+}
+
 export function evaluatePlayerEncounterParryLegality(input: {
   actionId: PlayerEncounterActionId | "";
   attackSource?: Exclude<ScenarioParticipantParrySource, "auto">;
@@ -331,7 +350,7 @@ export function evaluatePlayerEncounterParryLegality(input: {
   incomingAttackSide?: ScenarioParticipantIncomingAttackSide;
   parrySource?: ScenarioParticipantParrySource;
 }): PlayerEncounterParryLegalityResult {
-  if (input.actionId !== "attack_parry") {
+  if (!isPlayerEncounterParryAllocationDeclaration(input.actionId)) {
     return {
       reason: "Parry context applies to Single attack in this first pass.",
       status: "incomplete",

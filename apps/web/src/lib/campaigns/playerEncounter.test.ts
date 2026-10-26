@@ -21,6 +21,7 @@ import {
   isPlayerEncounterAttackAction,
   isPlayerEncounterActionId,
   isPlayerEncounterDefenseAction,
+  isPlayerEncounterParryAllocationDeclaration,
   mergeCombatContextWithCurrentModifierBuckets,
 } from "./playerEncounter";
 
@@ -324,6 +325,42 @@ describe("playerEncounter", () => {
       situationInitiative: [{ id: "initiative-1", scope: "until", value: 3 }],
       situationObSkill: [{ id: "ob-1", scope: "until", value: -1 }],
     });
+  });
+
+  /*
+   * #771: the UI gate for the parry source selector. The Product Owner ruled that the selector
+   * must be hidden where it changes nothing, "gated on the existing predicate, not on a
+   * hard-coded list of declaration ids", so this asserts the predicate and the legality
+   * evaluation cannot drift apart — widening one has to widen the other.
+   */
+  it("agrees with parry legality about which declarations allocate a parry", () => {
+    const declarationIds = [
+      ...PLAYER_ENCOUNTER_ACTION_OPTIONS.map((option) => option.value),
+      ...PLAYER_ENCOUNTER_SECONDARY_ACTION_OPTIONS.map((option) => option.value),
+      "" as const,
+    ];
+
+    for (const actionId of declarationIds) {
+      const allocates = isPlayerEncounterParryAllocationDeclaration(actionId);
+      const legality = evaluatePlayerEncounterParryLegality({
+        actionId,
+        hasOffHandWeapon: true,
+        hasSelectedOpponent: true,
+        hasShield: true,
+        parrySource: "mainHand",
+      });
+
+      // Outside the allocating declarations the evaluation refuses on declaration scope alone,
+      // with every other input supplied.
+      expect(allocates, `${actionId || "<none>"}`).toBe(
+        legality.reason !== "Parry context applies to Single attack in this first pass.",
+      );
+    }
+
+    // The current boundary, recorded so a widening is a deliberate edit rather than a surprise.
+    expect(declarationIds.filter(isPlayerEncounterParryAllocationDeclaration)).toEqual([
+      "attack_parry",
+    ]);
   });
 
   it("treats off-hand or shield parry as legal for attack-parry when they cover the incoming side", () => {
