@@ -528,6 +528,29 @@ const compactFieldLabelStyle = {
   gap: "0.2rem",
 } as const;
 
+/*
+ * #771 R2-3. The four inspection-navigation controls were text buttons beside the inspector
+ * heading, where they wrapped onto their own line and stopped reading as tracker controls. The
+ * Product Owner ruled them onto the tracker header's top line, left of `Current task`, as small
+ * arrow symbols. Compact glyphs are the ruled mitigation for the wrap, so the hit target and the
+ * focus ring are stated here rather than left to the glyph: a 1.9rem box is still a usable target,
+ * and no `outline` is set anywhere on these buttons, so the browser focus ring is intact.
+ *
+ * The glyphs match the tracker's existing arrow-key ownership exactly — up/down walk participants
+ * (rows), left/right walk steps (columns) — so the buttons and `handleTimelineKeyDown` describe one
+ * affordance. The accessible names are unchanged from the text buttons and are load-bearing: two
+ * running e2e specs and one component test drive them through `getByRole("button", { name })`.
+ */
+const trackerInspectionNavButtonStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  justifyContent: "center",
+  lineHeight: 1,
+  minHeight: "1.9rem",
+  minWidth: "1.9rem",
+  padding: "0.1rem 0.3rem",
+} as const;
+
 interface CombatInspectorDeclarationDraft {
   actionId: PlayerEncounterActionId | "";
   additionalActionNotes: string;
@@ -12822,9 +12845,49 @@ export default function CombatRoundManagerPanel({
             justifyContent: "space-between",
           }}
         >
-          <div>
+          <div style={{ marginRight: "auto" }}>
             <h2 style={{ margin: 0 }}>Combat Round Manager</h2>
           </div>
+          {inspector.participant ? (
+            <section aria-label="Tracker inspection navigation" style={inspectorNavStyle}>
+              <button
+                aria-label="Previous participant"
+                onClick={() => moveSelection({ participantOffset: -1 })}
+                style={trackerInspectionNavButtonStyle}
+                title="Previous participant"
+                type="button"
+              >
+                <span aria-hidden="true">↑</span>
+              </button>
+              <button
+                aria-label="Next participant"
+                onClick={() => moveSelection({ participantOffset: 1 })}
+                style={trackerInspectionNavButtonStyle}
+                title="Next participant"
+                type="button"
+              >
+                <span aria-hidden="true">↓</span>
+              </button>
+              <button
+                aria-label="Previous step"
+                onClick={() => moveSelection({ stepOffset: -1 })}
+                style={trackerInspectionNavButtonStyle}
+                title="Previous step"
+                type="button"
+              >
+                <span aria-hidden="true">←</span>
+              </button>
+              <button
+                aria-label="Next step"
+                onClick={() => moveSelection({ stepOffset: 1 })}
+                style={trackerInspectionNavButtonStyle}
+                title="Next step"
+                type="button"
+              >
+                <span aria-hidden="true">→</span>
+              </button>
+            </section>
+          ) : null}
           <section
             aria-label="Step controller"
             style={{
@@ -12979,33 +13042,20 @@ export default function CombatRoundManagerPanel({
                     {inspectorSnapshot ? " · Committed" : ""}
                   </div>
                 </div>
-                <div style={inspectorNavStyle}>
-                  <button onClick={() => moveSelection({ participantOffset: -1 })} type="button">
-                    Previous participant
-                  </button>
-                  <button onClick={() => moveSelection({ participantOffset: 1 })} type="button">
-                    Next participant
-                  </button>
-                  <button onClick={() => moveSelection({ stepOffset: -1 })} type="button">
-                    Previous step
-                  </button>
-                  <button onClick={() => moveSelection({ stepOffset: 1 })} type="button">
-                    Next step
-                  </button>
-                </div>
               </div>
 
               {selectedScenarioParticipant ? (
                 <>
                   <div style={playerCombatTopPanelRowStyle}>
-                    {inspectorIsHistorical && !inspectorHistoricalSelectorFactsComplete ? (
-                      <section style={playerCombatPanelCardStyle}>
-                        <strong>Action selector · History</strong>
-                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                          No information available for this panel.
-                        </div>
-                      </section>
-                    ) : inspectorIsHistorical ? (
+                    {/*
+                     * #771 R2-12. A historical panel with no recorded facts used to reserve a
+                     * full-height card stating that no information was available for it; four such
+                     * cards together filled roughly half the viewport. The panel is omitted instead.
+                     * The container is `display: grid` with `repeat(auto-fit, …)`, so the remaining
+                     * cards reflow and no residual box is left behind.
+                     */}
+                    {inspectorIsHistorical &&
+                    !inspectorHistoricalSelectorFactsComplete ? null : inspectorIsHistorical ? (
                       <PlayerCombatHistoricalActionSelectorPanel
                         actionLabel={
                           inspectorHistoricalDeclarationSummary?.actionLabel ??
@@ -13350,6 +13400,23 @@ export default function CombatRoundManagerPanel({
                       const phaseModel = phaseProjection.phaseModel;
 
                       /*
+                       * #771 R2-12. Omit the whole phase card, not just its message. The card
+                       * wrapper and the sibling defense snapshot sit outside the message ternary,
+                       * so dropping the text alone would leave a titled empty card. `phaseCard`
+                       * carries no title, description or stats (see `inspectorPhaseCards`), so the
+                       * only thing lost with the card is the "Phase 1"/"Phase 2" heading itself.
+                       * The guard keeps the card whenever a committed defense snapshot was
+                       * recorded, because that is real historical content.
+                       */
+                      if (
+                        inspectorIsHistorical &&
+                        !historicalPhasePanel &&
+                        !phaseProjection.defenseSnapshot
+                      ) {
+                        return null;
+                      }
+
+                      /*
                        * The phase projection is intentionally context-aware:
                        * normal rows use phase-aware stats, while selected P/D
                        * rows can replay the specific incoming attack's parry
@@ -13367,12 +13434,16 @@ export default function CombatRoundManagerPanel({
                               snapshot={phaseProjection.defenseSnapshot}
                             />
                           ) : null}
-                          {inspectorIsHistorical && !historicalPhasePanel ? (
-                            <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                              No information available for this panel.
-                            </div>
-                          ) : inspectorDisplayDraft.actionId === "offensive_parry" &&
-                            phaseKey === "phase1" ? (
+                          {/*
+                           * The historical-without-panel branch still has to short-circuit, so
+                           * historical inspection never falls through to the live controls below.
+                           * It renders nothing now (#771 R2-12): the card only survives this far
+                           * when a committed defense snapshot was recorded, and claiming "no
+                           * information available" beside that snapshot would be false.
+                           */}
+                          {inspectorIsHistorical &&
+                          !historicalPhasePanel ? null : inspectorDisplayDraft.actionId ===
+                              "offensive_parry" && phaseKey === "phase1" ? (
                             <div style={{ display: "grid", gap: "0.65rem" }}>
                               <PlayerCombatOpponentSelector
                                 controlsDisabled={saving || inspectorIsHistorical}
@@ -13742,14 +13813,8 @@ export default function CombatRoundManagerPanel({
                   </div>
 
                   <div style={playerCombatPanelRowStyle}>
-                    {inspectorIsHistorical && !inspectorPanelSnapshot?.modifierSummary ? (
-                      <section style={playerCombatPanelCardStyle}>
-                        <strong>Combat situation · History</strong>
-                        <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-                          No information available for this panel.
-                        </div>
-                      </section>
-                    ) : (
+                    {/* #771 R2-12: omit the empty historical panel instead of reserving a card. */}
+                    {inspectorIsHistorical && !inspectorPanelSnapshot?.modifierSummary ? null : (
                       <PlayerCombatModifierPanel
                         activeSpecialEffectCount={
                           inspectorIsHistorical

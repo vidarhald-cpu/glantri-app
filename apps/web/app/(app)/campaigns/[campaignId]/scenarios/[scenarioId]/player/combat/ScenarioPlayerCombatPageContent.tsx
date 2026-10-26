@@ -161,6 +161,7 @@ import {
   getAdjacentCombatRoundTimelineParticipantSelection,
   getAdjacentCombatRoundTimelineStepSelection,
   getCombatRoundTimelineArrowMove,
+  type CombatRoundTimelineArrowMove,
 } from "@/features/combat-round-manager/combatRoundTimelineNavigation";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
@@ -277,6 +278,31 @@ const panelStyle = {
   display: "grid",
   gap: "0.75rem",
   padding: "1rem",
+} as const;
+
+/*
+ * #771 R2-3. The player surface had no tracker inspection controls at all — arrow-key navigation
+ * worked, but there was nothing to click. The Product Owner ruled the same affordance onto both
+ * surfaces: small arrow symbols on the panel's top line, left of `Current task`. Glyph meanings
+ * match the tracker's existing arrow keys (up/down = participant rows, left/right = step columns).
+ * Sizes are stated so the compact glyphs stay a usable target; no `outline` is set, so the
+ * browser focus ring is intact.
+ */
+const trackerInspectionNavStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.5rem",
+} as const;
+
+const trackerInspectionNavButtonStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  justifyContent: "center",
+  lineHeight: 1,
+  minHeight: "1.9rem",
+  minWidth: "1.9rem",
+  padding: "0.1rem 0.3rem",
 } as const;
 
 function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
@@ -5072,15 +5098,19 @@ export default function ScenarioPlayerCombatPageContent({
     window.requestAnimationFrame(() => trackerRef.current?.focus({ preventScroll: true }));
   }
 
-  function handleTrackerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (!playerCombatTrackerModel) return;
-    const target = event.target instanceof HTMLElement ? event.target : undefined;
-    const move = getCombatRoundTimelineArrowMove({
-      key: event.key,
-      targetIsContentEditable: target?.isContentEditable,
-      targetTagName: target?.tagName,
-    });
-    if (!move) return;
+  /*
+   * #771 R2-3. Shared by the tracker's arrow keys and by the four arrow buttons added to the
+   * `Combat history` header. The buttons are presentation over this one path, not a second one:
+   * the move, the `inspectable` guard and the resulting state write are exactly what the keyboard
+   * already did, so the buttons cannot reach a cell the keyboard could not. Returns whether the
+   * selection actually moved, which is what the key handler needs in order to decide whether to
+   * consume the key event.
+   *
+   * Authority: this moves an inspection selection only. Execution permission lives in
+   * `authorizeCombatProgressionTask` and the task `allowedActors`/`owner` fields and is untouched.
+   */
+  function moveTrackerSelection(move: CombatRoundTimelineArrowMove): boolean {
+    if (!playerCombatTrackerModel) return false;
 
     const currentRound = playerCombatTrackerModel.rounds.find(
       (round) => round.currentStep !== undefined,
@@ -5114,13 +5144,12 @@ export default function ScenarioPlayerCombatPageContent({
             roundNumber: selection.roundNumber,
             step: selection.step,
           });
-    if (!nextSelection.participantId) return;
+    if (!nextSelection.participantId) return false;
     const nextCell =
       playerCombatTrackerModel.cells[
         `${nextSelection.roundNumber}:${nextSelection.participantId}:${nextSelection.step}`
       ];
-    if (!nextCell?.inspectable) return;
-    event.preventDefault();
+    if (!nextCell?.inspectable) return false;
     setRecentResultFocus(undefined);
     setRecentResultRequest(undefined);
     setHistoryInspection({
@@ -5128,6 +5157,20 @@ export default function ScenarioPlayerCombatPageContent({
       roundNumber: nextSelection.roundNumber,
       step: nextSelection.step,
     });
+    return true;
+  }
+
+  function handleTrackerKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const target = event.target instanceof HTMLElement ? event.target : undefined;
+    const move = getCombatRoundTimelineArrowMove({
+      key: event.key,
+      targetIsContentEditable: target?.isContentEditable,
+      targetTagName: target?.tagName,
+    });
+    if (!move) return;
+    if (moveTrackerSelection(move)) {
+      event.preventDefault();
+    }
   }
 
   if (sessionLoading || loading) {
@@ -5241,15 +5284,55 @@ export default function ScenarioPlayerCombatPageContent({
             }}
           >
             <strong>Combat history</strong>
-            <button
-              disabled={
-                !playerCombatTrackerModel.rounds.some((round) => round.currentStep !== undefined)
-              }
-              onClick={selectCurrentTrackerPosition}
-              type="button"
-            >
-              {historyInspection ? "Resume current task" : "Current task"}
-            </button>
+            <div style={trackerInspectionNavStyle}>
+              <section aria-label="Tracker inspection navigation" style={trackerInspectionNavStyle}>
+                <button
+                  aria-label="Previous participant"
+                  onClick={() => moveTrackerSelection({ participantOffset: -1 })}
+                  style={trackerInspectionNavButtonStyle}
+                  title="Previous participant"
+                  type="button"
+                >
+                  <span aria-hidden="true">↑</span>
+                </button>
+                <button
+                  aria-label="Next participant"
+                  onClick={() => moveTrackerSelection({ participantOffset: 1 })}
+                  style={trackerInspectionNavButtonStyle}
+                  title="Next participant"
+                  type="button"
+                >
+                  <span aria-hidden="true">↓</span>
+                </button>
+                <button
+                  aria-label="Previous step"
+                  onClick={() => moveTrackerSelection({ stepOffset: -1 })}
+                  style={trackerInspectionNavButtonStyle}
+                  title="Previous step"
+                  type="button"
+                >
+                  <span aria-hidden="true">←</span>
+                </button>
+                <button
+                  aria-label="Next step"
+                  onClick={() => moveTrackerSelection({ stepOffset: 1 })}
+                  style={trackerInspectionNavButtonStyle}
+                  title="Next step"
+                  type="button"
+                >
+                  <span aria-hidden="true">→</span>
+                </button>
+              </section>
+              <button
+                disabled={
+                  !playerCombatTrackerModel.rounds.some((round) => round.currentStep !== undefined)
+                }
+                onClick={selectCurrentTrackerPosition}
+                type="button"
+              >
+                {historyInspection ? "Resume current task" : "Current task"}
+              </button>
+            </div>
           </div>
           <CombatTracker
             followCurrent={!historyInspection}
