@@ -79,7 +79,14 @@ export function CombatItemInteractionPanel({
    * `options` alone cannot tell the two apart: it is only ever assigned on the success path, so
    * the absence of it used to mean both "still loading" and "the request failed", and a failed
    * load presented itself as work still in progress indefinitely. This holds the failure instead,
-   * carrying the server's own message, so the panel always reaches a resolved state.
+   * so the panel always reaches a resolved state.
+   *
+   * Forgejo issue #771 R2-4 — it no longer carries the **server's** message. The server's
+   * `ScenarioEquipmentStaleError` text explained persistence and reconciliation to the table,
+   * which the Product Owner ruled off the ordinary Combat surface. The failed state is still
+   * shown, and still presents as failed rather than as loading; it is now one short line.
+   * The underlying cause — that an ordinary Combat raises that error at all — is #773 and is
+   * not addressed here.
    */
   const [loadError, setLoadError] = useState<string>();
   const [recipientByItemId, setRecipientByItemId] = useState<Record<string, string>>({});
@@ -125,12 +132,8 @@ export function CombatItemInteractionPanel({
       .then((next) => {
         if (active) setOptions(next);
       })
-      .catch((error) => {
-        if (active) {
-          setLoadError(
-            error instanceof Error ? error.message : "Unable to load Items for this Combat.",
-          );
-        }
+      .catch(() => {
+        if (active) setLoadError("Items unavailable.");
       });
     return () => {
       active = false;
@@ -186,10 +189,6 @@ export function CombatItemInteractionPanel({
       <h3 id="combat-item-heading" style={{ margin: 0 }}>
         Items in this Combat
       </h3>
-      <div>
-        Choose an Item in context. The GM reviews the timing, and an accepted change is saved to
-        this Combat and the Character’s current equipment.
-      </div>
       {readOnly ? (
         <div role="status">Inspection is read-only: Item actions cannot be declared from here.</div>
       ) : null}

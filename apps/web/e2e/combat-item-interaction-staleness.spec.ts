@@ -151,6 +151,10 @@ test.describe("Combat Item interactions on an unreconciled ordinary Scenario", (
     // A Combat with no Items must reach the resolved empty state, not sit on the loading branch.
     await expect(panel.getByText("No available Items.")).toBeVisible();
     await expect(panel.getByText("Loading Items…")).toHaveCount(0);
+    // Forgejo issue #771 R2-4: the failed-load line is now the short `Items unavailable.`, not
+    // the server's reconciliation sentence. Narrowed to the new text; the property is the same
+    // one — a healthy load must not reach the failed state.
+    await expect(panel.getByText("Items unavailable.")).toHaveCount(0);
     await expect(
       panel.getByText("Scenario equipment changed outside play.", { exact: false }),
     ).toHaveCount(0);

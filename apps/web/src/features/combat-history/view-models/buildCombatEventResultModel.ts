@@ -129,16 +129,6 @@ function resultRow(event: ProjectedCombatHistoryEvent, text?: string): CombatEve
   return text ? [{ key: `${event.id}:outcome:result`, text }] : [];
 }
 
-function weaponProvenanceLabel(value: unknown): string | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const metadata = value as Record<string, unknown>;
-  const sheet = typeof metadata.sheet === "string" ? metadata.sheet : undefined;
-  const row = typeof metadata.row === "number" ? metadata.row : undefined;
-  const sourceRange = typeof metadata.sourceRange === "string" ? metadata.sourceRange : undefined;
-  if (!sheet && !sourceRange) return undefined;
-  return `${sheet ?? "Source"}${row ? ` row ${row}` : ""}${sourceRange ? ` · ${sourceRange}` : ""}`;
-}
-
 function eventPresentation(event: ProjectedCombatHistoryEvent): {
   outcomeRows: CombatEventResultFactRow[];
   summary: string;
@@ -170,15 +160,13 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       const weapon = event.facts.involvedOutcome?.weaponName;
       const status = factValue(event, "status");
       const range = factLabel(factValue(event, "weaponModeRange"));
-      const provenance = weaponProvenanceLabel(factValue(event, "weaponModeSourceMetadata"));
+      // Forgejo issue #771 R2-5 — workbook/source-row provenance is not player or GM combat
+      // information. `weaponModeSourceMetadata` stays on the event; it is no longer read here.
       if (status === "awaiting_defense" || status === "shot_committed") {
         return {
           outcomeRows: [
             ...resultRow(event, "Shot committed · awaiting defense review"),
             ...(range ? [{ key: `${event.id}:outcome:range`, text: `Range: ${range}` }] : []),
-            ...(provenance
-              ? [{ key: `${event.id}:outcome:source`, text: `Source: ${provenance}` }]
-              : []),
           ],
           summary:
             attacker && defender
@@ -190,9 +178,6 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
         outcomeRows: [
           ...resultRow(event, `Result: ${attackOutcome(event)}`),
           ...(range ? [{ key: `${event.id}:outcome:range`, text: `Range: ${range}` }] : []),
-          ...(provenance
-            ? [{ key: `${event.id}:outcome:source`, text: `Source: ${provenance}` }]
-            : []),
         ],
         summary:
           attacker && defender
@@ -939,12 +924,13 @@ export function buildCombatEventResultModel(
       return {
         calculations,
         calculationRows,
-        completenessLabel:
-          event.completeness === "complete"
-            ? undefined
-            : event.completeness === "legacy_derived"
-              ? "Legacy-derived history"
-              : "Incomplete history",
+        /**
+         * Forgejo issue #771 R2-11 — reader-facing history says what happened, not which
+         * internal projection reconstructed it. `legacy_derived` therefore carries no label.
+         * `"Incomplete history"` stays: it describes the record, not the projection. The
+         * `completeness` value itself is untouched and remains available internally.
+         */
+        completenessLabel: event.completeness === "incomplete" ? "Incomplete history" : undefined,
         envelope: event.resultEnvelope,
         id: event.id,
         outcomeRows: presentation.outcomeRows,

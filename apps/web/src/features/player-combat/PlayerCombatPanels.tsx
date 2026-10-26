@@ -2197,10 +2197,6 @@ export function PlayerCombatActionSelectorPanel({
             ))}
           </select>
         </label>
-        <div style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-          Relative intentions, movement direction, and facing are independent plans. The GM resolves
-          feasibility.
-        </div>
       </fieldset>
 
       <label style={compactWideFieldLabelStyle}>
@@ -2538,6 +2534,25 @@ export function formatCombatInitiativeFormula(initiative?: CombatRoundInitiative
   return `Main: I ${baseInitiative} + Initiative ${modifierAdjustment} + roll ${rollTotal} = ${initiative.total}`;
 }
 
+/**
+ * Forgejo issue #771, two Product Owner removals from this mini-table.
+ *
+ * **R2-9** — the `Range` column is gone. `stats.range` is still produced
+ * (`playerCombatPhaseModel.ts`), and is simply no longer displayed here; distance is
+ * represented elsewhere and range/distance mechanics are untouched.
+ *
+ * **R2-5** — the `Source: …` line is gone. It rendered workbook coordinates
+ * (`Weapon1 row 7 · Weapon1!A7:Q7`) to the GM and the bare word `imported` to the player.
+ * Workbook/source-row provenance is not player or GM combat information. `stats.provenance`
+ * and the GM-only model input that fills it are deliberately left in place for internal
+ * diagnostics; only the render is removed. **This supersedes ruling #517 E2 for the Combat
+ * surface**, which required the GM to see those coordinates here.
+ *
+ * The input is named in `playerCombatPhaseModel.ts`, not here, on purpose: a source-text guard
+ * in `playerCombatPhaseModel.test.ts` pins the exact set of files that reference it, and that
+ * guard failed when this comment first spelled it out. Keeping the literal out of this file
+ * leaves the guard's meaning intact.
+ */
 export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsTableProps) {
   return (
     <div style={compactStatsRowStyle}>
@@ -2552,7 +2567,7 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
       <table style={compactStatsTableStyle}>
         <thead>
           <tr>
-            {["I", "OB", "DMB", "AM", "MC", "Range"].map((heading) => (
+            {["I", "OB", "DMB", "AM", "MC"].map((heading) => (
               <th
                 key={heading}
                 style={{
@@ -2568,30 +2583,22 @@ export function PlayerCombatAttackStatsTable({ stats }: PlayerCombatAttackStatsT
         </thead>
         <tbody>
           <tr>
-            {[
-              stats.initiative,
-              stats.ob,
-              stats.dmb,
-              stats.attackMode,
-              stats.maxCrits,
-              stats.range ?? "—",
-            ].map((value, index) => (
-              <td
-                key={`${value}-${index}`}
-                style={{
-                  borderBottom: "1px solid #ece8dc",
-                  padding: "0.2rem",
-                }}
-              >
-                {value}
-              </td>
-            ))}
+            {[stats.initiative, stats.ob, stats.dmb, stats.attackMode, stats.maxCrits].map(
+              (value, index) => (
+                <td
+                  key={`${value}-${index}`}
+                  style={{
+                    borderBottom: "1px solid #ece8dc",
+                    padding: "0.2rem",
+                  }}
+                >
+                  {value}
+                </td>
+              ),
+            )}
           </tr>
         </tbody>
       </table>
-      {stats.provenance ? (
-        <small style={{ color: "#5e5a50" }}>Source: {stats.provenance}</small>
-      ) : null}
     </div>
   );
 }

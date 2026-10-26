@@ -370,9 +370,15 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain(
       "**Counterattack cannot currently be declared.**",
     );
-    // Item interactions and canonical Disarm need a current equipment projection (#599).
+    // Item interactions and canonical Disarm need a current equipment projection (#599). The
+    // rule is unchanged and still pinned; #771 R2-4 only shortened the message the panel shows,
+    // so the quoted copy is narrowed to the new one-line text rather than dropped.
+    expect(model.selectedDocument.markdown).toContain("`Items unavailable.`");
     expect(model.selectedDocument.markdown).toContain(
-      "The GM must reconcile it before dependent play can\ncontinue.",
+      "they stay unavailable\nuntil the GM reconciles.",
+    );
+    expect(model.selectedDocument.markdown).not.toContain(
+      "The GM must reconcile it before dependent play can",
     );
     // Verified runtime values, not hand-evaluated: distance penalty, Disarm and Break Off bands.
     expect(model.selectedDocument.markdown).toContain(

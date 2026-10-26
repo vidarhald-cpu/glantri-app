@@ -90,7 +90,14 @@ describe("buildCombatEventResultModel", () => {
     expect(target.items[0]?.outcomeRows.map((row) => row.text)).toEqual(["Status: preparing"]);
   });
 
-  it("presents a pending missile shot with Range and exact source provenance", () => {
+  /**
+   * Forgejo issue #771 R2-5. This case previously asserted a third row,
+   * `"Source: Weapon2 row 17 · A17:K17"`. The Product Owner ruled workbook/source-row
+   * provenance off the ordinary Combat surface, so the assertion is narrowed to the two rows
+   * that remain and the source row is now asserted absent rather than present. The event still
+   * carries `weaponModeSourceMetadata`; nothing reads it for presentation.
+   */
+  it("presents a pending missile shot with Range and no source provenance", () => {
     const model = buildCombatEventResultModel([
       event("attack", 1, {
         facts: {
@@ -129,8 +136,9 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[0]?.outcomeRows.map((row) => row.text)).toEqual([
       "Shot committed · awaiting defense review",
       "Range: 70/210/420",
-      "Source: Weapon2 row 17 · A17:K17",
     ]);
+    expect(model.items[0]?.outcomeRows.map((row) => row.text).join("\n")).not.toContain("Source:");
+    expect(model.items[0]?.outcomeRows.map((row) => row.text).join("\n")).not.toContain("A17:K17");
   });
 
   it("excludes workflow boundary provenance from participant combat results", () => {
@@ -835,15 +843,23 @@ describe("buildCombatEventResultModel", () => {
     );
   });
 
-  it("labels incomplete and legacy-derived events", () => {
+  /**
+   * Forgejo issue #771 R2-11. Narrowed, not deleted: the `"Incomplete history"` half still
+   * holds and is still asserted. The `"Legacy-derived history"` expectation is replaced by its
+   * negation, because the Product Owner ruled the reader must not be told which internal
+   * projection reconstructed the record.
+   */
+  it("labels incomplete events and says nothing about legacy derivation", () => {
     const model = buildCombatEventResultModel([
       event("attack", 1, { completeness: "incomplete" }),
       event("parry", 2, { completeness: "legacy_derived" }),
+      event("parry", 3, { completeness: "complete" }),
     ]);
 
     expect(model.items.map((item) => item.completenessLabel)).toEqual([
       "Incomplete history",
-      "Legacy-derived history",
+      undefined,
+      undefined,
     ]);
   });
 

@@ -359,7 +359,12 @@ describe("PlayerCombatActionSelectorPanel", () => {
       "forward_right",
     );
     expect(screen.getByRole("combobox", { name: "Facing" })).toHaveValue("backward_left");
-    expect(screen.getByText("The GM resolves feasibility.", { exact: false })).toBeInTheDocument();
+    // Forgejo issue #771 R2-7: the explanatory sentence that used to be asserted here is
+    // removed. The two assertions above are the substance — movement direction and facing hold
+    // independent values — and survive untouched.
+    expect(
+      screen.queryByText("The GM resolves feasibility.", { exact: false }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "How" })).not.toBeInTheDocument();
     expect(screen.queryByText("Expected time", { exact: false })).not.toBeInTheDocument();
   });
@@ -1233,7 +1238,21 @@ describe("a calculation group whose breakdown is incomplete", () => {
 });
 
 describe("PlayerCombatAttackStatsTable", () => {
-  it("shows a selected mode's workbook coordinates to the GM and never to the player (#517 ruling E2)", () => {
+  /**
+   * **Forgejo issue #771 R2-5 supersedes ruling #517 E2 for the Combat surface.**
+   *
+   * This case was written for #517 E2, which required the GM — and only the GM — to see the
+   * selected weapon mode's workbook coordinates in this mini-table. The Product Owner has since
+   * ruled that workbook/source-row provenance is not player or GM combat information and must
+   * not appear on the ordinary Combat surface at all. R2-5 is the newer controlling decision.
+   *
+   * The assertion is therefore **rewritten, deliberately and against a cited prior ruling**,
+   * not deleted. #517 E2's protective half is kept and strengthened: the player still never
+   * sees the coordinates, and now neither does the GM. The `includeSourceProvenance` input
+   * itself is untouched and still only reachable from the GM path, which
+   * `playerCombatPhaseModel.test.ts` continues to pin.
+   */
+  it("never shows a selected mode's workbook coordinates, to the GM or the player (#771 R2-5, superseding #517 E2)", () => {
     const loadoutModel = {
       armorSummary: null,
       combatStatePanelModel: {
@@ -1338,13 +1357,18 @@ describe("PlayerCombatAttackStatsTable", () => {
 
     // The player page's call, which never asks for the coordinates.
     const player = render(<PlayerCombatAttackStatsTable stats={summaryFor()} />);
-    expect(player.container.textContent).toContain("Source: imported");
+    expect(player.container.textContent).not.toContain("Source:");
+    expect(player.container.textContent).not.toContain("imported");
     expect(player.container.textContent).not.toContain("Weapon2");
     expect(player.container.textContent).not.toContain("A12:K12");
     cleanup();
 
-    // The GM's Combat Round Manager's call, for the same loadout.
+    // The GM's Combat Round Manager's call, for the same loadout. The model still builds the
+    // coordinates for internal diagnostics; this table no longer renders them.
+    expect(summaryFor(true).provenance).toBe("Weapon2 row 12 · A12:K12");
     const gm = render(<PlayerCombatAttackStatsTable stats={summaryFor(true)} />);
-    expect(gm.container.textContent).toContain("Source: Weapon2 row 12 · A12:K12");
+    expect(gm.container.textContent).not.toContain("Source:");
+    expect(gm.container.textContent).not.toContain("Weapon2");
+    expect(gm.container.textContent).not.toContain("A12:K12");
   });
 });

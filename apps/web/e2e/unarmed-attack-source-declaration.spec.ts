@@ -90,7 +90,8 @@ async function chooseUnarmedAttackSource(input: { page: Page; value: string }): 
 }
 
 /**
- * Reads the rendered attack stats row (I, OB, DMB, AM, MC, Range). Criterion 3: the OB must be a
+ * Reads the rendered attack stats row (I, OB, DMB, AM, MC — `Range` was removed from this
+ * mini-table by Forgejo issue #771 R2-9). Criterion 3: the OB must be a
  * real number derived through the mode's Brawling competency, never `COMBAT_COMPETENCY_REFUSED`.
  */
 async function readRenderedAttackStats(page: Page): Promise<string[]> {
