@@ -23,6 +23,13 @@ import { characterPayload } from "./character-fixture";
  * R2-12: a historical panel with nothing recorded is omitted rather than reserving a card.
  * R2-2: the `PD` column is gone from the visible tracker on both surfaces, and the twelve columns
  * that were asked for are all still there.
+ *
+ * The PD-removal navigation regression (#771, Product Owner ruling) is measured here too, because
+ * it is a consequence of R2-2 and this is the fixture that renders both surfaces. `Previous step`
+ * from Declaration used to open the GM inspector on `Pre-declaration Combat Experience check` — a
+ * step the grid draws no cell for, so nothing was highlighted anywhere. The invariant asserted
+ * below is the rendered one: whatever step navigation lands on, the inspected step is one of the
+ * rendered column titles and exactly one tracker cell carries the selection outline.
  */
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
@@ -30,6 +37,8 @@ const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const SINGLE_ROW_HEIGHT_LIMIT = 52;
 /** The ruled "realistic narrow width". 1024 is the smallest common desktop/tablet-landscape width. */
 const NARROW_VIEWPORT = { height: 900, width: 1024 };
+/** The step #771 R2-2 removed from the visible column set. It is still in the round-step enum. */
+const HIDDEN_STEP_LABEL = "Pre-declaration Combat Experience check";
 const NAV_NAMES = [
   "Previous participant",
   "Next participant",
@@ -165,6 +174,156 @@ async function readHeaderGeometry(input: {
     );
   }
   return geometry as HeaderGeometry;
+}
+
+interface TrackerSelectionReading {
+  /** The GM inspector heading's step segment. The player surface has no step heading. */
+  readonly inspectedStepLabel?: string;
+  readonly renderedColumnTitles: readonly string[];
+  /** The `title` of the button inside every tracker cell carrying the selection outline. */
+  readonly selectedCellTitles: readonly string[];
+}
+
+/**
+ * #771. One atomic read of what the tracker is actually showing: the rendered column titles, the
+ * cells that carry the selection outline (`CombatTracker.tsx` draws `outline: 2px solid #2f5d62`
+ * on the selected cell and nothing else), and the GM inspector heading's step.
+ *
+ * Both halves matter. A selection on a hidden step still sets `selectedCellKey` in the model —
+ * both tracker builders still populate `pre_declaration` cells — so the model cannot be asked
+ * whether anything is visible; only the rendered grid can. Read in one `page.evaluate` for the
+ * same reason as `readHeaderGeometry` above.
+ */
+async function readTrackerSelection(page: Page): Promise<TrackerSelectionReading> {
+  return page.evaluate(() => {
+    const grid = document.querySelector('[aria-label="Combat round timeline grid"]');
+    const headerCells = grid?.querySelectorAll("thead tr")[1]?.querySelectorAll("th") ?? [];
+    const inspectorHeading = Array.from(document.querySelectorAll("h3")).find((node) =>
+      (node.textContent ?? "").trim().startsWith("Combat inspector — "),
+    );
+    const headingText = inspectorHeading?.textContent?.replace(/\s+/g, " ").trim();
+    return {
+      inspectedStepLabel: headingText ? headingText.split(" · ").at(-1) : undefined,
+      renderedColumnTitles: Array.from(headerCells).map((node) => node.getAttribute("title") ?? ""),
+      selectedCellTitles: Array.from(grid?.querySelectorAll("tbody td") ?? [])
+        .filter((node) => {
+          const style = getComputedStyle(node);
+          return style.outlineStyle === "solid" && style.outlineWidth === "2px";
+        })
+        .map((node) => node.querySelector("button")?.getAttribute("title") ?? ""),
+    };
+  });
+}
+
+/** `<label> · Round <n> · <ABBREVIATION>: <hover text>` — see `buildCombatTrackerModel.ts:389`. */
+function selectedStepAbbreviations(reading: TrackerSelectionReading): string[] {
+  return reading.selectedCellTitles.map((title) => title.split(" · ")[2]?.split(":")[0] ?? title);
+}
+
+/**
+ * The rendered form of the Product Owner's ruling: step navigation must not park the inspector on
+ * a column-less state. One press, then the invariant.
+ *
+ * The synchronisation is deliberate and is the difference between a real check and one that reads
+ * the pre-click frame and passes on it. Playwright's click resolves when the event is dispatched,
+ * not when React has re-rendered, and the unrepaired behaviour this guards against shows up only
+ * in the frame *after* the click. So:
+ *
+ * - when the landing is expected to differ, poll until the rendered selection actually becomes it,
+ *   and assert the invariant on a reading taken after that;
+ * - when the press is expected to be a defined no-op at the end of the range — where a stale frame
+ *   and a correct frame look identical — assert the invariant **repeatedly** over several hundred
+ *   milliseconds instead of once, so a later bad render cannot slip in behind a passing read.
+ */
+async function assertLanding(input: {
+  expected?: string;
+  noOp: boolean;
+  page: Page;
+  where: string;
+}): Promise<TrackerSelectionReading> {
+  if (input.expected !== undefined && !input.noOp) {
+    await expect
+      .poll(async () => selectedStepAbbreviations(await readTrackerSelection(input.page))[0], {
+        message: `${input.where} — rendered selection`,
+        timeout: 10_000,
+      })
+      .toBe(input.expected);
+  }
+  const holds = input.noOp ? 5 : 1;
+  let reading = await readTrackerSelection(input.page);
+  for (let attempt = 1; attempt <= holds; attempt += 1) {
+    reading = await readTrackerSelection(input.page);
+    const abbreviations = selectedStepAbbreviations(reading);
+    const at = `${input.where} (hold ${attempt}/${holds})`;
+    expect(abbreviations, `${at} — exactly one highlighted tracker cell`).toHaveLength(1);
+    expect(abbreviations[0], `${at} — the removed step has no cell to highlight`).not.toBe("PD");
+    if (input.expected !== undefined) {
+      expect(abbreviations[0], `${at} — rendered selection`).toBe(input.expected);
+    }
+    if (reading.inspectedStepLabel !== undefined) {
+      expect(
+        reading.renderedColumnTitles,
+        `${at} — the inspected step must be a rendered column`,
+      ).toContain(reading.inspectedStepLabel);
+    }
+    if (attempt < holds) {
+      await input.page.waitForTimeout(120);
+    }
+  }
+  return reading;
+}
+
+/**
+ * Drives one control repeatedly and asserts the invariant after every press. `expected` gives the
+ * rendered landing per press where it is known; a repeat of the previous value marks a press that
+ * must be a no-op and switches on the repeated-hold check described above.
+ */
+async function sweepStepNavigation(input: {
+  expected: readonly string[];
+  label: string;
+  page: Page;
+  surface: string;
+}): Promise<void> {
+  for (const [index, expected] of input.expected.entries()) {
+    /*
+     * Whether this press is a no-op is decided from what is on screen *before* it, not from the
+     * previous expectation. Polling for a value the page already shows would be satisfied by the
+     * pre-click frame, which is exactly how a navigation guard comes to pass on the unrepaired
+     * baseline; reading first means every press whose landing is unchanged gets the repeated-hold
+     * check instead.
+     */
+    const before = selectedStepAbbreviations(await readTrackerSelection(input.page))[0];
+    await input.page.getByRole("button", { exact: true, name: input.label }).click();
+    await assertLanding({
+      expected,
+      noOp: expected === before,
+      page: input.page,
+      where: `${input.surface}: "${input.label}" press ${index + 1} (from ${before ?? "nothing"})`,
+    });
+  }
+}
+
+/**
+ * The player surface has no inspector step heading and its own `inspectable` guard decides how far
+ * each press gets, so the landing sequence is not known in advance. The invariant is, and it is
+ * held over several reads per press for the reason given above.
+ */
+async function sweepPlayerStepNavigation(input: {
+  label: string;
+  page: Page;
+  presses: number;
+}): Promise<string[]> {
+  const visited: string[] = [];
+  for (let press = 1; press <= input.presses; press += 1) {
+    await input.page.getByRole("button", { exact: true, name: input.label }).click();
+    const reading = await assertLanding({
+      noOp: true,
+      page: input.page,
+      where: `Player: "${input.label}" press ${press}`,
+    });
+    visited.push(selectedStepAbbreviations(reading)[0]!);
+  }
+  return visited;
 }
 
 /**
@@ -481,6 +640,75 @@ test.describe("Combat tracker inspection navigation and empty historical panels 
     await expect(inspectorHeading).toContainText("Declaration");
     await expect(inspectorHeading).toContainText(startLabel);
 
+    /*
+     * ---- #771 PD-removal navigation regression, GM surface ----
+     *
+     * Measured on `dev` 6c5542f7: from here, `Previous step` opened the inspector on
+     * "Pre-declaration Combat Experience check" and the rendered grid highlighted nothing, because
+     * R2-2 removed that step's column while #215 ruling 2 keeps the step first in every round.
+     * The ruling is that navigation must skip it instead of landing there.
+     */
+    const gmAtDeclaration = await readTrackerSelection(gmPage);
+    // Positive control first: this instrument must report a highlighted cell where one certainly is.
+    expect(
+      selectedStepAbbreviations(gmAtDeclaration),
+      "GM: positive control — Declaration is highlighted in the rendered grid",
+    ).toEqual(["DE"]);
+    expect(gmAtDeclaration.inspectedStepLabel, "GM: positive control — inspected step").toBe(
+      "Declaration",
+    );
+    expect(
+      gmAtDeclaration.renderedColumnTitles,
+      "GM: the removed step has no column to land on",
+    ).not.toContain(HIDDEN_STEP_LABEL);
+
+    /*
+     * `Previous step` here is the exact press the Product Owner reported. Round 1 has no earlier
+     * *visible* step, so the defined end-of-range behaviour is to keep the selection the GM
+     * already had; the control is not disabled, so pressing it again must keep doing nothing
+     * rather than emptying the inspector. Three presses, each held over five reads.
+     */
+    await sweepStepNavigation({
+      expected: ["DE", "DE", "DE"],
+      label: "Previous step",
+      page: gmPage,
+      surface: "GM",
+    });
+    await expect(inspectorHeading).toContainText("Declaration");
+    await expect(inspectorHeading).not.toContainText(HIDDEN_STEP_LABEL);
+
+    /*
+     * And the whole round in both directions, so the invariant is not proved at one cell only.
+     * Thirteen presses is one more than the twelve visible steps, which exercises the far clamp
+     * too; the sweep asserts a single highlighted cell in a rendered column after every press.
+     */
+    await sweepStepNavigation({
+      expected: ["M1", "i1", "A1", "P1", "D1", "M2", "i2", "A2", "P2", "D2", "SU", "SU", "SU"],
+      label: "Next step",
+      page: gmPage,
+      surface: "GM",
+    });
+    await sweepStepNavigation({
+      expected: ["D2", "P2", "A2", "i2", "M2", "D1", "P1", "A1", "i1", "M1", "DE", "DE", "DE"],
+      label: "Previous step",
+      page: gmPage,
+      surface: "GM",
+    });
+
+    // The GM's arrow keys drive the same `moveSelection`, so the same invariant must hold there.
+    await gmPage.locator('[aria-label="Combat round timeline grid"]').focus();
+    for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+      await gmPage.keyboard.press(key);
+      const reading = await assertLanding({
+        noOp: true,
+        page: gmPage,
+        where: `GM: arrow key "${key}"`,
+      });
+      expect(reading.inspectedStepLabel, `GM: "${key}" must not reach the removed step`).not.toBe(
+        HIDDEN_STEP_LABEL,
+      );
+    }
+
     // ---- Player surface ----
     const playerPage = await playerContext.newPage();
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
@@ -524,6 +752,55 @@ test.describe("Combat tracker inspection navigation and empty historical panels 
       "Player: the arrow button must reproduce the arrow key's move, not exceed it",
     ).toHaveText("Resume current task");
     await expect(playerPage.getByText("No information available for this panel.")).toHaveCount(0);
+
+    /*
+     * ---- #771 PD-removal navigation regression, player surface ----
+     *
+     * The player's handler additionally refuses a non-inspectable target, which is why the
+     * Product Owner's report is GM-only. That guard is *not* what protects it from a column-less
+     * landing: this surface still builds a `pre_declaration` cell, and that cell takes completion
+     * evidence from `combat_experience` events, so it can be inspectable while having no column.
+     * So the same rendered invariant is asserted here, and the same sweep is driven in both
+     * directions over the whole round.
+     */
+    const playerAtStart = await readTrackerSelection(playerPage);
+    expect(
+      selectedStepAbbreviations(playerAtStart),
+      "Player: positive control — exactly one highlighted tracker cell",
+    ).toHaveLength(1);
+    expect(
+      playerAtStart.renderedColumnTitles,
+      "Player: the removed step has no column to land on",
+    ).not.toContain(HIDDEN_STEP_LABEL);
+    const playerForward = await sweepPlayerStepNavigation({
+      label: "Next step",
+      page: playerPage,
+      presses: 13,
+    });
+    const playerBackward = await sweepPlayerStepNavigation({
+      label: "Previous step",
+      page: playerPage,
+      presses: 13,
+    });
+    expect(
+      [...playerForward, ...playerBackward],
+      "Player: no press may leave the tracker without a highlighted cell, and none may reach PD",
+    ).not.toContain("PD");
+
+    // Arrow-key navigation still behaves on this surface after the change.
+    await playerPage.locator('[aria-label="Combat round timeline grid"]').focus();
+    for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]) {
+      await playerPage.keyboard.press(key);
+      const reading = await readTrackerSelection(playerPage);
+      expect(
+        selectedStepAbbreviations(reading),
+        `Player: "${key}" must leave exactly one highlighted tracker cell`,
+      ).toHaveLength(1);
+      expect(
+        selectedStepAbbreviations(reading)[0],
+        `Player: "${key}" must not reach the removed step`,
+      ).not.toBe("PD");
+    }
 
     await playerPage.close();
     await playerContext.close();

@@ -159,7 +159,7 @@ import {
 import { getCurrentCombatRoundTaskSelection } from "@/features/combat-round-manager/combatRoundSelection";
 import {
   getAdjacentCombatRoundTimelineParticipantSelection,
-  getAdjacentCombatRoundTimelineStepSelection,
+  getAdjacentVisibleCombatRoundTimelineStepSelection,
   getCombatRoundTimelineArrowMove,
   type CombatRoundTimelineArrowMove,
 } from "@/features/combat-round-manager/combatRoundTimelineNavigation";
@@ -5130,12 +5130,21 @@ export default function ScenarioPlayerCombatPageContent({
     };
     const nextSelection =
       "stepOffset" in move
-        ? getAdjacentCombatRoundTimelineStepSelection({
+        ? /*
+           * #771. `visibleSteps` is this tracker model's own rendered column list. The
+           * `inspectable` guard below is not a substitute for it: this surface still builds a
+           * `pre_declaration` cell, and that cell takes completion evidence from
+           * `combat_experience` events, so it can be inspectable while having no column —
+           * a landing the player could reach and then see nothing highlighted. The ruled
+           * traversal order (#215 ruling 2) is untouched; only hidden steps are skipped.
+           */
+          getAdjacentVisibleCombatRoundTimelineStepSelection({
             participantId: selection.participantId,
             roundNumbers: playerCombatTrackerModel.rounds.map((round) => round.roundNumber),
             selectedRoundNumber: selection.roundNumber,
             step: selection.step,
             stepOffset: move.stepOffset,
+            visibleSteps: playerCombatTrackerModel.steps,
           })
         : getAdjacentCombatRoundTimelineParticipantSelection({
             participantId: selection.participantId,

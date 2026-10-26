@@ -356,7 +356,7 @@ import { buildCombatRoundPhasePanelProjection } from "./combatRoundPhasePanelPro
 import {
   getCombatRoundTimelineArrowMove,
   getAdjacentCombatRoundTimelineParticipantSelection,
-  getAdjacentCombatRoundTimelineStepSelection,
+  getAdjacentVisibleCombatRoundTimelineStepSelection,
   getCombatRoundTimelineCellKey,
   getParticipantIdsForTimelineRound,
   type CombatRoundTimelineSelection,
@@ -9666,12 +9666,20 @@ export default function CombatRoundManagerPanel({
     });
     const nextSelection =
       input.stepOffset !== undefined
-        ? getAdjacentCombatRoundTimelineStepSelection({
+        ? /*
+           * #771. `visibleSteps` is the tracker model's own rendered column list, so step
+           * navigation cannot land on a step this grid draws no cell for — which is what
+           * `Previous step` from Declaration did once R2-2 removed `PD` from the visible set.
+           * The ruled traversal order (#215 ruling 2) is untouched; only hidden steps are
+           * skipped, and at the ends of the range the selection is kept unchanged.
+           */
+          getAdjacentVisibleCombatRoundTimelineStepSelection({
             participantId: inspectionSelection.participantId,
             roundNumbers: [...timelineRoundNumbers],
             selectedRoundNumber,
             step: currentStep,
             stepOffset: input.stepOffset,
+            visibleSteps: trackerModel.steps,
           })
         : getAdjacentCombatRoundTimelineParticipantSelection({
             participantId: inspectionSelection.participantId,
