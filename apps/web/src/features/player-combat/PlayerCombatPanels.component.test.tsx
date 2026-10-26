@@ -1601,6 +1601,190 @@ describe("PlayerCombatDefenseGroup", () => {
     expect(container.textContent).not.toContain("Main hand");
     expect((container.firstElementChild as HTMLElement).style.borderTop).toBe("1px solid #e3e1dc");
   });
+
+  /**
+   * Forgejo #782, QA finding F1. A presentation choice of defensive mode must stop governing the
+   * displayed DB/DM/P the moment the selector that made it is gone, and must not follow the panel
+   * onto a different option set. Guarded against the vacuous read QA hit first: the defence row is
+   * asserted to have exactly three cells, and the chosen row is asserted to differ from the
+   * default before any "went back to the default" comparison is trusted.
+   */
+  describe("presentation selection lifetime (#782 F1)", () => {
+    const brawlingRow = ["11", "−1", "9"];
+
+    it("stops honouring the choice when the selector's gate closes, and resumes the derivation", () => {
+      const { container, rerender } = render(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={combinedDefenseStats}
+          parrySourceOptions={parrySourceOptions}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+
+      const defaultRow = readDefenseRow(container);
+      expect(defaultRow).toHaveLength(3);
+      expect(defaultRow).toEqual(["18", "−1", "15"]);
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Parry source" }), {
+        target: { value: "Brawling|Brawling" },
+      });
+      const chosenRow = readDefenseRow(container);
+      expect(chosenRow).toHaveLength(3);
+      // Guard: the choice must actually have moved the numbers, or the comparison below is empty.
+      expect(chosenRow).not.toEqual(defaultRow);
+      expect(chosenRow).toEqual(brawlingRow);
+      expect(container.textContent).toContain("Brawling");
+
+      // The declaration changes to one whose parry allocation does not reach the DB/Parry stack:
+      // the selector is gone, so the choice must be gone with it.
+      rerender(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={combinedDefenseStats}
+          parrySourceOptions={parrySourceOptions}
+          showParrySourceSelector={false}
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      expect(screen.queryByRole("combobox", { name: "Parry source" })).not.toBeInTheDocument();
+      const gatedRow = readDefenseRow(container);
+      expect(gatedRow).toHaveLength(3);
+      expect(gatedRow).toEqual(defaultRow);
+      expect(container.textContent).toContain("Sword / shield");
+      expect(container.textContent).not.toContain("Brawling");
+    });
+
+    it("stops honouring the choice when the offered rows collapse to fewer than two", () => {
+      // Binds the `options.length <= 1` arm of the gate specifically. The remaining single option
+      // is deliberately the one that was chosen: that is the only configuration in which this arm
+      // is observable at all, since a chosen id absent from the new set already falls back.
+      const { container, rerender } = render(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={combinedDefenseStats}
+          parrySourceOptions={parrySourceOptions}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      const defaultRow = readDefenseRow(container);
+      expect(defaultRow).toHaveLength(3);
+      expect(defaultRow).toEqual(["18", "\u22121", "15"]);
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Parry source" }), {
+        target: { value: "Brawling|Brawling" },
+      });
+      const chosenRow = readDefenseRow(container);
+      expect(chosenRow).toHaveLength(3);
+      // Guard: the choice moved the numbers, so the fallback assertion below is not vacuous.
+      expect(chosenRow).not.toEqual(defaultRow);
+      expect(chosenRow).toEqual(brawlingRow);
+
+      rerender(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={combinedDefenseStats}
+          parrySourceOptions={[parrySourceOptions[3]!]}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      expect(screen.queryByRole("combobox", { name: "Parry source" })).not.toBeInTheDocument();
+      const collapsedRow = readDefenseRow(container);
+      expect(collapsedRow).toHaveLength(3);
+      expect(collapsedRow).toEqual(defaultRow);
+      expect(collapsedRow).not.toEqual(brawlingRow);
+    });
+
+    it("does not carry the choice onto another participant's identically named rows", () => {
+      // Same option ids, different derived numbers: the next participant in the GM inspector.
+      const otherParticipantOptions = parrySourceOptions.map((option) => ({
+        ...option,
+        db: `${Number(option.db) - 2}`,
+        parry: `${Number(option.parry) - 2}`,
+      }));
+      const otherDefaultStats = {
+        db: "16",
+        dm: "−1",
+        parry: "13",
+        sourceName: "Sword / shield",
+      };
+
+      const { container, rerender } = render(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={combinedDefenseStats}
+          parrySourceOptions={parrySourceOptions}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      const firstDefaultRow = readDefenseRow(container);
+      expect(firstDefaultRow).toHaveLength(3);
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Parry source" }), {
+        target: { value: "Brawling|Brawling" },
+      });
+      expect(readDefenseRow(container)).toEqual(brawlingRow);
+      expect(readDefenseRow(container)).not.toEqual(firstDefaultRow);
+
+      rerender(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={otherDefaultStats}
+          parrySourceOptions={otherParticipantOptions}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      const otherRow = readDefenseRow(container);
+      expect(otherRow).toHaveLength(3);
+      // The second participant's own default, not their Brawling row (["9", "−1", "7"]).
+      expect(otherRow).toEqual(["16", "−1", "13"]);
+      expect(otherRow).not.toEqual(["9", "−1", "7"]);
+      expect(screen.getByRole("combobox", { name: "Parry source" })).toHaveValue(
+        "Combined|Sword / shield",
+      );
+    });
+
+    it("keeps the choice while the same option set is still offered", () => {
+      const { container, rerender } = render(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={combinedDefenseStats}
+          parrySourceOptions={parrySourceOptions}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      fireEvent.change(screen.getByRole("combobox", { name: "Parry source" }), {
+        target: { value: "Brawling|Brawling" },
+      });
+      expect(readDefenseRow(container)).toEqual(brawlingRow);
+
+      // A re-render with an equal-but-not-identical option array must not reset the choice.
+      rerender(
+        <PlayerCombatDefenseGroup
+          defaultParrySourceId="Combined|Sword / shield"
+          defenseStats={{ ...combinedDefenseStats }}
+          parrySourceOptions={parrySourceOptions.map((option) => ({ ...option }))}
+          showParrySourceSelector
+        >
+          <div>Main hand</div>
+        </PlayerCombatDefenseGroup>,
+      );
+      expect(readDefenseRow(container)).toEqual(brawlingRow);
+    });
+  });
 });
 
 describe("PlayerCombatAttackStatsTable source cell", () => {

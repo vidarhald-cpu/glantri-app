@@ -161,6 +161,56 @@ export interface PlayerCombatParrySourceOption {
   sourceName: string;
 }
 
+/**
+ * A presentation choice of defensive mode, stored together with the identity of the option set it
+ * was made against. Pairing the two in one state value is what lets the choice be dropped without
+ * an effect: the stored signature is compared against the current one on every render.
+ */
+export interface PlayerCombatParrySourceSelection {
+  id: string;
+  signature: string;
+}
+
+/**
+ * Identity of the offered defensive-mode set. Row **content** is part of the identity on purpose:
+ * option ids such as `Brawling|Brawling` recur across participants and declarations, so an
+ * id-membership test alone would carry one participant's choice onto another participant's rows
+ * (Forgejo #782 QA finding F1).
+ */
+export function playerCombatParrySourceSetSignature(
+  options: readonly PlayerCombatParrySourceOption[],
+  defaultParrySourceId?: string,
+): string {
+  return JSON.stringify([
+    defaultParrySourceId ?? null,
+    options.map((option) => [
+      option.id,
+      option.label,
+      option.sourceName,
+      option.db,
+      option.dm,
+      option.parry,
+    ]),
+  ]);
+}
+
+/**
+ * The selection the mini-table may honour for the props it is rendering **right now**. It is
+ * recomputed from the current props on every render and never written back to state, so a stored
+ * choice stops governing the displayed values in the same render in which the selector's gate
+ * closes or a different option set arrives — there is no re-synchronisation window in which the
+ * table can show a row belonging to another declaration or another participant.
+ */
+export function resolvePlayerCombatParrySourceSelection(
+  selection: PlayerCombatParrySourceSelection | undefined,
+  gate: { selectorOffered: boolean; signature: string },
+): string | undefined {
+  if (!selection || !gate.selectorOffered || selection.signature !== gate.signature) {
+    return undefined;
+  }
+  return selection.id;
+}
+
 interface PlayerCombatModifierPanelProps {
   activeSpecialEffectCount?: number;
   context?: CombatSituationContext;
@@ -3380,6 +3430,13 @@ export function PlayerCombatParryContextPanel({
  * combat state the mini-table displays. It changes no persisted declaration field and no
  * mechanics. With no explicit choice the displayed values are exactly what the unchanged
  * derivation produces, so the underlying source-selection rules are untouched.
+ *
+ * That choice is honoured only while the selector that made it is on screen and the same option
+ * set is still offered. The displayed row is resolved from the current props on every render by
+ * `resolvePlayerCombatParrySourceSelection`, so the moment the gate closes, or a different
+ * participant/declaration/derived row set arrives, the table falls back to the unchanged
+ * derivation rather than naming a row the player can no longer see or change (Forgejo #782 QA
+ * finding F1).
  */
 export function PlayerCombatDefenseGroup({
   children,
@@ -3392,8 +3449,17 @@ export function PlayerCombatDefenseGroup({
   separatedFromAttack = false,
   showParrySourceSelector = false,
 }: PlayerCombatDefenseGroupProps) {
-  const [chosenParrySourceId, setChosenParrySourceId] = useState<string | undefined>(undefined);
+  const [parrySourceSelection, setParrySourceSelection] = useState<
+    PlayerCombatParrySourceSelection | undefined
+  >(undefined);
   const options = parrySourceOptions ?? [];
+  // The selector's gate. The displayed values depend on it, so a choice cannot outlive it.
+  const selectorOffered = showParrySourceSelector && options.length > 1;
+  const optionSetSignature = playerCombatParrySourceSetSignature(options, defaultParrySourceId);
+  const chosenParrySourceId = resolvePlayerCombatParrySourceSelection(parrySourceSelection, {
+    selectorOffered,
+    signature: optionSetSignature,
+  });
   const selectedParrySourceId = chosenParrySourceId ?? defaultParrySourceId;
   const chosenOption = chosenParrySourceId
     ? options.find((option) => option.id === chosenParrySourceId)
@@ -3412,16 +3478,17 @@ export function PlayerCombatDefenseGroup({
       : defenseStats;
   // Only hand the mini-table a selector that will actually render, so the source/name cell falls
   // back to naming the source rather than rendering empty.
-  const parrySourceSelector =
-    showParrySourceSelector && options.length > 1 ? (
-      <PlayerCombatParrySourceSelector
-        controlsDisabled={controlsDisabled}
-        onChange={setChosenParrySourceId}
-        options={options}
-        readOnly={readOnly}
-        selectedParrySourceId={selectedParrySourceId}
-      />
-    ) : undefined;
+  const parrySourceSelector = selectorOffered ? (
+    <PlayerCombatParrySourceSelector
+      controlsDisabled={controlsDisabled}
+      onChange={(parrySourceId) =>
+        setParrySourceSelection({ id: parrySourceId, signature: optionSetSignature })
+      }
+      options={options}
+      readOnly={readOnly}
+      selectedParrySourceId={selectedParrySourceId}
+    />
+  ) : undefined;
 
   return (
     <div style={separatedFromAttack ? phaseGroupSeparatedStyle : playerCombatPhaseGroupStyle}>
