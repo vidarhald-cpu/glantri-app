@@ -4603,14 +4603,11 @@ function resolveApiCombatNpcDeclarationProposal(input: {
         state: input.state.distanceState,
       })
     : undefined;
+  // Forgejo #772: the requested distance may equal the current distance; only the target, the
+  // distance edge and the maneuver payload have to still be resolvable.
   const adjustDistanceValid =
     proposal.sourceDeclaration.actionId !== "adjust_range_attack" ||
-    Boolean(
-      adjustTarget &&
-      adjustDistanceEdge &&
-      proposal.sourceDeclaration.adjustDistance &&
-      proposal.sourceDeclaration.adjustDistance.requestedDistance !== adjustDistanceEdge.distance,
-    );
+    Boolean(adjustTarget && adjustDistanceEdge && proposal.sourceDeclaration.adjustDistance);
   let doubleAttackValid = true;
   if (proposal.sourceDeclaration.actionId === "double_attack") {
     const phase1 = phaseSources.phase1;
@@ -4848,11 +4845,9 @@ function prepareAcceptedNpcDeclarationProposal(input: {
       participantB: targetParticipant,
       state: input.state.distanceState,
     });
-    if (
-      !targetParticipantId ||
-      !edge ||
-      edge.distance === source.adjustDistance.requestedDistance
-    ) {
+    // Forgejo #772: an equal requested distance is a legal declared preference, so it must not
+    // abort the preparation. Only an unresolvable target or distance edge does.
+    if (!targetParticipantId || !edge) {
       return undefined;
     }
     adjustDistance = {
@@ -9296,24 +9291,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             .code(400)
             .send({ error: "Current distance is unavailable for this opponent." });
         }
-        const existingAdjustDistanceProposal = roundState.adjustDistanceProposals.find(
-          (proposal) =>
-            proposal.roundNumber === roundState.roundNumber &&
-            participantAliasesInclude({
-              id: proposal.attackerParticipantId,
-              participant: encounterParticipant,
-            }),
-        );
-        const distanceAtDeclaration =
-          existingAdjustDistanceProposal?.currentDistance ?? distanceEdge.distance;
-        if (
-          existingAdjustDistanceProposal?.status !== "committed" &&
-          body.adjustDistance.requestedDistance === distanceAtDeclaration
-        ) {
-          return reply
-            .code(400)
-            .send({ error: "Requested distance must differ from the current distance." });
-        }
+        // Product Owner ruling 2026-10-25 (Forgejo #772): the desired distance expresses the
+        // participant's preferred relative distance for the Phase-2 maneuver, so it may equal the
+        // current distance. `Adjust distance` with desired = current is a declared intention in its
+        // own right and is never the same declaration as `Keep distance`, so no inequality is
+        // required here and none may be enforced.
         const phase2Source = body.phaseAttackSources?.phase2;
         if (!phase2Source) {
           return reply.code(400).send({ error: "Select an attack source for Phase 2." });

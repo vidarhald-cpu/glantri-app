@@ -66,6 +66,7 @@ import {
   scenarioParticipantSchema,
   type CombatProgressionBoundaryKind,
   type CombatDefenseSnapshot,
+  type CombatDistance,
   combatRoundInitiativeResultSchema,
   movementIntentSchema,
   type CombatRoundState,
@@ -2258,6 +2259,13 @@ function makeStepAutomationFixture(input: {
 
 function makeDeclarationAutomationFixture(input: {
   attackParticipantIndex?: number;
+  /**
+   * Forgejo #772 — give this participant a round-1 `adjust_range_attack` declaration whose
+   * requested distance equals the round-2 pair distance, so the carry-forward proposal reaches the
+   * API's maneuver validation with `requested === current`.
+   */
+  adjustDistanceParticipantIndex?: number;
+  adjustDistanceRequested?: CombatDistance;
   inactiveTargetForParticipantIndex?: number;
   manuallyDeclaredCount?: number;
   playerControlledIndex?: number;
@@ -2269,14 +2277,37 @@ function makeDeclarationAutomationFixture(input: {
   let roundOne = combatRoundStateSchema.parse(roundOneEncounter.combatRoundState);
   for (const [index, participant] of encounterParticipants.entries()) {
     const target = encounterParticipants[(index + 1) % encounterParticipants.length]!;
-    const actionId =
-      input.inactiveTargetForParticipantIndex === index || input.attackParticipantIndex === index
+    const adjustsDistance = input.adjustDistanceParticipantIndex === index;
+    const actionId = adjustsDistance
+      ? "adjust_range_attack"
+      : input.inactiveTargetForParticipantIndex === index || input.attackParticipantIndex === index
         ? "attack_parry"
         : "parry";
-    const phaseContexts =
-      actionId === "attack_parry" ? { phase1: testCombatPhaseContext(target.id) } : undefined;
-    const attackOpportunities =
-      actionId === "attack_parry"
+    const phaseContexts = adjustsDistance
+      ? {
+          phase1: testCombatPhaseContext(target.id),
+          phase2: testCombatPhaseContext(target.id),
+        }
+      : actionId === "attack_parry"
+        ? { phase1: testCombatPhaseContext(target.id) }
+        : undefined;
+    const attackOpportunities = adjustsDistance
+      ? buildCombatRoundDeclaredAttackOpportunities({
+          actionId,
+          participantId: participant.id,
+          phaseContexts,
+          roundNumber: 1,
+          sources: {
+            phase2: {
+              attackModeId: "mode-1",
+              sourceKind: "unarmed",
+              weaponSourceId: "unarmed:virtual-weapon-template-punch",
+              weaponSourceSlot: "virtual",
+              weaponTemplateId: "virtual-weapon-template-punch",
+            },
+          },
+        })
+      : actionId === "attack_parry"
         ? buildCombatRoundDeclaredAttackOpportunities({
             actionId,
             participantId: participant.id,
@@ -2301,6 +2332,13 @@ function makeDeclarationAutomationFixture(input: {
       },
       declaration: {
         actionId,
+        adjustDistance: adjustsDistance
+          ? {
+              currentDistance: input.adjustDistanceRequested ?? 2,
+              requestedDistance: input.adjustDistanceRequested ?? 2,
+              targetParticipantId: target.id,
+            }
+          : undefined,
         attackOpportunities,
         combatContext: { modifierBuckets: emptyModifierBuckets() },
         id: `round:1:participant:${participant.id}:declaration`,
@@ -2325,6 +2363,25 @@ function makeDeclarationAutomationFixture(input: {
     roundNumber: 2,
     rounds: [{ ...roundOne, currentStep: "round_summary", roundNumber: 1 }],
   });
+  if (input.adjustDistanceParticipantIndex !== undefined) {
+    // Hold the round-2 pair distance at the carried-forward requested distance, so the proposal
+    // presents the exact `requested === current` case the #772 ruling declares legal.
+    const attacker = encounterParticipants[input.adjustDistanceParticipantIndex]!;
+    const defender =
+      encounterParticipants[
+        (input.adjustDistanceParticipantIndex + 1) % encounterParticipants.length
+      ]!;
+    roundTwo = combatRoundStateSchema.parse({
+      ...roundTwo,
+      distanceState: setDistanceBetween({
+        distance: input.adjustDistanceRequested ?? 2,
+        participantAId: attacker.id,
+        participantBId: defender.id,
+        source: "gm_set",
+        state: roundTwo.distanceState,
+      }),
+    });
+  }
   for (let index = 0; index < (input.manuallyDeclaredCount ?? 0); index += 1) {
     const participant = encounterParticipants[index]!;
     roundTwo = recordCombatRoundDeclaration({
@@ -17647,6 +17704,283 @@ describe("scenarios route contract", () => {
     ]);
   });
 
+  /**
+   * Forgejo #772 — Product Owner ruling of 2026-10-25. `Adjust distance` does not require the
+   * desired distance to differ from the current distance; the desired distance expresses the
+   * participant's preferred relative distance for the Phase-2 maneuver.
+   *
+   * Every arm below reads the persisted declaration back, because acceptance alone is not a
+   * sufficient assertion here: the pre-repair code path at
+   * `prepareAcceptedNpcDeclarationProposal` abandoned the preparation silently on an equal
+   * distance, and a status-only assertion would pass against a declaration that had lost exactly
+   * the intent under repair. Each arm therefore asserts that the stored declaration RETAINS its
+   * `adjustDistance` and its requested value.
+   */
+  async function declareAdjustRangeAttackAtDistance(input: {
+    currentDistance: number;
+    requestedDistance: number;
+  }) {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    });
+    const roundState = {
+      ...initializeCombatRoundState({ encounter: baseEncounter }),
+      distanceState: setDistanceBetween({
+        distance: input.currentDistance,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+        source: "gm_set",
+      }),
+    };
+    mocks.encounterService.updateEncounter.mockClear();
+    mocks.encounterService.updateScenarioParticipantState.mockClear();
+    setupCombatDeclarationRoute({
+      encounter: { combatRoundState: roundState, participants: encounterParticipants },
+      participants: [{ id: "participant-1" }, { id: "participant-2" }],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "adjust_range_attack",
+        adjustDistance: {
+          requestedDistance: input.requestedDistance,
+          targetParticipantId: "participant-2",
+        },
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        phaseAttackSources: {
+          phase2: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_2",
+            templateId: "virtual-weapon-template-punch",
+          }),
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-2"),
+          phase2: testCombatPhaseContext("participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+    const savedRoundState =
+      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
+    return {
+      declaration: savedRoundState?.participants?.find(
+        (participant: { participantId: string }) =>
+          participant.participantId === "encounter-participant-1",
+      )?.declaration,
+      participantState:
+        mocks.encounterService.updateScenarioParticipantState.mock.calls[0]?.[0]?.state,
+      proposals: savedRoundState?.adjustDistanceProposals,
+      response,
+    };
+  }
+
+  it("#772 accepts Adjust Distance - Attack whose desired distance equals the current distance", async () => {
+    const declared = await declareAdjustRangeAttackAtDistance({
+      currentDistance: 2,
+      requestedDistance: 2,
+    });
+
+    expect(declared.response.statusCode, declared.response.body).toBe(200);
+    expect(declared.declaration?.actionId).toBe("adjust_range_attack");
+    expect(declared.declaration?.adjustDistance).toEqual({
+      currentDistance: 2,
+      requestedDistance: 2,
+      targetParticipantId: "encounter-participant-2",
+    });
+    expect(declared.proposals).toEqual([
+      expect.objectContaining({
+        attackerParticipantId: "encounter-participant-1",
+        currentDistance: 2,
+        defenderParticipantId: "encounter-participant-2",
+        direction: "unchanged",
+        requestedDistance: 2,
+        status: "awaiting_action_turn",
+      }),
+    ]);
+  });
+
+  it("#772 keeps accepting a desired distance lower than the current distance", async () => {
+    const declared = await declareAdjustRangeAttackAtDistance({
+      currentDistance: 2,
+      requestedDistance: 1,
+    });
+
+    expect(declared.response.statusCode, declared.response.body).toBe(200);
+    expect(declared.declaration?.adjustDistance).toEqual({
+      currentDistance: 2,
+      requestedDistance: 1,
+      targetParticipantId: "encounter-participant-2",
+    });
+    expect(declared.proposals?.[0]).toMatchObject({ direction: "closer", requestedDistance: 1 });
+  });
+
+  it("#772 keeps accepting a desired distance higher than the current distance", async () => {
+    const declared = await declareAdjustRangeAttackAtDistance({
+      currentDistance: 2,
+      requestedDistance: 3,
+    });
+
+    expect(declared.response.statusCode, declared.response.body).toBe(200);
+    expect(declared.declaration?.adjustDistance).toEqual({
+      currentDistance: 2,
+      requestedDistance: 3,
+      targetParticipantId: "encounter-participant-2",
+    });
+    expect(declared.proposals?.[0]).toMatchObject({ direction: "farther", requestedDistance: 3 });
+  });
+
+  it("#772 leaves Phase-2 attack sequencing and the distance-adjustment process shape unchanged at an equal desired distance", async () => {
+    const closer = await declareAdjustRangeAttackAtDistance({
+      currentDistance: 2,
+      requestedDistance: 1,
+    });
+    const equal = await declareAdjustRangeAttackAtDistance({
+      currentDistance: 2,
+      requestedDistance: 2,
+    });
+    const farther = await declareAdjustRangeAttackAtDistance({
+      currentDistance: 2,
+      requestedDistance: 3,
+    });
+
+    // Phase-2 sequencing: the declared attack opportunities, their phase/slot/origin and the
+    // committed defensive penalties are identical across all three arms.
+    expect(equal.declaration?.attackOpportunities).toEqual(closer.declaration?.attackOpportunities);
+    expect(equal.declaration?.attackOpportunities).toEqual([
+      expect.objectContaining({
+        origin: "adjust_range_attack",
+        phase: "phase2",
+        slot: "attack_2",
+        targetParticipantId: "encounter-participant-2",
+      }),
+    ]);
+    expect(equal.declaration?.attackPhaseDefensivePenalties).toEqual(
+      closer.declaration?.attackPhaseDefensivePenalties,
+    );
+    expect(equal.declaration?.phaseContexts).toEqual(closer.declaration?.phaseContexts);
+
+    // The Phase-1 Adjust Distance process and its Phase-2 attack opportunity are bound by the
+    // same ids in every arm, so the maneuver reaches review and commit by the same route.
+    expect(equal.proposals?.[0]).toMatchObject({
+      phase1OpportunityId: closer.proposals?.[0]?.phase1OpportunityId,
+      phase2AttackOpportunityId: closer.proposals?.[0]?.phase2AttackOpportunityId,
+    });
+
+    // Distance mechanics: the generated closing DB/Parry penalty follows the domain's existing
+    // `requested >= current` boundary — only genuinely closing earns it. Removing the validation
+    // restriction must not move that boundary, so the equal arm behaves exactly like the farther
+    // arm and not like the closer arm.
+    const generatedDbIds = (declaration: {
+      combatContext?: { modifierBuckets?: { situationDb?: Array<{ id: string }> } };
+    }) => (declaration.combatContext?.modifierBuckets?.situationDb ?? []).map((entry) => entry.id);
+    expect(generatedDbIds(closer.declaration)).toContain(
+      "generated:adjust-range-attack:phase1:db-parry",
+    );
+    expect(generatedDbIds(equal.declaration)).toEqual(generatedDbIds(farther.declaration));
+    expect(generatedDbIds(equal.declaration)).not.toContain(
+      "generated:adjust-range-attack:phase1:db-parry",
+    );
+  });
+
+  it("#772 keeps Keep distance and Adjust distance distinct declared intentions at the same desired distance", async () => {
+    // Both arms hold the desired distance at the current distance, so the numeric value cannot be
+    // doing the discriminating work: only the declared intention differs.
+    const declareRelativePosition = async (
+      position:
+        | { desiredDistance: number; kind: "keep_distance"; targetParticipantId: string }
+        | { desiredDistance: number; kind: "adjust_distance"; targetParticipantId: string },
+    ) => {
+      const encounterParticipants = makeTwoCombatEncounterParticipants();
+      const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+        participants: encounterParticipants,
+      });
+      const roundState = {
+        ...initializeCombatRoundState({ encounter: baseEncounter }),
+        distanceState: setDistanceBetween({
+          distance: 2,
+          participantAId: "encounter-participant-1",
+          participantBId: "encounter-participant-2",
+          source: "gm_set",
+        }),
+      };
+      mocks.encounterService.updateEncounter.mockClear();
+      setupCombatDeclarationRoute({
+        encounter: { combatRoundState: roundState, participants: encounterParticipants },
+        participants: [{ id: "participant-1" }, { id: "participant-2" }],
+        user: mocks.adminUser,
+      });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: "adjust_range_attack",
+          adjustDistance: { requestedDistance: 2, targetParticipantId: "participant-2" },
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          intent: {
+            primaryAction: { actionId: "adjust_range_attack" },
+            relativePositions: [position],
+          },
+          phaseAttackSources: {
+            phase2: makeUnarmedAttackSourceRef({
+              opportunitySlot: "attack_2",
+              templateId: "virtual-weapon-template-punch",
+            }),
+          },
+          phaseContexts: {
+            phase1: testCombatPhaseContext("participant-2"),
+            phase2: testCombatPhaseContext("participant-2"),
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+      const savedRoundState =
+        mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
+      return {
+        relativePositions: savedRoundState?.participants?.find(
+          (participant: { participantId: string }) =>
+            participant.participantId === "encounter-participant-1",
+        )?.declaration?.intent?.relativePositions,
+        response,
+      };
+    };
+
+    const keep = await declareRelativePosition({
+      desiredDistance: 2,
+      kind: "keep_distance",
+      targetParticipantId: "participant-2",
+    });
+    const adjust = await declareRelativePosition({
+      desiredDistance: 2,
+      kind: "adjust_distance",
+      targetParticipantId: "participant-2",
+    });
+
+    expect(keep.response.statusCode, keep.response.body).toBe(200);
+    expect(adjust.response.statusCode, adjust.response.body).toBe(200);
+    expect(keep.relativePositions).toEqual([
+      {
+        desiredDistance: 2,
+        kind: "keep_distance",
+        targetParticipantId: "encounter-participant-2",
+      },
+    ]);
+    expect(adjust.relativePositions).toEqual([
+      {
+        desiredDistance: 2,
+        kind: "adjust_distance",
+        targetParticipantId: "encounter-participant-2",
+      },
+    ]);
+    expect(keep.relativePositions?.[0]?.kind).not.toBe(adjust.relativePositions?.[0]?.kind);
+  });
+
   it("creates the phase 2 DB/Parry modifier when a player declares Reactive attack", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
@@ -20844,6 +21178,88 @@ describe("scenarios route contract", () => {
     await app.close();
   });
 
+  it("#772 accepts a carried-forward NPC Adjust Distance - Attack whose requested distance equals the current distance", async () => {
+    // Pre-repair this was rejected twice over, both silently: the API folded the inequality into
+    // `adjustDistanceValid`, which made the proposal `invalid` with `maneuver_invalid`, and the
+    // accepted-proposal preparation independently abandoned the whole declaration on an equal
+    // distance. Neither produced a message, so the run stopped with `invalid_proposal`.
+    const prepared = makeDeclarationAutomationFixture({
+      adjustDistanceParticipantIndex: 0,
+      adjustDistanceRequested: 2,
+    });
+    const preparedState = combatRoundStateSchema.parse(prepared.encounter.combatRoundState);
+    expect(
+      getDistanceBetween(
+        preparedState.distanceState,
+        "encounter-participant-1",
+        "encounter-participant-2",
+      ),
+    ).toBe(2);
+    expect(
+      projectCombatNpcDeclarationProposal({
+        encounterId: prepared.encounter.id,
+        encounterRevision: prepared.encounter.updatedAt,
+        participantId: "encounter-participant-1",
+        proposalSequence: 0,
+        state: preparedState,
+      }),
+    ).toMatchObject({
+      sourceDeclaration: {
+        actionId: "adjust_range_attack",
+        adjustDistance: { requestedDistance: 2 },
+      },
+      validation: { status: "complete" },
+    });
+    const fixture = setupMutableCombatRouteState({
+      encounter: prepared.encounter,
+      participants: prepared.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "accept_remaining",
+        participants: prepared.participants,
+        runId: "declaration-adjust-distance-equal-run",
+      }),
+      url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+    });
+    await app.close();
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().workflow).toMatchObject({
+      stepComplete: true,
+      stopReason: "end_of_step",
+    });
+    const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+    const declaration = state.participants.find(
+      (participant) => participant.participantId === "encounter-participant-1",
+    )?.declaration;
+    // Retention, not acceptance.
+    expect(declaration?.actionId).toBe("adjust_range_attack");
+    expect(declaration?.adjustDistance).toEqual({
+      currentDistance: 2,
+      requestedDistance: 2,
+      targetParticipantId: "encounter-participant-2",
+    });
+    expect(
+      state.adjustDistanceProposals.filter(
+        (proposal) =>
+          proposal.roundNumber === 2 &&
+          proposal.attackerParticipantId === "encounter-participant-1",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        currentDistance: 2,
+        defenderParticipantId: "encounter-participant-2",
+        direction: "unchanged",
+        requestedDistance: 2,
+        status: "awaiting_action_turn",
+      }),
+    ]);
+  });
   it("stops before a carry-forward whose previous target is no longer valid", async () => {
     const prepared = makeDeclarationAutomationFixture({ inactiveTargetForParticipantIndex: 1 });
     const fixture = setupMutableCombatRouteState({
