@@ -20,7 +20,6 @@ import {
   PlayerCombatObservationProgress,
   PlayerCombatParryContextPanel,
   PlayerCombatPhasePanel,
-  playerCombatPanelCardStyle,
   playerCombatPanelRowStyle,
   playerCombatTopPanelRowStyle,
   type PlayerCombatDistancePreferenceOption,
@@ -34,21 +33,19 @@ import {
 import { CombatEventResultList } from "./CombatEventResultList";
 
 const noop = () => undefined;
-const historicalDataMissingMessage = "No information available for this panel.";
 
 function historicalActionLabel(actionId?: string): string | undefined {
   if (!actionId) return undefined;
   return getPlayerEncounterActionLabel(actionId);
 }
 
-function MissingHistoricalPanel(input: { title: string }) {
-  return (
-    <section aria-label={input.title} style={playerCombatPanelCardStyle}>
-      <strong>{input.title}</strong>
-      <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>{historicalDataMissingMessage}</div>
-    </section>
-  );
-}
+/*
+ * #771 R2-12. An unrecorded historical panel used to reserve a full-height card stating that no
+ * information was available for it; the three sites below omit the card instead. Both containers are
+ * `display: grid` with `repeat(auto-fit, …)`, so the surviving cards reflow and no residual box is
+ * left. The message itself is still the `Historical result` list's empty text, which is the primary
+ * result panel rather than an omittable card.
+ */
 
 function HistoricalPhasePanel(input: {
   actionId?: string;
@@ -60,7 +57,7 @@ function HistoricalPhasePanel(input: {
   secondaryActionId?: string;
 }) {
   const recorded = Object.keys(input.panel).length > 0;
-  if (!recorded) return <MissingHistoricalPanel title={input.phaseLabel} />;
+  if (!recorded) return null;
 
   const context = input.panel.phaseContext ?? createEmptyPlayerEncounterCombatContext();
   const targets = (input.panel.targetOptions ?? []).map((target) => ({
@@ -209,9 +206,7 @@ export function PlayerCombatHistoryInspector(input: {
               selector.secondaryActionLabel ?? historicalActionLabel(selector.secondaryActionId)
             }
           />
-        ) : (
-          <MissingHistoricalPanel title="Action selector" />
-        )}
+        ) : null}
         <HistoricalPhasePanel
           actionId={selector?.actionId}
           observationRelationships={input.observationRelationships ?? []}
@@ -253,15 +248,21 @@ export function PlayerCombatHistoryInspector(input: {
             rows={modifierRows}
             sourceLabel="History"
           />
-        ) : (
-          <MissingHistoricalPanel title="Combat situation" />
-        )}
+        ) : null}
         <PlayerCombatHistoricalContextPanel
           roundNumber={input.snapshot?.roundNumber}
           stepLabel={input.snapshot?.step.replaceAll("_", " ")}
         />
         <CombatEventResultList
-          emptyMessage={input.snapshot?.stepOutcome?.message ?? historicalDataMissingMessage}
+          /*
+           * #771 R2-12. The `Historical result` list is the panel that names the step being
+           * inspected, so it is not omittable and keeps an empty message. It used to override that
+           * message with the same generic "no information available for this panel" sentence the
+           * reserved cards used; dropping the override falls back to `CombatEventResultList`'s own
+           * "No recorded result for this step.", which is what the GM surface already shows and
+           * says something a reader can act on.
+           */
+          emptyMessage={input.snapshot?.stepOutcome?.message}
           events={input.events}
           title={
             input.snapshot

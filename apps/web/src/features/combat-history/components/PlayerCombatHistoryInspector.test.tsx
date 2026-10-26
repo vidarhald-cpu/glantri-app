@@ -184,16 +184,39 @@ describe("PlayerCombatHistoryInspector", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("shows explicit panel messages instead of generic projected-data summaries", () => {
+  /*
+   * #771 R2-12 changed the first half of this expectation on purpose. The original decision it
+   * records — show an explicit per-panel statement rather than a generic projected-data summary —
+   * was about *what* an unrecorded panel says, and the Product Owner has now ruled that such a
+   * panel should say nothing and take no space: four reserved cards filled roughly half the
+   * historical viewport. So the card is omitted rather than reworded.
+   *
+   * The anti-leak half is unchanged and must stay: an unrecorded panel still must not fall back to
+   * dumping raw projected keys such as `Action Label` or `Attack Summary` into the surface.
+   */
+  it("omits unrecorded historical panels instead of reserving a card for each", () => {
     const empty = snapshot();
     empty.panels.actionSelector = {};
     empty.panels.phase1 = {};
     empty.panels.modifiers = {};
-    render(<PlayerCombatHistoryInspector events={[]} snapshot={empty} />);
+    const { container } = render(<PlayerCombatHistoryInspector events={[]} snapshot={empty} />);
 
-    expect(
-      screen.getAllByText("No information available for this panel.").length,
-    ).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText("No information available for this panel.")).toBeNull();
+    // The one panel that cannot be omitted names the inspected step, so it keeps an empty message
+    // — now the same specific sentence the GM surface already shows.
+    expect(screen.getByText("No recorded result for this step.")).toBeTruthy();
+    expect(screen.queryByLabelText("Action selector")).toBeNull();
+    expect(screen.queryByLabelText("Combat situation")).toBeNull();
+    expect(screen.queryByText("Phase 1")).toBeNull();
+    /*
+     * Omission is per-panel, not wholesale: this fixture leaves Phase 2 recorded, so that card
+     * still renders beside the three that were emptied. That is the measurement that separates
+     * "omit the empty panel" from "drop the historical workspace".
+     */
+    expect(screen.getByText("Phase 2")).toBeTruthy();
+    expect(screen.getByText("Historical context")).toBeTruthy();
+    expect(container.textContent).not.toContain("Action Label");
+    expect(container.textContent).not.toContain("Attack Summary");
     expect(screen.queryByText("Action Label")).toBeNull();
     expect(screen.queryByText("Attack Summary")).toBeNull();
   });
