@@ -150,6 +150,44 @@ describe("playerEncounter", () => {
     ).toBe("Counterattack is unavailable and cannot be declared.");
   });
 
+  /**
+   * #778 — a legal secondary action on its own carries no compatibility message on either
+   * surface, and the primary selector is not narrowed by it. The only secondary that still
+   * narrows the selector is `observe_opponent`, which an approved rule binds to Parry or Pass
+   * (`docs/rules/observe-opponent.md`); that case is asserted in the test above and kept.
+   */
+  it("accepts a legal secondary action with no primary action chosen", () => {
+    for (const secondaryActionId of [
+      "pass",
+      "talk_shout",
+      "equip_unequip",
+      "small_action",
+    ] as const) {
+      expect(
+        getPlayerEncounterDeclarationCompatibilityMessage({ secondaryActionId }),
+      ).toBeUndefined();
+      expect(
+        getPlayerEncounterPrimaryActionOptions(secondaryActionId).map((option) => option.value),
+      ).toEqual(getPlayerEncounterPrimaryActionOptions("").map((option) => option.value));
+    }
+
+    expect(getPlayerEncounterPrimaryActionOptions("").map((option) => option.value)).toEqual([
+      "attack_parry",
+      "parry_attack",
+      "double_attack",
+      "feint_attack",
+      "adjust_range_attack",
+      "offensive_parry",
+      "parry",
+      "parry_disarm",
+      "disarm",
+      "break_off_engagement",
+      "pass",
+      "perform_task",
+      "move_only",
+    ]);
+  });
+
   it("keeps unsupported legacy action identities and labels readable", () => {
     expect(isPlayerEncounterActionId("counterattack")).toBe(true);
     expect(isPlayerEncounterActionId("disarm")).toBe(true);

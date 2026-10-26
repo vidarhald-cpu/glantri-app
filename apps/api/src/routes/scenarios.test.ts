@@ -10319,7 +10319,17 @@ describe("scenarios route contract", () => {
     },
   );
 
-  it("rejects a forged secondary-only declaration before it can persist", async () => {
+  /**
+   * #778 — this case was titled for secondary-only declarations in general, and the shared
+   * authority refused every one of them without consulting a rule. The *assertions* are
+   * unchanged, because `observe_opponent` is the one secondary an approved rule binds to a
+   * primary action: `docs/rules/observe-opponent.md` records it as "available with the
+   * untargeted primary actions Pass or Parry" and states that "every primary combination other
+   * than Pass or Parry is rejected". Only the title is corrected, so the case can no longer be
+   * read as pinning a general requirement. The sibling case below pins the behaviour that did
+   * change.
+   */
+  it("rejects a forged Observe Opponent declaration without its authored primary action", async () => {
     setupCombatDeclarationRoute();
     const app = await buildScenarioTestApp();
     const response = await app.inject({
@@ -10344,6 +10354,66 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
+
+  /**
+   * #778 — the Product Owner's case, through the same shared authority the web client uses: a
+   * declaration carrying only a legal secondary action is accepted, and **no primary action is
+   * supplied for it**. The persisted declaration and the persisted participant state are both
+   * asserted, not merely the status code, because a repair that defaulted the primary to `pass`
+   * would also return 200 while violating regression case 5 ("no declaration is silently given
+   * an extra Primary action").
+   */
+  it.each([
+    ["player", mocks.playerUser],
+    ["GM proxy", mocks.adminUser],
+  ] as const)(
+    "accepts a secondary-only declaration for %s and records no primary action",
+    async (_viewer, user) => {
+      setupCombatDeclarationRoute({ user });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          combatContext: { modifierBuckets: emptyModifierBuckets() },
+          intent: {
+            relativePositions: [],
+            secondaryAction: {
+              actionId: "equip_unequip",
+              description: "Draw the dagger from the belt",
+            },
+          },
+          movementId: "hold",
+          scenarioParticipantId: "participant-1",
+          secondaryActionId: "equip_unequip",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(200);
+      const persistedDeclaration =
+        mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState
+          .participants[0].declaration;
+      expect(persistedDeclaration.secondaryActionId).toBe("equip_unequip");
+      expect(persistedDeclaration.actionId).toBeUndefined();
+      expect(persistedDeclaration.actionId).not.toBe("pass");
+      expect(persistedDeclaration.intent?.primaryAction).toBeUndefined();
+      expect(persistedDeclaration.intent?.secondaryAction).toMatchObject({
+        actionId: "equip_unequip",
+        description: "Draw the dagger from the belt",
+      });
+      expect(mocks.encounterService.updateScenarioParticipantState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          state: expect.objectContaining({
+            combat: expect.objectContaining({
+              lastDeclaredActionId: undefined,
+              lastDeclaredEncounterId: "encounter-1",
+            }),
+          }),
+        }),
+      );
+    },
+  );
 
   it("keeps final DE and M1 mutation revisions authoritative through reads and immediate advances", async () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants();

@@ -114,8 +114,11 @@ is refused, naming both choices — for example `Single attack cannot be combine
 Opponent. Choose a compatible primary action or remove the secondary action.` Equally, choosing
 Observe Opponent first narrows the primary selector to exactly **Parry** and **Pass**.
 
-A secondary action on its own is not a declaration: without a primary action it is refused with a
-message asking you to choose a compatible primary action.
+A secondary action on its own **is** a declaration. Pass, Talk / Shout, Equip / Unequip and Small
+Action need no primary action, so declaring one of them with the primary selector left on
+`Choose primary action` is accepted and records **no** primary action — you are not made to find
+Pass merely to draw a weapon. Observe Opponent is the exception, because it needs Parry or Pass:
+declared on its own it is refused with a message asking you to choose a compatible primary action.
 
 An `Equip / Unequip` declaration **records an intention; it does not change your equipment.** The
 actual change happens through the ordinary Item controls and GM adjudication — see

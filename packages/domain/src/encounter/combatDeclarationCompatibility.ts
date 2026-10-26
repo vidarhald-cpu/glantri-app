@@ -337,12 +337,40 @@ export function validateCombatDeclarationCompatibility(input: {
     });
   }
   if (!input.primaryAction) {
-    return input.secondaryAction
-      ? {
-          message: `${input.secondaryAction} requires a compatible primary action.`,
-          valid: false,
-        }
-      : { valid: true };
+    if (!input.secondaryAction) return { valid: true };
+    /**
+     * #778 — primary and secondary actions are independent choices. This branch previously
+     * refused *every* secondary action declared without a primary action, unconditionally and
+     * without consulting any rule, which forced a player who only wanted to draw a weapon to
+     * also select `pass`. A secondary action is now refused for want of a primary action only
+     * where the authored compatibility table above already binds that secondary to specific
+     * primary actions.
+     *
+     * Today that is `observe_opponent` alone, and it is rule-bound:
+     * `docs/rules/observe-opponent.md` records it as "a typed secondary action available with
+     * the untargeted primary actions Pass or Parry" whose "primary combination other than Pass
+     * or Parry is rejected", and its round-boundary progression counts only rounds in which
+     * "the observer declared Pass or Parry plus Observe Opponent against the relationship
+     * target". `docs/rules/combat-round-and-actions.md` section 2.2 states the same bound.
+     *
+     * The predicate *reads* that one table instead of restating it, so there is no second
+     * compatibility matrix to drift from it, and a secondary compatible with every available
+     * primary action is a complete declaration on its own. Nothing here supplies a primary
+     * action: an accepted secondary-only declaration records no primary action at all.
+     */
+    const availablePrimaryActions = getAvailableCombatPrimaryActionIds();
+    const authoredPrimaryActions = availablePrimaryActions.filter((primaryAction) =>
+      getCombatDeclarationCompatibilityRule(primaryAction)?.compatibleSecondaryActions.some(
+        (secondary) => secondary.actionId === input.secondaryAction,
+      ),
+    );
+    if (authoredPrimaryActions.length < availablePrimaryActions.length) {
+      return {
+        message: `${input.secondaryAction} requires a compatible primary action.`,
+        valid: false,
+      };
+    }
+    return { valid: true };
   }
   const rule = getCombatDeclarationCompatibilityRule(input.primaryAction);
   if (!rule) {
