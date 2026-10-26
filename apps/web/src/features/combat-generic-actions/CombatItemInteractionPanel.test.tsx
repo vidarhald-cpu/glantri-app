@@ -507,10 +507,15 @@ describe("CombatItemInteractionPanel — read-only inspection (Forgejo #509 F2)"
    * ever assigned on the success path, so a failed request stayed on "Loading Items…" for as long
    * as the panel was mounted and never retried. On an ordinary Scenario that failure is the
    * permanent 409 the staleness guard raises, so the whole Item and Disarm capability presented
-   * itself as work still in progress. A failed load must reach a resolved, failed state that
-   * carries the server's own message.
+   * itself as work still in progress. A failed load must reach a resolved, failed state.
+   *
+   * Forgejo issue #771 R2-4 narrows this, and only this: the resolved failed state no longer
+   * echoes the server's `ScenarioEquipmentStaleError` sentence, which explained persistence and
+   * reconciliation on the ordinary Combat surface. The #599 property under test is unchanged
+   * and still asserted — the panel reaches a resolved failed state and leaves "Loading Items…" —
+   * and the block is deliberately **not** collapsed, so the blocked state stays visible.
    */
-  it("represents a failed load as failed rather than as still loading", async () => {
+  it("represents a failed load as failed rather than as still loading, in one short line", async () => {
     vi.mocked(loadCombatItemInteractionOptions).mockRejectedValueOnce(
       new Error(
         "Scenario equipment changed outside play. The GM must reconcile it before dependent play can continue.",
@@ -526,15 +531,21 @@ describe("CombatItemInteractionPanel — read-only inspection (Forgejo #509 F2)"
       />,
     );
 
-    expect(
-      await screen.findByText(
-        "Scenario equipment changed outside play. The GM must reconcile it before dependent play can continue.",
-      ),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Items unavailable.")).toBeInTheDocument();
     expect(screen.queryByText("Loading Items…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Scenario equipment changed outside play.", { exact: false }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("reconcile", { exact: false })).not.toBeInTheDocument();
   });
 
-  it("falls back to the panel's own message when a failed load carries none", async () => {
+  /**
+   * The non-`Error` rejection shape. Before #771 R2-4 this case asserted a distinct fallback
+   * string, because the message came from the rejection; now both shapes resolve to the same
+   * one line. The case is kept, not folded away, because the #599 property it covers is the
+   * one about this rejection shape reaching a resolved failed state rather than loading.
+   */
+  it("reaches the same resolved failed state when a rejection carries no message", async () => {
     vi.mocked(loadCombatItemInteractionOptions).mockRejectedValueOnce("no message");
 
     render(
@@ -546,7 +557,7 @@ describe("CombatItemInteractionPanel — read-only inspection (Forgejo #509 F2)"
       />,
     );
 
-    expect(await screen.findByText("Unable to load Items for this Combat.")).toBeInTheDocument();
+    expect(await screen.findByText("Items unavailable.")).toBeInTheDocument();
     expect(screen.queryByText("Loading Items…")).not.toBeInTheDocument();
   });
 

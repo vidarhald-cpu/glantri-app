@@ -14269,9 +14269,6 @@ export default function CombatRoundManagerPanel({
                   }.`}
             </span>
           </div>
-          <div style={{ color: "#5e5a50", fontSize: "0.85rem" }}>
-            Pair distances shared by the round; not part of the current action command.
-          </div>
           {displayParticipants.length > 1 ? (
             <>
               <div style={{ overflowX: "auto" }}>

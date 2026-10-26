@@ -1858,7 +1858,16 @@ describe("player combat phase model", () => {
   });
 });
 
-describe("workbook import provenance in the attack stats (#517 ruling E2)", () => {
+/**
+ * **Forgejo issue #771 R2-5 supersedes ruling #517 E2 for the Combat surface.** The coordinates
+ * are no longer rendered anywhere in Combat — `PlayerCombatPanels.tsx` dropped the `Source: …`
+ * line. This guard therefore no longer pins a *visible* GM-only disclosure; it pins that the
+ * `includeSourceProvenance` plumbing, retained for internal diagnostics, is still asked for
+ * only from the GM's Combat Round Manager and never from the player page. That confinement is
+ * the part worth keeping, so the guard is narrowed in meaning rather than deleted, and its
+ * assertions are unchanged because the plumbing itself is unchanged.
+ */
+describe("workbook import provenance plumbing (#771 R2-5, superseding #517 ruling E2)", () => {
   const webRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
   const sourceFiles = (directory: string): string[] =>
     readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
