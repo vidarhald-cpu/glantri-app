@@ -919,7 +919,15 @@ describe("CombatRoundManagerPanel", () => {
     expect(trackerNav).toBeLessThan(source.indexOf("<CombatTracker"));
     expect(trackerNav).toBeLessThan(source.indexOf('aria-label="Step controller"'));
     expect(trackerNav).toBeLessThan(source.indexOf('aria-label="Combat round inspector"'));
-    expect(source).toContain("getAdjacentCombatRoundTimelineStepSelection");
+    /*
+     * #771. Step navigation goes through the visible-step wrapper, not the raw traversal, and it
+     * is handed the tracker model's own rendered column list. Asserted by the exact call rather
+     * than by the old substring, which `getAdjacentVisibleCombatRoundTimelineStepSelection` would
+     * not have satisfied and which must not be allowed to pass on a name that merely contains it.
+     */
+    expect(source).toContain("getAdjacentVisibleCombatRoundTimelineStepSelection({");
+    expect(source).toContain("visibleSteps: trackerModel.steps,");
+    expect(source).not.toContain("getAdjacentCombatRoundTimelineStepSelection({");
     expect(source).toContain("getAdjacentCombatRoundTimelineParticipantSelection");
     expect(source).toContain("getParticipantIdsForTimelineRound");
     expect(source).toContain("roundNumbers: [...timelineRoundNumbers]");
