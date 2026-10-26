@@ -901,10 +901,24 @@ describe("CombatRoundManagerPanel", () => {
       "const inspectorActionButtonDisabled = saving || Boolean(inspectorActionValidationMessage)",
     );
     expect(source).toContain("Phase-wide task");
-    expect(source).toContain("Previous participant");
-    expect(source).toContain("Next participant");
-    expect(source).toContain("Previous step");
-    expect(source).toContain("Next step");
+    expect(source).toContain('aria-label="Previous participant"');
+    expect(source).toContain('aria-label="Next participant"');
+    expect(source).toContain('aria-label="Previous step"');
+    expect(source).toContain('aria-label="Next step"');
+    /*
+     * #771 R2-3. The four assertions above only prove the accessible names survive the move to
+     * icon buttons; on their own they would pass wherever the controls sat, which is how the
+     * previous version of this guard let the placement drift unnoticed. These pin the ruled
+     * position: inside the tracker section's own header, above the tracker, left of the
+     * `Current task` button — not beside the inspector heading below it.
+     */
+    const trackerNav = source.indexOf('aria-label="Tracker inspection navigation"');
+    expect(trackerNav).toBeGreaterThan(
+      source.indexOf("<h2 style={{ margin: 0 }}>Combat Round Manager</h2>"),
+    );
+    expect(trackerNav).toBeLessThan(source.indexOf("<CombatTracker"));
+    expect(trackerNav).toBeLessThan(source.indexOf('aria-label="Step controller"'));
+    expect(trackerNav).toBeLessThan(source.indexOf('aria-label="Combat round inspector"'));
     expect(source).toContain("getAdjacentCombatRoundTimelineStepSelection");
     expect(source).toContain("getAdjacentCombatRoundTimelineParticipantSelection");
     expect(source).toContain("getParticipantIdsForTimelineRound");
@@ -948,7 +962,17 @@ describe("CombatRoundManagerPanel", () => {
       "Phase filtering belongs to calculation totals, not historical visibility.",
     );
     expect(source).toContain(": inspectorModifierRows;");
-    expect(source).toContain("No information available for this panel.");
+    /*
+     * #771 R2-12 reversed this guard deliberately. It used to pin the presence of the
+     * "No information available for this panel." card, which is exactly the block the Product
+     * Owner ruled out: four of them filled roughly half the historical viewport. The historical
+     * guards above still hold — the panels short-circuit rather than falling through to live
+     * state — they now render nothing instead of a reserved card.
+     */
+    expect(source).not.toContain("No information available for this panel.");
+    expect(source).toContain(
+      "!historicalPhasePanel &&\n                        !phaseProjection.defenseSnapshot",
+    );
     expect(source).toContain("resolveCombatHistoryPanelSnapshot");
     expect(source).toContain("inspectorHistoricalSelectorFactsComplete");
     expect(source).toContain("movementPreferenceTargets");

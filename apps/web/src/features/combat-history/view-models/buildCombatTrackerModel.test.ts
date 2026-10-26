@@ -6,7 +6,11 @@ import {
 import { describe, expect, it } from "vitest";
 
 import type { CombatTrackerCellFacts } from "../types";
-import { buildCombatTrackerCellKey, buildCombatTrackerModel } from "./buildCombatTrackerModel";
+import {
+  buildCombatTrackerCellKey,
+  buildCombatTrackerModel,
+  VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
+} from "./buildCombatTrackerModel";
 
 function facts(overrides: Partial<CombatTrackerCellFacts> = {}): CombatTrackerCellFacts {
   return {
@@ -498,5 +502,29 @@ describe("buildCombatTrackerModel", () => {
     const result = model([facts({ inspectable: false })]);
 
     expect(result.cells["1:participant-a:select_actions"].inspectable).toBe(false);
+  });
+
+  /*
+   * #771 R2-2. Nothing in this repository pinned the visible column set before: the tracker simply
+   * rendered the whole step enum, which is the only reason a `PD` column ever existed. This pins
+   * the removal as a removal of exactly one column, and pins the two things that must not move
+   * with it — the domain step sequence, and the cells the builder still produces for that step.
+   */
+  it("drops only the pre-declaration column from the visible tracker and leaves the step itself", () => {
+    expect(VISIBLE_COMBAT_ROUND_TRACKER_STEPS).toEqual(
+      COMBAT_ROUND_STEPS.filter((step) => step !== "pre_declaration"),
+    );
+    expect(VISIBLE_COMBAT_ROUND_TRACKER_STEPS).toHaveLength(COMBAT_ROUND_STEPS.length - 1);
+    expect(VISIBLE_COMBAT_ROUND_TRACKER_STEPS).not.toContain("pre_declaration");
+    // The domain sequence is untouched, and `pre_declaration` is still the step a round opens on.
+    expect(COMBAT_ROUND_STEPS).toContain("pre_declaration");
+    expect(COMBAT_ROUND_STEPS[0]).toBe("pre_declaration");
+    // The cell map is built from the facts it is given, so a pre-declaration cell still exists for
+    // anything that reads cells by key; only the rendered column list changed.
+    expect(
+      model([facts({ status: "pending", step: "pre_declaration" })]).cells[
+        "1:participant-a:pre_declaration"
+      ],
+    ).toBeDefined();
   });
 });

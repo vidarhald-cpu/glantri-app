@@ -26,6 +26,7 @@ import {
   buildCombatTrackerModel,
   buildCurrentActionPresentation,
   getCombatProgressionPresentationTasks,
+  VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
   type CombatProgressionTrackerIndex,
   type CombatTrackerCellFacts,
   type CombatTrackerModel,
@@ -462,7 +463,7 @@ export function buildArchivedCombatPresentation(input: {
         ...participant,
         selected: false,
       })),
-      steps: COMBAT_ROUND_STEPS,
+      steps: VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
     }),
     trackerCellFacts,
   };
@@ -575,7 +576,7 @@ export function buildActiveCombatPresentation(input: {
         participantId: participant.participantId,
         selected: false,
       })),
-      steps: COMBAT_ROUND_STEPS,
+      steps: VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
     }),
     trackerCellFacts,
   };
@@ -678,7 +679,7 @@ export function buildCombatTrackerBasePresentation(input: {
     ],
     rows: input.active.tracker.rows,
     selectedCellKey: undefined,
-    steps: COMBAT_ROUND_STEPS,
+    steps: VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
   };
 }
 

@@ -18,6 +18,7 @@ import type {
 import {
   buildCombatTrackerCellKey,
   COMBAT_TRACKER_MARKER_MEANINGS,
+  VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
 } from "./buildCombatTrackerModel";
 import { buildCombatProgressionTrackerIndex } from "./buildCombatProgressionTrackerModel";
 import {
@@ -499,6 +500,6 @@ export function buildProjectedCombatTrackerModel(input: {
       selected: cursorSelection?.participantId === row.participantId,
     })),
     selectedCellKey: cursorSelection ? buildCombatTrackerCellKey(cursorSelection) : undefined,
-    steps: COMBAT_ROUND_STEPS,
+    steps: VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
   };
 }
