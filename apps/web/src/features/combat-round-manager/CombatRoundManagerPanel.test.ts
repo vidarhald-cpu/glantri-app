@@ -303,7 +303,10 @@ describe("CombatRoundManagerPanel", () => {
 
     expect(source).toContain("Distance matrix");
     expect(source).toContain("Round-level distance matrix");
-    expect(source).toContain(
+    // Forgejo issue #771 R2-6: the Product Owner named this implementation-style line for
+    // removal. Asserted absent so it cannot come back. Only the prose went — the matrix itself
+    // and its style constants are untouched, and the assertions below still pin them.
+    expect(source).not.toContain(
       "Pair distances shared by the round; not part of the current action command.",
     );
     expect(source).not.toContain("Participant A");

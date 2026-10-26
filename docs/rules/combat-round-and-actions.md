@@ -247,9 +247,8 @@ to a player, `No supported Items for this participant.` to the GM. An empty pane
 state, not a pending one.
 
 **Item interactions and canonical Disarm both depend on the participant's equipment projection
-being current.** If it is stale the panel reports
-`Scenario equipment changed outside play. The GM must reconcile it before dependent play can
-continue.` and they stay unavailable until the GM reconciles. This is the same reconciliation as
+being current.** If it is stale the panel reports `Items unavailable.` and they stay unavailable
+until the GM reconciles. This is the same reconciliation as
 [section 4](#4-loadout-in-the-fight) — Disarm needs to know exactly which Item is in whose hand, so
 it cannot run against a loadout the application knows to be out of date.
 
