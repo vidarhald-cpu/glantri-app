@@ -265,12 +265,102 @@ describe("combat declaration compatibility", () => {
     });
   });
 
-  it("rejects a secondary action without a compatible primary", () => {
+  /**
+   * #778 — the branch this guards previously refused *every* secondary action declared without a
+   * primary action, consulting no rule. `observe_opponent` keeps being refused because an
+   * approved rule binds it: `docs/rules/observe-opponent.md` ("available with the untargeted
+   * primary actions Pass or Parry", "every primary combination other than Pass or Parry is
+   * rejected") and `docs/rules/combat-round-and-actions.md` section 2.2. The title names that
+   * dependency so the case cannot later be read as a general requirement again.
+   */
+  it("rejects Observe Opponent without its authored Parry or Pass primary action", () => {
     expect(validateCombatDeclarationCompatibility({ secondaryAction: "observe_opponent" })).toEqual(
       {
         message: "observe_opponent requires a compatible primary action.",
         valid: false,
       },
     );
+    expect(projectCombatDeclarationCompatibility({ secondaryAction: "observe_opponent" })).toEqual(
+      expect.objectContaining({
+        compatiblePrimaryActions: ["parry", "pass"],
+        requiredContexts: ["secondary_target_participant"],
+        status: "incomplete",
+        valid: false,
+      }),
+    );
+  });
+
+  /**
+   * #778 — a legal secondary action is a complete declaration on its own. No primary action is
+   * required, and none is supplied: the returned validation carries no primary action and the
+   * projection reports every available primary as still open, so nothing downstream can read an
+   * implicit `pass` out of it.
+   */
+  it("accepts a declaration carrying only a legal secondary action", () => {
+    for (const secondaryAction of ["pass", "talk_shout", "equip_unequip", "small_action"]) {
+      expect(validateCombatDeclarationCompatibility({ secondaryAction })).toEqual({ valid: true });
+      expect(projectCombatDeclarationCompatibility({ secondaryAction })).toEqual(
+        expect.objectContaining({
+          compatiblePrimaryActions: [
+            "attack_parry",
+            "parry_attack",
+            "double_attack",
+            "feint_attack",
+            "adjust_range_attack",
+            "offensive_parry",
+            "parry",
+            "break_off_engagement",
+            "pass",
+            "perform_task",
+            "parry_disarm",
+            "disarm",
+            "move_only",
+          ],
+          message: undefined,
+          status: "compatible",
+          valid: true,
+        }),
+      );
+    }
+
+    expect(validateCombatDeclarationCompatibility({})).toEqual({ valid: true });
+    expect(
+      validateCombatDeclarationCompatibility({
+        movementKind: "set_distance_preferences",
+        secondaryAction: "equip_unequip",
+      }),
+    ).toEqual({ valid: true });
+  });
+
+  /**
+   * #778 — the Product Owner's regression case 4: existing explicit action-specific restrictions
+   * remain enforced. These are the three bounds the repair had to leave standing, each on a
+   * different axis from primary/secondary compatibility.
+   */
+  it("keeps the authored availability, primary-ineligibility and pair bounds standing", () => {
+    expect(validateCombatDeclarationCompatibility({ primaryAction: "observe_opponent" })).toEqual({
+      message: "Observe Opponent is a secondary action.",
+      valid: false,
+    });
+    expect(validateCombatDeclarationCompatibility({ secondaryAction: "counterattack" })).toEqual({
+      message: "Combat secondary action is not yet available: counterattack.",
+      valid: false,
+    });
+    expect(validateCombatDeclarationCompatibility({ primaryAction: "counterattack" })).toEqual({
+      message: "Combat action is not yet available: counterattack.",
+      valid: false,
+    });
+    expect(
+      validateCombatDeclarationCompatibility({
+        primaryAction: "attack_parry",
+        secondaryAction: "observe_opponent",
+      }),
+    ).toEqual({
+      message: "observe_opponent is not compatible with the selected primary action.",
+      valid: false,
+    });
+    expect(getCombatDeclarationRequiredContexts({ secondaryAction: "observe_opponent" })).toEqual([
+      "secondary_target_participant",
+    ]);
   });
 });

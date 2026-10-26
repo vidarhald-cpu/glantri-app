@@ -232,6 +232,63 @@ describe("PlayerCombatActionSelectorPanel", () => {
     );
   });
 
+  /**
+   * #778 — the Product Owner's case: a player who only wants to draw a weapon must not be made
+   * to find `Pass` in the primary selector. With a general secondary chosen and no primary, the
+   * panel reports nothing, and the primary selector still offers the empty choice plus every
+   * available primary action rather than a narrowed list.
+   */
+  it("accepts a general secondary action with no primary action chosen", () => {
+    function SecondaryOnlyHarness() {
+      const [actionId, setActionId] = useState<"" | "attack_parry">("");
+      const [secondaryActionId, setSecondaryActionId] = useState<"" | "equip_unequip">("");
+      return (
+        <PlayerCombatActionSelectorPanel
+          actionId={actionId}
+          additionalActionNotes=""
+          movementId="hold"
+          onActionChange={(value) => setActionId(value as "" | "attack_parry")}
+          onAdditionalActionNotesChange={vi.fn()}
+          onMovementChange={vi.fn()}
+          onSecondaryActionChange={(value) => setSecondaryActionId(value as "" | "equip_unequip")}
+          secondaryActionId={secondaryActionId}
+        />
+      );
+    }
+
+    render(<SecondaryOnlyHarness />);
+    const primary = screen.getByRole("combobox", { name: "Action" }) as HTMLSelectElement;
+    const unconstrainedPrimaryValues = Array.from(primary.options).map((option) => option.value);
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Secondary action" }), {
+      target: { value: "equip_unequip" },
+    });
+
+    expect(screen.getByRole("combobox", { name: "Secondary action" })).toHaveValue("equip_unequip");
+    expect(primary).toHaveValue("");
+    expect(Array.from(primary.options).map((option) => option.value)).toEqual(
+      unconstrainedPrimaryValues,
+    );
+    expect(Array.from(primary.options).map((option) => option.value)).toEqual([
+      "",
+      "attack_parry",
+      "parry_attack",
+      "double_attack",
+      "feint_attack",
+      "adjust_range_attack",
+      "offensive_parry",
+      "parry",
+      "parry_disarm",
+      "disarm",
+      "break_off_engagement",
+      "pass",
+      "perform_task",
+      "move_only",
+    ]);
+    expect(screen.queryByText(/compatible primary action/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cannot be combined with/)).not.toBeInTheDocument();
+  });
+
   it("offers Observe Opponent as an explicit Parry secondary action", () => {
     const onSecondaryActionChange = vi.fn();
     render(
