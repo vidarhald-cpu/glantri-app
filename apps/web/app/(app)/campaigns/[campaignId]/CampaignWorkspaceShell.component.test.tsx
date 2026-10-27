@@ -181,6 +181,41 @@ describe("Campaign workspace task navigation", () => {
     expect(within(navigation).getByRole("link", { name: "Maps" })).toBeVisible();
     expect(within(navigation).queryByRole("link", { name: "Membership" })).not.toBeInTheDocument();
   });
+
+  it("drops the player Campaign row's duplicate Blackboard and Maps while the Play arena is on screen", () => {
+    render(
+      <CampaignWorkspaceNavigation
+        activeTab="scenario"
+        campaignId="campaign-1"
+        canManageCampaign={false}
+        playArenaPresent
+      />,
+    );
+
+    const navigation = screen.getByRole("navigation", { name: "Campaign navigation" });
+    expect(
+      within(navigation)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Campaigns", "Campaign"]);
+    expect(within(navigation).queryByRole("link", { name: "Blackboard" })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole("link", { name: "Maps" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the GM Campaign rows unchanged while a Play arena is on screen", () => {
+    render(
+      <CampaignWorkspaceNavigation
+        activeTab="scenario"
+        campaignId="campaign-1"
+        canManageCampaign
+        playArenaPresent
+      />,
+    );
+
+    const relatedTools = screen.getByRole("navigation", { name: "Related Campaign tools" });
+    expect(within(relatedTools).getByRole("link", { name: "Blackboard" })).toBeVisible();
+    expect(within(relatedTools).getByRole("link", { name: "Maps" })).toBeVisible();
+  });
 });
 
 describe("Scenario Play navigation", () => {
@@ -191,7 +226,7 @@ describe("Scenario Play navigation", () => {
     scenarioName: "The Library",
   };
 
-  it("gives a player one Play arena of five views, with the retained Combat entry point beside them", () => {
+  it("gives a player exactly one active-play sub-navigation row holding every entry point", () => {
     render(
       <ScenarioPlayNavigation
         {...playNavigationProps}
@@ -207,7 +242,12 @@ describe("Scenario Play navigation", () => {
       within(playViews)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Situation", "Action", "Map", "Blackboard", "Character"]);
+    ).toEqual(["Situation", "Action", "Map", "Blackboard", "Character", "Player combat"]);
+
+    // #787: one contextual row only, and one Map/Blackboard entry each in it.
+    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+    expect(within(playViews).getAllByRole("link", { name: "Map" })).toHaveLength(1);
+    expect(within(playViews).getAllByRole("link", { name: "Blackboard" })).toHaveLength(1);
 
     expect(within(playViews).getByRole("link", { name: "Situation" })).toHaveAttribute(
       "href",
@@ -238,9 +278,12 @@ describe("Scenario Play navigation", () => {
     // A player never sees the GM-only Combat tooling.
     expect(screen.queryByRole("link", { name: "Combat" })).not.toBeInTheDocument();
 
-    // Existing routes remain reachable: Player combat is retained, not folded in.
-    const retained = screen.getByRole("navigation", { name: "Retained Play entry points" });
-    expect(within(retained).getByRole("link", { name: "Player combat" })).toHaveAttribute(
+    // Existing routes remain reachable: Player combat keeps its own route and
+    // now sits inside the one row rather than a second contextual row.
+    expect(
+      screen.queryByRole("navigation", { name: "Retained Play entry points" }),
+    ).not.toBeInTheDocument();
+    expect(within(playViews).getByRole("link", { name: "Player combat" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-1&encounterId=encounter-1",
     );
@@ -279,6 +322,7 @@ describe("Scenario Play navigation", () => {
     ).not.toBeInTheDocument();
 
     expect(screen.getByRole("navigation", { name: "Play views" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Player combat" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Action" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-1",
@@ -316,7 +360,7 @@ describe("Scenario Play navigation", () => {
     }
   });
 
-  it("leaves the retained player Combat view outside the five Play views", () => {
+  it("marks the retained player Combat entry current from inside the one Play views row", () => {
     render(
       <ScenarioPlayNavigation
         {...playNavigationProps}
@@ -327,10 +371,12 @@ describe("Scenario Play navigation", () => {
       />,
     );
 
-    expect(
-      screen.getAllByRole("link").filter((link) => link.getAttribute("aria-current") === "page"),
-    ).toHaveLength(0);
-    expect(screen.getByRole("link", { name: "Player combat" })).toBeVisible();
+    const playViews = screen.getByRole("navigation", { name: "Play views" });
+    const current = within(playViews)
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page");
+    expect(current.map((link) => link.textContent)).toEqual(["Player combat"]);
+    expect(within(playViews).getByRole("link", { name: "Player combat" })).toBeVisible();
   });
 
   it("leaves the GM Scenario and Encounter tools unchanged", () => {

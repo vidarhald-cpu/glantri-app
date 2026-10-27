@@ -5135,10 +5135,17 @@ export default function ScenarioPlayerCombatPageContent({
         ? /*
            * #771. `visibleSteps` is this tracker model's own rendered column list. The
            * `inspectable` guard below is not a substitute for it: this surface still builds a
-           * `pre_declaration` cell, and that cell takes completion evidence from
-           * `combat_experience` events, so it can be inspectable while having no column —
+           * `pre_declaration` cell, and that cell can be inspectable while having no column —
            * a landing the player could reach and then see nothing highlighted. The ruled
            * traversal order (#215 ruling 2) is untouched; only hidden steps are skipped.
+           *
+           * Corrected mechanism (#783 F2): the hidden cell is *not* made inspectable by
+           * completion evidence keyed to it. `buildProjectedCombatTrackerModel.ts` derives
+           * `inspectable` from `stageReached` plus current/selected/snapshot/result-event
+           * presence and reads no completion evidence, and the Combat Experience event routes to
+           * `DE` canonically and to `select_actions` in the legacy mapping. It is the events and
+           * snapshots written with `step: normalized.currentStep` while the round is in
+           * `pre_declaration` that land on the cell. The conclusion is unchanged.
            */
           getAdjacentVisibleCombatRoundTimelineStepSelection({
             participantId: selection.participantId,

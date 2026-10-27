@@ -148,6 +148,7 @@ import {
   type CombatCalculationPresentation,
   selectCombatLogEvent,
   selectCombatEventsForTrackerCell,
+  VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
   type CombatLogEventSelection,
   type CurrentActionCommandDescriptor,
 } from "@/features/combat-history";
@@ -344,11 +345,11 @@ import {
   type CombatTaskReviewDraft,
 } from "./CombatTaskLifecycleControls";
 import {
-  getCombatRoundManagerInspectionSelection,
   getCurrentCombatRoundTaskSelection,
   getNextCombatRoundParticipantSelection,
   isCombatRoundInspectionSelectionLive,
   isGlobalCombatRoundParticipantStep,
+  resolveVisibleCombatRoundInspectionSelection,
   type CombatRoundSelectionTarget,
 } from "./combatRoundSelection";
 import { buildAdjustDistanceReviewPresentation } from "./adjustDistanceReviewPresentation";
@@ -4273,18 +4274,26 @@ function CombatRoundEndDistanceControlPanel(input: {
   );
 }
 
+/**
+ * #783. Thin surface binding. The composition and the rendered-column normalization live in
+ * `resolveVisibleCombatRoundInspectionSelection` so that one importable production function — not
+ * a parallel re-implementation inside a test — is what the regression test drives.
+ *
+ * `visibleSteps` is `VISIBLE_COMBAT_ROUND_TRACKER_STEPS`, which *is* this surface's rendered
+ * column list: `combatPresentationModel.ts` assigns every GM tracker model's `steps` from that
+ * constant directly, and this resolver is a module-level function with no tracker model in scope
+ * at its twenty-odd callers. The regression test asserts the GM tracker model's own `steps` is
+ * that same list, so the two cannot drift silently.
+ */
 function resolveCombatRoundInspectionSelection(input: {
   manualSelection?: CombatRoundSelectionTarget;
   pendingSelection?: CombatRoundSelectionTarget;
   state: CombatRoundState;
 }): CombatRoundSelectionTarget {
-  return (
-    getCombatRoundManagerInspectionSelection(input) ??
-    getCurrentCombatRoundTaskSelection(input.state) ?? {
-      participantId: input.state.participants[0]?.participantId,
-      step: input.state.currentStep,
-    }
-  );
+  return resolveVisibleCombatRoundInspectionSelection({
+    ...input,
+    visibleSteps: VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
+  });
 }
 
 function getCombatRoundManagerStateFromCommandEnvelope(input: {

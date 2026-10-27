@@ -1865,3 +1865,138 @@ describe("PlayerCombatAttackStatsTable source cell", () => {
     expect(screen.getByText("Punch")).toBeInTheDocument();
   });
 });
+
+describe("PlayerCombatAttackSourceSelector remembered-source gate (#785)", () => {
+  const dunk = { id: "weapon:dunk", label: "Dunk · Primary" };
+  const punch = { id: "unarmed:punch", label: "Punch · Unarmed" };
+
+  it("renders an attack source that is in the currently derived legal option set", () => {
+    render(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={[dunk, punch]}
+        selectedAttackSourceId={punch.id}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "Attack source" }) as HTMLSelectElement;
+    expect(select.value).toBe(punch.id);
+    // No placeholder is offered for an available source, so the gate is not simply off.
+    expect(Array.from(select.options).map((option) => option.value)).toHaveLength(2);
+    expect(screen.queryByRole("option", { name: "Select attack source" })).not.toBeInTheDocument();
+  });
+
+  it("does not render a remembered attack source that left the legal option set", () => {
+    // The remembered id names no option here, and a <select> whose value matches no <option>
+    // displays the FIRST option. Guard that the unrepaired reading and the required reading are
+    // genuinely different values, so neither assertion below can pass by coincidence.
+    const options = [dunk, punch];
+    const rememberedId = "weapon:shield-bash";
+    expect(options.map((option) => option.id)).toHaveLength(2);
+    expect(options.some((option) => option.id === rememberedId)).toBe(false);
+    expect(options[0].id).not.toBe("");
+
+    render(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={options}
+        selectedAttackSourceId={rememberedId}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "Attack source" }) as HTMLSelectElement;
+    // Not the first option, and not the remembered id: nothing is shown as selected.
+    expect(select.value).toBe("");
+    expect(select.value).not.toBe(options[0].id);
+    expect(select.value).not.toBe(rememberedId);
+    // The placeholder must not be suppressed by an id that names no available option.
+    const optionValues = Array.from(select.options).map((option) => option.value);
+    expect(optionValues).toHaveLength(3);
+    expect(optionValues[0]).toBe("");
+    expect(screen.getByRole("option", { name: "Select attack source" })).toBeInTheDocument();
+  });
+
+  it("stops and resumes rendering a remembered source as it leaves and re-enters the option set", () => {
+    // The ruling permits the memory to survive; only rendering is gated. The caller keeps passing
+    // the same id throughout, so this measures the gate rather than any erasure.
+    const { rerender } = render(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={[dunk, punch]}
+        selectedAttackSourceId={punch.id}
+      />,
+    );
+    const read = () =>
+      (screen.getByRole("combobox", { name: "Attack source" }) as HTMLSelectElement).value;
+    expect(read()).toBe(punch.id);
+
+    rerender(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={[dunk]}
+        selectedAttackSourceId={punch.id}
+      />,
+    );
+    expect(read()).toBe("");
+    expect(read()).not.toBe(dunk.id);
+
+    rerender(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={[dunk, punch]}
+        selectedAttackSourceId={punch.id}
+      />,
+    );
+    expect(read()).toBe(punch.id);
+  });
+
+  it("names no attack source in the read-only presentation paths when the source is unavailable", () => {
+    const { container, rerender } = render(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={[dunk, punch]}
+        readOnly
+        selectedAttackSourceId="weapon:shield-bash"
+        variant="cell"
+      />,
+    );
+    expect(container.querySelector("strong")?.textContent).toBe("No attack source");
+    expect(screen.queryByText(punch.label)).not.toBeInTheDocument();
+    expect(screen.queryByText(dunk.label)).not.toBeInTheDocument();
+
+    rerender(
+      <PlayerCombatAttackSourceSelector
+        onChange={() => {}}
+        options={[dunk, punch]}
+        readOnly
+        selectedAttackSourceId={dunk.id}
+        variant="cell"
+      />,
+    );
+    expect(container.querySelector("strong")?.textContent).toBe(dunk.label);
+  });
+
+  it("gates a filtered option set: an unarmed resolved source cannot name a weapon the player holds", () => {
+    // The weapon-feint control at ScenarioPlayerCombatPageContent.tsx filters the derived options
+    // to sourceKind "weapon" while passing the unfiltered resolved source id, so an unarmed
+    // resolution reaches a weapon-only option set. That is a props-level route into the state this
+    // issue is about, with no remembered draft involved.
+    const weaponOnly = [
+      { id: dunk.id, label: dunk.label, slot: "primary" as const, sourceKind: "weapon" as const },
+    ];
+    render(
+      <PlayerCombatAttackSourceSelector
+        emptyState="No ready weapon can perform a weapon feint."
+        onChange={() => {}}
+        options={weaponOnly}
+        selectedAttackSourceId={punch.id}
+      />,
+    );
+
+    const select = screen.getByRole("combobox", { name: "Attack source" }) as HTMLSelectElement;
+    expect(weaponOnly).toHaveLength(1);
+    expect(select.value).toBe("");
+    expect(select.value).not.toBe(dunk.id);
+    expect(Array.from(select.options).map((option) => option.value)).toHaveLength(2);
+  });
+});
