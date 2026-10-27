@@ -101,9 +101,16 @@ export function getAdjacentCombatRoundTimelineStepSelection(input: {
  *   `pending`, and the GM's whole purpose for this cursor is to move onto a step and watch it.
  *   Skipping non-inspectable cells would make `Next step` jump past the entire rest of the round
  *   to whatever is inspectable, or stall with nowhere to go.
- * - *hidden but inspectable* is live, not hypothetical. The player's `pre_declaration` cell takes
- *   completion evidence from `combat_experience` events, so it can be `inspectable` while having
- *   no column — a cell-inspectability guard does not prevent a column-less landing there.
+ * - *hidden but inspectable* is live, not hypothetical. The player's `pre_declaration` cell can
+ *   be `inspectable` while having no column, so a cell-inspectability guard does not prevent a
+ *   column-less landing there. **Corrected mechanism (#783 F2):** this is not completion
+ *   evidence. `buildProjectedCombatTrackerModel.ts` derives `inspectable` from
+ *   `stageReached && (current || selected || snapshot || participantResultEvents.length > 0)` and
+ *   reads no completion evidence at all; and the Combat Experience event does not key to that
+ *   cell either — the canonical `roll_combat_experience` command routes its event to `DE`
+ *   (`combatRoundManager.ts`) and the legacy mapping to `select_actions`
+ *   (`combatStepEvents.ts`). What makes the hidden cell inspectable is the events and snapshots
+ *   written with `step: normalized.currentStep` while the round *is* in `pre_declaration`.
  *
  * **Ends of the range are a no-op.** If there is no visible step left in the direction of travel,
  * the caller's current selection is returned unchanged, which is what the underlying clamp already
@@ -190,4 +197,84 @@ export function getParticipantIdsForTimelineRound(input: {
       .find((round) => round.roundNumber === input.roundNumber)
       ?.participants.map((participant) => participant.participantId) ?? input.fallbackParticipantIds
   );
+}
+
+/**
+ * #783 — the **entry-point** equivalent of the `Previous step` / `Next step` skip above.
+ *
+ * The navigation wrapper only protects selections that travel through the arrow controls. The
+ * inspector's *initial* selection does not: `Start New Round` puts the round in
+ * `pre_declaration` (#215 ruling 2, `combatRoundManager.ts` `currentStep: "pre_declaration"`),
+ * `isGlobalCombatRoundStep("pre_declaration")` is true, and every producer the GM panel composes
+ * — the cursor branch, the current-task selection and the `state.currentStep` fallback — therefore
+ * reports `pre_declaration`. Since #771 R2-2 removed `PD` from the rendered column set, that
+ * selection matches no cell: zero highlighted cells, every cell disabled, and a heading that
+ * cannot name the step it is on. Round 1 is unaffected because it never visits `pre_declaration`
+ * (its Combat Experience roll belongs to `select_actions`), so the defect starts at round 2 — and
+ * it is not a flash, because the round *stays* in `pre_declaration` until every due Combat
+ * Experience obligation is discharged.
+ *
+ * Because all three producers agree, the repair is not in any one of them; it is one normalization
+ * applied to whatever they produce. **The predicate is the same one #781 chose — rendered-column
+ * membership** (`visibleSteps`), not cell `inspectable`, for the reasons recorded on
+ * `getAdjacentVisibleCombatRoundTimelineStepSelection` above.
+ *
+ * **Forward first, then backward.** `COMBAT_ROUND_STEPS` is the ruled round order, so the next
+ * visible step after `pre_declaration` is `select_actions` — which is exactly where the player's
+ * progression projection already routes `PD` (`combatProgressionProjection/declaration.ts`: "the
+ * tracker reads **DE** while `currentStep` is `pre_declaration`"). The two surfaces therefore open
+ * on the same column, which is what "the tracker for the player and GM must have the same
+ * structure" requires. The backward fallback exists only so a hidden *last* step could never
+ * produce a column-less selection; no step is hidden there today.
+ *
+ * **This does not restore the `PD` column and does not reinterpret any rule.** It changes only
+ * which rendered column the inspector opens on while the round sits in a step that has no column.
+ * If `pre_declaration` were ever returned to `VISIBLE_COMBAT_ROUND_TRACKER_STEPS`, this helper
+ * becomes an identity for it automatically, exactly as #781's wrapper does.
+ */
+export function getVisibleCombatRoundTimelineStep(input: {
+  step: CombatRoundStep;
+  visibleSteps: readonly CombatRoundStep[];
+}): CombatRoundStep {
+  if (input.visibleSteps.includes(input.step)) {
+    return input.step;
+  }
+
+  const stepIndex = COMBAT_ROUND_STEPS.indexOf(input.step);
+  if (stepIndex === -1) {
+    return input.step;
+  }
+
+  for (let index = stepIndex + 1; index < COMBAT_ROUND_STEPS.length; index += 1) {
+    const candidate = COMBAT_ROUND_STEPS[index];
+    if (candidate && input.visibleSteps.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (let index = stepIndex - 1; index >= 0; index -= 1) {
+    const candidate = COMBAT_ROUND_STEPS[index];
+    if (candidate && input.visibleSteps.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  return input.step;
+}
+
+/**
+ * #783 — the one place the GM inspector's resolved selection is pinned to a rendered column.
+ *
+ * Kept next to the step helper and the navigation wrapper so the entry point and the arrow
+ * controls cannot drift apart on which predicate they use.
+ */
+export function getVisibleCombatRoundTimelineSelection<
+  TSelection extends { participantId?: string; step: CombatRoundStep },
+>(input: { selection: TSelection; visibleSteps: readonly CombatRoundStep[] }): TSelection {
+  const step = getVisibleCombatRoundTimelineStep({
+    step: input.selection.step,
+    visibleSteps: input.visibleSteps,
+  });
+
+  return step === input.selection.step ? input.selection : { ...input.selection, step };
 }

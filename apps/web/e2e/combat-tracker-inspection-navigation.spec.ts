@@ -758,8 +758,12 @@ test.describe("Combat tracker inspection navigation and empty historical panels 
      *
      * The player's handler additionally refuses a non-inspectable target, which is why the
      * Product Owner's report is GM-only. That guard is *not* what protects it from a column-less
-     * landing: this surface still builds a `pre_declaration` cell, and that cell takes completion
-     * evidence from `combat_experience` events, so it can be inspectable while having no column.
+     * landing: this surface still builds a `pre_declaration` cell, and that cell can be
+     * inspectable while having no column. Corrected mechanism (#783 F2): not through
+     * `combat_experience` completion evidence — `buildProjectedCombatTrackerModel.ts` reads none
+     * for `inspectable`, and that event keys to `DE` canonically and `select_actions` legacily.
+     * The cell becomes inspectable from events and snapshots written with
+     * `step: normalized.currentStep` while the round is in `pre_declaration`.
      * So the same rendered invariant is asserted here, and the same sweep is driven in both
      * directions over the whole round.
      */

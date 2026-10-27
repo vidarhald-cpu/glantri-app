@@ -835,7 +835,16 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("fromParticipantId: actedParticipantId");
     expect(source).toContain("pendingSelectionRef");
     expect(source).toContain("manualSelectionRef");
-    expect(source).toContain("getCombatRoundManagerInspectionSelection");
+    /*
+     * #783 moved the producer composition into `resolveVisibleCombatRoundInspectionSelection`
+     * (`combatRoundSelection.ts`), where it is importable and can be driven by a behavioural
+     * regression test instead of only pinned as source text. This panel no longer names
+     * `getCombatRoundManagerInspectionSelection` directly; it must still route its inspection
+     * selection through the shared resolver, with the rendered column set as the predicate.
+     */
+    expect(source).not.toContain("getCombatRoundManagerInspectionSelection");
+    expect(source).toContain("resolveVisibleCombatRoundInspectionSelection({");
+    expect(source).toContain("visibleSteps: VISIBLE_COMBAT_ROUND_TRACKER_STEPS,");
     expect(source).toContain("getCurrentCombatRoundTaskSelection");
     expect(source).toContain("getNextCombatRoundParticipantSelection");
     expect(source).toContain(
