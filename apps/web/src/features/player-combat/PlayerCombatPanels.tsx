@@ -3113,8 +3113,35 @@ export function PlayerCombatAttackSourceSelector({
     ) : null;
   }
 
+  /*
+   * The attack source this control may show for the options it is rendering **right now** (#785).
+   *
+   * Product Owner ruling (#785 comment 17804): "remembered transient state may survive, but it
+   * may only render/apply if the source is still in the currently derived legal option set." The
+   * apply path already honours that — `buildPlayerCombatLoadoutSummary` resolves the chosen source
+   * with `attackSourceOptions.find(...)`, so an id that names no available option yields
+   * `undefined` and the derivation falls back. The render path resolves membership the same way,
+   * against the `options` prop being rendered right now.
+   *
+   * No membership answer is stored, so the gate cannot go stale: it is recomputed from the current
+   * props on every render, and the render in which an id leaves the option set is the render in
+   * which the control stops showing it. That matters because a `<select>` whose `value` matches no
+   * `<option>` displays the **first** option, and the `Select attack source` placeholder used to be
+   * suppressed by any truthy id — so an unavailable id could name an attack source nobody chose,
+   * with nothing on the surface to say so.
+   *
+   * Unlike the parry side (#782) this needs no option-set signature. That mechanism exists because
+   * the parry selection is component-local `useState` that outlives a participant switch while
+   * option ids such as `Brawling|Brawling` recur across participants. Nothing is remembered here;
+   * the remembered attack source lives in the GM inspector's `inspectorDrafts`, which is keyed by
+   * participant, and in the player page's own per-phase drafts.
+   */
+  const availableAttackSourceId = options.some((option) => option.id === selectedAttackSourceId)
+    ? selectedAttackSourceId
+    : undefined;
+
   if (readOnly) {
-    const selectedLabel = options.find((option) => option.id === selectedAttackSourceId)?.label;
+    const selectedLabel = options.find((option) => option.id === availableAttackSourceId)?.label;
     return inCell ? (
       <strong style={{ fontSize: "0.95rem" }}>{selectedLabel ?? "No attack source"}</strong>
     ) : (
@@ -3128,9 +3155,9 @@ export function PlayerCombatAttackSourceSelector({
       disabled={controlsDisabled}
       onChange={(event) => onChange(event.target.value)}
       style={inCell ? compactInCellSelectStyle : compactPhaseContextSelectStyle}
-      value={selectedAttackSourceId ?? ""}
+      value={availableAttackSourceId ?? ""}
     >
-      {!selectedAttackSourceId ? <option value="">Select attack source</option> : null}
+      {!availableAttackSourceId ? <option value="">Select attack source</option> : null}
       {options.map((option) => (
         <option key={option.id} value={option.id}>
           {option.label}
