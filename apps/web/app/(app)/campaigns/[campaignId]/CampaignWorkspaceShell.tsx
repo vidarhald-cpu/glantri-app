@@ -191,14 +191,28 @@ export function CurrentScenarioContextPanel({
   );
 }
 
+/**
+ * The Campaign-level navigation above the Scenario Play arena.
+ *
+ * A player's Campaign row carries the Blackboard and Maps tools, which are the
+ * same `?tab=blackboard` and `?tab=maps` destinations the Play views row names
+ * `Blackboard` and `Map`. While the Play arena is on screen that row is the one
+ * active-play sub-navigation, so the Campaign row drops its duplicate pair
+ * (#787). It keeps them whenever no Play arena is rendered, which is the only
+ * state in which they are the sole way to reach those tabs.
+ *
+ * A GM's navigation is unchanged.
+ */
 export function CampaignWorkspaceNavigation({
   activeTab,
   campaignId,
   canManageCampaign,
+  playArenaPresent = false,
 }: {
   activeTab: CampaignWorkspaceTabId;
   campaignId: string;
   canManageCampaign: boolean;
+  playArenaPresent?: boolean;
 }) {
   const commonLinkStyle = {
     color: "#2f5d62",
@@ -255,16 +269,18 @@ export function CampaignWorkspaceNavigation({
         >
           Campaign
         </Link>
-        {relatedLinks.map((link) => (
-          <Link
-            aria-current={activeTab === link.id ? "page" : undefined}
-            href={link.href}
-            key={link.id}
-            style={commonLinkStyle}
-          >
-            {link.label}
-          </Link>
-        ))}
+        {playArenaPresent
+          ? null
+          : relatedLinks.map((link) => (
+              <Link
+                aria-current={activeTab === link.id ? "page" : undefined}
+                href={link.href}
+                key={link.id}
+                style={commonLinkStyle}
+              >
+                {link.label}
+              </Link>
+            ))}
       </nav>
     );
   }
@@ -313,10 +329,12 @@ export function CampaignWorkspaceNavigation({
  * Navigation inside a live Scenario.
  *
  * A player sees the one Play arena: a shared header naming the Scenario and the
- * active Encounter, and the five Play views
- * `Situation | Action | Map | Blackboard | Character`. The separate player
- * Combat entry point is retained beside them rather than folded into Action —
- * Action composition is a later slice, and existing routes stay reachable.
+ * active Encounter, and a single `Play views` row holding
+ * `Situation | Action | Map | Blackboard | Character`, plus `Player combat`
+ * while an Encounter is active. The player Combat entry point keeps its own
+ * `?tab=player-combat` route rather than being folded into Action — Action
+ * composition is a later slice — but it no longer occupies a second contextual
+ * row of its own (#787).
  *
  * A GM's navigation is unchanged: the Scenario and Encounter tools row as it
  * was, including the GM-only Combat link.
@@ -407,6 +425,35 @@ export function ScenarioPlayNavigation({
   }
 
   const activePlayView = resolveActiveCampaignPlayView(activeTab);
+  const playEntries: Array<{ current: boolean; href: string; key: string; label: string }> = [
+    ...buildCampaignPlayViews().map((view) => ({
+      current: activePlayView === view.id,
+      href: buildWorkspaceHref({
+        encounterId: activeEncounterId,
+        scenarioId,
+        tab: view.canonicalTab,
+      }),
+      key: view.id,
+      label: view.label,
+    })),
+    // The player Combat entry point keeps its own `?tab=player-combat` route and
+    // is not folded into Action; it now sits inside the one Play views row
+    // instead of a second contextual row of its own (#787).
+    ...(activeEncounterId
+      ? [
+          {
+            current: activeTab === "player-combat",
+            href: buildWorkspaceHref({
+              encounterId: activeEncounterId,
+              scenarioId,
+              tab: "player-combat" as const,
+            }),
+            key: "player-combat",
+            label: "Player combat",
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div style={{ display: "grid", gap: "0.5rem" }}>
@@ -430,36 +477,12 @@ export function ScenarioPlayNavigation({
         ) : null}
       </section>
       <nav aria-label="Play views" style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
-        {buildCampaignPlayViews().map((view) => (
-          <Link
-            aria-current={activePlayView === view.id ? "page" : undefined}
-            href={buildWorkspaceHref({
-              encounterId: activeEncounterId,
-              scenarioId,
-              tab: view.canonicalTab,
-            })}
-            key={view.id}
-          >
-            {view.label}
+        {playEntries.map((entry) => (
+          <Link aria-current={entry.current ? "page" : undefined} href={entry.href} key={entry.key}>
+            {entry.label}
           </Link>
         ))}
       </nav>
-      {activeEncounterId ? (
-        <nav
-          aria-label="Retained Play entry points"
-          style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}
-        >
-          <Link
-            href={buildWorkspaceHref({
-              encounterId: activeEncounterId,
-              scenarioId,
-              tab: "player-combat",
-            })}
-          >
-            Player combat
-          </Link>
-        </nav>
-      ) : null}
     </div>
   );
 }
@@ -772,6 +795,16 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const completedScenarios = scenarios.filter((scenario) => scenario.status === "completed");
   const activeScenario = scenarios.find(
     (scenario) => scenario.id === workspaceState.activeScenarioId,
+  );
+  /**
+   * True exactly when `ScenarioPlayNavigation` renders the player Play arena,
+   * which is the one row that then carries Blackboard and Map (#787).
+   */
+  const playArenaPresent = Boolean(
+    activeScenario &&
+    activeScenario.status !== "completed" &&
+    activeScenario.status !== "archived" &&
+    !canAccessGmEncounter,
   );
   const activeScenarioRoundNumber =
     activeScenario && "liveState" in activeScenario
@@ -1223,6 +1256,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         activeTab={workspaceState.activeTab}
         campaignId={campaignId}
         canManageCampaign={canAccessGmEncounter}
+        playArenaPresent={playArenaPresent}
       />
 
       {activeScenario ? (
