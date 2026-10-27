@@ -14,7 +14,9 @@ import { scenarioParticipantSchema, scenarioSchema } from "./scenario";
 import {
   buildPlayerSafeScenario,
   buildScenarioSessionView,
+  isGmOperationalScenarioHistoryEventType,
   projectScenarioObjectiveHistory,
+  scenarioObjectiveHistoryEventTypeSchema,
 } from "./scenarioSession";
 
 const now = "2026-08-22T10:00:00.000Z";
@@ -646,5 +648,150 @@ describe("Scenario session privacy projection", () => {
     expect(serialized).not.toContain("source-character");
     expect(serialized).not.toContain("gm-object");
     expect(serialized).not.toContain("Hidden culprit");
+  });
+});
+
+/**
+ * Forgejo #788 — the GM operational boundary over Activity/history.
+ *
+ * The load-bearing proof for this issue is an HTTP-level integration test
+ * (`apps/api/src/routes/scenarios/scenarioActivityAudience.integration.test.ts`)
+ * that asserts on raw player-identity response bodies. That file is skipped
+ * unless `GLANTRI_DB_MODE=task`, which CI does not set, so these unit-level
+ * assertions exist to keep the boundary under the CI `test` gate.
+ */
+describe("GM operational events are not player history (#788)", () => {
+  const membershipAndMaintenanceLogs = [
+    {
+      createdAt: now,
+      eventType: "participant_added",
+      id: "added",
+      participantId: "participant-npc",
+      payload: { role: "npc", sourceType: "entity" },
+      scenarioId: "scenario-1",
+      summary: "Added Watchman Dorn to the scenario.",
+    },
+    {
+      createdAt: now,
+      eventType: "participant_activated",
+      id: "activated",
+      participantId: "participant-npc",
+      scenarioId: "scenario-1",
+      summary: "Activated Watchman Dorn in the Scenario.",
+    },
+    {
+      createdAt: now,
+      eventType: "participant_deactivated",
+      id: "deactivated",
+      participantId: "participant-npc",
+      scenarioId: "scenario-1",
+      summary: "Deactivated Watchman Dorn in the Scenario.",
+    },
+    {
+      createdAt: now,
+      eventType: "encounter_participants_updated",
+      id: "encounter-membership",
+      payload: { encounterId: "encounter-a" },
+      scenarioId: "scenario-1",
+      summary: "Updated encounter Gatehouse participants.",
+    },
+    {
+      createdAt: now,
+      eventType: "equipment_reconciled",
+      id: "reconciled",
+      participantId: "participant-a",
+      payload: { fingerprint: "abc" },
+      scenarioId: "scenario-1",
+      summary: "Ari\u2019s equipment was reconciled for Scenario play.",
+    },
+    // The positive navigation case: an objective Encounter fact that is
+    // legitimately player history and must survive the boundary.
+    {
+      createdAt: now,
+      eventType: "encounter_started",
+      id: "started",
+      payload: { encounterId: "encounter-a" },
+      scenarioId: "scenario-1",
+      summary: "Started encounter Gatehouse.",
+    },
+  ];
+
+  it("withholds membership and maintenance events from a player and keeps the GM audit complete", () => {
+    const playerHistory = projectScenarioObjectiveHistory({
+      controlledParticipantIds: new Set(["participant-a"]),
+      eventLogs: membershipAndMaintenanceLogs,
+      viewerMode: "player",
+    });
+    const gmHistory = projectScenarioObjectiveHistory({
+      controlledParticipantIds: new Set(),
+      eventLogs: membershipAndMaintenanceLogs,
+      viewerMode: "gm",
+    });
+
+    // Requirements 1 and 3, with no reliance on participant visibility
+    // settings: none of these rows names an excluded participant, and the
+    // suppression still applies.
+    expect(playerHistory.map((event) => event.type)).toEqual(["encounter_started"]);
+    expect(JSON.stringify(playerHistory)).not.toContain("Watchman Dorn");
+    expect(JSON.stringify(playerHistory)).not.toContain("equipment was reconciled");
+    expect(JSON.stringify(playerHistory)).not.toContain("Gatehouse participants");
+
+    // Requirement 4: audience and presentation only. Every row still reaches
+    // the GM, with its stored summary and its original ordering.
+    // These fixture rows carry no `sequence` and share a `createdAt`, so the
+    // projection's documented tiebreak sorts them by id; the assertion is on
+    // the id set and on each row's stored summary, not on a fabricated order.
+    expect([...gmHistory.map((event) => event.id)].sort()).toEqual(
+      [...membershipAndMaintenanceLogs.map((event) => event.id)].sort(),
+    );
+    expect(Object.fromEntries(gmHistory.map((event) => [event.id, event.summary]))).toEqual(
+      Object.fromEntries(membershipAndMaintenanceLogs.map((event) => [event.id, event.summary])),
+    );
+
+    // Requirement 5: no replacement prose is authored for the suppressed rows.
+    expect(JSON.stringify(playerHistory)).not.toContain("enters");
+    expect(JSON.stringify(playerHistory)).not.toContain("joins");
+    expect(JSON.stringify(playerHistory)).not.toContain("leaves");
+  });
+
+  it("suppresses a membership row for a player who controls the participant it names", () => {
+    // Over-restriction is a defect, but requirement 1 is unqualified: a
+    // membership change is GM operational state even when it is the viewer's
+    // own Character being added. Asserted so the boundary is not quietly
+    // narrowed to "other people's participants" later.
+    const history = projectScenarioObjectiveHistory({
+      controlledParticipantIds: new Set(["participant-a"]),
+      eventLogs: [
+        {
+          createdAt: now,
+          eventType: "participant_added",
+          id: "own-added",
+          participantId: "participant-a",
+          payload: { audienceParticipantIds: ["participant-a"] },
+          scenarioId: "scenario-1",
+          summary: "Added Ari to the scenario.",
+        },
+      ],
+      viewerMode: "player",
+    });
+
+    expect(history).toEqual([]);
+  });
+
+  it("classifies exactly the membership and maintenance event types as GM operational", () => {
+    // A new objective-history event type must be classified deliberately. This
+    // pins the membership set so adding a type cannot silently widen or narrow
+    // the player boundary.
+    const operational = scenarioObjectiveHistoryEventTypeSchema.options.filter((type) =>
+      isGmOperationalScenarioHistoryEventType(type),
+    );
+
+    expect([...operational].sort()).toEqual([
+      "encounter_participants_updated",
+      "equipment_reconciled",
+      "participant_activated",
+      "participant_added",
+      "participant_deactivated",
+    ]);
   });
 });
