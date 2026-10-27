@@ -138,6 +138,53 @@ const playerSafeHistoryTypes = new Set<ScenarioObjectiveHistoryEventType>(
   scenarioObjectiveHistoryEventTypeSchema.options,
 );
 
+/**
+ * Forgejo #788 — Scenario membership changes and implementation/maintenance
+ * events are **GM operational state**, not player history.
+ *
+ * Product Owner ruling of 2026-10-26, verbatim on the issue: "scenario
+ * membership changes are GM operational state and must not automatically
+ * appear in player Activity/history. Participant additions/removals are
+ * GM-only unless the GM explicitly publishes/reveals the event to players. The
+ * same boundary applies to implementation/maintenance events such as equipment
+ * reconciliation: these are not player history."
+ *
+ * This is a **read-side audience boundary only**. Every row is still written,
+ * still carries its original `createdAt` and `sequence`, and still reaches the
+ * GM projection in full: the suppression below is gated on
+ * `viewerMode === "player"` and never on the stored record, so the audit
+ * history is unchanged and lossless (requirement 4). Nothing here authors
+ * replacement prose, so no automatic narrative is invented (requirement 5).
+ *
+ * Requirement 2 — becoming player-visible on explicit GM publication — has no
+ * carrier today. No Scenario event-log row has a publication or reveal state,
+ * and no GM surface can set one; designing that affordance is a product
+ * decision and is deliberately **not** attempted here. The boundary below is
+ * therefore unconditional for players, which is the fail-closed side of the
+ * requirement rather than a substitute for it.
+ */
+const gmOperationalHistoryTypes = new Set<ScenarioObjectiveHistoryEventType>([
+  // Scenario membership: additions and removals.
+  "participant_added",
+  "participant_activated",
+  "participant_deactivated",
+  // Encounter membership: the same boundary, one level down.
+  "encounter_participants_updated",
+  // Implementation/maintenance, named explicitly in the ruling.
+  "equipment_reconciled",
+]);
+
+/**
+ * Whether an objective-history event type is GM operational state rather than
+ * player history (#788). Exported so the boundary has one definition and the
+ * player surface cannot acquire a second.
+ */
+export function isGmOperationalScenarioHistoryEventType(
+  type: ScenarioObjectiveHistoryEventType,
+): boolean {
+  return gmOperationalHistoryTypes.has(type);
+}
+
 function readEventPayload(event: ScenarioEventLog): Record<string, unknown> {
   return event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
     ? (event.payload as Record<string, unknown>)
@@ -324,6 +371,15 @@ export function projectScenarioObjectiveHistory(input: {
     .flatMap((event) => {
       const parsedType = scenarioObjectiveHistoryEventTypeSchema.safeParse(event.eventType);
       if (!parsedType.success || !playerSafeHistoryTypes.has(parsedType.data)) return [];
+
+      // #788. Deliberately placed before every other narrowing and gated on the
+      // viewer alone: a membership or maintenance row must not become
+      // player-visible because of a participant's visibility settings, an
+      // audience payload, or anything else a player can influence. The GM
+      // branch is untouched, so the audit record stays complete.
+      if (input.viewerMode === "player" && gmOperationalHistoryTypes.has(parsedType.data)) {
+        return [];
+      }
 
       // Read-side narrowing, keyed on the structured classification every stored row already
       // carries (combat-panel-contract.md 12.7/12.13/12.19). This is a positive publish list: an

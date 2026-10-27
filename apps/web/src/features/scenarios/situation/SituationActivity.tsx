@@ -8,6 +8,18 @@ import type { ScenarioObjectiveHistoryEventType, ScenarioSessionView } from "@gl
  * only distinctions the existing model expresses: Player Play V1 §9.4 records
  * that adding an event type — a GM announcement member, for instance — is
  * floor-class and part of no slice, so nothing here invents one.
+ *
+ * The map is keyed on every member of the enum because the enum is the model's
+ * own type. Several of those members can no longer appear in a player's
+ * `session.history` at all: #788 settles that Scenario and Encounter
+ * membership changes (`participant_added`, `participant_activated`,
+ * `participant_deactivated`, `encounter_participants_updated`) and
+ * implementation/maintenance events (`equipment_reconciled`) are GM
+ * operational state, and `projectScenarioObjectiveHistory` withholds them from
+ * the player projection. Their entries are retained only to keep this a total
+ * `Record` over the model's type; the audience boundary is enforced in the
+ * projection, never here, so this component cannot become a second authority
+ * on it.
  */
 const eventTypeLabels: Record<ScenarioObjectiveHistoryEventType, string> = {
   encounter_archived: "Encounter",
