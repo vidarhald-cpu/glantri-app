@@ -10,6 +10,8 @@ import {
   isGlobalCombatRoundStep,
 } from "@glantri/domain";
 
+import { getVisibleCombatRoundTimelineSelection } from "./combatRoundTimelineNavigation";
+
 export interface CombatRoundSelectionTarget {
   participantId?: string;
   step: CombatRoundStep;
@@ -290,4 +292,42 @@ export function getCombatRoundManagerInspectionSelection(input: {
   }
 
   return undefined;
+}
+
+/**
+ * #783 — the GM inspector's **entry-point** selection, pinned to a rendered column.
+ *
+ * The three producers composed here all describe `state.currentStep`. From round 2 onward
+ * `Start New Round` makes that step `pre_declaration` (#215 ruling 2), and
+ * `isGlobalCombatRoundStep("pre_declaration")` is `true`, so the cursor branch of
+ * `getCombatRoundManagerInspectionSelection` already answers and neither
+ * `getCurrentCombatRoundTaskSelection` nor the `currentStep` fallback is consulted. All three
+ * would have said `pre_declaration` anyway, so no single producer is the defect: since #771 R2-2
+ * removed `PD` from the rendered column set, *whatever they agree on* matches no cell, and the
+ * inspector opened with zero highlighted cells, every cell disabled, and a heading that could not
+ * name its step. Round 1 is unaffected because it never visits `pre_declaration`.
+ *
+ * The repair is therefore one normalization over the composed result, using the same predicate
+ * `Previous step` / `Next step` adopted in #781 — **rendered-column membership**, supplied by the
+ * caller as its own tracker model's `steps` — and deliberately not cell `inspectable`, which would
+ * reject almost every cell of a live round.
+ *
+ * It does not restore the `PD` column and reinterprets no rule: `pre_declaration` normalizes
+ * forward to `select_actions`, which is where the player's progression projection already routes
+ * `PD`, so both surfaces open on the same column.
+ */
+export function resolveVisibleCombatRoundInspectionSelection(input: {
+  manualSelection?: CombatRoundSelectionTarget;
+  pendingSelection?: CombatRoundSelectionTarget;
+  state: CombatRoundState;
+  visibleSteps: readonly CombatRoundStep[];
+}): CombatRoundSelectionTarget {
+  return getVisibleCombatRoundTimelineSelection({
+    selection: getCombatRoundManagerInspectionSelection(input) ??
+      getCurrentCombatRoundTaskSelection(input.state) ?? {
+        participantId: input.state.participants[0]?.participantId,
+        step: input.state.currentStep,
+      },
+    visibleSteps: input.visibleSteps,
+  });
 }

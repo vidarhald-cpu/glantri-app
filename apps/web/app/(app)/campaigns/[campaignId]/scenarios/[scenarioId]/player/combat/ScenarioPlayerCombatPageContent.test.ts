@@ -442,9 +442,14 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("if (!nextCell?.inspectable) return");
     /*
      * #771. The `inspectable` guard above stays, and the visible-step wrapper is added in front
-     * of it: this surface still builds a `pre_declaration` cell that can be inspectable through
-     * its `combat_experience` completion evidence, so inspectability alone does not keep the
-     * inspector off a step with no rendered column.
+     * of it: this surface still builds a `pre_declaration` cell that can be inspectable, so
+     * inspectability alone does not keep the inspector off a step with no rendered column.
+     *
+     * Corrected mechanism (#783 F2): that cell is not inspectable through `combat_experience`
+     * completion evidence. `buildProjectedCombatTrackerModel.ts` reads no completion evidence for
+     * `inspectable`, and the Combat Experience event keys to `DE` canonically and to
+     * `select_actions` in the legacy mapping; what reaches the cell is the events and snapshots
+     * written with `step: normalized.currentStep` while the round is in `pre_declaration`.
      */
     expect(source).toContain("getAdjacentVisibleCombatRoundTimelineStepSelection({");
     expect(source).toContain("visibleSteps: playerCombatTrackerModel.steps,");
