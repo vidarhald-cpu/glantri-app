@@ -279,6 +279,38 @@ describe("resolveScenarioParticipantDisclosure", () => {
     }
   });
 
+  /**
+   * The retained fail-closed belt. Nothing in the application writes this
+   * field, so it hides nobody a GM hid through the product — but the create
+   * path, the recovery script and test helpers do write it, and before #798 it
+   * was the only thing these producers consulted. Dropping it would have
+   * widened disclosure for any row that carries it.
+   */
+  it("still denies a participant whose write-dead visibilityOverrides says hidden", () => {
+    const flaggedShade = {
+      ...shade,
+      visibilityOverrides: { visibility: "gm_only" as const },
+    };
+    const disclosure = resolveScenarioParticipantDisclosure({
+      // No Encounters at all, and no matrix: the only signal is the flat enum.
+      encounters: [],
+      participants: [ari, flaggedShade, dorn],
+      userId: "user-ari",
+      viewerMode: "player",
+    });
+
+    expect([...disclosure.suppressedParticipantIds]).toEqual(["p-shade"]);
+    // And it does not reach the viewer's own participant.
+    expect([
+      ...resolveScenarioParticipantDisclosure({
+        encounters: [],
+        participants: [{ ...ari, visibilityOverrides: { visibility: "hidden" as const } }],
+        userId: "user-ari",
+        viewerMode: "player",
+      }).suppressedParticipantIds,
+    ]).toEqual([]);
+  });
+
   it("decides nothing for a GM viewer", () => {
     const disclosure = resolveScenarioParticipantDisclosure({
       encounters: [

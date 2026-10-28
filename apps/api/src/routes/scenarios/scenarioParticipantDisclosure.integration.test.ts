@@ -93,7 +93,11 @@ interface StructuralDifference {
  * two to an id search as well, because the leak is an array length or an
  * arithmetic gap, so the diff is structural rather than textual.
  */
-function structuralDifferences(visible: unknown, hidden: unknown, path = "$"): StructuralDifference[] {
+function structuralDifferences(
+  visible: unknown,
+  hidden: unknown,
+  path = "$",
+): StructuralDifference[] {
   if (Array.isArray(visible) && Array.isArray(hidden)) {
     const differences: StructuralDifference[] = [];
     if (visible.length !== hidden.length) {
@@ -595,8 +599,9 @@ if (!hasTaskApplicationDatabase) {
       expect(playerTwoBody.body).toContain("Bryn");
       expect(playerTwoBody.body).toContain("Watchman Dorn");
       // And the mode value no longer claims to be every active participant.
-      expect(playerTwoBody.json<{ projection: { visibilityMode: string } }>().projection
-        .visibilityMode).toBe("viewer_visible_participants");
+      expect(
+        playerTwoBody.json<{ projection: { visibilityMode: string } }>().projection.visibilityMode,
+      ).toBe("viewer_visible_participants");
     });
 
     /**
@@ -663,7 +668,10 @@ if (!hasTaskApplicationDatabase) {
       await scenarioService.recordScenarioEvent({
         actorUserId: fixture.gmUserId,
         eventType: "encounter_updated",
-        payload: { encounterId: fixture.gatehouseId, participantId: `scenario-${fixture.shade.id}` },
+        payload: {
+          encounterId: fixture.gatehouseId,
+          participantId: `scenario-${fixture.shade.id}`,
+        },
         scenarioId: fixture.scenario.id,
         summary: `Assigned Dexterity Stat check to Lurking Shade.`,
       });
@@ -850,7 +858,9 @@ if (!hasTaskApplicationDatabase) {
         "summary: `Assigned ${statProfile.statLabel} Stat check to ${participant.label}.`",
       );
       expect(source).toContain("summary: `${participant.label} rolled ${pendingRoll.skillLabel}.`");
-      expect(source).toContain("objectiveSummary = `${participant.label} used ${pendingRoll.skillLabel}: ${");
+      expect(source).toContain(
+        "objectiveSummary = `${participant.label} used ${pendingRoll.skillLabel}: ${",
+      );
     });
   });
 }

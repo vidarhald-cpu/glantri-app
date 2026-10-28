@@ -131,10 +131,7 @@ export function resolveScenarioParticipantDisclosure(input: {
       const byEncounterId =
         membershipsByParticipantId.get(encounterParticipant.scenarioParticipantId) ??
         new Map<string, readonly string[]>();
-      byEncounterId.set(
-        encounter.id,
-        getCombatDistanceParticipantAliases(encounterParticipant),
-      );
+      byEncounterId.set(encounter.id, getCombatDistanceParticipantAliases(encounterParticipant));
       membershipsByParticipantId.set(encounterParticipant.scenarioParticipantId, byEncounterId);
     }
   }
@@ -184,6 +181,24 @@ export function resolveScenarioParticipantDisclosure(input: {
 
   for (const participant of input.participants) {
     if (controlledParticipantIds.has(participant.id)) continue;
+
+    /**
+     * Retained fail-closed belt. `visibilityOverrides` has no production write
+     * path, so it never hides anyone a GM hid through the application — which
+     * is the whole of #798. But it *is* written by `scenarioRepository`'s
+     * create path, by `scripts/recovery/historicalPlaytestCore.ts` and by test
+     * helpers, and before #798 it was the only thing these producers consulted.
+     * Dropping it would therefore have *widened* disclosure for any row that
+     * carries it, which is the opposite of this issue's intent. Keeping it is
+     * not the collapse ruling D1 forbids: nothing writes this enum from the
+     * GM's per-viewer control, and the matrix below remains the per-viewer
+     * mechanism. It only ever denies.
+     */
+    const flatVisibility = participant.visibilityOverrides?.visibility;
+    if (flatVisibility === "hidden" || flatVisibility === "gm_only") {
+      suppressedParticipants.push(participant);
+      continue;
+    }
 
     const memberships = membershipsByParticipantId.get(participant.id);
     // A Scenario-level participant belongs to no Encounter and stays visible.
