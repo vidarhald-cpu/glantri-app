@@ -24,6 +24,7 @@ import {
   type ScenarioEventLog,
   type ScenarioParticipant,
 } from "./scenario";
+import { resolveScenarioParticipantDisclosure } from "./scenarioParticipantDisclosure";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -315,7 +316,22 @@ function eventIdentifiesExcludedParticipant(input: {
   participantNames: ReadonlySet<string>;
 }): boolean {
   if (input.event.participantId && input.participantIds.has(input.event.participantId)) return true;
-  if (valueReferencesParticipant(input.event.payload, input.participantIds)) return true;
+  // The payload is scanned for any reference to an excluded participant, which
+  // is what suppresses a row whose `actorParticipantId` would otherwise resolve
+  // through the roster in the same body (#798 L6).
+  //
+  // `audienceParticipantIds` is excluded from that scan, and only it. It is the
+  // row's delivery list, never emitted in any projection, and it is enforced
+  // separately below against the viewer's own controlled participants. Scanning
+  // it suppressed rows the viewer is *in the audience of* merely because a
+  // co-recipient is hidden — measured on `encounter_started` for an Encounter
+  // the player is a member of, whose audience is every member. That withheld a
+  // row carrying no identifying content at all, which is over-suppression
+  // rather than confidentiality.
+  const { audienceParticipantIds: _audience, ...identifyingPayload } = readEventPayload(
+    input.event,
+  );
+  if (valueReferencesParticipant(identifyingPayload, input.participantIds)) return true;
 
   const normalizedSummary = input.event.summary.toLocaleLowerCase();
   return [...input.participantNames].some((name) =>
@@ -468,26 +484,19 @@ export function buildScenarioSessionView(input: {
   userId: string;
   viewerMode: "gm" | "player";
 }): ScenarioSessionView {
-  const controlledParticipantIds = new Set(
-    input.participants
-      .filter(
-        (participant) => participant.isActive && participant.controlledByUserId === input.userId,
-      )
-      .map((participant) => participant.id),
-  );
-  const excludedParticipants =
-    input.viewerMode === "player"
-      ? input.participants.filter(
-          (participant) =>
-            !controlledParticipantIds.has(participant.id) &&
-            (participant.visibilityOverrides?.visibility === "hidden" ||
-              participant.visibilityOverrides?.visibility === "gm_only"),
-        )
-      : [];
-  const excludedParticipantIds = new Set(excludedParticipants.map((participant) => participant.id));
-  const excludedParticipantNames = new Set(
-    excludedParticipants.map((participant) => participant.snapshot.displayName),
-  );
+  // Issue #798. The GM's reachable hide control writes the per-viewer
+  // `roleplayState.visibility` matrix; `ScenarioParticipant.visibilityOverrides`,
+  // which this function used to filter on, has no production write path and so
+  // the filter was inert. The resolver reads the matrix the GM actually writes,
+  // maps it into `ScenarioParticipant.id` space, and answers the deliberate
+  // empty-matrix fail-open default in exactly one place.
+  const disclosure = resolveScenarioParticipantDisclosure({
+    encounters: input.encounters,
+    participants: input.participants,
+    userId: input.userId,
+    viewerMode: input.viewerMode,
+  });
+  const controlledParticipantIds = disclosure.controlledParticipantIds;
   const accessibleEncounters = input.encounters.filter(
     (encounter) =>
       encounter.status !== "archived" &&
@@ -498,7 +507,10 @@ export function buildScenarioSessionView(input: {
           userId: input.userId,
         })),
   );
-  const accessibleEncounterIds = new Set(accessibleEncounters.map((encounter) => encounter.id));
+  // Presence wording only. Participant suppression is the resolver's decision
+  // and is deliberately not conditioned on Encounter status: the previous
+  // `status === "active"` coupling meant pausing, completing or archiving an
+  // Encounter restored disclosure of its occupants as `presence: {kind:"scenario"}`.
   const activeEncounterByParticipantId = new Map<string, EncounterSession>();
 
   for (const encounter of input.encounters) {
@@ -519,8 +531,7 @@ export function buildScenarioSessionView(input: {
     if (
       input.viewerMode === "player" &&
       !controlled &&
-      (excludedParticipantIds.has(participant.id) ||
-        (activeEncounter && !accessibleEncounterIds.has(activeEncounter.id)))
+      disclosure.suppressedParticipantIds.has(participant.id)
     ) {
       return [];
     }
@@ -566,8 +577,8 @@ export function buildScenarioSessionView(input: {
     history: projectScenarioObjectiveHistory({
       controlledParticipantIds,
       eventLogs: input.eventLogs,
-      excludedParticipantIds,
-      excludedParticipantNames,
+      excludedParticipantIds: disclosure.suppressedParticipantIdAliases,
+      excludedParticipantNames: disclosure.suppressedParticipantNames,
       itemOutcomeContext: {
         encounters: input.encounters,
         participants: input.participants,

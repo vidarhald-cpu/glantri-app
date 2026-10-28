@@ -476,7 +476,15 @@ export const scenarioPlayerProjectionSchema = z.object({
     roundNumber: z.number().int().positive().default(1),
     status: scenarioStatusSchema,
   }),
-  visibilityMode: z.literal("all_active_participants"),
+  /**
+   * Issue #798. This was `all_active_participants`, and that value became
+   * untrue once the projection stopped disclosing participants the viewer
+   * shares no Encounter with or the GM has hidden from them. A mode name that
+   * no longer describes the content is how a reader concludes a boundary is
+   * open when it is closed, so the value changed with the behaviour. It has no
+   * consumer outside this schema.
+   */
+  visibilityMode: z.literal("viewer_visible_participants"),
   visibleParticipants: z.array(scenarioPlayerVisibleParticipantSchema),
 });
 
@@ -848,6 +856,15 @@ function isPlayerControlledScenarioParticipant(input: {
 export function buildScenarioPlayerVisibleParticipants(input: {
   controlledParticipantId?: string;
   participants: ScenarioParticipant[];
+  /**
+   * Issue #798. Scenario participant ids this viewer must not be told about,
+   * resolved from the per-viewer `roleplayState.visibility` matrix the GM's
+   * hide control actually writes. The predicate this replaced filtered on
+   * `visibilityOverrides`, which has no production write path, so it never
+   * excluded anyone. The caller resolves the set because this function sits in
+   * the Scenario layer and holds no Encounters.
+   */
+  suppressedParticipantIds?: ReadonlySet<string>;
   userId?: string;
   viewerMode?: "gm" | "player";
 }): ScenarioPlayerVisibleParticipant[] {
@@ -859,8 +876,7 @@ export function buildScenarioPlayerVisibleParticipants(input: {
       const controlledByViewer =
         participant.id === input.controlledParticipantId ||
         participant.controlledByUserId === input.userId;
-      const visibility = participant.visibilityOverrides?.visibility;
-      return controlledByViewer || (visibility !== "hidden" && visibility !== "gm_only");
+      return controlledByViewer || !input.suppressedParticipantIds?.has(participant.id);
     })
     .map((participant) =>
       scenarioPlayerVisibleParticipantSchema.parse({
@@ -901,6 +917,12 @@ function stripPrivateModifierLifecycleFromPlayerCombatContext(
 export function buildScenarioPlayerProjection(input: {
   participants: ScenarioParticipant[];
   scenario: Scenario;
+  /**
+   * Issue #798. Resolved by the route from the viewer's Encounters, because
+   * this projection receives no Encounters and must not start threading them
+   * into the domain signature.
+   */
+  suppressedParticipantIds?: ReadonlySet<string>;
   userId: string;
   viewerMode: "gm" | "player";
 }): ScenarioPlayerProjection {
@@ -916,6 +938,7 @@ export function buildScenarioPlayerProjection(input: {
       ? buildScenarioPlayerVisibleParticipants({
           controlledParticipantId: controlledParticipant?.id,
           participants: input.participants,
+          suppressedParticipantIds: input.suppressedParticipantIds,
           userId: input.userId,
           viewerMode: input.viewerMode,
         })
@@ -958,7 +981,7 @@ export function buildScenarioPlayerProjection(input: {
       roundNumber: input.scenario.liveState?.roundNumber ?? 1,
       status: input.scenario.status,
     },
-    visibilityMode: "all_active_participants",
+    visibilityMode: "viewer_visible_participants",
     visibleParticipants,
   });
 }

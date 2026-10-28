@@ -343,7 +343,14 @@ describe("Scenario session privacy projection", () => {
 
   it("keeps owned and closed Item history, archived control rules, and other chronology unchanged", () => {
     const current = itemHistoryFixture();
-    current.currentEncounter.roleplayState!.visibility = { "encounter-participant-a": {} };
+    // #798: Scenario-level participant suppression now reads the same per-viewer
+    // matrix combat honours, so once the matrix is non-empty a viewer needs
+    // their own row to see a co-participant. User B is given one here; user A's
+    // row is varied in the loop below, which is what this case exercises.
+    current.currentEncounter.roleplayState!.visibility = {
+      "encounter-participant-a": {},
+      "encounter-participant-b": { "encounter-participant-a": true },
+    };
     const view = (userId: string) =>
       buildScenarioSessionView({
         availableObjects: [],
@@ -490,7 +497,7 @@ describe("Scenario session privacy projection", () => {
     expect(JSON.stringify(history)).not.toContain("privateCalculation");
   });
 
-  it("omits hidden and GM-only participants and every typed event that identifies them", () => {
+  it("omits GM-hidden participants and every typed event that identifies them", () => {
     const scenario = scenarioSchema.parse({
       campaignId: "campaign-1",
       createdAt: now,
@@ -499,11 +506,52 @@ describe("Scenario session privacy projection", () => {
       status: "live",
       updatedAt: now,
     });
+    // #798: the GM's reachable hide control writes the per-viewer
+    // `roleplayState.visibility` matrix. `visibilityOverrides` has no
+    // production write path, so a fixture that sets it characterises nothing.
     const participants = [
-      participant("participant-a", "user-a", "Player A", "visible_to_all"),
-      participant("participant-hidden", "user-hidden", "Hidden Steward", "hidden"),
-      participant("participant-gm", "user-gm-only", "Veiled Witness", "gm_only"),
+      participant("participant-a", "user-a", "Player A"),
+      participant("participant-hidden", "user-hidden", "Hidden Steward"),
+      participant("participant-gm", "user-gm-only", "Veiled Witness"),
     ];
+    const hidingEncounter = encounterSessionSchema.parse({
+      createdAt: now,
+      id: "encounter-hiding",
+      kind: "roleplay",
+      participantMembershipMode: "explicit",
+      participants: [
+        {
+          id: "encounter-participant-a",
+          label: "participant-a",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-a",
+        },
+        {
+          id: "encounter-participant-hidden",
+          label: "participant-hidden",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-hidden",
+        },
+        {
+          id: "encounter-participant-gm",
+          label: "participant-gm",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-gm",
+        },
+      ],
+      roleplayState: {
+        visibility: {
+          "encounter-participant-a": {
+            "encounter-participant-gm": false,
+            "encounter-participant-hidden": false,
+          },
+        },
+      },
+      scenarioId: "scenario-1",
+      status: "active",
+      title: "Library",
+      updatedAt: now,
+    });
     const eventLogs = [
       {
         createdAt: now,
@@ -544,7 +592,7 @@ describe("Scenario session privacy projection", () => {
 
     const playerView = buildScenarioSessionView({
       availableObjects: [],
-      encounters: [],
+      encounters: [hidingEncounter],
       eventLogs,
       participants,
       scenario,
@@ -553,7 +601,7 @@ describe("Scenario session privacy projection", () => {
     });
     const gmView = buildScenarioSessionView({
       availableObjects: [],
-      encounters: [],
+      encounters: [hidingEncounter],
       eventLogs,
       participants,
       scenario,
