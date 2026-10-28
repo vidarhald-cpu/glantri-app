@@ -134,10 +134,6 @@ export type ScenarioSessionParticipantEquipment = NonNullable<
 >;
 export type ScenarioSessionView = z.infer<typeof scenarioSessionViewSchema>;
 
-const playerSafeHistoryTypes = new Set<ScenarioObjectiveHistoryEventType>(
-  scenarioObjectiveHistoryEventTypeSchema.options,
-);
-
 /**
  * Forgejo #788 — Scenario membership changes and implementation/maintenance
  * events are **GM operational state**, not player history.
@@ -163,26 +159,67 @@ const playerSafeHistoryTypes = new Set<ScenarioObjectiveHistoryEventType>(
  * therefore unconditional for players, which is the fail-closed side of the
  * requirement rather than a substitute for it.
  */
-const gmOperationalHistoryTypes = new Set<ScenarioObjectiveHistoryEventType>([
-  // Scenario membership: additions and removals.
-  "participant_added",
-  "participant_activated",
-  "participant_deactivated",
+/**
+ * Forgejo #799 — the audience classification of the **type** axis, stated
+ * positively and totally.
+ *
+ * Previously the type axis was a deny-list: the "player safe" set was the
+ * whole enum and filtered nothing, so an event type added to
+ * `scenarioObjectiveHistoryEventTypeSchema` later was player-visible until
+ * somebody remembered to classify it. QA measured that on #788/PR #791: adding
+ * `participant_removed` to the enum returned it to a player with every test
+ * still green. That is the same omission failure mode the Product Owner's #788
+ * ruling forbids one level up.
+ *
+ * This record is **total over the enum**, so TypeScript rejects a new event
+ * type that carries no classification, and the lookup below is **fail
+ * closed**: a type with no entry is treated as GM operational and suppressed
+ * for players rather than leaking through. That matches the `eventKind`
+ * narrowing in `projectScenarioObjectiveHistory`, which has always been a
+ * positive publish list.
+ *
+ * The classification of every type that exists today is unchanged by #799.
+ */
+const scenarioHistoryEventTypeAudience: Record<
+  ScenarioObjectiveHistoryEventType,
+  "gm_operational" | "player_history"
+> = {
+  // Scenario membership: additions and (de)activations.
+  participant_added: "gm_operational",
+  participant_activated: "gm_operational",
+  participant_deactivated: "gm_operational",
   // Encounter membership: the same boundary, one level down.
-  "encounter_participants_updated",
+  encounter_participants_updated: "gm_operational",
   // Implementation/maintenance, named explicitly in the ruling.
-  "equipment_reconciled",
-]);
+  equipment_reconciled: "gm_operational",
+  // Objective Scenario and Encounter facts that are legitimately player
+  // history. Each still passes the later per-row narrowings (audience,
+  // excluded participants, combat `eventKind` and outcome scope).
+  encounter_created: "player_history",
+  encounter_started: "player_history",
+  encounter_resumed: "player_history",
+  encounter_paused: "player_history",
+  encounter_closed: "player_history",
+  encounter_archived: "player_history",
+  item_transferred: "player_history",
+  encounter_skill_outcome: "player_history",
+  encounter_combat_outcome: "player_history",
+};
 
 /**
  * Whether an objective-history event type is GM operational state rather than
  * player history (#788). Exported so the boundary has one definition and the
  * player surface cannot acquire a second.
+ *
+ * Fail closed (#799): only a type explicitly classified as `player_history`
+ * is player history. Anything else — including a type added to the enum and
+ * left unclassified — is GM operational, so a new type is suppressed for
+ * players by default instead of disclosed by default.
  */
 export function isGmOperationalScenarioHistoryEventType(
   type: ScenarioObjectiveHistoryEventType,
 ): boolean {
-  return gmOperationalHistoryTypes.has(type);
+  return scenarioHistoryEventTypeAudience[type] !== "player_history";
 }
 
 function readEventPayload(event: ScenarioEventLog): Record<string, unknown> {
@@ -370,14 +407,20 @@ export function projectScenarioObjectiveHistory(input: {
     )
     .flatMap((event) => {
       const parsedType = scenarioObjectiveHistoryEventTypeSchema.safeParse(event.eventType);
-      if (!parsedType.success || !playerSafeHistoryTypes.has(parsedType.data)) return [];
+      if (!parsedType.success) return [];
 
       // #788. Deliberately placed before every other narrowing and gated on the
       // viewer alone: a membership or maintenance row must not become
       // player-visible because of a participant's visibility settings, an
       // audience payload, or anything else a player can influence. The GM
       // branch is untouched, so the audit record stays complete.
-      if (input.viewerMode === "player" && gmOperationalHistoryTypes.has(parsedType.data)) {
+      // #799: the single definition of the type axis, consulted here so the
+      // player surface cannot acquire a second. It is fail closed, so an
+      // unclassified type is suppressed rather than disclosed.
+      if (
+        input.viewerMode === "player" &&
+        isGmOperationalScenarioHistoryEventType(parsedType.data)
+      ) {
         return [];
       }
 
