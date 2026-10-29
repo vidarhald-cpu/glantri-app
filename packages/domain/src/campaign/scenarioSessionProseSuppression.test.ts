@@ -234,30 +234,32 @@ describe("stored-prose suppression matches names, not substrings (#798 F1)", () 
   });
 
   /**
-   * Acceptance 5, and the decision it required. A whole-word hit on the hidden
-   * `Guard` also occurs inside the **visible** `Gate Guard Captain`, so word
-   * boundaries alone do not settle this case.
+   * Acceptance 5, re-measured after the Product Owner withdrew the covering
+   * rule (#798 F6). A whole-word hit on the hidden `Guard` also occurs inside
+   * the **visible** `Gate Guard Captain`, so word boundaries alone do not
+   * settle this case — and nothing else is allowed to.
    *
-   * **Rule: the longest matching name wins.** An occurrence of a suppressed
-   * name that lies inside an occurrence of a strictly longer visible
-   * participant's name is that visible participant's mention and does not
-   * suppress the row. An occurrence not covered that way still does.
+   * The earlier rule ("the longest matching name wins") attributed the covered
+   * occurrence to the visible participant and kept the row. `visibleNames` is
+   * every active non-suppressed participant's display name, and a display name
+   * is player-writable, so a player could name their own Character
+   * `Lurking Shade used` and recover the hidden participant's own rows from
+   * another player's Activity. The rule is gone.
    *
-   * Reasoning: the alternative withholds a visible participant's own rows
-   * whenever a hidden participant's name happens to be a word inside their
-   * name, which is the same correctness defect F1 reports, merely rarer. The
-   * covered occurrence conveys nothing about the hidden participant that the
-   * visible roster does not already publish.
+   * **Accepted behaviour, over-suppression that fails closed:** when a hidden
+   * participant's display name is a word-boundary substring of a **visible**
+   * participant's name, the visible participant's own rows are withheld from
+   * players too. That is a cost, recorded rather than hidden; the leak it
+   * replaces was the hidden participant's own action reaching another player.
    */
-  it("attributes a hit inside a longer visible name to the visible participant", () => {
+  it("withholds a visible participant's row whose name contains the hidden name", () => {
     const guard = participant({ displayName: "Guard", id: "p-guard" });
     const rows = [
       ...viewerOwnRows(),
-      // The visible Captain's own row. Kept: `Guard` here is part of the
-      // Captain's name, which this viewer can see in the roster.
+      // The visible Captain's own row. Withheld: `Guard` occurs in it at a word
+      // boundary, and no covering rule rescues it any more.
       hiddenNpcRow({ displayName: "Gate Guard Captain", id: "captain", sequence: 6 }),
-      // The hidden participant's own row. Withheld: the occurrence of `Guard`
-      // is not covered by any longer visible name.
+      // The hidden participant's own row. Withheld, as it always was.
       hiddenNpcRow({ displayName: "Guard", id: "guard", sequence: 7 }),
     ];
     const summaries = playerHistorySummaries({
@@ -265,16 +267,64 @@ describe("stored-prose suppression matches names, not substrings (#798 F1)", () 
       eventLogs: rows,
       participants: [ari, captain, guard],
     });
-    expect(summaries).toContain("Gate Guard Captain used Stealth: success.");
+    expect(summaries).not.toContain("Gate Guard Captain used Stealth: success.");
     expect(summaries).not.toContain("Guard used Stealth: success.");
-    expect(summaries).toHaveLength(6);
+    // F1 is still fixed: `Guard` inside `Gatehouse` is not a boundary hit, so
+    // all five of the viewer's own rows survive.
+    expect(summaries).toEqual(viewerOwnRows().map((event) => event.summary));
   });
 
   /**
-   * The tie the rule deliberately does not resolve. Two participants sharing a
-   * display name, one visible and one hidden, make the prose genuinely
-   * unattributable, so the row fails closed. Stated here as a measured
-   * behaviour rather than left implicit.
+   * #798 F6, the leak the covering rule opened, asserted at the domain layer.
+   * A player-chosen display name of the form `<hidden name> used` entered the
+   * visible set and covered the hidden occurrence inside the hidden
+   * participant's own `encounter_skill_outcome` row. QA measured five variants
+   * through real routes; all five are asserted here against
+   * `buildScenarioSessionView`, which is the scan's only caller.
+   */
+  it.each([
+    { attackerName: "Lurking Shade used" },
+    { attackerName: "LURKING SHADE USED STEALTH" },
+    { attackerName: "Lurking Shade" },
+    { attackerName: "The Lurking Shade" },
+    { attackerName: "Shade used" },
+  ])(
+    "withholds the hidden participant's own row when another player is named $attackerName (F6)",
+    ({ attackerName }) => {
+      const shade = participant({ displayName: "Lurking Shade", id: "p-shade" });
+      // The attacker's own Character, visible to the viewer: a second PC on the
+      // roster, active, not suppressed, so its name is in the visible set.
+      const attacker = participant({
+        controlledByUserId: "user-bryn",
+        displayName: attackerName,
+        id: "p-attacker",
+      });
+      const summaries = playerHistorySummaries({
+        encounters: [
+          encounter({
+            id: "encounter-1",
+            scenarioParticipantIds: ["p-ari", "p-attacker", "p-shade"],
+            title: "Gatehouse",
+            visibility: {
+              "scenario-p-ari": { "scenario-p-attacker": true, "scenario-p-shade": false },
+            },
+          }),
+        ],
+        eventLogs: [
+          ...viewerOwnRows(),
+          hiddenNpcRow({ displayName: "Lurking Shade", id: "shade", sequence: 6 }),
+        ],
+        participants: [ari, attacker, shade],
+      });
+      expect(summaries).not.toContain("Lurking Shade used Stealth: success.");
+    },
+  );
+
+  /**
+   * Two participants sharing a display name, one visible and one hidden: the
+   * prose is genuinely unattributable, so the row fails closed. This held under
+   * the covering rule (equal-length names never covered each other) and still
+   * holds without it. Stated as a measured behaviour rather than left implicit.
    */
   it("fails closed when a visible and a hidden participant share a display name", () => {
     const hiddenGuard = participant({ displayName: "Guard", id: "p-hidden-guard" });

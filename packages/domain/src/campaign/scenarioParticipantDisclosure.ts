@@ -52,15 +52,6 @@ export interface ScenarioParticipantDisclosure {
   /** Display names of suppressed participants, for stored-prose suppression. */
   readonly suppressedParticipantNames: ReadonlySet<string>;
   /**
-   * Display names of the active participants this viewer is **not** denied —
-   * their own included. Stored-prose suppression needs these as well as the
-   * suppressed names: a suppressed name can occur inside a longer *visible*
-   * participant's name (hidden `Guard`, visible `Gate Guard Captain`), and
-   * without this set that occurrence withholds the visible participant's own
-   * row. See `summaryIdentifiesExcludedParticipant` in `scenarioSession.ts`.
-   */
-  readonly visibleParticipantNames: ReadonlySet<string>;
-  /**
    * Diagnostics for the id-space mapping. A repair whose computed set never
    * intersects the id space it filters measures clean because it filters
    * nothing, so the mapping is reported rather than assumed.
@@ -85,9 +76,6 @@ const EMPTY_DISCLOSURE: ScenarioParticipantDisclosure = {
   suppressedParticipantIdAliases: new Set<string>(),
   suppressedParticipantIds: new Set<string>(),
   suppressedParticipantNames: new Set<string>(),
-  // Nothing is suppressed in this shape, so no prose scan can fire and the
-  // covering set is unused. Deliberately empty rather than the full roster.
-  visibleParticipantNames: new Set<string>(),
 };
 
 /**
@@ -257,13 +245,6 @@ export function resolveScenarioParticipantDisclosure(input: {
     suppressedParticipantIds,
     suppressedParticipantNames: new Set(
       suppressedParticipants.map((participant) => participant.snapshot.displayName),
-    ),
-    visibleParticipantNames: new Set(
-      input.participants
-        .filter(
-          (participant) => participant.isActive && !suppressedParticipantIds.has(participant.id),
-        )
-        .map((participant) => participant.snapshot.displayName),
     ),
   };
 }

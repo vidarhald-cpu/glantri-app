@@ -1000,17 +1000,21 @@ if (!hasTaskApplicationDatabase) {
     });
 
     /**
-     * F1, acceptance item 5 — the decision, measured end to end. The hidden
-     * `Guard`'s name is a whole word inside the **visible** `Gate Guard
-     * Captain`, so word boundaries alone do not settle it.
+     * F1 acceptance item 5, re-measured after the Product Owner withdrew the
+     * covering rule (#798 F6). The hidden `Guard`'s name is a whole word inside
+     * the **visible** `Gate Guard Captain`, so word boundaries alone do not
+     * settle it — and nothing else is allowed to, because the only available
+     * discriminator was a set of player-writable display names.
      *
-     * **Rule: the longest matching name wins.** An occurrence of a suppressed
-     * name inside an occurrence of a strictly longer visible participant's name
-     * is that visible participant's mention and does not suppress the row; an
-     * occurrence not covered that way still does. Rationale: the alternative
-     * withholds a visible participant's own rows, which is F1's defect again.
+     * **Accepted behaviour:** the row is **withheld**. That is over-suppression
+     * of a visible participant's own row, and it fails closed. The rule it
+     * replaces kept the row and let a player who knew the hidden name recover
+     * the hidden participant's own rows (F6, measured below).
+     *
+     * `Ari found a guardrail.` is still kept: `guardrail` is not a boundary hit,
+     * which is the F1 fix and is untouched.
      */
-    it("F1 — a whole-word hit inside a visible participant's longer name keeps the row", async () => {
+    it("F1 — a whole-word hit inside a visible participant's longer name withholds the row", async () => {
       // The visible NPC is renamed so the hidden word is a whole word inside a
       // longer **visible** participant's name — the case word boundaries alone
       // do not settle.
@@ -1071,11 +1075,241 @@ if (!hasTaskApplicationDatabase) {
       const hidden = await get(fixture.playerOneCookie, url);
       expect(hidden.statusCode, hidden.body).toBe(200);
       const summaries = hidden.json<SessionPayload>().session.history.map((event) => event.summary);
-      // Covered by a longer visible name, and by a longer word: both kept.
-      expect(summaries).toContain("Gate Guard Captain used Persuade: success.");
+      // A boundary hit inside a longer VISIBLE name: now withheld. The accepted
+      // cost of removing the covering rule, in the fail-closed direction.
+      expect(summaries).not.toContain("Gate Guard Captain used Persuade: success.");
+      // Not a boundary hit at all: kept. This is the F1 fix and it still holds.
       expect(summaries).toContain("Ari found a guardrail.");
-      // Not covered: still withheld, so the rule did not disarm the scan.
+      // The hidden participant's own row: withheld, as it always was.
       expect(summaries).not.toContain("Guard used Persuade: success.");
+    });
+
+    /**
+     * #798 F6 — the leak the covering rule opened, driven through the two
+     * ordinary player routes QA used. No GM action is involved in the attack.
+     *
+     *   1. `PUT /characters/:id` renames the attacker's own Character;
+     *   2. the **non-GM** branch of
+     *      `POST /scenarios/:scenarioId/participants/character` self-adds it to
+     *      the live Scenario — owned Character, on the Campaign roster,
+     *      Scenario live-interactive;
+     *   3. a participant in no Encounter is visible to every player, so the
+     *      crafted name entered the victim's visible set.
+     *
+     * Under the covering rule a name of the form `<hidden name> used` covered
+     * the hidden occurrence inside `Lurking Shade used Stealth: success.` and
+     * the row reached the victim. `encounter_skill_outcome` persists no
+     * participant id, so the prose is its only identifying content: that row is
+     * the hidden participant's own action.
+     *
+     * All five of QA's variants are driven. The last three were withheld at
+     * `613e54c8` too — they are kept as the controls that show the probe
+     * distinguishes covering from mere overlap.
+     */
+    const f6AttackerNames = [
+      { attackerName: "Lurking Shade used", leakedAtPriorHead: true },
+      { attackerName: "LURKING SHADE USED STEALTH", leakedAtPriorHead: true },
+      { attackerName: "Lurking Shade", leakedAtPriorHead: false },
+      { attackerName: "The Lurking Shade", leakedAtPriorHead: false },
+      { attackerName: "Shade used", leakedAtPriorHead: false },
+    ];
+
+    /**
+     * Creates a third player who owns a roster Character, renames it through
+     * `PUT /characters/:id` and self-adds it through the non-GM participant
+     * POST. Returns the stored participant, so the crafted name is asserted to
+     * have reached `snapshot.displayName` rather than assumed to have.
+     */
+    async function selfAddRenamedCharacter(input: {
+      campaignId: string;
+      displayName: string;
+      scenarioId: string;
+    }) {
+      const attacker = await createTestUser(prisma, { displayName: "Player Three" });
+      const character = await createTestCharacter(prisma, attacker.id, { name: "Cass" });
+      await prisma.campaignRosterEntry.create({
+        data: {
+          campaignId: input.campaignId,
+          category: "pc",
+          sourceId: character.id,
+          sourceType: "character",
+        },
+      });
+      const cookie = await sessionCookie(attacker.id);
+
+      const read = await get(cookie, `/characters/${character.id}`);
+      expect(read.statusCode, read.body).toBe(200);
+      const canonical = read.json<{ character: { build: { name: string }; updatedAt: string } }>()
+        .character;
+      const rename = await app.inject({
+        headers: { cookie, origin },
+        method: "PUT",
+        payload: {
+          build: { ...canonical.build, name: input.displayName },
+          expectedUpdatedAt: canonical.updatedAt,
+        },
+        url: `/characters/${character.id}`,
+      });
+      expect(rename.statusCode, rename.body).toBe(200);
+
+      const join = await app.inject({
+        headers: { cookie, origin },
+        method: "POST",
+        payload: { characterId: character.id },
+        url: `/scenarios/${input.scenarioId}/participants/character`,
+      });
+      expect(join.statusCode, join.body).toBe(200);
+
+      const participants = await new ScenarioService().listScenarioParticipants(input.scenarioId);
+      const joined = participants.find((entry) => entry.characterId === character.id);
+      // CONTROL: the crafted name really is the stored display name, which is
+      // what `visibleParticipantNames` was built from.
+      expect(joined?.snapshot.displayName).toBe(input.displayName);
+
+      return { cookie, participant: joined!, userId: attacker.id };
+    }
+
+    it.each(f6AttackerNames)(
+      "F6 — a player-chosen name $attackerName does not expose the hidden participant's own row",
+      async ({ attackerName }) => {
+        const fixture = await seed();
+        const scenarioService = new ScenarioService();
+        await scenarioService.recordScenarioEvent({
+          actorUserId: fixture.gmUserId,
+          eventType: "encounter_skill_outcome",
+          payload: { encounterId: fixture.gatehouseId },
+          scenarioId: fixture.scenario.id,
+          summary: "Lurking Shade used Stealth: success.",
+        });
+        await scenarioService.recordScenarioEvent({
+          actorUserId: fixture.gmUserId,
+          eventType: "encounter_skill_outcome",
+          payload: { encounterId: fixture.gatehouseId },
+          scenarioId: fixture.scenario.id,
+          summary: "Gate Sergeant Rell used Persuade: success.",
+        });
+        await setVisibility({
+          encounterId: fixture.gatehouseId,
+          gmCookie: fixture.gmCookie,
+          targetParticipantId: fixture.rell.id,
+          viewerParticipantId: fixture.ari.id,
+          visible: true,
+        });
+        await setVisibility({
+          encounterId: fixture.gatehouseId,
+          gmCookie: fixture.gmCookie,
+          targetParticipantId: fixture.shade.id,
+          viewerParticipantId: fixture.ari.id,
+          visible: false,
+        });
+
+        const attack = await selfAddRenamedCharacter({
+          campaignId: fixture.campaignId,
+          displayName: attackerName,
+          scenarioId: fixture.scenario.id,
+        });
+
+        const victim = await get(
+          fixture.playerOneCookie,
+          `/scenarios/${fixture.scenario.id}/session`,
+        );
+        expect(victim.statusCode, victim.body).toBe(200);
+        const payload = victim.json<SessionPayload>();
+        const summaries = payload.session.history.map((event) => event.summary);
+
+        // CONTROL: the crafted participant is in the victim's visible roster,
+        // so it really was a candidate covering name for this viewer.
+        expect(payload.session.participants.map((entry) => entry.displayName)).toContain(
+          attack.participant.snapshot.displayName,
+        );
+        // CONTROL: the hide is real — Shade's participant is gone from the
+        // victim's roster. Asserted on the id, not the name: in the
+        // equal-length variant the attacker's own PC legitimately carries the
+        // name `Lurking Shade`, so a name check would report the attacker.
+        expect(payload.session.participants.map((entry) => entry.id)).not.toContain(
+          fixture.shade.id,
+        );
+        // MEASUREMENT: the hidden participant's own row never reaches the victim.
+        expect(summaries).not.toContain("Lurking Shade used Stealth: success.");
+      },
+    );
+
+    /**
+     * #798 F6 case B. The GM adds the attacker's own PC to the Gatehouse and
+     * hides Shade from them explicitly, so the attacker is a legitimate viewer
+     * of that Encounter. At `613e54c8` the attacker's own history then carried
+     * `["Lurking Shade used Stealth: success."]`; at `4d65b52f` it was `[]`.
+     * The assertion is over the attacker's own resulting history, not a count.
+     */
+    it("F6 case B — the crafted name does not expose the row to the attacker either", async () => {
+      const fixture = await seed();
+      const attack = await selfAddRenamedCharacter({
+        campaignId: fixture.campaignId,
+        displayName: "Lurking Shade used",
+        scenarioId: fixture.scenario.id,
+      });
+
+      // The GM adds the attacker's PC to the Gatehouse through `PUT /encounters/:id`.
+      const read = await get(fixture.gmCookie, `/encounters/${fixture.gatehouseId}`);
+      expect(read.statusCode, read.body).toBe(200);
+      const session = read.json<{ encounter: EncounterSession }>().encounter;
+      const write = await app.inject({
+        headers: { cookie: fixture.gmCookie, origin },
+        method: "PUT",
+        payload: {
+          expectedRevision: session.updatedAt,
+          session: {
+            ...session,
+            participants: [
+              ...session.participants,
+              {
+                id: `scenario-${attack.participant.id}`,
+                label: attack.participant.snapshot.displayName,
+                order: session.participants.length,
+                participantType: "scenario",
+                scenarioParticipantId: attack.participant.id,
+              },
+            ],
+          },
+        },
+        url: `/encounters/${fixture.gatehouseId}`,
+      });
+      expect(write.statusCode, write.body).toBe(200);
+
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.rell.id,
+        viewerParticipantId: attack.participant.id,
+        visible: true,
+      });
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.shade.id,
+        viewerParticipantId: attack.participant.id,
+        visible: false,
+      });
+
+      await new ScenarioService().recordScenarioEvent({
+        actorUserId: fixture.gmUserId,
+        eventType: "encounter_skill_outcome",
+        payload: { encounterId: fixture.gatehouseId },
+        scenarioId: fixture.scenario.id,
+        summary: "Lurking Shade used Stealth: success.",
+      });
+
+      const attackerRead = await get(attack.cookie, `/scenarios/${fixture.scenario.id}/session`);
+      expect(attackerRead.statusCode, attackerRead.body).toBe(200);
+      const payload = attackerRead.json<SessionPayload>();
+      // CONTROL: the hide reached this viewer too.
+      expect(payload.session.participants.map((entry) => entry.displayName)).not.toContain(
+        "Lurking Shade",
+      );
+      // MEASUREMENT: the attacker's own history, reported in full.
+      expect(payload.session.history.map((event) => event.summary)).not.toContain(
+        "Lurking Shade used Stealth: success.",
+      );
     });
 
     /**

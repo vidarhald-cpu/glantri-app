@@ -326,7 +326,7 @@ function escapeForRegExp(value: string): string {
  *
  * Matching is done with a case-insensitive `RegExp` rather than by lower-casing
  * both strings, because lower-casing can change a string's length and would
- * then shift every index the covering rule below depends on.
+ * then shift the indices the flanking-character checks below read.
  */
 function displayNameOccurrences(
   summary: string,
@@ -357,52 +357,46 @@ function displayNameOccurrences(
  * that row the prose is the **only** identifying content, so removing the scan
  * would reopen L5. It is made precise instead.
  *
- * Two rules, both of which the raw `summary.includes(name)` test got wrong:
+ * **One rule: name boundaries.** A suppressed name suppresses the row when it
+ * occurs as a name — flanked by a non-name character or a string boundary — and
+ * not otherwise. That is what the raw `summary.includes(name)` test got wrong:
+ * `includes` made short names match ordinary English in the production
+ * templates (`Ed` inside `used`, `Started`, `Paused`; `Bat` inside `combat`;
+ * `Guard` inside `guardrail`), so hiding or staging an NPC with a short name, or
+ * merely splitting the party, withheld the player's own Activity rows, which
+ * carry no identifying content at all.
  *
- * 1. **Name boundaries.** A suppressed name must occur as a name, not inside a
- *    longer word. `includes` made short names match ordinary English in the
- *    production templates — `Ed` inside `used`, `Started`, `Paused`; `Bat`
- *    inside `combat`; `Guard` inside `guardrail` — so hiding or staging an NPC
- *    with a short name, or merely splitting the party, withheld the player's
- *    own Activity rows, which carry no identifying content at all.
- * 2. **The longest name wins.** A whole-name hit that lies inside an occurrence
- *    of a strictly longer *visible* participant's name is that visible
- *    participant's mention, not the suppressed one's: `Gate Guard Captain used
- *    Persuade: success.` is about Gate Guard Captain even while `Guard` is
- *    hidden, and withholding it would hide a visible participant's own row. An
- *    occurrence not covered that way still suppresses, so `Guard used Persuade.`
- *    is withheld. Equal-length names do not cover each other: when a visible
- *    and a suppressed participant share a display name the prose genuinely
- *    cannot be attributed, and the row fails closed.
+ * **Accepted cost (#798 F6, Product Owner ruling).** An earlier form of this
+ * function also carried a covering rule: an occurrence lying inside a strictly
+ * longer *visible* participant's name was attributed to that visible
+ * participant and did not suppress. That rule is removed. `visibleNames` was
+ * every active non-suppressed participant's `snapshot.displayName`, and a
+ * display name is player-writable — `PUT /characters/:id` followed by the
+ * non-GM branch of `POST /scenarios/:scenarioId/participants/character` needs no
+ * GM action — so a player who knew a hidden participant's name could enter a
+ * covering name such as `Lurking Shade used` and recover that participant's own
+ * `encounter_skill_outcome` rows from another player's Activity.
+ *
+ * The cost of removing it is over-suppression, in the safe direction: when a
+ * hidden participant's display name is a word-boundary substring of a **visible**
+ * participant's name, the visible participant's own rows are withheld from
+ * players too. `Gate Guard Captain used Persuade: success.` is withheld while a
+ * `Guard` is hidden. The same fail-closed outcome already applied to equal-length
+ * collisions, including a collision with the viewer's own name.
  */
 function summaryIdentifiesExcludedParticipant(input: {
   excludedNames: ReadonlySet<string>;
   summary: string;
-  visibleNames: ReadonlySet<string>;
 }): boolean {
   const excludedNames = [...input.excludedNames].filter((name) => name.trim().length > 0);
   if (excludedNames.length === 0) return false;
-  const visibleOccurrences = [...input.visibleNames].flatMap((name) =>
-    displayNameOccurrences(input.summary, name),
-  );
-  return excludedNames.some((name) =>
-    displayNameOccurrences(input.summary, name).some(
-      (occurrence) =>
-        !visibleOccurrences.some(
-          (covering) =>
-            covering.start <= occurrence.start &&
-            covering.end >= occurrence.end &&
-            covering.end - covering.start > occurrence.end - occurrence.start,
-        ),
-    ),
-  );
+  return excludedNames.some((name) => displayNameOccurrences(input.summary, name).length > 0);
 }
 
 function eventIdentifiesExcludedParticipant(input: {
   event: ScenarioEventLog;
   participantIds: ReadonlySet<string>;
   participantNames: ReadonlySet<string>;
-  visibleParticipantNames: ReadonlySet<string>;
 }): boolean {
   if (input.event.participantId && input.participantIds.has(input.event.participantId)) return true;
   // The payload is scanned for any reference to an excluded participant, which
@@ -425,7 +419,6 @@ function eventIdentifiesExcludedParticipant(input: {
   return summaryIdentifiesExcludedParticipant({
     excludedNames: input.participantNames,
     summary: input.event.summary,
-    visibleNames: input.visibleParticipantNames,
   });
 }
 
@@ -440,12 +433,6 @@ export function projectScenarioObjectiveHistory(input: {
     userId: string;
   };
   viewerMode: "gm" | "player";
-  /**
-   * Display names of the participants this viewer is not denied. Used only by
-   * the stored-prose scan's longest-name-wins rule; an omitted set means no
-   * occurrence is ever attributed to a visible participant.
-   */
-  visibleParticipantNames?: ReadonlySet<string>;
 }): z.infer<typeof scenarioSessionHistoryEventSchema>[] {
   const participantDisplayNames = new Map(
     (input.itemOutcomeContext?.participants ?? []).map((participant) => [
@@ -529,7 +516,6 @@ export function projectScenarioObjectiveHistory(input: {
           event,
           participantIds: input.excludedParticipantIds ?? new Set(),
           participantNames: input.excludedParticipantNames ?? new Set(),
-          visibleParticipantNames: input.visibleParticipantNames ?? new Set(),
         })
       ) {
         return [];
@@ -682,7 +668,6 @@ export function buildScenarioSessionView(input: {
         userId: input.userId,
       },
       viewerMode: input.viewerMode,
-      visibleParticipantNames: disclosure.visibleParticipantNames,
     }),
     participants,
     revision: input.scenario.updatedAt,
