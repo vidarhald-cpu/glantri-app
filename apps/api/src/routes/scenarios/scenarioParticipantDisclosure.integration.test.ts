@@ -175,13 +175,21 @@ if (!hasTaskApplicationDatabase) {
      * `scenario-${ScenarioParticipant.id}`, which is what the web writes. A
      * fixture with synthetic ids hides real leaks.
      */
-    async function seed() {
+    async function seed(names?: { hiddenNpc?: string; playerTwo?: string; visibleNpc?: string }) {
+      // #798 F1. The display names are parameters because the defect is a
+      // property of the *name*, not of the participant: a short name is a
+      // substring of ordinary English in the production summary templates.
+      const hiddenNpcName = names?.hiddenNpc ?? "Lurking Shade";
+      const playerTwoName = names?.playerTwo ?? "Bryn";
+      const visibleNpcName = names?.visibleNpc ?? "Gate Sergeant Rell";
       const gm = await createTestUser(prisma, { displayName: "GM", roles: ["game_master"] });
       const playerOne = await createTestUser(prisma, { displayName: "Player One" });
       const playerTwo = await createTestUser(prisma, { displayName: "Player Two" });
       const campaign = await createTestCampaign(prisma, gm.id, { status: "active" });
       const ariCharacter = await createTestCharacter(prisma, playerOne.id, { name: "Ari" });
-      const brynCharacter = await createTestCharacter(prisma, playerTwo.id, { name: "Bryn" });
+      const brynCharacter = await createTestCharacter(prisma, playerTwo.id, {
+        name: playerTwoName,
+      });
       for (const sourceId of [ariCharacter.id, brynCharacter.id]) {
         await prisma.campaignRosterEntry.create({
           data: { campaignId: campaign.id, category: "pc", sourceId, sourceType: "character" },
@@ -207,13 +215,13 @@ if (!hasTaskApplicationDatabase) {
         scenarioId: scenario.id,
       });
       const rell = await scenarioService.addEntityParticipant({
-        entityInput: { gmUserId: gm.id, kind: "npc", name: "Gate Sergeant Rell" },
+        entityInput: { gmUserId: gm.id, kind: "npc", name: visibleNpcName },
         joinSource: "gm_added",
         role: "npc",
         scenarioId: scenario.id,
       });
       const shade = await scenarioService.addEntityParticipant({
-        entityInput: { gmUserId: gm.id, kind: "npc", name: "Lurking Shade" },
+        entityInput: { gmUserId: gm.id, kind: "npc", name: hiddenNpcName },
         joinSource: "gm_added",
         role: "enemy",
         scenarioId: scenario.id,
@@ -321,11 +329,14 @@ if (!hasTaskApplicationDatabase) {
         gatehouseId,
         gmCookie: await sessionCookie(gm.id),
         gmUserId: gm.id,
+        hiddenNpcName,
         playerOneCookie: await sessionCookie(playerOne.id),
         playerTwoCookie: await sessionCookie(playerTwo.id),
+        playerTwoName,
         rell,
         scenario,
         shade,
+        visibleNpcName,
       };
     }
 
@@ -845,6 +856,229 @@ if (!hasTaskApplicationDatabase) {
     });
 
     /**
+     * F1 — the stored-prose scan must match names, not substrings.
+     *
+     * QA's measurement at `4d65b52f`: hiding an NPC named `Ed` withheld **0 of
+     * 5** of Ari's own Activity rows, because `Ed` occurs inside `used`,
+     * `Started`, `Paused` and `Scenario`. The rows carry no identifying content
+     * and several are Ari's own.
+     *
+     * Method as ruled: the full serialized body is read twice over one
+     * fixture and diffed structurally. The hide is the only thing that changes
+     * between the reads, so every difference is attributable to it — and after
+     * the repair the only differences are in the roster, not the history.
+     */
+    it("F1 — a hidden name occurring only inside another word withholds no row", async () => {
+      const fixture = await seed({ hiddenNpc: "Ed" });
+      const url = `/scenarios/${fixture.scenario.id}/session`;
+      const scenarioService = new ScenarioService();
+
+      // Ari's own rows, with the summaries their production write sites
+      // persist: `encounterRoutes.ts` (`encounter_skill_outcome`) and
+      // `scenarioService.ts` (the pick-up). `Started encounter Gatehouse.` and
+      // `Paused encounter Gatehouse because the Scenario paused.` already exist
+      // from the seed and the pause below.
+      await scenarioService.recordScenarioEvent({
+        actorUserId: fixture.gmUserId,
+        eventType: "encounter_skill_outcome",
+        payload: { encounterId: fixture.gatehouseId },
+        scenarioId: fixture.scenario.id,
+        summary: `Ari used Stealth: success.`,
+      });
+      await scenarioService.recordScenarioEvent({
+        actorUserId: fixture.gmUserId,
+        eventType: "item_transferred",
+        participantId: fixture.ari.id,
+        payload: { encounterId: fixture.gatehouseId },
+        scenarioId: fixture.scenario.id,
+        summary: `Ari picked up Lost Seal.`,
+      });
+      await scenarioService.recordScenarioEvent({
+        actorUserId: fixture.gmUserId,
+        eventType: "encounter_created",
+        payload: { encounterId: fixture.gatehouseId },
+        scenarioId: fixture.scenario.id,
+        summary: `Created combat encounter Gatehouse.`,
+      });
+
+      // The visible NPC is given an explicit `true`, as the L1 case does: once
+      // the matrix is non-empty a viewer needs their own row for each target
+      // (the PR's finding 1), so without this the delta would also carry that
+      // pre-existing behaviour instead of only the hide.
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.rell.id,
+        viewerParticipantId: fixture.ari.id,
+        visible: true,
+      });
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.shade.id,
+        viewerParticipantId: fixture.ari.id,
+        visible: true,
+      });
+      const visible = await get(fixture.playerOneCookie, url);
+      expect(visible.statusCode, visible.body).toBe(200);
+      const visibleSummaries = visible
+        .json<SessionPayload>()
+        .session.history.map((event) => event.summary);
+      // CONTROL: every row this case is about reaches Ari before the hide, and
+      // each one carries a word the substring scan matched on `Ed`.
+      expect(visibleSummaries).toEqual(
+        expect.arrayContaining([
+          "Created combat encounter Gatehouse.",
+          "Started encounter Gatehouse.",
+          "Ari used Stealth: success.",
+          "Ari picked up Lost Seal.",
+        ]),
+      );
+      expect(visible.body).toContain("Ed");
+
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.shade.id,
+        viewerParticipantId: fixture.ari.id,
+        visible: false,
+      });
+      const hidden = await get(fixture.playerOneCookie, url);
+      expect(hidden.statusCode, hidden.body).toBe(200);
+      const hiddenPayload = hidden.json<SessionPayload>();
+
+      // MEASUREMENT: the hide removes the NPC from the roster and nothing else.
+      // Asserted on the structural diff of the whole body, not on a name search.
+      const differences = withoutNoise(structuralDifferences(visible.json(), hidden.json()));
+      expect(
+        differences.every((difference) => difference.path.startsWith("$.session.participants")),
+        differences.map((difference) => difference.path).join(", "),
+      ).toBe(true);
+      expect(hiddenPayload.session.history.map((event) => event.summary)).toEqual(visibleSummaries);
+      // And the hide did happen, so this is not a vacuous pass.
+      expect(hiddenPayload.session.participants.map((entry) => entry.displayName)).not.toContain(
+        "Ed",
+      );
+      expect(hiddenPayload.session.participants.map((entry) => entry.displayName)).toContain("Ari");
+    });
+
+    /**
+     * F1, second trigger. The suppressed set is non-empty with **no GM hide at
+     * all**: a participant sharing no Encounter with the viewer is suppressed
+     * by the cross-Encounter boundary. QA measured a party split withholding
+     * 0 of 3 of Ari's rows. Bryn is renamed `Ed` and stays in the Cellar;
+     * no visibility row is written anywhere.
+     */
+    it("F1 — a party split with empty visibility matrices leaves the viewer's rows intact", async () => {
+      const fixture = await seed({ playerTwo: "Ed" });
+      const scenarioService = new ScenarioService();
+      for (const summary of ["Ari used Stealth: success.", "Ari picked up Lost Seal."]) {
+        await scenarioService.recordScenarioEvent({
+          actorUserId: fixture.gmUserId,
+          eventType: "encounter_skill_outcome",
+          payload: { encounterId: fixture.gatehouseId },
+          scenarioId: fixture.scenario.id,
+          summary,
+        });
+      }
+
+      const read = await get(fixture.playerOneCookie, `/scenarios/${fixture.scenario.id}/session`);
+      expect(read.statusCode, read.body).toBe(200);
+      const payload = read.json<SessionPayload>();
+
+      // CONTROL that the split is real: Ed is suppressed from Ari's roster with
+      // no matrix written, which is the condition that fed the name scan.
+      expect(payload.session.participants.map((entry) => entry.displayName)).not.toContain("Ed");
+      // MEASUREMENT: Ari's rows survive it.
+      expect(payload.session.history.map((event) => event.summary)).toEqual(
+        expect.arrayContaining([
+          "Started encounter Gatehouse.",
+          "Ari used Stealth: success.",
+          "Ari picked up Lost Seal.",
+        ]),
+      );
+    });
+
+    /**
+     * F1, acceptance item 5 — the decision, measured end to end. The hidden
+     * `Guard`'s name is a whole word inside the **visible** `Gate Guard
+     * Captain`, so word boundaries alone do not settle it.
+     *
+     * **Rule: the longest matching name wins.** An occurrence of a suppressed
+     * name inside an occurrence of a strictly longer visible participant's name
+     * is that visible participant's mention and does not suppress the row; an
+     * occurrence not covered that way still does. Rationale: the alternative
+     * withholds a visible participant's own rows, which is F1's defect again.
+     */
+    it("F1 — a whole-word hit inside a visible participant's longer name keeps the row", async () => {
+      // The visible NPC is renamed so the hidden word is a whole word inside a
+      // longer **visible** participant's name — the case word boundaries alone
+      // do not settle.
+      const fixture = await seed({ hiddenNpc: "Guard", visibleNpc: "Gate Guard Captain" });
+      const url = `/scenarios/${fixture.scenario.id}/session`;
+      const scenarioService = new ScenarioService();
+      const record = (summary: string) =>
+        scenarioService.recordScenarioEvent({
+          actorUserId: fixture.gmUserId,
+          eventType: "encounter_skill_outcome",
+          payload: { encounterId: fixture.gatehouseId },
+          scenarioId: fixture.scenario.id,
+          summary,
+        });
+      // Three rows: one naming the longer **visible** participant that contains
+      // the hidden word, one naming the hidden participant alone, and one where
+      // the hidden name occurs only inside a longer ordinary word.
+      await record("Gate Guard Captain used Persuade: success.");
+      await record("Guard used Persuade: success.");
+      await record("Ari found a guardrail.");
+
+      // The visible NPC is given an explicit `true`, as the L1 case does: once
+      // the matrix is non-empty a viewer needs their own row for each target
+      // (the PR's finding 1), so without this the delta would also carry that
+      // pre-existing behaviour instead of only the hide.
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.rell.id,
+        viewerParticipantId: fixture.ari.id,
+        visible: true,
+      });
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.shade.id,
+        viewerParticipantId: fixture.ari.id,
+        visible: true,
+      });
+
+      const visible = await get(fixture.playerOneCookie, url);
+      expect(visible.statusCode, visible.body).toBe(200);
+      expect(visible.json<SessionPayload>().session.history.map((event) => event.summary)).toEqual(
+        expect.arrayContaining([
+          "Gate Guard Captain used Persuade: success.",
+          "Guard used Persuade: success.",
+          "Ari found a guardrail.",
+        ]),
+      );
+
+      await setVisibility({
+        encounterId: fixture.gatehouseId,
+        gmCookie: fixture.gmCookie,
+        targetParticipantId: fixture.shade.id,
+        viewerParticipantId: fixture.ari.id,
+        visible: false,
+      });
+      const hidden = await get(fixture.playerOneCookie, url);
+      expect(hidden.statusCode, hidden.body).toBe(200);
+      const summaries = hidden.json<SessionPayload>().session.history.map((event) => event.summary);
+      // Covered by a longer visible name, and by a longer word: both kept.
+      expect(summaries).toContain("Gate Guard Captain used Persuade: success.");
+      expect(summaries).toContain("Ari found a guardrail.");
+      // Not covered: still withheld, so the rule did not disarm the scan.
+      expect(summaries).not.toContain("Guard used Persuade: success.");
+    });
+
+    /**
      * Pins the L5 fixture to the production summary templates. The rows above
      * are written directly, so if a route's wording changed the differential
      * would keep passing while measuring a string nothing produces — the
@@ -860,6 +1094,26 @@ if (!hasTaskApplicationDatabase) {
       expect(source).toContain("summary: `${participant.label} rolled ${pendingRoll.skillLabel}.`");
       expect(source).toContain(
         "objectiveSummary = `${participant.label} used ${pendingRoll.skillLabel}: ${",
+      );
+      // #798 F1 additionally fixtures the Encounter-lifecycle templates, which
+      // name no participant at all and were withheld purely on a substring.
+      expect(source).toContain(
+        "summary: `Created ${encounter.kind} encounter ${encounter.title}.`",
+      );
+      expect(source).toContain('"Archived" : "Started"} encounter ${existingEncounter.title}.`');
+      const repositorySource = await readFile(
+        join(process.cwd(), "packages/database/src/repositories/scenarioRepository.ts"),
+        "utf8",
+      );
+      expect(repositorySource).toContain(
+        "summary: `Paused encounter ${encounter.name} because the Scenario paused.`",
+      );
+      const serviceSource = await readFile(
+        join(process.cwd(), "packages/database/src/services/scenarioService.ts"),
+        "utf8",
+      );
+      expect(serviceSource).toContain(
+        'summary: `${participant.snapshot.displayName} picked up ${availableObject?.name ?? "an Item"}.`',
       );
     });
   });

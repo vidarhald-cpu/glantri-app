@@ -310,10 +310,99 @@ function valueReferencesParticipant(value: unknown, participantIds: ReadonlySet<
   return Object.values(value).some((entry) => valueReferencesParticipant(entry, participantIds));
 }
 
+/**
+ * A character that can be part of a name. A display-name occurrence flanked by
+ * one of these on either side is a substring of a longer word, not a mention.
+ */
+const NAME_CHARACTER = /[\p{L}\p{N}]/u;
+
+function escapeForRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Case-insensitive occurrences of a display name in stored prose, each one
+ * flanked by a non-name character (or a string boundary) on both sides.
+ *
+ * Matching is done with a case-insensitive `RegExp` rather than by lower-casing
+ * both strings, because lower-casing can change a string's length and would
+ * then shift every index the covering rule below depends on.
+ */
+function displayNameOccurrences(
+  summary: string,
+  name: string,
+): { readonly end: number; readonly start: number }[] {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return [];
+  const occurrences: { readonly end: number; readonly start: number }[] = [];
+  for (const match of summary.matchAll(new RegExp(escapeForRegExp(trimmed), "giu"))) {
+    const start = match.index;
+    const end = start + match[0].length;
+    const before = start === 0 ? "" : summary.charAt(start - 1);
+    const after = end >= summary.length ? "" : summary.charAt(end);
+    if (NAME_CHARACTER.test(before) || NAME_CHARACTER.test(after)) continue;
+    occurrences.push({ end, start });
+  }
+  return occurrences;
+}
+
+/**
+ * Whether stored prose names a participant this viewer is denied (#798 L5).
+ *
+ * The scan is load-bearing and cannot be dropped: the `encounter_skill_outcome`
+ * row written by `encounterRoutes.ts` (`summary: "<name> used <skill>: …"`) is
+ * persisted through `encounterRepository.updateEncounter`, whose payload is
+ * `{ audienceParticipantIds, encounterId }` with no `participantId` column —
+ * and `audienceParticipantIds` is deliberately outside the id scan above. For
+ * that row the prose is the **only** identifying content, so removing the scan
+ * would reopen L5. It is made precise instead.
+ *
+ * Two rules, both of which the raw `summary.includes(name)` test got wrong:
+ *
+ * 1. **Name boundaries.** A suppressed name must occur as a name, not inside a
+ *    longer word. `includes` made short names match ordinary English in the
+ *    production templates — `Ed` inside `used`, `Started`, `Paused`; `Bat`
+ *    inside `combat`; `Guard` inside `guardrail` — so hiding or staging an NPC
+ *    with a short name, or merely splitting the party, withheld the player's
+ *    own Activity rows, which carry no identifying content at all.
+ * 2. **The longest name wins.** A whole-name hit that lies inside an occurrence
+ *    of a strictly longer *visible* participant's name is that visible
+ *    participant's mention, not the suppressed one's: `Gate Guard Captain used
+ *    Persuade: success.` is about Gate Guard Captain even while `Guard` is
+ *    hidden, and withholding it would hide a visible participant's own row. An
+ *    occurrence not covered that way still suppresses, so `Guard used Persuade.`
+ *    is withheld. Equal-length names do not cover each other: when a visible
+ *    and a suppressed participant share a display name the prose genuinely
+ *    cannot be attributed, and the row fails closed.
+ */
+function summaryIdentifiesExcludedParticipant(input: {
+  excludedNames: ReadonlySet<string>;
+  summary: string;
+  visibleNames: ReadonlySet<string>;
+}): boolean {
+  const excludedNames = [...input.excludedNames].filter((name) => name.trim().length > 0);
+  if (excludedNames.length === 0) return false;
+  const visibleOccurrences = [...input.visibleNames].flatMap((name) =>
+    displayNameOccurrences(input.summary, name),
+  );
+  return excludedNames.some((name) =>
+    displayNameOccurrences(input.summary, name).some(
+      (occurrence) =>
+        !visibleOccurrences.some(
+          (covering) =>
+            covering.start <= occurrence.start &&
+            covering.end >= occurrence.end &&
+            covering.end - covering.start > occurrence.end - occurrence.start,
+        ),
+    ),
+  );
+}
+
 function eventIdentifiesExcludedParticipant(input: {
   event: ScenarioEventLog;
   participantIds: ReadonlySet<string>;
   participantNames: ReadonlySet<string>;
+  visibleParticipantNames: ReadonlySet<string>;
 }): boolean {
   if (input.event.participantId && input.participantIds.has(input.event.participantId)) return true;
   // The payload is scanned for any reference to an excluded participant, which
@@ -333,10 +422,11 @@ function eventIdentifiesExcludedParticipant(input: {
   );
   if (valueReferencesParticipant(identifyingPayload, input.participantIds)) return true;
 
-  const normalizedSummary = input.event.summary.toLocaleLowerCase();
-  return [...input.participantNames].some((name) =>
-    normalizedSummary.includes(name.toLocaleLowerCase()),
-  );
+  return summaryIdentifiesExcludedParticipant({
+    excludedNames: input.participantNames,
+    summary: input.event.summary,
+    visibleNames: input.visibleParticipantNames,
+  });
 }
 
 export function projectScenarioObjectiveHistory(input: {
@@ -350,6 +440,12 @@ export function projectScenarioObjectiveHistory(input: {
     userId: string;
   };
   viewerMode: "gm" | "player";
+  /**
+   * Display names of the participants this viewer is not denied. Used only by
+   * the stored-prose scan's longest-name-wins rule; an omitted set means no
+   * occurrence is ever attributed to a visible participant.
+   */
+  visibleParticipantNames?: ReadonlySet<string>;
 }): z.infer<typeof scenarioSessionHistoryEventSchema>[] {
   const participantDisplayNames = new Map(
     (input.itemOutcomeContext?.participants ?? []).map((participant) => [
@@ -433,6 +529,7 @@ export function projectScenarioObjectiveHistory(input: {
           event,
           participantIds: input.excludedParticipantIds ?? new Set(),
           participantNames: input.excludedParticipantNames ?? new Set(),
+          visibleParticipantNames: input.visibleParticipantNames ?? new Set(),
         })
       ) {
         return [];
@@ -585,6 +682,7 @@ export function buildScenarioSessionView(input: {
         userId: input.userId,
       },
       viewerMode: input.viewerMode,
+      visibleParticipantNames: disclosure.visibleParticipantNames,
     }),
     participants,
     revision: input.scenario.updatedAt,
