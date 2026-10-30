@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, type ReactNode } from "react";
+import React, { useId, useState, type ReactNode } from "react";
 
 import {
   HIT_LOCATIONS,
@@ -565,6 +565,29 @@ const compactWideFieldLabelStyle = {
   display: "grid",
   gap: "0.18rem",
   maxWidth: "100%",
+} as const;
+
+/**
+ * Forgejo issue #771 finding R2-8. `Movement direction` and `Facing` legitimately share one
+ * eight-direction enum (`docs/rules/combat-declarations.md` §7/§8, Product Owner approved), so the
+ * two selects are identical by design and cannot be told apart from their options. The sentence that
+ * used to distinguish them was removed by the R2-7 prose repair, so each select now carries the
+ * approved §7/§8 definition of the field it records, quoted verbatim, as its own description. The
+ * description is a sibling of the `<label>` rather than inside it, because text inside a wrapping
+ * label becomes part of the control's accessible name.
+ */
+const declarationFieldDescriptionStyle = {
+  color: "#4f554d",
+  fontSize: "0.76rem",
+  lineHeight: 1.3,
+  margin: 0,
+  maxWidth: "26rem",
+} as const;
+
+const declarationFieldWithDescriptionStyle = {
+  display: "grid",
+  gap: "0.22rem",
+  minWidth: 0,
 } as const;
 
 const compactModifierGroupHeaderStyle = {
@@ -1810,6 +1833,9 @@ export function PlayerCombatActionSelectorPanel({
   secondaryActionId,
   sourceLabel,
 }: PlayerCombatActionSelectorPanelProps) {
+  const fieldDescriptionIdPrefix = useId();
+  const movementDirectionDescriptionId = `${fieldDescriptionIdPrefix}movement-direction-description`;
+  const facingDescriptionId = `${fieldDescriptionIdPrefix}facing-description`;
   const compatiblePrimaryActionIds = new Set(
     getPlayerEncounterPrimaryActionOptions(secondaryActionId).map((option) => option.value),
   );
@@ -2342,47 +2368,60 @@ export function PlayerCombatActionSelectorPanel({
         <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
           Movement and facing
         </legend>
-        <label style={compactFieldLabelStyle}>
-          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement direction</span>
-          <select
-            disabled={controlsDisabled}
-            onChange={(event) =>
-              commitDeclarationIntent({
-                ...effectiveDeclarationIntent,
-                movementDirection: (event.target.value ||
-                  undefined) as CombatDeclarationIntent["movementDirection"],
-              })
-            }
-            value={effectiveDeclarationIntent.movementDirection ?? ""}
-          >
-            <option value="">None / blank</option>
-            {directionOptions.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={compactFieldLabelStyle}>
-          <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Facing</span>
-          <select
-            disabled={controlsDisabled}
-            onChange={(event) =>
-              commitDeclarationIntent({
-                ...effectiveDeclarationIntent,
-                facing: (event.target.value || undefined) as CombatDeclarationIntent["facing"],
-              })
-            }
-            value={effectiveDeclarationIntent.facing ?? ""}
-          >
-            <option value="">None / blank</option>
-            {directionOptions.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={declarationFieldWithDescriptionStyle}>
+          <label style={compactFieldLabelStyle}>
+            <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement direction</span>
+            <select
+              aria-describedby={movementDirectionDescriptionId}
+              disabled={controlsDisabled}
+              onChange={(event) =>
+                commitDeclarationIntent({
+                  ...effectiveDeclarationIntent,
+                  movementDirection: (event.target.value ||
+                    undefined) as CombatDeclarationIntent["movementDirection"],
+                })
+              }
+              value={effectiveDeclarationIntent.movementDirection ?? ""}
+            >
+              <option value="">None / blank</option>
+              {directionOptions.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p id={movementDirectionDescriptionId} style={declarationFieldDescriptionStyle}>
+            Movement Direction records the absolute direction in which the character intends to
+            move.
+          </p>
+        </div>
+        <div style={declarationFieldWithDescriptionStyle}>
+          <label style={compactFieldLabelStyle}>
+            <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Facing</span>
+            <select
+              aria-describedby={facingDescriptionId}
+              disabled={controlsDisabled}
+              onChange={(event) =>
+                commitDeclarationIntent({
+                  ...effectiveDeclarationIntent,
+                  facing: (event.target.value || undefined) as CombatDeclarationIntent["facing"],
+                })
+              }
+              value={effectiveDeclarationIntent.facing ?? ""}
+            >
+              <option value="">None / blank</option>
+              {directionOptions.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p id={facingDescriptionId} style={declarationFieldDescriptionStyle}>
+            Facing records the direction/orientation the character intends to maintain or reach.
+          </p>
+        </div>
       </fieldset>
 
       <label style={compactWideFieldLabelStyle}>
