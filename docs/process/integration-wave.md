@@ -260,6 +260,114 @@ paths instead, for example
 or `git diff --name-status`, and treat an empty result as identity. Deletions
 then appear as deletions and are compared as such.
 
+## Batch integration and integration capacity
+
+### Integration capacity is not Builder capacity
+
+They are tracked separately because they are consumed by different things and they
+free up on different events. A Builder slot frees when a lane finishes. Integration
+capacity is **one serial CI runner**, at roughly 25 minutes of runner time per
+protected gate run, and it does not free when a lane finishes — it frees when a gate
+run completes.
+
+Three consequences, each measured on this host:
+
+- **Each merge invalidates the next PR's gate.** `dev` requires a protected check,
+  and `dev` moving makes every other open PR's head behind its base. PR #813's merge
+  was refused with `the head branch is behind the base branch`; the branch was
+  updated, which produced a new head, which needed its own gate run (#798
+  comment 18675). With three accepted heads the sequence is strictly serial: rerun,
+  merge, update, rerun, merge, update, rerun, merge — about 25 minutes of runner per
+  step, with the rebuild and playtest still to come (#798 comment 18680).
+- **Capacity is measured where the gate runs, not where the Orchestrator sits.** The
+  host's network recovered to 0.70–3.31 s TCP connect, which the Orchestrator read as
+  sufficient to start integrating. Inside the image build, `pnpm install` then failed
+  on `EAI_AGAIN` — DNS resolution failing outright — with retries exhausted. The
+  Orchestrator recorded the correction in terms: host-side timing is **not** a usable
+  predictor for this gate, and readiness is tested by DNS and a tarball fetch **from
+  inside a build container** (#798 comment 18680).
+- **A dispatcher checks integration capacity before dispatching more implementation
+  work.** Accepted, unintegrated heads are a queue with a known service rate. Adding
+  a Builder while that queue is full produces another accepted head waiting on the
+  same runner, and each one that arrives makes the others' gates stale. Cap
+  concurrent lanes at about two while one runner serves the gate, and hold one
+  consolidated watch rather than one per head.
+
+Re-triggering is bounded: **one re-trigger per head**, and none while the cause is
+known to be unresolved. Three settled runs are worth more than nine inconclusive
+ones, and the runner they consume is the same runner the batch needs.
+
+### The standard batch
+
+A **batch** composes several independently reviewed exact heads onto one integration
+branch, which then receives **one** combined protected gate run, in place of one run
+per head and one per intervening update.
+
+**What each member must already have, before it may join:**
+
+1. an independent QA verdict of PASS or PASS WITH FOLLOW-UP, bound to that exact
+   head, with **no open A, B or C finding**;
+2. explicit control-plane acceptance of that subject, or an explicit
+   pre-authorization to integrate without it — a green verdict is not acceptance,
+   under [acceptance and mechanical refresh](#acceptance-and-mechanical-refresh-are-different-questions);
+3. the Orchestrator's [load-bearing re-check](./development-operating-model.md#the-load-bearing-re-check-between-harvesting-a-verdict-and-acting-on-it)
+   recorded as reproduced;
+4. a declared consumed-vocabulary set, and a reachability-path declaration where it
+   introduces or alters a workflow-driving state;
+5. no computed changed-path overlap with another member that is not resolved by a
+   recorded merge order, under
+   [hotspot overlap is declared and computed](./development-operating-model.md#hotspot-overlap-is-declared-and-computed).
+
+**How the batch is composed and verified:**
+
+1. Create the integration branch from the current accepted `dev`, by merge only — no
+   rebase, no squash, no amend — in the recorded merge order.
+2. Merge each member in turn. **A member requiring manual conflict resolution leaves
+   the batch** rather than being resolved in place; a resolved conflict is a change
+   nobody reviewed.
+3. Run the five [composition verification conditions](#composition-verification-conditions)
+   against the composed head, with blob identity checked by a
+   [restricted tree-level diff](#blob-checks-use-a-restricted-tree-level-diff) over
+   the reviewed paths.
+4. **Where a member's reviewed tree survives composition byte-identically, its PASS
+   transfers by tree identity rather than by assumption.** This is verifiable with
+   one `rev-parse`, and it has been done: PR #813's updated head carried tree
+   `09489f11`, byte-identical to the merge tree QA had computed with
+   `git merge-tree --write-tree` and run its whole evidence against (#798
+   comment 18675).
+5. Run the protected gate **once**, on the composed head, and read per-job results
+   from the Actions `tasks` API by `head_sha` — a skipped job reports `success` in
+   the combined commit-status API, so the combined status cannot distinguish an
+   executed pass from a skip.
+6. Merge the integration branch into `dev` through the protected path, by the
+   authorized integration identity, after the final recheck of exact head, target,
+   freshness, required checks and mergeability in
+   [PR freshness, merge base, and pre-integration recheck](./development-baseline.md#pr-freshness-merge-base-and-pre-integration-recheck).
+7. Perform downstream work **once per batch, not once per member** — one rebuild,
+   then the playtest.
+
+**When one member fails:**
+
+- **The gate fails on the composed head.** Attribute the failure before composing
+  anything new. Where it is attributable to one member, drop that member, recompose
+  without it, and run the gate once more. Where it is not attributable, the batch is
+  the problem: reduce it rather than re-running it.
+- **A member is dropped, not repaired in the batch.** It returns to its own lane at
+  its own head, with its verdict intact and bound to the head it still has. The
+  batch never carries a repair.
+- **An environmental failure does not drop anybody.** Where the cause is outside
+  every member's diff — the `EAI_AGAIN` build-container case is the standing example
+  — the batch holds, the required check stays blocking, nothing is bypassed and no
+  success is fabricated. Record the evidence and route it to bounded operational
+  repair.
+- **No bypass, ever.** Not a forced merge, not a protection change, not a
+  reconfigured runner. Branch protection on `dev` stands as configured (#819
+  amendment 3).
+
+A batch is a composed wave and inherits everything this document already says about
+one, including the limitation that composition condition 4 passes vacuously for a
+dependency nobody declared.
+
 ## Evidence provenance
 
 Durable policy text inherits whatever confidence its sources carried, and says

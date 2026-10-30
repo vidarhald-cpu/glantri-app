@@ -130,6 +130,122 @@ contention and its scheduling constraint; do not impose blanket serial waiting.
 When required QA and applicable checks pass, the integration actor promptly
 applies existing conditional integration authority and every remaining gate.
 
+## QA levels and what independence means
+
+The **verification class** above answers "what evidence applies to this change".
+The **QA level** answers "how adversarially is it reviewed, and by whom". They are
+two axes of one decision and are stated together in the work order. A level never
+lowers a class: a floor-class change reviewed at QA-3 still needs the class's
+evidence.
+
+| Level    | Entry criteria                                                                                                                                                                                                                 | What it requires                                                                                                                                                                                                                                                                                                                    | Typical class                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **QA-1** | Documentation or process text; a mechanical refresh whose delta is mechanically provable; a change that cannot alter runtime behaviour.                                                                                        | Light relevant checks: formatting, internal references, scope, policy consistency, and the applicable protected gate. Executed by an independent context, or routed through the explicit documentation-only exemption, which carries evidence to acceptance **without** claiming a QA PASS.                                         | Documentation/process, mechanical refresh |
+| **QA-2** | Ordinary implementation that is not floor-class: UI, presentation, non-authority domain logic, additive reads.                                                                                                                 | Everything in the independence requirement below, plus the class's functional and regression evidence, plus independent execution of the load-bearing measurements. The reviewer measures rather than reads wherever measuring is possible, and says which is which.                                                                | Substantive implementation                |
+| **QA-3** | Any [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) class — persisted schema or stored-data semantics, authorization/authentication/privacy projection, `dev` gate or CI definitions — or an Orchestrator escalation. | QA-2 in full, at the strongest reasonably capable model, **adversarially**: the reviewer attacks the guard rather than confirming the test, constructs the state the product cannot currently produce, and races what it cannot reach by reading. Downgrading the level, the model, or the substrate on cost grounds is prohibited. | Substantive implementation                |
+
+QA-3's adversarial requirement is not rhetoric. The #798 cycle-1 reviewer did not
+stop at the domain function: it renamed a Character through `PUT /characters/:id`,
+self-added it to a live Scenario through the non-GM participant route, and
+recovered a hidden name — a defect no test predicted. The #794 reviewer deleted the
+API guard under test to find out whether a second layer existed, and found one. The
+#786 reviewer raced a check-then-write gap that a code reading had called
+unreachable, and reproduced it ten times out of ten.
+
+### The independence requirement
+
+Independence is a property of what the reviewer **does**, stated positively. A
+reviewer is independent when all of the following hold, and the verdict records
+each one:
+
+1. **It did not build the change.** Not the Builder, and not a helper agent inside
+   the Builder's context.
+2. **Its context is fresh.** It shares no Builder conversational history. It also
+   does not review a change built to satisfy its own prior recommendation: on #798,
+   cycle 2 implemented the alternative the cycle-1 reviewer had measured and
+   recommended, so a fresh reviewer took it, and the reason was recorded rather
+   than left incidental (comment 18529).
+3. **It reads the issue and the packet from the source**, through the API, and
+   prefers the fetched issue body over a supplied copy. Where a copy was supplied,
+   a diff against the live issue is evidence worth recording.
+4. **Its verdict binds to one exact full SHA**, re-read from the remote immediately
+   before publication.
+5. **It executes the load-bearing measurements itself.** The Builder's figures are
+   an input, never a verdict. On #798 the Builder reported its diff as `+379/−8`
+   when the diff against its own parent was `+742/−8`; the Orchestrator corrected it
+   (comment 18335) and QA confirmed the correction independently (comment 18394).
+6. **It records substrate and model honestly**, including that it is a background
+   subagent where it is one, and never as a visible session. It states no background
+   agent ID it cannot know.
+7. **It accepts no self-assessment** — neither the Builder's nor its own earlier
+   run's. An instrument it reuses is re-proved able to fail at this candidate; see
+   [the QA instrument register](./qa-instruments.md).
+
+A background or subagent context that satisfies all seven supplies independence as
+fully as a visible session does. **Visibility is an observability property, not an
+independence property**, and the two are recorded separately. Where the
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) still requires a visible
+dedicated session, that requirement stands on its own terms and this section does
+not waive it.
+
+## Finding dispositions A–F
+
+Every finding in a verdict carries exactly one disposition letter, assigned **in the
+verdict itself**, not in the Orchestrator's reading of it afterwards (#819 standing
+rule 3). The letter is the finding's whole authority: it says what the finding
+permits, and nothing outside the letter is permitted by having recorded it.
+
+**Only A, B and C may authorize implementation.** C only minimally, under its STOP
+clause. D, E and F are recorded and routed. See
+[a recorded discovery is not authorized work](../../AGENTS.md#a-recorded-discovery-is-not-authorized-work).
+
+| Letter | Disposition                         | The test that distinguishes it from its neighbours                                                                                                                                                                                                               | What it authorizes                                                                                                                                                                                                                                                                          |
+| ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A**  | Current-contract blocker            | An acceptance criterion of **this** work order is not met at this head. Distinguished from B: A would have been false at the baseline too. Distinguished from C: A is named in the contract; C is not.                                                           | A bounded in-scope repair by the existing Builder, then fresh exact-head QA, within the standing repair allowance. FAIL.                                                                                                                                                                    |
+| **B**  | Regression introduced by the change | The behaviour was correct at the baseline and is wrong at this head. Measure both, do not reason about one. Distinguished from F: run the probe at the baseline — if it fails there too, it is F.                                                                | As A. FAIL. A regression is blocking even when no acceptance criterion names it.                                                                                                                                                                                                            |
+| **C**  | Necessary adjacent invariant        | Not named in the contract, but the change **cannot be correct without it** — a guard the change newly makes load-bearing, an authority the change newly exposes. Distinguished from E: C is required for the change in hand to be safe; E is a different change. | A **minimal** repair, scoped to the invariant and nothing adjacent to it. **STOP clause:** where the invariant cannot be restored without deciding ownership, delegation, historical access or authority, the lane stops and the question is routed. It does not become an acceptance item. |
+| **D**  | Residual accepted for this stage    | A real shortfall that the current stage's policy accepts. Under the Alpha execution policy this is the `Alpha residual` class. It fails closed, discloses nothing, and is a Product Owner judgement rather than an implementation defect.                        | Recording, and routing to the Product Owner as a decision they should see. **No repair cycle.** QA says so explicitly in the verdict.                                                                                                                                                       |
+| **E**  | Future feature or design discovery  | The finding describes work the product does not currently have. Distinguished from C: ask whether the change in hand is unsafe without it. If it is merely incomplete without it, it is E.                                                                       | A separate issue, filed and linked. Nothing in the running lane. #823 is the model: a helper wired on one surface and not the second surface its PR claimed, filed separately rather than widened into that PR.                                                                             |
+| **F**  | Pre-existing unrelated defect       | Present at the baseline and not caused by, nor in the path of, this change. Prove it at the baseline; do not infer it.                                                                                                                                           | A durable backlog issue, or a P3 follow-up for clear low-impact polish. Unrelated CI or environment failures route to bounded operational repair with the required check still blocking.                                                                                                    |
+
+### Relationship to the #819 four-way classification
+
+A–F **refines** the Alpha execution policy's four classes; it does not replace them,
+and no document may state both as independent schemes. The mapping is mechanical, so
+a verdict that states the letter has stated the #819 class:
+
+| A–F  | #819 class                       |
+| ---- | -------------------------------- |
+| A, B | required for the original defect |
+| C    | necessary adjacent invariant     |
+| D    | Alpha residual                   |
+| E, F | post-Alpha / theoretical         |
+
+A–F splits #819's first class into "the contract is unmet" and "the baseline was
+better", because the two have different proofs, and it splits its last class into
+"a feature nobody has built" and "a defect that was already there", because the two
+route differently.
+
+**Reversal condition.** `D` is named for the current stage. When the Product Owner
+declares the Alpha stage over, `D` continues to mean "a residual the current stage's
+policy accepts" and the policy it refers to becomes whatever is then in force. A
+reader arriving after that declaration must not apply #819's Alpha reasoning to it.
+
+### The artefact of a recorded-only finding
+
+A D, E or F finding produces, and produces only:
+
+1. a classified entry in the verdict, with its evidence and its letter;
+2. for E and F, a separate issue, linked from the verdict; and
+3. for D, a statement in the verdict that this is a Product Owner judgement, named
+   as such, so the decision reaches them rather than being absorbed.
+
+It produces no repair dispatch, no reopening of an accepted head, and no widening of
+a running lane. **Promotion to authorized work is a control-plane act** through the
+ordinary lifecycle: the control plane prepares it, the Product Owner authorizes it,
+and the Orchestrator dispatches it as its own work order. QA does not promote its own
+finding, and neither does the Orchestrator.
+
 ## QA modes and handoff tuples
 
 ### INITIAL QA
@@ -311,6 +427,29 @@ Prefer the fetched issue body over a supplied copy, and record that the contract
 was read directly. Where a copy was supplied as well, a diff against the live
 issue is evidence worth recording.
 
+**A `skipped` job reports `success` in the commit-status API.** Per-job truth comes
+only from the Actions `tasks` API, read by `head_sha`. Quote per-job states from
+there and say which jobs executed and which were skipped. Measured twice on the
+same day: #798's cycle-2 verdict recorded that the commit-status API read 8/8
+because it counted the skipped `tooling` job while only 7 jobs executed
+(comment 18569), and #794's Builder tabulated executed-versus-skipped from
+`actions/tasks` for exactly this reason (comment 18540). A combined status is not
+evidence that a job ran.
+
+Two further reading traps, both measured:
+
+- **A tail-read of a job log blames the wrong step.** #813's failing run ended with
+  `GHESNotSupportedError: upload-artifact@v4+ … not supported on GHES`, which is a
+  consequence: that step is `Upload Playwright report on failure` with
+  `if: failure()`, so it runs only because the build already failed. There were two
+  `exitcode '1'` lines and the earlier one was the real failure. It is not an
+  independent CI defect and must not be filed as one (#798 comment 18680).
+- **Host-side network timing does not predict the build container's.** The same
+  incident: the host resolved and fetched normally while `pnpm install` inside the
+  image build failed on `EAI_AGAIN` — DNS resolution failing, not merely slow — with
+  retries exhausted. Capacity is measured where the gate runs. See
+  [batch integration and integration capacity](./integration-wave.md#batch-integration-and-integration-capacity).
+
 For a failing protected context, `commits/<sha>/status` names the context and
 its state, and `actions/tasks` gives the per-job name, status, and head SHA, so
 QA can usually separate an infrastructure failure from a product failure without
@@ -340,7 +479,11 @@ retain independence, exact-head and scope gates and apply the verification class
 - exact head: verdict names the full immutable reviewed SHA;
 - contract and scope: approved acceptance, exclusions, changed files, and no
   unauthorized widening;
-- checks: focused evidence plus the selected proportional regressions;
+- checks: focused evidence plus the selected proportional regressions. Prove
+  collection rather than assuming it — a suite that collects zero tests exits
+  green. For a reused probe, re-prove at this candidate that the probe can fail,
+  and read its output rather than its exit code; see
+  [the QA instrument register](./qa-instruments.md);
 - privacy/security: authorization and information projection are separate
   gates; rejected actions, zero mutation, or hidden UI alone do not prove safe
   payloads;
@@ -392,7 +535,16 @@ inline, and a class-keyed survey missed every Combat string.
 ## Verdict, child state, and harvesting
 
 The QA verdict is `PASS`, `PASS WITH FOLLOW-UP`, or `FAIL`. A tuple or entry
-mismatch returns `BLOCKED` before verdict. Only PASS or safe, durably justified
+mismatch returns `BLOCKED` before verdict.
+
+The verdict follows mechanically from the
+[dispositions](#finding-dispositions-a-f): an open **A** or **B** is `FAIL`; an
+open **C** is `FAIL` unless its STOP clause fires, in which case the verdict is
+`BLOCKED` on the routed question; a verdict whose findings are all **D**, **E** or
+**F** is `PASS` or `PASS WITH FOLLOW-UP` and says so in those terms. A finding is
+never relabelled to move the verdict in either direction. QA states when it is
+**not** asking for a repair cycle, explicitly, because silence on that point is
+read as a request. Only PASS or safe, durably justified
 PASS WITH FOLLOW-UP advances the issue to
 `Ready for Control-plane Acceptance`. FAIL returns an in-scope bounded repair
 to `Active`; it never advances toward acceptance.
@@ -504,7 +656,9 @@ observed end-to-end comparison.
 ```text
 QA RETURN
 Mode: INITIAL | REPAIR | PRESERVATION
+Level: QA-1 | QA-2 | QA-3, and the independence items 1-7 as satisfied
 Dispatch: Glantri app — Forgejo / independent QA / <child state>
+Substrate and model, stated accurately; agent ID only if supplied
 Thread ID / direct link when available / worktree:
 PR / exact reviewed head:
 Topology and scope check:
@@ -513,7 +667,9 @@ Failed/retested gate and directly affected regressions:
 Carried-forward prior PASS evidence and rationale, or none:
 High-risk escalation trigger and expanded checks, or none:
 Privacy/security, browser, and database applicability/evidence:
-Findings and durable links:
+Findings, each with its A-F disposition letter and durable links:
+Load-bearing claim this verdict rests on, named for the Orchestrator re-check:
+Instruments used or reused, and their discrimination proof at this head:
 Recovery/repair counters and remaining allowance:
 Publication link or exact ready report/recorder fallback:
 Timings while temporary capture is active:

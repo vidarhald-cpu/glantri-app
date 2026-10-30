@@ -27,6 +27,8 @@ This file is the canonical, provider-neutral execution policy for every worker o
 - Every QA verdict names the exact PR head SHA verified.
 - Substantive work requires independent immutable-head QA. Mechanical refreshes use preservation QA; process/docs work uses light relevant checks and its explicit exemption route, which carries complete evidence to control-plane acceptance without a QA claim. An unchanged exact-head PASS does not expire merely with time. See [QA classes](docs/process/qa-execution.md#verification-classes-and-evidence-validity).
 - Read-only investigation and bounded operational diagnosis may be delegated to Investigator/Ops workers. They do not silently become implementation. Authorized read-only investigation includes assigned-issue evidence publication; if a worker cannot publish with its assigned credential, the Orchestrator/Recorder publishes the exact ready result.
+- **Roles are provider-neutral; a pool is not a role.** A Builder is a Builder whichever execution pool runs it, and the same work order serves every pool. An adapter — `CLAUDE.md` and its successors — maps this policy onto one client's substrate and owns nothing else. Which pools are qualified for which work, and the ladder a new pool climbs, are in [provider pools and qualification](docs/process/development-operating-model.md#provider-pools-and-qualification).
+- **Provenance fields the worker cannot know are supplied, not self-reported.** A lane cannot see its own background agent ID; it can see the orchestrating session's UUID in its own environment. Twice a lane wrote that session UUID into a PR body as its agent ID, and independent QA caught it both times. The Orchestrator states the real ID in the packet for the lane to quote verbatim, or tells the lane to omit it. A lane asked for an ID it cannot know omits it and says so.
 
 ### Mandatory QA floor
 
@@ -37,6 +39,18 @@ These classes **require** full adversarial independent QA at the strongest reaso
 3. any change to the `dev` integration gate, protected-branch configuration, or CI workflow definitions.
 
 Escalation above the floor is discretionary. Where a task spans a floor class and ordinary work, the floor governs the whole task.
+
+Independent QA at any level satisfies the [independence requirement](docs/process/qa-execution.md#qa-levels-and-what-independence-means), which states positively what a reviewer must do rather than only where it must sit.
+
+> **Stage 2 proposal, not in force — requires a control-plane decision.** Stage 2 proposes replacing the floor's `in a visible dedicated QA session` with the independence requirement linked above, so the floor turns on what the reviewer does rather than on whether a human watched it. The written floor above stands until the control plane rules. Evidence either way: #819 amendment 2 already relaxed the visible-session clause for one evening and stated the cost honestly — a background verdict cannot be watched mid-run and its reasoning is not inspectable afterwards beyond what it posts — and floor-class background verdicts produced under it (for example #771 comment 18640, #794 comment 18580) met every other floor requirement. Against: the clause exists because this programme has had findings that became trustworthy only through being watched. This is a change to QA independence and therefore reserved to the control plane under [process governance](docs/process/development-operating-model.md#process-governance).
+
+### A recorded discovery is not authorized work
+
+QA records a finding — with evidence, classified — **without** that record creating an implementation cycle, reopening an accepted head, or widening a running lane. The artefact of a recorded-only finding is a durable classified entry in the verdict, plus a separate issue where it names work somebody may later do. Neither is authorization.
+
+Only dispositions **A**, **B** and **C** may authorize implementation, and C only minimally and under its STOP clause. **D**, **E** and **F** are recorded and routed, and nothing further happens on that authority. Promoting a recorded finding to authorized work is a control-plane act through the ordinary lifecycle. See [finding dispositions](docs/process/qa-execution.md#finding-dispositions-a-f).
+
+The failure mode this replaces is measured. On #798 the Orchestrator wrote an incremental acceptance item — that a visible participant's longer name wins — the lane implemented it, and the next QA cycle blocked on the defect that item had created (comment 18407). On #786 the same shape produced four QA returns across three heads before the contract was replaced (comment 18354).
 
 ## Task start and required reading
 
@@ -56,13 +70,15 @@ For an ordinary independent-QA task, the mandatory process set is only this file
 ### Scope precision
 
 - Dispatch packets name the **exact files and paths** the task owns, not only a surface or a document list, and never say `read all architecture docs`.
+- A dispatch packet carries the complete [work-order field set](docs/process/task-contract.md#work-order-field-set), including its declared expected hotspots and its performance expectation. A worker that finds a mandatory field absent stops and asks rather than assuming a default.
 - For data-heavy content or analysis work, process large data files with a script rather than reading them into context.
 
 Useful references:
 
-- Task contract: `docs/process/task-contract.md`
+- Task contract and work-order schema: `docs/process/task-contract.md`
 - Isolated Builder/QA execution: `docs/process/agent-execution.md`
 - Compact independent QA execution: `docs/process/qa-execution.md`
+- Reusable QA probes and their known failure modes: `docs/process/qa-instruments.md`
 - Canonical development operating model: `docs/process/development-operating-model.md`
 - Durable authority and baseline policy: `docs/process/control-plane.md` and `docs/process/development-baseline.md`
 - Functional ownership/hotspots: `docs/architecture/ownership.md`
@@ -158,7 +174,8 @@ Preservation QA and other mechanically specifiable verification may use a cheape
 
 - Continue the current authorized task, branch, PR, and worker whenever it can make meaningful progress. Do not create a replacement merely because status delivery is delayed, a worktree path briefly disappears, or a task is slow.
 - **Continuation-first governs Git issue, branch, and worktree ownership. It is not a requirement to resume the same conversational or model context.**
-- The Orchestrator maintains one durable execution-ledger entry per `issue + role + mode + exact SHA`, including the provisioning request, real task/agent ID, parent task, leased worktree, observed HEAD, liveness, and next action. A replacement is allowed only after the prior owner is confirmed completed, canceled, retired, or lost.
+- **Supersession is the one named exception to continuation-first.** A material change to the contract or to a ruling the contract depends on, while a lane is active, closes that work order and opens a new one. It is not a replacement for slowness and it does not reset the anti-loop counters by itself. See [supersession of an active work order](docs/process/task-contract.md#supersession-of-an-active-work-order).
+- The Orchestrator maintains one durable execution-ledger entry per `issue + role + mode + exact SHA`, including the provisioning request, real task/agent ID, parent task, leased worktree, observed HEAD, liveness, and next action. A replacement is allowed only after the prior owner is confirmed completed, canceled, retired, or lost. **The authoritative copy of a claim and its lease is Forgejo issue metadata, not dispatcher-local state**; see [claim and lease representation](docs/process/agent-execution.md#claim-and-lease-representation).
 - A provisioned worktree is leased to its request/task until that ownership is durably released. Do not remove, reuse, or recreate it from the outside while the request may still materialize or the task may still be running.
 - An authorized Builder has the full bounded authority stated in its contract: implementation, proportionate tests, commit, task-branch push, draft-PR publication/updates, evidence, and automatic batched in-scope repair continuations including repair commits/pushes without routine reapproval. It does not gain merge, product-decision, `main`, release, or production authority.
 - If a worker needs login, OS/browser permission, credential interaction, or another human action, record it and surface `USER ACTION REQUIRED` promptly. Safari launch, authorized testing-process control, and ordinary local/development Glantri browser checks have [standing authorization](docs/process/control-plane.md#standing-safari-and-development-browser-authority); actual human-only OS/login/security prompts still require immediate `USER ACTION REQUIRED` and are never bypassed, nor do they imply external/production access.
@@ -176,6 +193,7 @@ Preservation QA and other mechanically specifiable verification may use a cheape
 - Immediately before integration, recheck exact head, target branch, freshness, required checks, and mergeability.
 - The path-aware dev gate is integrated through #163/PR #164. Its aggregate controls integration through the existing protected compatibility guards; no bypass or fabricated success. See `docs/process/development-baseline.md`.
 - Run QA and hosted checks in parallel unless a concrete dependency or measured resource constraint prevents it.
+- **Integration capacity is a separate ceiling from Builder capacity, and it is measured where the gate runs.** Several independently accepted exact heads may receive one combined gate run on an integration branch. The ceiling, the batch's entry conditions, and what happens when one member fails are in [batch integration and integration capacity](docs/process/integration-wave.md#batch-integration-and-integration-capacity).
 
 ## Rule and architecture discipline
 

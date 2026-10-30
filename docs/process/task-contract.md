@@ -465,6 +465,140 @@ delivery shape, not the freshness requirement.
 | Fix accepted Combat results disappearing after advance | Required        | Regression only unless values change      | Required              | Required for participant-safe result detail   | Required        | Required                                            |
 | Improve an internal query plan without changing output | Required        | Not applicable                            | Regression only       | Regression only                               | Not applicable  | Not applicable                                      |
 
+## Work-order field set
+
+A **work order** is the dispatchable projection of the Ready contract above. It is
+not a second contract and never carries a value the issue body contradicts: the
+issue body remains the executable contract, and the work order is the field set a
+dispatcher — human or, later, mechanical — must be able to read out of it without
+interpretation. Where a field below already exists above, the name above is
+authoritative and this section only says whether it is mandatory and what a worker
+may assume when it is absent.
+
+A work order is representable as YAML, as Markdown key/value lines, or as
+issue-body headings. The representation is not the contract; the field set is.
+
+### Mandatory fields
+
+A packet missing any of these is not dispatchable. The hazard is not the missing
+field but the default a worker invents in its place.
+
+| Field                        | Carries                                                                                                                                                                            | Absent means                                                                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                         | The work-order identity, distinct from the issue number, so that a superseded order and its successor on one issue stay separable.                                                 | Stop. A reader cannot tell which order a verdict binds to.                                                                         |
+| `issue`                      | The Forgejo issue whose body is the executable contract.                                                                                                                           | Stop, unless the contract names another durable authorization record explicitly.                                                   |
+| `kind`                       | `implementation`, `investigation`, `ops`, `docs/process`, or `qa`. Selects the verification class and the return format.                                                           | Stop. Verification class is not inferable from the file list.                                                                      |
+| `state`                      | The current lifecycle state, by label name.                                                                                                                                        | Stop. `Ready` is not permission, and the difference is the whole point of the state.                                               |
+| `priority horizon`           | Whether this is on the current authorized path, queued behind a named item, or deferred. #819's authorized order is the live example of a horizon stated as an ordered path.       | Stop. A worker cannot judge its own urgency, and an unqueued lane competes for one serial CI runner.                               |
+| `baseline branch`            | Normally `dev`.                                                                                                                                                                    | Stop. Never infer from `main`, remote HEAD, or a default branch.                                                                   |
+| `baseline SHA`               | The full exact accepted SHA. A continuation also carries its authorized parent; a QA order also carries the immutable candidate head.                                              | Stop. Apply the [exact-SHA provisioning gate](./development-baseline.md#exact-sha-provisioning-gate).                              |
+| `required reading`           | Exact repository paths or sections. `AGENTS.md` is always included.                                                                                                                | Read `AGENTS.md` and this contract, and nothing else. Do not self-expand the set.                                                  |
+| `scope`                      | What the order exists to achieve, stated as an outcome.                                                                                                                            | Stop.                                                                                                                              |
+| `exclusions`                 | What the order must not change, stated positively.                                                                                                                                 | **Nothing is excluded by default.** An empty exclusion list is a real statement, so write it rather than omit the field.           |
+| `edit set`                   | The exact files the order may write.                                                                                                                                               | Stop. See [what a lane declares](../architecture/ownership.md#what-a-lane-declares).                                               |
+| `declared expected hotspots` | The subset of the edit set that appears in the hotspot register, plus any hotspot the order must coordinate without editing.                                                       | The whole edit set is treated as reserved, which blocks more than necessary. State it.                                             |
+| `acceptance`                 | Concrete acceptance examples with inputs, actions and expected outcomes, plus the applicability result for every acceptance dimension.                                             | Stop.                                                                                                                              |
+| `performance expectation`    | The sizing at which the result must remain sane. Under the Alpha execution policy this is **roughly 200 participants/entities**, carried in every dispatch (#819 standing rule 2). | The floor above applies. It is not waived by silence.                                                                              |
+| `eligible provider pools`    | Which execution pools may take this order. See [provider pools and qualification](./development-operating-model.md#provider-pools-and-qualification).                              | Any pool qualified for this `kind`. A pool not yet qualified for that kind does not self-select into it.                           |
+| `QA level`                   | `QA-1`, `QA-2` or `QA-3`, with its independence requirement. See [QA levels](./qa-execution.md#qa-levels-and-what-independence-means).                                             | Stop for implementation work. A lane does not choose its own review depth.                                                         |
+| `git authority`              | Granted or withheld, per operation: commit, task-branch push, draft-PR publication, evidence publication.                                                                          | **Withheld.** Produce the result and return it; do not push.                                                                       |
+| `return gate`                | Where the order stops, and whether conditional integration is pre-authorized.                                                                                                      | Stop at `Ready for Independent QA`, or at acceptance for an explicitly QA-exempt docs/process order. Integration is never implied. |
+
+### Fields that may be absent, and what a worker may then assume
+
+| Field                          | Absent means                                                                                                                                                           |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `consumed-vocabulary set`      | The order reads no symbol another lane could reinterpret. A worker that finds this false stops and reports rather than deriving a set mid-flight.                      |
+| `floor invariant`              | The order is not floor-class. A worker that concludes otherwise stops; once the floor applies it governs the whole task.                                               |
+| `database capability`          | **None.** No application, migration, reset, seed, or integration-test command runs, and no `DATABASE_URL` is assumed.                                                  |
+| `browser capability`           | Synthetic evidence only. Standing Safari/development-browser authority still applies where the acceptance contract requires a real browser condition.                  |
+| `provenance IDs`               | The worker records what it can observe and omits what it cannot. It never substitutes the orchestrating session's UUID for a background agent ID.                      |
+| `dependencies and merge order` | No declared dependency. A dependency discovered in flight is a stop, not a scope expansion.                                                                            |
+| `repair allowance`             | The standing limits apply: one initial attempt plus two recoveries, and two Builder–QA repair cycles after initial QA. A contract may lower them and never raise them. |
+
+### Declared expected hotspots plus computed actual overlap
+
+The declaration above is half of the mechanism. The other half is computed from the
+real diff, and the Orchestrator owns it: see
+[hotspot overlap is declared and computed](./development-operating-model.md#hotspot-overlap-is-declared-and-computed).
+A declaration is a prediction, and a prediction is checkable.
+
+## Supersession of an active work order
+
+**A material change to the contract, or to a ruling the contract depends on, while
+a lane is active, closes that work order and opens a new one.** It does not amend
+the running order in place, and it does not reach the lane as one more acceptance
+item.
+
+This is the one named exception to continuation-first in
+[AGENTS.md](../../AGENTS.md#continuation-first-execution). Continuation-first
+protects a lane from being replaced for slowness. It does not oblige anyone to keep
+a lane running against a contract that no longer describes the work.
+
+### What `material` means
+
+A change is material when it alters any of:
+
+1. the outcome the order exists to achieve;
+2. the authority model the order implements — who may act, who owns a persisted
+   field, what the server decides rather than the client;
+3. the acceptance criteria, **including the withdrawal of one**;
+4. the edit set, the declared hotspots, or the floor classification;
+5. the baseline the order was cut from, where the lane cannot be mechanically
+   refreshed onto the new one.
+
+A change is **not** material when it corrects a wrong number, clarifies wording
+without changing what passes, names a source more precisely, or records evidence.
+Those are reconciled into the issue body under
+[executable contract and dispatch correlation](./agent-execution.md#executable-contract-and-dispatch-correlation).
+
+A withdrawn acceptance item is material, and it is the case most often mistaken for
+a clarification. On #798 the Orchestrator's own acceptance item 5 — that a visible
+participant's longer name wins — was the cause of the defect the next QA cycle
+blocked on, and withdrawing it was a changed contract rather than a third attempt at
+one problem (comment 18407).
+
+### Who decides, and what happens to the branch and the PR
+
+- **The Product Owner decides materiality** where the change concerns product
+  behaviour, a rule, authority or ownership. The control plane prepares the
+  question; the Orchestrator does not answer it. #786 is the worked example: after
+  three failed heads the Product Owner replaced the contract verbatim — revert to
+  `dev` semantics, fix only the concrete defect, defer delegation to #784 — and
+  recorded it as a changed causal condition (comment 18354).
+- **The Orchestrator decides materiality** for a baseline or edit-set change that
+  carries no product judgement, and records the decision with its reason.
+- **The branch is kept.** Nothing is force-deleted and nothing is reset. #790's
+  branch was retained at its tip precisely so that every measurement in comments
+  17864, 18080, 18247 and 18339 stays addressable.
+- **The PR is closed as superseded** — not merged, not reverted. #790 closed as
+  superseded and the successor opened a **new** PR from current `dev` rather than
+  continuing on the old head.
+- **The successor order starts fresh from the current accepted baseline** unless the
+  superseding ruling says otherwise, and takes fresh exact-head QA.
+
+### How the superseded order is recorded, so the evidence is not lost
+
+The superseded order's record carries, durably on the issue:
+
+1. its work-order `id`, and the successor's;
+2. the exact last head it reached, and the branch retained at that head;
+3. the verdicts it received, by comment id, each still bound to the head it
+   reviewed;
+4. what caused supersession, quoted, with the ruling's own comment id;
+5. which earlier rulings the change makes moot, listed, so that no later reader
+   applies a superseded ruling to the successor. #786 comment 18168 is the model: a
+   table of three earlier rulings with their status for the new repair, each marked
+   `not to be built` or `not a prerequisite`;
+6. the recovery and repair-cycle counters at the moment of supersession, with an
+   explicit statement of whether they carry to the successor, and why.
+
+On (6): counters do not reset merely because a new order exists. They reset only
+where the superseding change is itself the changed causal condition that
+[AGENTS.md](../../AGENTS.md#continuation-first-execution) requires after a STOP —
+which is what #786 comment 18354 recorded, in terms, when it replaced the design
+rather than retrying it.
+
 ## Cross-area integration plan
 
 Add this section when actual size, risk, dependencies, or ownership conflicts
