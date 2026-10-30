@@ -428,6 +428,81 @@ describe("PlayerCombatActionSelectorPanel", () => {
     expect(screen.queryByText("Expected time", { exact: false })).not.toBeInTheDocument();
   });
 
+  /**
+   * Forgejo issue #771 finding R2-8. `Movement direction` and `Facing` share one eight-direction
+   * enum by approved rule, so nothing in the two selects distinguishes them; the sentence that did
+   * was removed by the R2-7 prose repair. Each select must carry the approved
+   * `docs/rules/combat-declarations.md` §7/§8 definition of the field it records, verbatim, as its
+   * own programmatic description — and the two accessible names must stay exactly
+   * `Movement direction` and `Facing`, which is why the description cannot live inside the
+   * wrapping `<label>`.
+   */
+  it("distinguishes movement direction from facing with the approved per-field descriptions", () => {
+    render(
+      <>
+        <PlayerCombatActionSelectorPanel
+          actionId="move_only"
+          additionalActionNotes=""
+          movementId="step"
+          onActionChange={vi.fn()}
+          onAdditionalActionNotesChange={vi.fn()}
+          onMovementChange={vi.fn()}
+          onSecondaryActionChange={vi.fn()}
+          secondaryActionId=""
+        />
+        <PlayerCombatActionSelectorPanel
+          actionId="move_only"
+          additionalActionNotes=""
+          movementId="step"
+          onActionChange={vi.fn()}
+          onAdditionalActionNotesChange={vi.fn()}
+          onMovementChange={vi.fn()}
+          onSecondaryActionChange={vi.fn()}
+          secondaryActionId=""
+        />
+      </>,
+    );
+
+    const movementDirectionSelects = screen.getAllByRole("combobox", {
+      name: "Movement direction",
+    });
+    const facingSelects = screen.getAllByRole("combobox", { name: "Facing" });
+    expect(movementDirectionSelects).toHaveLength(2);
+    expect(facingSelects).toHaveLength(2);
+
+    movementDirectionSelects.forEach((select) => {
+      expect(select).toHaveAccessibleDescription(
+        "Movement Direction records the absolute direction in which the character intends to move.",
+      );
+    });
+    facingSelects.forEach((select) => {
+      expect(select).toHaveAccessibleDescription(
+        "Facing records the direction/orientation the character intends to maintain or reach.",
+      );
+    });
+
+    // Two panels on one page must not collide on a description id.
+    const describedByIds = [...movementDirectionSelects, ...facingSelects].map((select) =>
+      select.getAttribute("aria-describedby"),
+    );
+    expect(describedByIds.every((value) => typeof value === "string" && value.length > 0)).toBe(
+      true,
+    );
+    expect(new Set(describedByIds).size).toBe(4);
+
+    // The descriptions are visible text, not hover-only tooltips.
+    expect(
+      screen.getAllByText(
+        "Movement Direction records the absolute direction in which the character intends to move.",
+      ),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByText(
+        "Facing records the direction/orientation the character intends to maintain or reach.",
+      ),
+    ).toHaveLength(2);
+  });
+
   it("keeps Perform Task and communication as description-only player declarations", () => {
     const onDeclarationIntentChange = vi.fn();
     const { rerender } = render(
