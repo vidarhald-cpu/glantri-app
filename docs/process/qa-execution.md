@@ -188,7 +188,7 @@ independence property**, and the two are recorded separately. Where the
 dedicated session, that requirement stands on its own terms and this section does
 not waive it.
 
-## Finding dispositions A–F
+## Finding dispositions A-F
 
 Every finding in a verdict carries exactly one disposition letter, assigned **in the
 verdict itself**, not in the Orchestrator's reading of it afterwards (#819 standing
