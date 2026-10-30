@@ -16,6 +16,7 @@ import {
   buildCombatDeclarationAttackSelection,
   getCombatDeclarationAttackModeUnavailableMessage,
   getCombatDeclarationAttackSourceRequiredMessage,
+  getCombatDeclarationSelectableAttackSourceCount,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
   buildPlayerCombatPhasePanelModel,
@@ -2824,6 +2825,165 @@ describe("explicit player attack source selection (#575)", () => {
       expect(gmPanel).toContain("phaseAttackSourceIds: {},");
       expect(gmPanel).not.toContain("virtual-weapon-template-punch");
       expect(gmPanel).not.toContain("virtual-weapon-template-kick");
+    });
+  });
+
+  /**
+   * #794: the Feint source control offers weapon sources only, but the submitted Phase 1 source is
+   * built from the resolved loadout reference, which can be unarmed. The endpoint's real behaviour
+   * is measured in `apps/api/src/routes/scenarios.test.ts` ("rejects a weapon Feint whose Phase 1
+   * attack source is unarmed"): HTTP 400 `{"error":"Select a weapon for the weapon feint."}`, with
+   * no encounter write. So an unarmed Phase 1 source must never leave this boundary.
+   */
+  describe("weapon Feint Phase 1 source (#794)", () => {
+    const armedLoadoutModel = () =>
+      buildLoadoutModel({
+        rows: [weaponModeRow("Dagger", "Primary"), ...unarmedRows],
+        valueLabel: "Dagger",
+        weaponRows: [daggerWeaponRow, ...catalogueBrawlingRows],
+      });
+    const feintSummaries = (phase1SourceId: string | undefined) => ({
+      phase1: buildPlayerCombatLoadoutSummary({
+        actionId: "feint_attack",
+        allowUnarmedFallback: true,
+        loadoutModel: armedLoadoutModel(),
+        phaseKey: "phase1",
+        secondaryActionId: "",
+        selectedAttackSourceId: phase1SourceId,
+      }),
+      phase2: buildPlayerCombatLoadoutSummary({
+        actionId: "feint_attack",
+        allowUnarmedFallback: true,
+        loadoutModel: armedLoadoutModel(),
+        phaseKey: "phase2",
+        secondaryActionId: "",
+        selectedAttackSourceId: "weapon:primary-weapon",
+      }),
+    });
+    const weaponFeintSelection = (phase1SourceId: string | undefined) =>
+      buildCombatDeclarationAttackSelection({
+        actionId: "feint_attack",
+        feintMethod: "weapon",
+        phaseContexts: emptyPhaseContexts(),
+        phaseLoadoutSummaries: feintSummaries(phase1SourceId),
+        secondaryActionId: "",
+      });
+
+    it("refuses to submit an unarmed Phase 1 source for a weapon Feint", () => {
+      // The reachable state: an unarmed source chosen for another action stays in the per-phase
+      // source draft when the action becomes Feint, so the reference still resolves to Punch even
+      // though the Feint control offers the ready Dagger only.
+      const summaries = feintSummaries("unarmed:virtual-weapon-template-punch");
+      expect(summaries.phase1.reference?.selectedWeapon).toBe("Punch");
+      expect(summaries.phase1.reference?.sourceItemId).toBeUndefined();
+
+      const selection = weaponFeintSelection("unarmed:virtual-weapon-template-punch");
+      expect(selection.phaseAttackSources.phase1).toBeUndefined();
+      expect(selection.missingSourcePhases).toEqual(["phase1"]);
+      // And the declaration is blocked with a reason, rather than sending a request the endpoint
+      // has been measured to refuse.
+      expect(
+        getCombatDeclarationAttackSourceRequiredMessage(selection.missingSourcePhases, {
+          selectableSourceCount: getCombatDeclarationSelectableAttackSourceCount({
+            actionId: "feint_attack",
+            feintMethod: "weapon",
+            missingSourcePhases: selection.missingSourcePhases,
+            phaseLoadoutSummaries: feintSummaries("unarmed:virtual-weapon-template-punch"),
+          }),
+        }),
+      ).toBe("Select an attack source for Phase 1.");
+    });
+
+    it("still submits the ready weapon as the Phase 1 source for a weapon Feint", () => {
+      const selection = weaponFeintSelection("weapon:primary-weapon");
+      expect(selection.missingSourcePhases).toEqual([]);
+      expect(selection.phaseAttackSources.phase1).toEqual({
+        attackModeId: "thrust",
+        opportunitySlot: "attack_1",
+        scenarioItemId: "primary-weapon",
+        slot: "primary",
+        sourceKind: "weapon",
+        templateId: "weapon-template-dagger",
+      });
+    });
+
+    it("names the dead end when no ready weapon can perform a weapon Feint", () => {
+      // Brawling only: the Feint source control shows its own empty state, so asking the player to
+      // pick a source would be a misleading instruction.
+      const brawlingOnly = {
+        attackSourceOptions: buildPlayerCombatLoadoutSummary({
+          actionId: "feint_attack",
+          allowUnarmedFallback: true,
+          loadoutModel: buildLoadoutModel({
+            fields: [],
+            rows: unarmedRows,
+            weaponRows: catalogueBrawlingRows,
+          }),
+          phaseKey: "phase1",
+          secondaryActionId: "",
+          selectedAttackSourceId: "unarmed:virtual-weapon-template-punch",
+        }).attackSourceOptions,
+      };
+      expect(
+        getCombatDeclarationSelectableAttackSourceCount({
+          actionId: "feint_attack",
+          feintMethod: "weapon",
+          missingSourcePhases: ["phase1"],
+          phaseLoadoutSummaries: { phase1: brawlingOnly, phase2: brawlingOnly },
+        }),
+      ).toBe(0);
+      expect(
+        getCombatDeclarationAttackSourceRequiredMessage(["phase1"], { selectableSourceCount: 0 }),
+      ).toBe(
+        "No attack source is available for Phase 1. Ready a weapon, or ask the GM to refresh your scenario equipment.",
+      );
+    });
+
+    it("has no weapon Feint skill to derive from an unarmed reference", () => {
+      // Why the divergence was never observed in play: the virtual Punch and Kick templates are
+      // derived rows, not equipment templates, so the page's feint-skill resolution finds nothing
+      // for an unarmed reference and already renders "The selected weapon has no valid combat
+      // skill for a weapon feint.", which disables the submit control. The guard above closes the
+      // boundary itself, for the GM proxy path and any other caller of the shared helper.
+      const equipmentState = {
+        templates: {
+          templatesById: {
+            "weapon-template-dagger": {
+              category: "weapon",
+              id: "weapon-template-dagger",
+              weaponSkill: "1-h edged",
+            },
+          },
+        },
+      } as unknown as Parameters<typeof resolveCombatFeintWeaponSkill>[0]["equipmentState"];
+      const skills = [{ id: "one_handed_edged", name: "1-h edged" }];
+      expect(
+        resolveCombatFeintWeaponSkill({
+          equipmentState,
+          skills,
+          sourceTemplateId: punchTemplate.id,
+        }),
+      ).toBeUndefined();
+      expect(
+        resolveCombatFeintWeaponSkill({
+          equipmentState,
+          skills,
+          sourceTemplateId: "weapon-template-dagger",
+        }),
+      ).toEqual({ id: "one_handed_edged", label: "1-h edged" });
+    });
+
+    it("leaves a movement Feint's Phase 1 source untouched", () => {
+      // A movement Feint declares no Phase 1 attack at all, so the weapon rule must not reach it.
+      const selection = buildCombatDeclarationAttackSelection({
+        actionId: "feint_attack",
+        feintMethod: "movement",
+        phaseContexts: emptyPhaseContexts(),
+        phaseLoadoutSummaries: feintSummaries("unarmed:virtual-weapon-template-punch"),
+        secondaryActionId: "",
+      });
+      expect(selection.missingSourcePhases).toEqual([]);
+      expect(selection.phaseAttackSources.phase1).toBeUndefined();
     });
   });
 });

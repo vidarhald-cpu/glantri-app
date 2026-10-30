@@ -140,6 +140,7 @@ import {
   formatScenarioCombatEquipmentDiagnostic,
   getCombatDeclarationAttackModeUnavailableMessage,
   getCombatDeclarationAttackSourceRequiredMessage,
+  getCombatDeclarationSelectableAttackSourceCount,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
@@ -2951,12 +2952,12 @@ export default function ScenarioPlayerCombatPageContent({
     const attackSourceRequiredMessage = getCombatDeclarationAttackSourceRequiredMessage(
       declarationAttackSelection.missingSourcePhases,
       {
-        selectableSourceCount: Math.max(
-          ...declarationAttackSelection.missingSourcePhases.map(
-            (phaseKey) => phaseCombatLoadoutSummaries[phaseKey].attackSourceOptions.length,
-          ),
-          0,
-        ),
+        selectableSourceCount: getCombatDeclarationSelectableAttackSourceCount({
+          actionId: selectedActionId || undefined,
+          feintMethod,
+          missingSourcePhases: declarationAttackSelection.missingSourcePhases,
+          phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
+        }),
       },
     );
     if (attackSourceRequiredMessage) {
@@ -4815,12 +4816,12 @@ export default function ScenarioPlayerCombatPageContent({
     ? getCombatDeclarationAttackSourceRequiredMessage(
         renderedDeclarationAttackSelection.missingSourcePhases,
         {
-          selectableSourceCount: Math.max(
-            ...renderedDeclarationAttackSelection.missingSourcePhases.map(
-              (phaseKey) => phaseCombatLoadoutSummaries[phaseKey].attackSourceOptions.length,
-            ),
-            0,
-          ),
+          selectableSourceCount: getCombatDeclarationSelectableAttackSourceCount({
+            actionId: selectedActionId || undefined,
+            feintMethod,
+            missingSourcePhases: renderedDeclarationAttackSelection.missingSourcePhases,
+            phaseLoadoutSummaries: phaseCombatLoadoutSummaries,
+          }),
         },
       )
     : undefined;

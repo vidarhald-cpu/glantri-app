@@ -17638,6 +17638,111 @@ describe("scenarios route contract", () => {
     expect(declaration.feint.attackerSkillId).not.toBe("unrelated-client-skill");
   });
 
+  /**
+   * #794: the submit path can build an unarmed Phase 1 source for a weapon Feint, because it
+   * derives the source from the resolved loadout reference rather than from the weapon-only
+   * selector. This records what the endpoint actually does with such a request, on the raw
+   * response body, rather than inferring the contract from the call-site comment.
+   */
+  it("rejects a weapon Feint whose Phase 1 attack source is unarmed", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const weaponParticipant = makeDoubleAttackWeaponParticipant("weapon-template-dagger");
+    const weaponTemplate = weaponTemplates.find(
+      (candidate) => candidate.id === "weapon-template-dagger",
+    );
+    if (!weaponTemplate) throw new Error("Missing dagger fixture.");
+    const modeId = weaponTemplate.attackModes?.[0]?.id;
+    if (!modeId) throw new Error("Missing dagger mode fixture.");
+    setupCombatDeclarationRoute({
+      encounter: { participants: encounterParticipants },
+      participants: [
+        {
+          ...weaponParticipant,
+          snapshot: {
+            ...weaponParticipant.snapshot,
+            sheetSummary: {
+              adjustedStats: { dex: 12, int: 9 },
+              draftView: {
+                skills: [
+                  {
+                    effectiveSkillNumber: 8,
+                    name: weaponTemplate.weaponSkill,
+                    skillId: "one_handed_edged",
+                    totalSkill: 24,
+                  },
+                  {
+                    effectiveSkillNumber: 7,
+                    name: "Brawling",
+                    skillId: "brawling",
+                    totalSkill: 21,
+                  },
+                ],
+              },
+            },
+          },
+        },
+        {
+          controlledByUserId: "other-player",
+          id: "participant-2",
+          snapshot: {
+            displayName: "City guard",
+            sheetSummary: {
+              adjustedStats: { dex: 9, int: 12 },
+              draftView: {
+                skills: [
+                  {
+                    effectiveSkillNumber: 6,
+                    name: "Brawling",
+                    skillId: "brawling",
+                    totalSkill: 18,
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const itemId = "item-weapon-template-dagger";
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "feint_attack",
+        combatContext: { modifierBuckets: emptyModifierBuckets() },
+        feint: {
+          method: "weapon",
+          targetParticipantId: "participant-2",
+        },
+        phaseAttackSources: {
+          phase1: makeUnarmedAttackSourceRef({
+            opportunitySlot: "attack_1",
+            templateId: "virtual-weapon-template-punch",
+          }),
+          phase2: makeWeaponAttackSourceRef({
+            attackModeId: modeId,
+            itemId,
+            opportunitySlot: "attack_2",
+            templateId: weaponTemplate.id,
+          }),
+        },
+        phaseContexts: {
+          phase1: testCombatPhaseContext("participant-2"),
+          phase2: testCombatPhaseContext("participant-2"),
+        },
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Select a weapon for the weapon feint." });
+    expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
+  });
+
   it("rejects a genuinely missing Feint target with the player-facing target error", async () => {
     setupCombatDeclarationRoute({ user: mocks.adminUser });
     const app = await buildScenarioTestApp();
