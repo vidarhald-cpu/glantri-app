@@ -16,6 +16,7 @@ import {
   buildScenarioSessionView,
   isGmOperationalScenarioHistoryEventType,
   projectScenarioObjectiveHistory,
+  type ScenarioObjectiveHistoryEventType,
   scenarioObjectiveHistoryEventTypeSchema,
 } from "./scenarioSession";
 
@@ -826,12 +827,19 @@ describe("GM operational events are not player history (#788)", () => {
     expect(history).toEqual([]);
   });
 
-  it("classifies exactly the membership and maintenance event types as GM operational", () => {
-    // A new objective-history event type must be classified deliberately. This
-    // pins the membership set so adding a type cannot silently widen or narrow
-    // the player boundary.
+  it("partitions today's enum into the membership/maintenance set and the player-visible set", () => {
+    // What this establishes (#799): the exact partition of the event types
+    // that exist today. Classification is total and fail closed, so a type
+    // added to the enum without a classification is GM operational and lands
+    // in `operational`, which fails this assertion; reclassifying one of
+    // today's types moves it between the two lists and fails one of them.
+    // It does not establish anything about a type absent from the enum — that
+    // is the fail-closed assertion below.
     const operational = scenarioObjectiveHistoryEventTypeSchema.options.filter((type) =>
       isGmOperationalScenarioHistoryEventType(type),
+    );
+    const playerVisible = scenarioObjectiveHistoryEventTypeSchema.options.filter(
+      (type) => !isGmOperationalScenarioHistoryEventType(type),
     );
 
     expect([...operational].sort()).toEqual([
@@ -841,5 +849,122 @@ describe("GM operational events are not player history (#788)", () => {
       "participant_added",
       "participant_deactivated",
     ]);
+    // The complement, pinned explicitly so a new type cannot arrive on the
+    // player side unnoticed either.
+    expect([...playerVisible].sort()).toEqual([
+      "encounter_archived",
+      "encounter_closed",
+      "encounter_combat_outcome",
+      "encounter_created",
+      "encounter_paused",
+      "encounter_resumed",
+      "encounter_skill_outcome",
+      "encounter_started",
+      "item_transferred",
+    ]);
+    // The two lists account for every member of the enum: nothing is
+    // unclassified in either direction.
+    expect(operational.length + playerVisible.length).toBe(
+      scenarioObjectiveHistoryEventTypeSchema.options.length,
+    );
+  });
+});
+
+/**
+ * Forgejo #799 — the player Activity **type** axis must fail closed.
+ *
+ * The axis used to be a deny-list, and QA measured the consequence on
+ * #788/PR #791: adding `participant_removed` to the enum returned
+ * `[["participant_removed","Removed Watchman Dorn from the scenario."]]` to a
+ * player while all 12 tests in this file still passed. These assertions make
+ * that experiment a permanent guard. The hypothetical type is injected here,
+ * never added to the production enum.
+ */
+describe("Player Activity type classification fails closed (#799)", () => {
+  // The exact type QA injected. It is not a member of
+  // `scenarioObjectiveHistoryEventTypeSchema`, so the cast stands in for the
+  // state of the world one commit after somebody adds it to the enum and
+  // forgets to classify it.
+  const unclassifiedType = "participant_removed" as ScenarioObjectiveHistoryEventType;
+
+  it("classifies an unclassified event type as GM operational rather than player history", () => {
+    // Fails on the pre-#799 code: the deny-list returned `false` here, which
+    // is what let the type reach a player.
+    expect(isGmOperationalScenarioHistoryEventType(unclassifiedType)).toBe(true);
+  });
+
+  it("keeps the player and GM projections of today's whole enum unchanged", () => {
+    // Behaviour preservation for the current enum, asserted on the projected
+    // rows rather than on a render: the 5 membership/maintenance types are
+    // suppressed for a player and the other 9 survive, while the GM audit
+    // still carries all 14 with their stored summaries.
+    const oneRowPerType = scenarioObjectiveHistoryEventTypeSchema.options.map((type, index) => ({
+      createdAt: now,
+      eventType: type,
+      id: `row-${type}`,
+      payload:
+        type === "encounter_combat_outcome"
+          ? { encounterId: "encounter-a", eventKind: "attack" }
+          : { encounterId: "encounter-a" },
+      scenarioId: "scenario-1",
+      sequence: index + 1,
+      summary: `Stored summary for ${type}.`,
+    }));
+
+    const playerHistory = projectScenarioObjectiveHistory({
+      controlledParticipantIds: new Set(["participant-a"]),
+      eventLogs: oneRowPerType,
+      viewerMode: "player",
+    });
+    const gmHistory = projectScenarioObjectiveHistory({
+      controlledParticipantIds: new Set(),
+      eventLogs: oneRowPerType,
+      viewerMode: "gm",
+    });
+
+    expect(playerHistory.map((event) => event.type)).toEqual([
+      "encounter_created",
+      "encounter_started",
+      "encounter_resumed",
+      "encounter_paused",
+      "encounter_closed",
+      "encounter_archived",
+      "item_transferred",
+      "encounter_skill_outcome",
+      "encounter_combat_outcome",
+    ]);
+    expect(gmHistory.map((event) => event.type)).toEqual([
+      ...scenarioObjectiveHistoryEventTypeSchema.options,
+    ]);
+    expect(Object.fromEntries(gmHistory.map((event) => [event.type, event.summary]))).toEqual(
+      Object.fromEntries(oneRowPerType.map((event) => [event.eventType, event.summary])),
+    );
+  });
+
+  it("suppresses an unclassified type for a player and never for the GM audit", () => {
+    // The projection consults the classifier above for the player branch only.
+    // A row whose type the enum does not know is dropped for both viewers by
+    // `safeParse`, so this asserts the player side of the chain the classifier
+    // governs, not a second definition of it.
+    const unclassifiedRow = [
+      {
+        createdAt: now,
+        eventType: unclassifiedType,
+        id: "unclassified",
+        participantId: "participant-npc",
+        payload: { audienceParticipantIds: ["participant-a"] },
+        scenarioId: "scenario-1",
+        sequence: 1,
+        summary: "Removed Watchman Dorn from the scenario.",
+      },
+    ];
+
+    expect(
+      projectScenarioObjectiveHistory({
+        controlledParticipantIds: new Set(["participant-a"]),
+        eventLogs: unclassifiedRow,
+        viewerMode: "player",
+      }),
+    ).toEqual([]);
   });
 });
