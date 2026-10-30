@@ -100,6 +100,14 @@ export function buildPlayerSafeCombatScopeForParticipants(input: {
             aliases.includes(candidate.id) ||
             Boolean(candidate.characterId && aliases.includes(candidate.characterId)),
         );
+        // `ScenarioParticipant.visibilityOverrides` has no production write path
+        // (create-time only, and its sole non-test supplier is a test helper), so
+        // this branch is inert in production and is retained only as a
+        // fail-closed belt. Issue #798 deliberately does not make it
+        // load-bearing: the GM's reachable hide control writes the per-viewer
+        // matrix consulted below, and collapsing that matrix into this flat
+        // per-participant enum would hide the participant from every player
+        // rather than from the one viewer the GM chose (PO ruling D1).
         const scenarioVisibility = scenarioParticipant?.visibilityOverrides?.visibility;
         if (scenarioVisibility === "hidden" || scenarioVisibility === "gm_only") return false;
 

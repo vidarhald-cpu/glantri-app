@@ -6791,7 +6791,22 @@ describe("scenarios route contract", () => {
           participantType: "scenario",
           scenarioParticipantId: "participant-a",
         },
+        // #798: the hidden participant is a member of the Encounter the viewer
+        // is in, and the GM's hide is expressed in the per-viewer matrix the GM
+        // control actually writes. `visibilityOverrides` on the fixture below
+        // is retained but is no longer what suppresses anyone: it has no
+        // production write path, so a fixture that relies on it characterises
+        // nothing a GM can do.
+        {
+          id: "encounter-participant-hidden",
+          label: "Hidden Steward",
+          participantType: "scenario",
+          scenarioParticipantId: "participant-hidden",
+        },
       ],
+      roleplayState: {
+        visibility: { "encounter-participant-a": { "encounter-participant-hidden": false } },
+      },
       scenarioId: "scenario-1",
       status: "active",
       title: "Library",
@@ -7279,6 +7294,49 @@ describe("scenarios route contract", () => {
     });
     mocks.scenarioService.userHasPlayerScenarioAccess.mockResolvedValue(true);
     mocks.scenarioService.listScenarioParticipants.mockResolvedValue(participants);
+    // #798: `/player-projection` now resolves the viewer's effective visibility
+    // from the Encounter matrix the GM control writes. The `visibilityOverrides`
+    // on the fixtures above are retained but inert, as they are in production:
+    // nothing can write them, so a fixture resting on them characterises no GM
+    // action. The matrix below expresses the same intent per viewer.
+    mocks.encounterService.listEncountersByScenario.mockResolvedValue([
+      encounterSessionSchema.parse({
+        createdAt: "2026-08-22T10:00:00.000Z",
+        id: "encounter-privacy",
+        kind: "roleplay",
+        participantMembershipMode: "explicit",
+        participants: [
+          "participant-a",
+          "participant-visible",
+          "participant-hidden",
+          "participant-gm-only",
+        ].map((scenarioParticipantId, order) => ({
+          id: `scenario-${scenarioParticipantId}`,
+          label: scenarioParticipantId,
+          order,
+          participantType: "scenario",
+          scenarioParticipantId,
+        })),
+        roleplayState: {
+          visibility: {
+            "scenario-participant-a": {
+              "scenario-participant-gm-only": false,
+              "scenario-participant-hidden": false,
+              "scenario-participant-visible": true,
+            },
+            "scenario-participant-gm-only": {
+              "scenario-participant-a": true,
+              "scenario-participant-hidden": true,
+              "scenario-participant-visible": true,
+            },
+          },
+        },
+        scenarioId: "scenario-1",
+        status: "active",
+        title: "Privacy",
+        updatedAt: "2026-08-22T10:01:00.000Z",
+      }),
+    ]);
     const app = await buildScenarioTestApp();
 
     const playerResponse = await app.inject({

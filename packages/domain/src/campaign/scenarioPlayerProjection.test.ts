@@ -314,7 +314,7 @@ describe("buildScenarioPlayerProjection", () => {
     expect(projection.actionStub.canDeclareActions).toBe(false);
   });
 
-  it("omits hidden and GM-only identities while retaining the viewer's own controlled participant", () => {
+  it("omits GM-hidden identities while retaining the viewer's own controlled participant", () => {
     const participants = [
       createParticipant({
         controlledByUserId: "player-1",
@@ -342,9 +342,14 @@ describe("buildScenarioPlayerProjection", () => {
       }),
     ];
 
+    // #798: the suppressed set is resolved by the route from the viewer's
+    // Encounters, because this projection receives none. `visibilityOverrides`
+    // on the fixture is no longer load-bearing: it has no production writer.
+    const suppressedParticipantIds = new Set(["participant-hidden", "participant-gm-only"]);
     const playerProjection = buildScenarioPlayerProjection({
       participants,
       scenario,
+      suppressedParticipantIds,
       userId: "player-1",
       viewerMode: "player",
     });
@@ -357,6 +362,7 @@ describe("buildScenarioPlayerProjection", () => {
     const gmProjection = buildScenarioPlayerProjection({
       participants,
       scenario,
+      suppressedParticipantIds,
       userId: "gm-1",
       viewerMode: "gm",
     });
@@ -376,5 +382,16 @@ describe("buildScenarioPlayerProjection", () => {
       "Hidden Steward",
       "GM Only Witness",
     ]);
+    // The viewer's own participant is never suppressed, even when named.
+    expect(
+      buildScenarioPlayerProjection({
+        participants,
+        scenario,
+        suppressedParticipantIds: new Set(["participant-self"]),
+        userId: "player-1",
+        viewerMode: "player",
+      }).visibleParticipants.map(({ displayName }) => displayName),
+    ).toContain("Veiled Hero");
+    expect(playerProjection.visibilityMode).toBe("viewer_visible_participants");
   });
 });
