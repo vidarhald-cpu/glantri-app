@@ -32,7 +32,7 @@ This file is the canonical, provider-neutral execution policy for every worker o
 
 ### Mandatory QA floor
 
-These classes **require** full adversarial independent QA at the strongest reasonably capable model, in a visible dedicated QA session. The Orchestrator **may not** downgrade class, model, or substrate on cost grounds:
+These classes **require** full adversarial independent QA at the strongest reasonably capable model, in a fresh independent QA context that shares no Builder conversational history, with the verdict bound to the exact candidate head and carrying the evidence its QA level demands. The Orchestrator **may not** downgrade class, model, or substrate on cost grounds:
 
 1. database migrations and any change to persisted schema or stored data semantics;
 2. authorization, authentication, privacy projection, or other security-relevant behaviour;
@@ -42,7 +42,7 @@ Escalation above the floor is discretionary. Where a task spans a floor class an
 
 Independent QA at any level satisfies the [independence requirement](docs/process/qa-execution.md#qa-levels-and-what-independence-means), which states positively what a reviewer must do rather than only where it must sit.
 
-> **Stage 2 proposal, not in force — requires a control-plane decision.** Stage 2 proposes replacing the floor's `in a visible dedicated QA session` with the independence requirement linked above, so the floor turns on what the reviewer does rather than on whether a human watched it. The written floor above stands until the control plane rules. Evidence either way: #819 amendment 2 already relaxed the visible-session clause for one evening and stated the cost honestly — a background verdict cannot be watched mid-run and its reasoning is not inspectable afterwards beyond what it posts — and floor-class background verdicts produced under it (for example #771 comment 18640, #794 comment 18580) met every other floor requirement. Against: the clause exists because this programme has had findings that became trustworthy only through being watched. This is a change to QA independence and therefore reserved to the control plane under [process governance](docs/process/development-operating-model.md#process-governance).
+> **Ruling applied.** The floor's former `in a visible dedicated QA session` clause was replaced by the independence, exact-head, and QA-level requirement above by Product Owner ruling recorded on #826 and #819 on 2026-10-31. Visibility remains an observability property, recorded separately, and is no longer a floor requirement. The separate rule that a background subagent must never be described as a visible session is unaffected.
 
 ### A recorded discovery is not authorized work
 

@@ -286,12 +286,16 @@ Three consequences, each measured on this host:
   Orchestrator recorded the correction in terms: host-side timing is **not** a usable
   predictor for this gate, and readiness is tested by DNS and a tarball fetch **from
   inside a build container** (#798 comment 18680).
-- **A dispatcher checks integration capacity before dispatching more implementation
-  work.** Accepted, unintegrated heads are a queue with a known service rate. Adding
-  a Builder while that queue is full produces another accepted head waiting on the
-  same runner, and each one that arrives makes the others' gates stale. Cap
-  concurrent lanes at about two while one runner serves the gate, and hold one
-  consolidated watch rather than one per head.
+- **The control plane owns the capacity policy; the Orchestrator measures and
+  enforces it.** Concurrent-lane limits and reserved integration/CI headroom are
+  control-plane policy. The Orchestrator — later the dispatcher — measures the
+  actual capacity where the gate runs and enforces that policy against the
+  measurement before dispatching more implementation work. It does not set the
+  number. Accepted, unintegrated heads are a queue with a known service rate.
+  Adding a Builder while that queue is full produces another accepted head waiting
+  on the same runner, and each one that arrives makes the others' gates stale. The
+  standing policy while one runner serves the gate caps concurrent lanes at about
+  two, and the Orchestrator holds one consolidated watch rather than one per head.
 
 Re-triggering is bounded: **one re-trigger per head**, and none while the cause is
 known to be unresolved. Three settled runs are worth more than nine inconclusive

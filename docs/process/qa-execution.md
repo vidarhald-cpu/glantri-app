@@ -18,14 +18,15 @@ for **normal independent QA** provided it shares no Builder conversational
 history. Independence comes from a fresh worker in a separate execution context
 from the Builder, a separate clean exact-head worktree, and review-only
 authority; a background context that meets those requirements supplies it as
-fully as a visible session does. Outside the mandatory QA floor, where this
-document says `visible`, read it as naming the lane it is written for, not as a
-universal requirement.
+fully as a visible session does. Where this document says `visible`, read it as
+naming the lane it is written for, not as a universal requirement.
 
-The [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) is the standing
-exception and is unchanged. Its classes continue through the dedicated visible
-QA lane at the strongest reasonably capable model, and the Orchestrator may not
-downgrade class, model, or substrate for them.
+The [mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) adds no visibility
+requirement of its own. Its classes require full adversarial QA at the strongest
+reasonably capable model, in a fresh independent context sharing no Builder
+conversational history, bound to the exact candidate head and carrying the
+evidence its QA level demands; the Orchestrator may not downgrade class, model,
+or substrate for them.
 
 The Forgejo issue body is the current executable task contract once the task is
 authorized. Comments are evidence and history. Repository process documents
@@ -69,9 +70,9 @@ the QA worker's provenance, topology, scope, or delta verification.
 
 The Development Orchestrator then:
 
-1. creates exactly one fresh isolated QA task directly — in the visible lane for
-   every mandatory-floor class, and otherwise on any substrate `AGENTS.md`
-   permits for normal independent QA;
+1. creates exactly one fresh isolated QA task directly, on any substrate
+   `AGENTS.md` permits for independent QA and sharing no Builder conversational
+   history;
 2. records one ledger entry keyed by `issue + QA + mode + exact head`, including
    provisioning request, task ID when materialized, parent task, leased
    worktree, requested SHA, observed `HEAD`, liveness, and next action;
@@ -183,10 +184,10 @@ each one:
 
 A background or subagent context that satisfies all seven supplies independence as
 fully as a visible session does. **Visibility is an observability property, not an
-independence property**, and the two are recorded separately. Where the
-[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) still requires a visible
-dedicated session, that requirement stands on its own terms and this section does
-not waive it.
+independence property**, and the two are recorded separately. The
+[mandatory QA floor](../../AGENTS.md#mandatory-qa-floor) requires these seven items
+too, at QA-3 and at the strongest reasonably capable model; it adds no visibility
+requirement of its own.
 
 ## Finding dispositions A-F
 
@@ -199,37 +200,37 @@ permits, and nothing outside the letter is permitted by having recorded it.
 clause. D, E and F are recorded and routed. See
 [a recorded discovery is not authorized work](../../AGENTS.md#a-recorded-discovery-is-not-authorized-work).
 
-| Letter | Disposition                         | The test that distinguishes it from its neighbours                                                                                                                                                                                                               | What it authorizes                                                                                                                                                                                                                                                                          |
-| ------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **A**  | Current-contract blocker            | An acceptance criterion of **this** work order is not met at this head. Distinguished from B: A would have been false at the baseline too. Distinguished from C: A is named in the contract; C is not.                                                           | A bounded in-scope repair by the existing Builder, then fresh exact-head QA, within the standing repair allowance. FAIL.                                                                                                                                                                    |
-| **B**  | Regression introduced by the change | The behaviour was correct at the baseline and is wrong at this head. Measure both, do not reason about one. Distinguished from F: run the probe at the baseline — if it fails there too, it is F.                                                                | As A. FAIL. A regression is blocking even when no acceptance criterion names it.                                                                                                                                                                                                            |
-| **C**  | Necessary adjacent invariant        | Not named in the contract, but the change **cannot be correct without it** — a guard the change newly makes load-bearing, an authority the change newly exposes. Distinguished from E: C is required for the change in hand to be safe; E is a different change. | A **minimal** repair, scoped to the invariant and nothing adjacent to it. **STOP clause:** where the invariant cannot be restored without deciding ownership, delegation, historical access or authority, the lane stops and the question is routed. It does not become an acceptance item. |
-| **D**  | Residual accepted for this stage    | A real shortfall that the current stage's policy accepts. Under the Alpha execution policy this is the `Alpha residual` class. It fails closed, discloses nothing, and is a Product Owner judgement rather than an implementation defect.                        | Recording, and routing to the Product Owner as a decision they should see. **No repair cycle.** QA says so explicitly in the verdict.                                                                                                                                                       |
-| **E**  | Future feature or design discovery  | The finding describes work the product does not currently have. Distinguished from C: ask whether the change in hand is unsafe without it. If it is merely incomplete without it, it is E.                                                                       | A separate issue, filed and linked. Nothing in the running lane. #823 is the model: a helper wired on one surface and not the second surface its PR claimed, filed separately rather than widened into that PR.                                                                             |
-| **F**  | Pre-existing unrelated defect       | Present at the baseline and not caused by, nor in the path of, this change. Prove it at the baseline; do not infer it.                                                                                                                                           | A durable backlog issue, or a P3 follow-up for clear low-impact polish. Unrelated CI or environment failures route to bounded operational repair with the required check still blocking.                                                                                                    |
+| Letter | Disposition                         | The test that distinguishes it from its neighbours                                                                                                                                                                                                                    | What it authorizes                                                                                                                                                                                                                                                                          |
+| ------ | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A**  | Current-contract blocker            | An acceptance criterion of **this** work order is not met at this head. Distinguished from B: A would have been false at the baseline too. Distinguished from C: A is named in the contract; C is not.                                                                | A bounded in-scope repair by the existing Builder, then fresh exact-head QA, within the standing repair allowance. FAIL.                                                                                                                                                                    |
+| **B**  | Regression introduced by the change | The behaviour was correct at the baseline and is wrong at this head. Measure both, do not reason about one. Distinguished from F: run the probe at the baseline — if it fails there too, it is F.                                                                     | As A. FAIL. A regression is blocking even when no acceptance criterion names it.                                                                                                                                                                                                            |
+| **C**  | Necessary adjacent invariant        | Not named in the contract, but the change **cannot be correct without it** — a guard the change newly makes load-bearing, an authority the change newly exposes. Distinguished from E: C is required for the change in hand to be safe; E is a different change.      | A **minimal** repair, scoped to the invariant and nothing adjacent to it. **STOP clause:** where the invariant cannot be restored without deciding ownership, delegation, historical access or authority, the lane stops and the question is routed. It does not become an acceptance item. |
+| **D**  | Current-milestone residual          | A real shortfall that the current milestone's policy accepts. `Alpha residual` under the Alpha execution policy is one example of the class, not its name. It fails closed, discloses nothing, and is a Product Owner judgement rather than an implementation defect. | Recording, and routing to the Product Owner as a decision they should see. **No repair cycle.** QA says so explicitly in the verdict.                                                                                                                                                       |
+| **E**  | Future feature or design discovery  | The finding describes work the product does not currently have. Distinguished from C: ask whether the change in hand is unsafe without it. If it is merely incomplete without it, it is E.                                                                            | A separate issue, filed and linked. Nothing in the running lane. #823 is the model: a helper wired on one surface and not the second surface its PR claimed, filed separately rather than widened into that PR.                                                                             |
+| **F**  | Pre-existing unrelated defect       | Present at the baseline and not caused by, nor in the path of, this change. Prove it at the baseline; do not infer it.                                                                                                                                                | A durable backlog issue, or a P3 follow-up for clear low-impact polish. Unrelated CI or environment failures route to bounded operational repair with the required check still blocking.                                                                                                    |
 
-### Relationship to the #819 four-way classification
+### Legacy translation table for the #819 four-way classification
 
-A–F **refines** the Alpha execution policy's four classes; it does not replace them,
-and no document may state both as independent schemes. The mapping is mechanical, so
-a verdict that states the letter has stated the #819 class:
+A–F is the **only** scheme a verdict may use. The #819 four-way classification is
+retired by Product Owner ruling recorded on #826 and #819 on 2026-10-31: no document
+may instruct anyone to assign a four-way class, and no verdict carries one going
+forward.
 
-| A–F  | #819 class                       |
+The mapping below survives **only as a translation table for reading records written
+before that ruling**. It is not an assignment rule.
+
+| A–F  | #819 class (legacy records only) |
 | ---- | -------------------------------- |
 | A, B | required for the original defect |
 | C    | necessary adjacent invariant     |
 | D    | Alpha residual                   |
 | E, F | post-Alpha / theoretical         |
 
-A–F splits #819's first class into "the contract is unmet" and "the baseline was
-better", because the two have different proofs, and it splits its last class into
-"a feature nobody has built" and "a defect that was already there", because the two
-route differently.
-
-**Reversal condition.** `D` is named for the current stage. When the Product Owner
-declares the Alpha stage over, `D` continues to mean "a residual the current stage's
-policy accepts" and the policy it refers to becomes whatever is then in force. A
-reader arriving after that declaration must not apply #819's Alpha reasoning to it.
+A–F is enough on its own because each split carries a distinction the four-way
+scheme lost. **A and B have different proofs:** B requires measuring the behaviour at
+the baseline, and A does not. **E and F route differently:** E files a new issue for
+work the product does not have, and F routes to the backlog for a defect that was
+already there.
 
 ### The artefact of a recorded-only finding
 

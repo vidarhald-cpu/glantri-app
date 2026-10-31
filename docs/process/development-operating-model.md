@@ -222,6 +222,11 @@ than invented:
 | `Deferred`             | `Design` or `Ready` as the exclusive status, plus `priority/Future` and, where something concrete blocks it, `gate/Dependency`. #819's deferral of the remove/re-add family is recorded this way: as a ruling naming the issues, not as a status. |
 | `PO Decision Required` | The pre-acceptance status the work is actually in, plus a `Needs decision` classification in the issue body with one concrete question. `task-contract.md` already defines `Needs decision` as a body classification rather than a label.         |
 
+**`Deferred` and `PO Decision Required` are mutually exclusive lifecycle states.**
+A work order is in one or the other, never both, and no issue carries both
+representations at the same time (Product Owner ruling recorded on #826 and #819 on
+2026-10-31).
+
 Adding either as an eighth or ninth exclusive status is a change to the lifecycle
 and therefore requires an explicit control-plane decision under
 [process governance](#process-governance). Until then, do not set a status that the
