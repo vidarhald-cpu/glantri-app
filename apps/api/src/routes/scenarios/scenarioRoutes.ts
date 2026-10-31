@@ -11,6 +11,7 @@ import {
   buildPlayerSafeScenario,
   buildScenarioSessionView,
   buildScenarioPlayerProjection,
+  resolveScenarioParticipantDisclosure,
   scenarioAvailableObjectReferenceSchema,
   scenarioKindSchema,
   scenarioLiveStateSchema,
@@ -303,9 +304,20 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
         return reply.code(404).send({ error: "Scenario not found." });
       }
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
+      // Issue #798: this projection holds no Encounters, so the viewer's
+      // effective participant visibility is resolved here from the Encounter
+      // matrix the GM's hide control writes and passed in as a resolved set.
+      const encounters = await encounterService.listEncountersByScenario(scenarioId);
+      const disclosure = resolveScenarioParticipantDisclosure({
+        encounters,
+        participants,
+        userId: user.id,
+        viewerMode: access.mode,
+      });
       const projection = buildScenarioPlayerProjection({
         participants,
         scenario,
+        suppressedParticipantIds: disclosure.suppressedParticipantIds,
         userId: user.id,
         viewerMode: access.mode,
       });

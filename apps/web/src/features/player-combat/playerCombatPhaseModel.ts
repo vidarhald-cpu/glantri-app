@@ -846,7 +846,8 @@ export function buildCombatDeclarationAttackSelection(input: {
       secondaryActionId: input.secondaryActionId,
     }),
   );
-  if (input.actionId === "feint_attack" && input.feintMethod === "weapon") {
+  const isWeaponFeintPhase1 = input.actionId === "feint_attack" && input.feintMethod === "weapon";
+  if (isWeaponFeintPhase1) {
     attackPhases.add("phase1");
   }
 
@@ -865,6 +866,17 @@ export function buildCombatDeclarationAttackSelection(input: {
     if (!source) {
       // #575: an attack phase without a resolvable source used to be dropped here, so the
       // declaration was submitted incomplete and rejected with nothing shown. Report it instead.
+      missingSourcePhases.push(phaseKey);
+      continue;
+    }
+
+    if (isWeaponFeintPhase1 && phaseKey === "phase1" && source.sourceKind !== "weapon") {
+      // #794: the submitted source follows the resolved loadout reference, not the weapon-only
+      // Feint source control, so an unarmed reference produced an unarmed Phase 1 source for a
+      // weapon Feint. The API refuses exactly that — measured as HTTP 400
+      // `{"error":"Select a weapon for the weapon feint."}` with nothing persisted — so report the
+      // phase as missing its source and keep the declaration unsubmittable, rather than sending a
+      // request that is certain to be rejected (#575's principle, applied to this contract).
       missingSourcePhases.push(phaseKey);
       continue;
     }
@@ -900,6 +912,36 @@ export function getCombatDeclarationAttackSourceRequiredMessage(
     return `No attack source is available for ${phaseLabels}. Ready a weapon, or ask the GM to refresh your scenario equipment.`;
   }
   return `Select an attack source for ${phaseLabels}.`;
+}
+
+/**
+ * How many attack sources the player could actually choose for the phases reported as missing one.
+ * `getCombatDeclarationAttackSourceRequiredMessage` uses it to decide between asking the player to
+ * pick a source and telling them none exists.
+ *
+ * Phase 1 of a weapon Feint counts only weapon sources, because that is the source the API accepts
+ * for it (#794). Counting a Punch or Kick row there would ask the player to pick a source the Feint
+ * control does not offer and the endpoint would refuse.
+ */
+export function getCombatDeclarationSelectableAttackSourceCount(input: {
+  actionId?: string;
+  feintMethod?: "movement" | "weapon";
+  missingSourcePhases: readonly PlayerCombatPhaseKey[];
+  phaseLoadoutSummaries: Record<
+    PlayerCombatPhaseKey,
+    Pick<PlayerCombatLoadoutSummary, "attackSourceOptions">
+  >;
+}): number {
+  const weaponOnlyPhase1 = input.actionId === "feint_attack" && input.feintMethod === "weapon";
+  return Math.max(
+    ...input.missingSourcePhases.map((phaseKey) => {
+      const options = input.phaseLoadoutSummaries[phaseKey].attackSourceOptions;
+      return weaponOnlyPhase1 && phaseKey === "phase1"
+        ? options.filter((option) => option.sourceKind === "weapon").length
+        : options.length;
+    }),
+    0,
+  );
 }
 
 export function getCombatDeclarationAttackModeUnavailableMessage(input: {

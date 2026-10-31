@@ -24,6 +24,7 @@ import {
   type ScenarioEventLog,
   type ScenarioParticipant,
 } from "./scenario";
+import { resolveScenarioParticipantDisclosure } from "./scenarioParticipantDisclosure";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -346,18 +347,116 @@ function valueReferencesParticipant(value: unknown, participantIds: ReadonlySet<
   return Object.values(value).some((entry) => valueReferencesParticipant(entry, participantIds));
 }
 
+/**
+ * A character that can be part of a name. A display-name occurrence flanked by
+ * one of these on either side is a substring of a longer word, not a mention.
+ */
+const NAME_CHARACTER = /[\p{L}\p{N}]/u;
+
+function escapeForRegExp(value: string): string {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Case-insensitive occurrences of a display name in stored prose, each one
+ * flanked by a non-name character (or a string boundary) on both sides.
+ *
+ * Matching is done with a case-insensitive `RegExp` rather than by lower-casing
+ * both strings, because lower-casing can change a string's length and would
+ * then shift the indices the flanking-character checks below read.
+ */
+function displayNameOccurrences(
+  summary: string,
+  name: string,
+): { readonly end: number; readonly start: number }[] {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return [];
+  const occurrences: { readonly end: number; readonly start: number }[] = [];
+  for (const match of summary.matchAll(new RegExp(escapeForRegExp(trimmed), "giu"))) {
+    const start = match.index;
+    const end = start + match[0].length;
+    const before = start === 0 ? "" : summary.charAt(start - 1);
+    const after = end >= summary.length ? "" : summary.charAt(end);
+    if (NAME_CHARACTER.test(before) || NAME_CHARACTER.test(after)) continue;
+    occurrences.push({ end, start });
+  }
+  return occurrences;
+}
+
+/**
+ * Whether stored prose names a participant this viewer is denied (#798 L5).
+ *
+ * The scan is load-bearing and cannot be dropped: the `encounter_skill_outcome`
+ * row written by `encounterRoutes.ts` (`summary: "<name> used <skill>: …"`) is
+ * persisted through `encounterRepository.updateEncounter`, whose payload is
+ * `{ audienceParticipantIds, encounterId }` with no `participantId` column —
+ * and `audienceParticipantIds` is deliberately outside the id scan above. For
+ * that row the prose is the **only** identifying content, so removing the scan
+ * would reopen L5. It is made precise instead.
+ *
+ * **One rule: name boundaries.** A suppressed name suppresses the row when it
+ * occurs as a name — flanked by a non-name character or a string boundary — and
+ * not otherwise. That is what the raw `summary.includes(name)` test got wrong:
+ * `includes` made short names match ordinary English in the production
+ * templates (`Ed` inside `used`, `Started`, `Paused`; `Bat` inside `combat`;
+ * `Guard` inside `guardrail`), so hiding or staging an NPC with a short name, or
+ * merely splitting the party, withheld the player's own Activity rows, which
+ * carry no identifying content at all.
+ *
+ * **Accepted cost (#798 F6, Product Owner ruling).** An earlier form of this
+ * function also carried a covering rule: an occurrence lying inside a strictly
+ * longer *visible* participant's name was attributed to that visible
+ * participant and did not suppress. That rule is removed. `visibleNames` was
+ * every active non-suppressed participant's `snapshot.displayName`, and a
+ * display name is player-writable — `PUT /characters/:id` followed by the
+ * non-GM branch of `POST /scenarios/:scenarioId/participants/character` needs no
+ * GM action — so a player who knew a hidden participant's name could enter a
+ * covering name such as `Lurking Shade used` and recover that participant's own
+ * `encounter_skill_outcome` rows from another player's Activity.
+ *
+ * The cost of removing it is over-suppression, in the safe direction: when a
+ * hidden participant's display name is a word-boundary substring of a **visible**
+ * participant's name, the visible participant's own rows are withheld from
+ * players too. `Gate Guard Captain used Persuade: success.` is withheld while a
+ * `Guard` is hidden. The same fail-closed outcome already applied to equal-length
+ * collisions, including a collision with the viewer's own name.
+ */
+function summaryIdentifiesExcludedParticipant(input: {
+  excludedNames: ReadonlySet<string>;
+  summary: string;
+}): boolean {
+  const excludedNames = [...input.excludedNames].filter((name) => name.trim().length > 0);
+  if (excludedNames.length === 0) return false;
+  return excludedNames.some((name) => displayNameOccurrences(input.summary, name).length > 0);
+}
+
 function eventIdentifiesExcludedParticipant(input: {
   event: ScenarioEventLog;
   participantIds: ReadonlySet<string>;
   participantNames: ReadonlySet<string>;
 }): boolean {
   if (input.event.participantId && input.participantIds.has(input.event.participantId)) return true;
-  if (valueReferencesParticipant(input.event.payload, input.participantIds)) return true;
-
-  const normalizedSummary = input.event.summary.toLocaleLowerCase();
-  return [...input.participantNames].some((name) =>
-    normalizedSummary.includes(name.toLocaleLowerCase()),
+  // The payload is scanned for any reference to an excluded participant, which
+  // is what suppresses a row whose `actorParticipantId` would otherwise resolve
+  // through the roster in the same body (#798 L6).
+  //
+  // `audienceParticipantIds` is excluded from that scan, and only it. It is the
+  // row's delivery list, never emitted in any projection, and it is enforced
+  // separately below against the viewer's own controlled participants. Scanning
+  // it suppressed rows the viewer is *in the audience of* merely because a
+  // co-recipient is hidden — measured on `encounter_started` for an Encounter
+  // the player is a member of, whose audience is every member. That withheld a
+  // row carrying no identifying content at all, which is over-suppression
+  // rather than confidentiality.
+  const { audienceParticipantIds: _audience, ...identifyingPayload } = readEventPayload(
+    input.event,
   );
+  if (valueReferencesParticipant(identifyingPayload, input.participantIds)) return true;
+
+  return summaryIdentifiesExcludedParticipant({
+    excludedNames: input.participantNames,
+    summary: input.event.summary,
+  });
 }
 
 export function projectScenarioObjectiveHistory(input: {
@@ -511,26 +610,19 @@ export function buildScenarioSessionView(input: {
   userId: string;
   viewerMode: "gm" | "player";
 }): ScenarioSessionView {
-  const controlledParticipantIds = new Set(
-    input.participants
-      .filter(
-        (participant) => participant.isActive && participant.controlledByUserId === input.userId,
-      )
-      .map((participant) => participant.id),
-  );
-  const excludedParticipants =
-    input.viewerMode === "player"
-      ? input.participants.filter(
-          (participant) =>
-            !controlledParticipantIds.has(participant.id) &&
-            (participant.visibilityOverrides?.visibility === "hidden" ||
-              participant.visibilityOverrides?.visibility === "gm_only"),
-        )
-      : [];
-  const excludedParticipantIds = new Set(excludedParticipants.map((participant) => participant.id));
-  const excludedParticipantNames = new Set(
-    excludedParticipants.map((participant) => participant.snapshot.displayName),
-  );
+  // Issue #798. The GM's reachable hide control writes the per-viewer
+  // `roleplayState.visibility` matrix; `ScenarioParticipant.visibilityOverrides`,
+  // which this function used to filter on, has no production write path and so
+  // the filter was inert. The resolver reads the matrix the GM actually writes,
+  // maps it into `ScenarioParticipant.id` space, and answers the deliberate
+  // empty-matrix fail-open default in exactly one place.
+  const disclosure = resolveScenarioParticipantDisclosure({
+    encounters: input.encounters,
+    participants: input.participants,
+    userId: input.userId,
+    viewerMode: input.viewerMode,
+  });
+  const controlledParticipantIds = disclosure.controlledParticipantIds;
   const accessibleEncounters = input.encounters.filter(
     (encounter) =>
       encounter.status !== "archived" &&
@@ -541,7 +633,10 @@ export function buildScenarioSessionView(input: {
           userId: input.userId,
         })),
   );
-  const accessibleEncounterIds = new Set(accessibleEncounters.map((encounter) => encounter.id));
+  // Presence wording only. Participant suppression is the resolver's decision
+  // and is deliberately not conditioned on Encounter status: the previous
+  // `status === "active"` coupling meant pausing, completing or archiving an
+  // Encounter restored disclosure of its occupants as `presence: {kind:"scenario"}`.
   const activeEncounterByParticipantId = new Map<string, EncounterSession>();
 
   for (const encounter of input.encounters) {
@@ -562,8 +657,7 @@ export function buildScenarioSessionView(input: {
     if (
       input.viewerMode === "player" &&
       !controlled &&
-      (excludedParticipantIds.has(participant.id) ||
-        (activeEncounter && !accessibleEncounterIds.has(activeEncounter.id)))
+      disclosure.suppressedParticipantIds.has(participant.id)
     ) {
       return [];
     }
@@ -609,8 +703,8 @@ export function buildScenarioSessionView(input: {
     history: projectScenarioObjectiveHistory({
       controlledParticipantIds,
       eventLogs: input.eventLogs,
-      excludedParticipantIds,
-      excludedParticipantNames,
+      excludedParticipantIds: disclosure.suppressedParticipantIdAliases,
+      excludedParticipantNames: disclosure.suppressedParticipantNames,
       itemOutcomeContext: {
         encounters: input.encounters,
         participants: input.participants,

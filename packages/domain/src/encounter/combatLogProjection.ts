@@ -220,6 +220,41 @@ function projectSubjectForViewer(input: {
 }
 
 /**
+ * Issue #798 (L7). A GM-hidden participant's identity survived anonymisation
+ * through the event ids. `id` is built as `combat-log:${eventId}` and
+ * `sourceEventIds` carries the raw engine event id, both unconditionally and in
+ * neither branch of the `mayInspect` gate below — and a declaration event id
+ * embeds `scenario-<ScenarioParticipant.id>`, which the same player's Scenario
+ * session body resolves to a display name. The inspection ids leak the same id
+ * whenever `mayInspect` is true, which is exactly when the hidden participant
+ * acts against the viewer.
+ *
+ * Every occurrence of an anonymised participant's id is replaced, in every
+ * id-bearing field of every event in the response, with one shared constant.
+ * PO ruling D2 forbids a placeholder that signals, so the token is deliberately
+ * not derived from the hidden id: a hash of it would still correlate the
+ * participant across requests, whereas every hidden participant collapses onto
+ * the same token here. Consistent replacement rather than omission keeps the
+ * ids usable for the correlation the client already performs between
+ * `sourceEventIds`, `id` and the result ids, which a player legitimately needs
+ * for an attack declared against them.
+ */
+const REDACTED_PARTICIPANT_ID_TOKEN = "hidden-participant";
+
+function redactParticipantIdentity<T extends string | undefined>(
+  value: T,
+  redactedParticipantIds: readonly string[],
+): T {
+  if (!value || redactedParticipantIds.length === 0) return value;
+  let redacted: string = value;
+  for (const participantId of redactedParticipantIds) {
+    if (!redacted.includes(participantId)) continue;
+    redacted = redacted.split(participantId).join(REDACTED_PARTICIPANT_ID_TOKEN);
+  }
+  return redacted as T;
+}
+
+/**
  * Transforms one canonical GM-full log without creating or reordering events.
  * The viewer stage only changes structured subjects, wording, and inspectability.
  */
@@ -231,6 +266,26 @@ export function projectCombatLogForViewer(input: {
 }): CombatLogProjection {
   if (input.viewer.kind === "gm") return input.projection;
   const viewer = input.viewer;
+
+  /**
+   * Resolved over the whole projection before any event is rewritten, so one
+   * event cannot keep an id another event redacted. A subject is redactable
+   * when this viewer neither controls it nor may see it — the same condition
+   * `projectSubjectForViewer` uses to replace its name with "another combatant".
+   */
+  const redactedParticipantIds = [
+    ...new Set(
+      input.projection.events
+        .flatMap((event) => [event.actor?.participantId, event.target?.participantId])
+        .filter((participantId): participantId is string => Boolean(participantId))
+        .filter(
+          (participantId) =>
+            !viewer.controlledParticipantIds.has(participantId) &&
+            !viewer.visibleParticipantIds.has(participantId),
+        ),
+    ),
+    // Longest first, so a bare id never partially rewrites its prefixed alias.
+  ].sort((left, right) => right.length - left.length);
 
   return deepFreeze({
     ...input.projection,
@@ -276,6 +331,26 @@ export function projectCombatLogForViewer(input: {
           actor: actor.subject,
           target: target.subject,
           summary: targetSummary,
+          // #798 L7: identity-bearing id fields, redacted before the
+          // inspection gate so both branches are covered.
+          id: redactParticipantIdentity(event.id, redactedParticipantIds),
+          sourceEventIds: event.sourceEventIds.map(
+            (sourceEventId) => redactParticipantIdentity(sourceEventId, redactedParticipantIds)!,
+          ),
+          attackResultId: redactParticipantIdentity(event.attackResultId, redactedParticipantIds),
+          detailResultId: redactParticipantIdentity(event.detailResultId, redactedParticipantIds),
+          opportunityId: redactParticipantIdentity(event.opportunityId, redactedParticipantIds),
+          presentationTargetId: redactParticipantIdentity(
+            event.presentationTargetId,
+            redactedParticipantIds,
+          ),
+          presentationTargetSourceId: redactParticipantIdentity(
+            event.presentationTargetSourceId,
+            redactedParticipantIds,
+          ),
+          processId: redactParticipantIdentity(event.processId, redactedParticipantIds),
+          proposalId: redactParticipantIdentity(event.proposalId, redactedParticipantIds),
+          taskId: redactParticipantIdentity(event.taskId, redactedParticipantIds),
           ...(mayInspect
             ? {}
             : {

@@ -1274,3 +1274,127 @@ describe("getCombatRoundLiveItemInteractionForParticipant (Forgejo #409)", () =>
     ).toBe("item-action-1");
   });
 });
+
+describe("CombatLogProjection — hidden participant identity in event ids (Forgejo #798 L7)", () => {
+  /**
+   * Measured at `dev` `bb8cc7fe`: a player's `/combat-history` row reads
+   * "another combatant declared Single Attack against you." with
+   * `actor.participantId` correctly dropped, while `id`, `sourceEventIds`,
+   * `presentationTargetId` and `presentationTargetSourceId` on the same object
+   * carry `scenario-<ScenarioParticipant.id>` — which the same player's
+   * Scenario session body resolves to the hidden display name. `id` and
+   * `sourceEventIds` were built in neither branch of the `mayInspect` gate, and
+   * the inspection ids leak whenever `mayInspect` is true, which is exactly
+   * when the hidden participant acts against the viewer.
+   *
+   * Participant ids are the production shape `scenario-${ScenarioParticipant.id}`:
+   * a fixture with synthetic ids understates this to a bare opaque id.
+   */
+  const hiddenParticipantId = "scenario-cmvrewqag0017zgpveos9x1ng";
+  const viewerParticipantId = "scenario-cmvrewq4o000hzgpvqhh7rnyw";
+
+  const hidingProjection = () =>
+    project(
+      state({
+        participants: [
+          {
+            attackResults: {},
+            declaration: {
+              actionId: "attack_parry",
+              phaseContexts: {
+                phase1: {
+                  modifierBuckets: {
+                    general: [],
+                    situationDb: [],
+                    situationInitiative: [],
+                    situationObSkill: [],
+                  },
+                  targetParticipantId: viewerParticipantId,
+                },
+              },
+              roundNumber: 1,
+              submittedAt: "2026-07-21T10:00:00.000Z",
+              submittedBy: "player",
+            },
+            initiatives: {},
+            label: "Lurking Shade",
+            participantId: hiddenParticipantId,
+            stepStatuses: {},
+          },
+          {
+            attackResults: {},
+            initiatives: {},
+            label: "Ari",
+            participantId: viewerParticipantId,
+            stepStatuses: {},
+          },
+        ],
+      }),
+    );
+
+  it("carries the hidden participant id in the GM projection — the control for the measurement below", () => {
+    expect(JSON.stringify(hidingProjection())).toContain(hiddenParticipantId);
+  });
+
+  it("removes the hidden participant id from every id field, in both branches of the inspection gate", () => {
+    const projection = hidingProjection();
+
+    // mayInspect true: the hidden participant declared against the viewer.
+    const targetView = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set([viewerParticipantId]),
+        kind: "player",
+        visibleParticipantIds: new Set([viewerParticipantId]),
+      },
+    });
+    // mayInspect false: the viewer is uninvolved and cannot see either subject.
+    const bystanderView = projectCombatLogForViewer({
+      projection,
+      viewer: {
+        controlledParticipantIds: new Set(["scenario-bystander"]),
+        kind: "player",
+        visibleParticipantIds: new Set(["scenario-bystander"]),
+      },
+    });
+
+    for (const [name, view] of [
+      ["mayInspect true", targetView],
+      ["mayInspect false", bystanderView],
+    ] as const) {
+      // Structural, over the full serialized player output: the leak was in
+      // fields a name search cannot see.
+      expect(JSON.stringify(view), name).not.toContain(hiddenParticipantId);
+      expect(JSON.stringify(view), name).not.toContain("Lurking Shade");
+      expect(
+        JSON.stringify(view).includes("cmvrewqag0017zgpveos9x1ng"),
+        `${name}: bare id form must not survive either`,
+      ).toBe(false);
+    }
+
+    // Non-vacuous: the anonymised declaration row is still delivered, and the
+    // redaction demonstrably ran on its ids rather than the row being dropped.
+    const declaration = targetView.events.find((event) => event.category === "declaration");
+    expect(declaration?.summary).toBe("another combatant declared Single Attack against you.");
+    expect(declaration?.id).toContain("hidden-participant");
+    expect(declaration?.sourceEventIds.join("|")).toContain("hidden-participant");
+    // The viewer's own id is not redacted, so correlation the client needs survives.
+    expect(JSON.stringify(targetView)).toContain(viewerParticipantId);
+    // One shared token: two hidden participants cannot be told apart by id.
+    expect(declaration?.id.split("hidden-participant").length).toBeGreaterThan(1);
+  });
+
+  it("leaves ids untouched when the viewer may see the participant", () => {
+    const visibleView = projectCombatLogForViewer({
+      projection: hidingProjection(),
+      viewer: {
+        controlledParticipantIds: new Set([viewerParticipantId]),
+        kind: "player",
+        visibleParticipantIds: new Set([viewerParticipantId, hiddenParticipantId]),
+      },
+    });
+
+    expect(JSON.stringify(visibleView)).toContain(hiddenParticipantId);
+    expect(JSON.stringify(visibleView)).not.toContain("hidden-participant");
+  });
+});
