@@ -8,7 +8,7 @@
 - Attended substantial Builders normally use separate visible Claude Code sessions.
 - Explicitly authorized unattended Builder subagents are permitted for bounded tasks whose substrate is durably recorded.
 - A fresh QA subagent that shares no Builder conversational history is normal independent QA. A helper agent inside the Builder's own implementation context is not.
-- The mandatory QA floor in `AGENTS.md` still governs: database/persisted-data, security-relevant, and `dev`-gate/CI/branch-protection changes require full adversarial independent QA at the strongest reasonably capable model in a visible dedicated QA session.
+- The mandatory QA floor's independence requirement in `AGENTS.md` maps onto the same Claude Code substrate: a fresh QA subagent, or a separate Claude Code session, sharing no Builder conversational history satisfies it on any floor class.
 
 ## Provenance
 

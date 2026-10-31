@@ -190,6 +190,100 @@ Supporting fields or labels may record priority, inactivity, dependencies, or a
 blocker, but they do not replace or silently change the exclusive lifecycle
 status.
 
+### Label names for the exclusive statuses
+
+These labels exist in `recovery-admin/glantri-app` and are the Forgejo
+representation of the statuses above. They are recorded here so that a dispatcher
+can read and set state without guessing a name. **This section documents label
+names; it does not create them.** Creating or renaming a lifecycle label is a
+control-plane act.
+
+| Status                               | Label                                       |
+| ------------------------------------ | ------------------------------------------- |
+| `Design`                             | `status/Design`                             |
+| `Ready`                              | `status/Ready`                              |
+| `Authorized`                         | `status/Authorized`                         |
+| `Active`                             | `status/Active`                             |
+| `Ready for Independent QA`           | `status/Ready for Independent QA`           |
+| `Ready for Control-plane Acceptance` | `status/Ready for Control-plane Acceptance` |
+| `Integrated`                         | `status/Integrated`                         |
+
+Supporting labels that record state **without** changing the exclusive status
+include `state/Inactive`, `state/Paused`, `gate/Dependency`, `priority/Future`,
+`relation/Superseded`, and the `area/`, `type/` and `priority/` families. A
+supporting label never substitutes for a status and never contradicts one.
+
+**Two states have no label and are not in the exclusive set.** A dispatcher looking
+for them will not find them, so the current representation is recorded here rather
+than invented:
+
+| Wanted state           | Current representation                                                                                                                                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Deferred`             | `Design` or `Ready` as the exclusive status, plus `priority/Future` and, where something concrete blocks it, `gate/Dependency`. #819's deferral of the remove/re-add family is recorded this way: as a ruling naming the issues, not as a status. |
+| `PO Decision Required` | The pre-acceptance status the work is actually in, plus a `Needs decision` classification in the issue body with one concrete question. `task-contract.md` already defines `Needs decision` as a body classification rather than a label.         |
+
+**`Deferred` and `PO Decision Required` are mutually exclusive lifecycle states.**
+A work order is in one or the other, never both, and no issue carries both
+representations at the same time (Product Owner ruling recorded on #826 and #819 on
+2026-10-31).
+
+Adding either as an eighth or ninth exclusive status is a change to the lifecycle
+and therefore requires an explicit control-plane decision under
+[process governance](#process-governance). Until then, do not set a status that the
+control plane has not defined, and do not infer one from a stage name used in prose.
+`Ready for Integration` is the standing example of a process stage that is
+deliberately **not** a status.
+
+### Which transitions are mechanical and which need judgement
+
+A **mechanical** transition follows from a fact somebody can check. A **judgement**
+transition is somebody deciding something, and no amount of green evidence performs
+it.
+
+| Transition                                                                | Kind       | Who performs it                                         | The fact or the judgement                                                                                                                      |
+| ------------------------------------------------------------------------- | ---------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Design` to `Ready`                                                       | Judgement  | Control plane                                           | The contract is complete and current, with an applicability result for every acceptance dimension. Completeness is assessed, not counted.      |
+| `Ready` to `Authorized`                                                   | Judgement  | **Product Owner only**                                  | The deliberate decision boundary. Never inferred from technical readiness, credentials, discussion, or an existing issue.                      |
+| `Authorized` to `Active`                                                  | Mechanical | Orchestrator                                            | A named lane owns live work and a claim comment exists. Live gates passed.                                                                     |
+| `Active` to `Ready for Independent QA`                                    | Mechanical | Orchestrator                                            | The Builder returned an exact immutable head and the PR exists at it.                                                                          |
+| `Ready for Independent QA` to `Active` (repair)                           | Mechanical | Orchestrator                                            | A durable FAIL with an open A or B finding, within the repair allowance.                                                                       |
+| `Ready for Independent QA` to `Ready for Control-plane Acceptance`        | Mechanical | Orchestrator                                            | A durable PASS or PASS WITH FOLLOW-UP bound to the exact head, **after** the load-bearing re-check below. Required CI has settled.             |
+| `Active` to `Ready for Control-plane Acceptance` (docs/process exemption) | Mechanical | Orchestrator                                            | The contract explicitly exempts the work from independent QA. This routes evidence; it does not claim a QA PASS.                               |
+| `Ready for Control-plane Acceptance` to `Integrated`                      | Judgement  | **Product Owner**, then an authorized integration actor | Acceptance asks whether the change should exist. A green verdict does not answer it. Only an explicit pre-authorization integrates without it. |
+| Any state to a successor work order (supersession)                        | Judgement  | Product Owner, or Orchestrator for a non-product change | [Supersession of an active work order](./task-contract.md#supersession-of-an-active-work-order).                                               |
+| Any state to STOP                                                         | Mechanical | Whichever lane hits the limit                           | The anti-loop counters, or an unresolved product, rule, authority or ownership question. A STOP is reached by rule, and lifted by judgement.   |
+
+The asymmetry is deliberate: **every transition that lets work move forward past
+acceptance is a judgement, and every transition that stops it is mechanical.**
+
+## Hotspot overlap is declared and computed
+
+A lane declares its expected hotspots in its work order. The Orchestrator then
+computes the actual overlap, from the real changed-path sets, before dispatching a
+second lane and again before composing an integration batch:
+
+1. **Declared against declared.** Intersect the candidate lane's declared expected
+   hotspots with every standing claim's reserved hotspots. A non-empty intersection
+   serialises the two lanes, and the merge order is recorded in both contracts.
+2. **Computed against computed.** For work already in flight, intersect the actual
+   changed-path sets — `git diff --name-only <baseline> <head>` on each — rather than
+   the declarations. A declaration is a prediction; this is the measurement.
+3. **Computed against declared.** Intersect a running lane's actual changed paths
+   with a queued lane's declared expected hotspots. This is the case that catches a
+   lane whose real diff grew past what it predicted.
+4. **Then ask what no path intersection can see.** Path overlap does not expose
+   coupling that runs through a shared symbol. The
+   [consumed-vocabulary set](./integration-wave.md#deriving-and-reviewing-a-consumed-vocabulary-set)
+   is the separate instrument for that, and it is not replaced by any of the three
+   intersections above.
+
+Record the computed result, not only the conclusion. #817 was held behind #813
+because both edit the same disclosure module — a correct call, made as an
+Orchestrator judgement rather than from a stated rule, which is why it is a rule
+now. The same incident shows why the sequence matters in both directions: the #817
+F3 ruling enlarges the very name set #813's defect fed on, so #817 on top of an
+unfixed #813 would have widened the leak (#798 comment 18407).
+
 ## Capability sizing and preparation
 
 Prefer the largest coherent vertical user capability whose decisions are settled,
@@ -358,6 +452,62 @@ and routes the outcome. The QA worker independently verifies the exact head,
 topology, scope, and actual delta; any tuple mismatch produces a quick
 `BLOCKED` return.
 
+### The load-bearing re-check, between harvesting a verdict and acting on it
+
+**After harvesting a QA verdict and before acting on it, the Orchestrator
+independently re-checks the single most load-bearing claim in that verdict.** This
+is a check **on QA**, not a re-run of QA, and it is not an override: the Orchestrator
+still cannot override a FAIL, and a re-check that agrees adds nothing to the verdict's
+authority.
+
+**Identifying the claim.** It is the one claim on which the verdict's outcome turns —
+the single measurement whose falsity would change PASS to FAIL, or FAIL to PASS. For
+a PASS it is usually the proof that the defect is gone, or that the instrument used
+to show it can fail. For a FAIL it is the measurement of the defect itself. The
+verdict names it in its return, and where the verdict does not, the Orchestrator
+names the claim it chose and why, so the choice is auditable rather than convenient.
+One claim, not a re-audit: picking three is how this step becomes a second QA pass
+and stops being done.
+
+**What counts as an independent re-check.** Reading the claim at source, or running
+the measurement, in the Orchestrator's own context:
+
+- for a source claim, opening the named file at the exact head and reading the code
+  the verdict describes;
+- for a measurement, running it, or running the one adjacent check that would be
+  inconsistent with it;
+- for a diff or scope claim, recomputing it from Git at the exact head;
+- for a CI claim, reading the Actions `tasks` API by `head_sha` rather than the
+  combined status.
+
+Accepting the verdict's own figure, re-reading the verdict more carefully, or
+agreeing with its reasoning are **not** re-checks.
+
+**When it does not reproduce**, the verdict is not discarded and the lane does not
+advance. Record expected versus observed, return the discrepancy to the same
+reviewer, and resolve it before the verdict is used. A verdict whose load-bearing
+claim does not reproduce is `BLOCKED` in effect, whatever letter it carried. Where
+the discrepancy is the Orchestrator's own error, record that too.
+
+**Why this step exists, measured.** Four instances, none hypothetical:
+
+- a Builder reported its diff as `+379/−8` when the diff against its own parent was
+  `+742/−8`; the file list was right, so only recomputing the diff caught it (#798
+  comment 18335, confirmed independently at 18394);
+- a lane's new helper was wired on one of the two surfaces its PR claimed to cover —
+  the GM panel never imported it — which a source read found and a report read would
+  not have (#823);
+- #777's stated premise was measured **false** at `dev`: the issue said parry
+  allocation reached the stack for one declaration, and at `f9fcaa3d` it reached it
+  for none, which inverted the whole characterization (comment 18558);
+- the Orchestrator's own record of an accepted cost was narrower than the measured
+  trigger, and the correction came from QA rather than from the Orchestrator reading
+  its own ruling again (#798 comment 18584, N1).
+
+Two of the four were the Orchestrator's own claims. The step is not an expression of
+distrust in QA; it is the acknowledgement that **whoever acts on a measurement should
+have touched it**.
+
 On FAIL, the loop is:
 
 `bounded Builder repair -> new immutable head -> direct QA handoff -> fresh independent QA`
@@ -469,7 +619,10 @@ own inspection, direct notifications and deduplication.
 Parallelize independent architecture, design, and investigation where useful;
 keep future preparation proportionate and durable.
 No more than four implementation Builders run concurrently; four is a ceiling,
-not a target. Reserve repair or infrastructure capacity when useful, begin QA
+not a target. **Integration capacity is a separate ceiling, tracked separately**,
+and it is the binding one on this host: see
+[batch integration and integration capacity](./integration-wave.md#batch-integration-and-integration-capacity).
+Builder slots free up when a lane finishes; a single serial CI runner does not. Reserve repair or infrastructure capacity when useful, begin QA
 as soon as a Builder finishes, and do not pause unrelated lanes. Run QA and
 hosted checks for the immutable candidate in parallel whenever neither
 depends on the other. Do not wait for hosted completion merely to start QA.
@@ -491,6 +644,72 @@ gate. It does not start, stop, reprioritize, change lane state, or dispatch
 implementation in Chargen, Campaign, Combat, Equipment, or any other product
 lane. Existing separately authorized product contracts continue unchanged; only
 separately dispatched product orders authorize that work.
+
+## Provider pools and qualification
+
+A **provider pool** is one source of execution capacity: a client, a model family,
+or a locally hosted model, running on one substrate. A pool is **not** a role.
+Roles are Builder, independent QA, Investigator/Ops and Orchestrator, and
+[AGENTS.md](../../AGENTS.md#execution-substrate-and-independence) owns them. The
+same work order serves every pool, and a pool name never appears where a role
+belongs.
+
+**What an adapter owns.** A provider adapter — `CLAUDE.md` is the current one —
+maps this policy onto one client's substrate: which of the client's surfaces counts
+as a visible session, how a background context is identified, how model and effort
+are named, how provenance is recorded. It owns nothing else. It does not restate,
+extend, or override policy, and general process must not be duplicated into it. A
+rule that would be true of every pool belongs in `AGENTS.md` or in the owning
+process document, never in an adapter.
+
+**Dispatch is pool-blind by default.** The work order names `eligible provider
+pools` only where a qualification rung, a measured capability, or a substrate
+requirement actually constrains the choice. "This pool is the one we usually use" is
+not such a constraint.
+
+### The qualification ladder
+
+A new pool climbs these rungs in order. Each rung is cleared by evidence from that
+pool's own completed work, not by argument about the pool's capability, and the
+control plane records the rung reached.
+
+| Rung | The pool may take                                                            | Cleared by                                                                                                                                          |
+| ---- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Nothing. The protocol is run **by hand** across real work in existing pools. | Several complete work orders executed manually under this process, with their defects recorded, before any dispatcher automates it.                 |
+| 1    | Read-only investigation and bounded diagnosis.                               | Returns that distinguish what the pool measured from what it read, and that stop rather than widening into implementation.                          |
+| 2    | Documentation and process orders.                                            | A result that cites its sources precisely and does not restate a rule that already has an owner.                                                    |
+| 3    | Ordinary non-floor implementation, under QA-2.                               | Builder returns whose declared scope matches the computed diff, and whose own figures survive the load-bearing re-check.                            |
+| 4    | Independent QA at QA-1, then QA-2.                                           | Verdicts that bind to an exact head, execute their own load-bearing measurements, and find at least one thing the Builder's report did not contain. |
+| 5    | Floor-class implementation, and independent QA at QA-3.                      | An explicit control-plane decision. It is not reached by accumulating rung-4 passes.                                                                |
+
+**Rung 0 is a real rung and it is first.** Run the Stage 2 protocol manually across
+real work in the pools already in use before building a dispatcher for it. A
+dispatcher automates whatever the protocol actually does, including the parts that
+are wrong, and the cheapest place to find those is by hand.
+
+### Local-model QA comes late, and why
+
+A locally hosted model may reach rung 3 on the ordinary evidence. **It does not take
+independent QA — any level — until it has cleared rungs 1 through 3 on its own
+completed work**, and it never takes QA-3 without an explicit control-plane
+decision. Two reasons, both already written down elsewhere in this policy:
+
+- **Reviewer and Builder errors are not symmetric.** A weaker Builder produces work
+  the reviewer catches; a weaker reviewer lets defects reach `dev`. `AGENTS.md`
+  therefore directs economy to the Builder side and preserves reviewer capability,
+  and a local model is adopted for economy. See
+  [where economy is taken](../../AGENTS.md#where-economy-is-taken).
+- **QA's value is in the finding no test plan enumerates.** The verdicts that have
+  mattered in this programme were adversarial in a way a checklist cannot specify:
+  attacking a guard by deleting it to see whether a second layer exists, racing a
+  check-then-write gap a code reading had called unreachable, crafting a display name
+  through two ordinary player routes. A pool is credited with that capability only
+  after its own returns show it.
+
+The corollary is that a cheaper pool may be used for **mechanically specifiable**
+verification — preservation QA and the like — only when the dispatch packet
+enumerates the exact proofs required, so that the capability comes from the contract
+rather than being assumed of the pool. The mandatory QA floor still governs.
 
 ## Durable authority hierarchy
 
@@ -519,7 +738,10 @@ This document owns the high-level operating map. Details stay with:
 - [`agent-execution.md`](./agent-execution.md): isolated Builder procedure and
   exact Builder return;
 - [`qa-execution.md`](./qa-execution.md): compact INITIAL/REPAIR QA dispatch,
-  worker entry, verification breadth, child states, and QA return;
+  worker entry, verification breadth, QA levels and independence, finding
+  dispositions, child states, and QA return;
+- [`qa-instruments.md`](./qa-instruments.md): the register of reusable QA probes,
+  their limitations, and their known failure modes;
 - [`development-baseline.md`](./development-baseline.md): branch, baseline,
   integration, and release-boundary policy;
 - [`forgejo-agent-credentials.md`](./forgejo-agent-credentials.md): persistent

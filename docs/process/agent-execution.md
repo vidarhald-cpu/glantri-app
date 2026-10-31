@@ -223,6 +223,66 @@ may remove, reuse, or recreate the path. A worker that finds its leased path
 missing stops and reports; it does not silently reconstruct it unless its
 contract explicitly grants that recovery.
 
+### Claim and lease representation
+
+**The authoritative copy of a claim and its lease is Forgejo issue metadata.** Any
+dispatcher-local store is a cache of that record and never the record itself. A
+dispatcher that restarts, crashes, or is replaced by a different one must be able
+to reconstruct the complete current claim state from Forgejo alone, without reading
+its own prior state and without asking a human what was running.
+
+A claim is published as a durable comment on the issue, superseded by a later
+comment rather than edited in place, and carries exactly these fields:
+
+| Field                | Value                                                                                               |
+| -------------------- | --------------------------------------------------------------------------------------------------- |
+| `work order id`      | The order this claim is against, not only the issue number.                                         |
+| `provider pool`      | The pool, by name. Not a model name, and not a brand used as a role.                                |
+| `worker id`          | The real resolved task, thread, or background agent ID, **supplied by the Orchestrator**.           |
+| `claimed at`         | Timestamp of the claim, not of the dispatch request.                                                |
+| `lease expires at`   | An absolute time, with the inspection interval that will be used before it.                         |
+| `exact baseline SHA` | The full accepted baseline, and the requested execution SHA where the two differ.                   |
+| `reserved hotspots`  | The declared expected hotspots this claim reserves.                                                 |
+| `leased worktree`    | The absolute path, which no other actor may remove or reuse while the claim stands.                 |
+| `liveness`           | The current state and the next inspection, so that an unexplained indefinite `Active` cannot occur. |
+
+**One Builder per work order.** A second claim against a standing claim is a routing
+mismatch, quarantined rather than published, under the correlation key
+`issue + role + mode + exact SHA`.
+
+#### Expiry and reclaim
+
+Lease expiry is **permission to inspect, not permission to replace.** At expiry the
+Orchestrator runs the replacement checks already in this section: request-to-task
+binding, direct task access, parent, worktree identity and ownership, branch and PR
+activity, and completed returns. Replacement stays blocked while the child's
+existence is unknown. Expiry bounds how long an unexplained silence may last; it
+does not convert silence into proof of loss.
+
+A reclaimed lease is recorded by a superseding claim comment naming the prior claim,
+what was inspected, what the prior owner's terminal state was shown to be, and the
+cleanup evidence. Releasing the worktree is part of that record, and it happens once
+the work is pushed rather than at lane close: three retained delegated worktrees at
+roughly 1.6 GB each filled the host disk and took the Forgejo instance down with it.
+
+#### What a restarted dispatcher reconstructs from Forgejo alone
+
+1. Every issue at `Active`, and the standing claim comment on each.
+2. For each claim: the work order, pool, worker ID, baseline SHA, reserved hotspots,
+   leased worktree and lease expiry.
+3. Every open PR, its author identity, its base, and its exact head.
+4. Per-job CI state at each of those heads, from the Actions `tasks` API by
+   `head_sha` — never from the combined commit status, which reports a skipped job
+   as `success`.
+5. Every verdict, by comment, each bound to the exact head it reviewed, with its
+   finding dispositions.
+6. The recovery and repair-cycle counters, from the durable STOP and ruling comments
+   that recorded them.
+
+Anything a restarted dispatcher cannot reconstruct from that list is not durable
+state and must not be relied on. The practical consequence: a counter, a reserved
+hotspot, or a lease that exists only in a dispatcher's memory does not exist.
+
 Before any replacement:
 
 1. Record original and replacement request IDs, resolved task IDs, provisional
@@ -349,6 +409,15 @@ Builder and QA use separate clean filesystems/worktrees for clean-room verificat
 Git worktree isolation does not isolate PostgreSQL. Before a database-capable Builder or QA starts application code, migrations, resets, seeds, or integration tests, its task contract must name explicit `DATABASE_URL` and `DATABASE_URL_TEST` ownership and the worktree must pass the disposable PostgreSQL 16 setup and verification in `docs/dev-database.md`. Never copy or inherit the primary checkout `.env` or another worktree's `.env.task`; environment values are not ownership proof until they match the actual current worktree and expected container labels. Record the sanitized target before every database-capable command and clean up only the current worktree-owned container at handoff.
 
 ## Finding routes
+
+Each finding carries one
+[disposition letter A-F](./qa-execution.md#finding-dispositions-a-f), which owns
+what the finding authorizes and the test that separates it from its neighbours. The
+routes below say where each one goes; they do not restate the dispositions, and a
+finding is never routed on a letter it was not given.
+
+**A recorded finding is not authorized work.** Routing a D, E or F finding produces
+a record and, where applicable, a separate issue. It produces no repair dispatch.
 
 Route each finding once, without broadening the active task:
 
