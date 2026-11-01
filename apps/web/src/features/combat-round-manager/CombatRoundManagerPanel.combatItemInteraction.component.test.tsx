@@ -27,15 +27,26 @@ import {
  * M7's client half — Forgejo issue #356.
  *
  * Every test here runs with `GenericCombatActionPanel` **unmounted**, which is the condition A3
- * (#335) parity check P6 needs: the declaration surface and the GM `review` / `activate` /
- * `resolve` path must both work without the panel A3 deletes.
+ * (#335) parity check P6 needs: the GM `review` / `activate` / `resolve` path must work without
+ * the panel A3 deletes.
  *
- * The lifecycle is driven through the real UI against the **real domain commands**: the fake
+ * The GM lifecycle is driven through the real UI against the **real domain commands**: the fake
  * transport below applies `declareCombatGenericAction`, `reviewCombatGenericAction`,
  * `activateCombatGenericAction` and `finishCombatGenericAction` exactly as
  * `POST /encounters/:id/combat-round/item-interactions` applies them, including the route's own
  * `expectedItemRevision`, `expectedRevision` and resolve-input guards. No post-command state is
- * hand-built, and every assertion is made on the API payload rather than on the DOM.
+ * hand-built, and every assertion on a GM command is made on the API payload rather than on the
+ * DOM.
+ *
+ * Forgejo issue #834 removed the Combat **declaration surface** — the persistent
+ * `Items in this Combat` block — from both Combat surfaces for Alpha. The declaration *command*,
+ * its `/options` payload and all of their guards are untouched, and so is the GM lifecycle half
+ * this file protects. Every test below therefore mints its Item action through
+ * `declareThroughAuthority`, which sends the removed surface's own declare payload to the same
+ * fake transport, and then drives the retained GM controls. Where a property belonged to the
+ * removed surface itself rather than to the command — the disabled-until-complete declaration
+ * buttons, and the declaration feedback line that showed the authority's refusal — the test below
+ * says so at the point where it used to be asserted.
  */
 
 const TASK_ID = "round:1:participant:encounter-owner:declaration:perform_task";
@@ -190,9 +201,11 @@ function emptyModifierBuckets() {
 }
 
 /**
- * The `/options` payload the real route serves, with the Item's **current** revision. The
- * declaration surface reads `revision` from here and sends it back as `expectedItemRevision`; that
- * round trip is exactly what the staleness test below perturbs.
+ * The `/options` payload the real route serves, with the Item's **current** revision. A declare
+ * reads `revision` from here and sends it back as `expectedItemRevision`; that round trip is
+ * exactly what the staleness test below perturbs. The route and this payload both survive #834 —
+ * the panel still reads them for the canonical Disarm controls — so `declareThroughAuthority`
+ * takes the revision from what the mock actually served rather than from a constant.
  */
 function itemOptionsPayload(revision = CURRENT_ITEM_REVISION) {
   return {
@@ -529,7 +542,53 @@ function createServer(initial: EncounterSession, itemRevision = CURRENT_ITEM_REV
   };
 }
 
-async function renderPanel(encounter: EncounterSession) {
+let declaredActionCount = 0;
+
+/**
+ * Declares an Item action through this file's **own mocked authority** — the fake transport above,
+ * which applies the real domain command under the route's own guards and returns the canonical
+ * encounter it produced.
+ *
+ * The payload is the one the surface #834 removed used to send, field for field: a fresh action
+ * id, `expectedItemRevision` taken from the `/options` payload the mock actually served rather
+ * than from a constant, `expectedRevision` from the encounter the caller holds, and
+ * `intentDetail` only for `use`. Nothing about the resulting action is hand-built — it is minted
+ * by `declareCombatGenericAction` behind the route's guards, exactly as before.
+ */
+async function declareThroughAuthority(input: {
+  encounter: EncounterSession;
+  expectedItemRevision?: string;
+  intentDetail?: string;
+  itemOperation: CombatItemInteractionOperation;
+  recipientParticipantId?: string;
+}): Promise<EncounterSession> {
+  const served = (await mocks.loadItemOptions(input.encounter.id)) as ReturnType<
+    typeof itemOptionsPayload
+  >;
+  const item = served.actors[0]!.items[0]!;
+  // The operation has to be one the surviving `/options` contract actually permits.
+  expect(item.operations).toContain(input.itemOperation);
+  declaredActionCount += 1;
+  return (await mocks.updateItemInteraction({
+    actionId: `combat-item-action-${declaredActionCount}`,
+    encounterId: input.encounter.id,
+    expectedItemRevision: input.expectedItemRevision ?? item.revision,
+    expectedRevision: input.encounter.updatedAt,
+    intentDetail: input.itemOperation === "use" ? input.intentDetail : undefined,
+    itemId: item.id,
+    itemOperation: input.itemOperation,
+    operation: "declare",
+    participantId: OWNER,
+    recipientParticipantId: input.recipientParticipantId,
+  })) as EncounterSession;
+}
+
+/**
+ * Mounts the GM panel on the owner's live Phase 1 opportunity. The anchor is a control of the
+ * **retained** surface, so every absence asserted after it is asserted against a panel that has
+ * finished rendering rather than against one that never got there.
+ */
+async function renderPanel(encounter: EncounterSession, anchor = "Review Item action") {
   const onEncounterUpdated = vi.fn();
   const view = render(
     <CombatRoundManagerPanel
@@ -538,7 +597,7 @@ async function renderPanel(encounter: EncounterSession) {
       scenarioParticipants={participants()}
     />,
   );
-  await screen.findByRole("button", { name: "Crowbar: Drop" });
+  await screen.findByRole("button", { name: anchor });
   return { onEncounterUpdated, view };
 }
 
@@ -560,6 +619,7 @@ function lastPayload(): ItemActionPayload {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  declaredActionCount = 0;
   mocks.loadEncounterItems.mockResolvedValue({ availableItems: [], items: [] });
   mocks.loadItemOptions.mockResolvedValue(itemOptionsPayload());
   mocks.advanceDeterministic.mockImplementation(
@@ -579,44 +639,45 @@ afterEach(() => {
 describe("Item interaction without GenericCombatActionPanel (#356)", () => {
   it("never renders the retiring Actions and tasks surface", async () => {
     const encounter = buildOpportunityEncounter();
-    createServer(encounter);
-    await renderPanel(encounter);
+    const server = createServer(encounter);
+    // A live Item action is on the Inspector, so the retained GM control in `renderPanel`'s
+    // anchor is the positive control these two absences are measured behind.
+    await renderPanel(await declareThroughAuthority({ encounter, itemOperation: "drop" }));
+    expect(server.itemActions).toHaveLength(1);
 
     expect(screen.queryByText("Actions and tasks")).toBeNull();
     expect(screen.queryByText("Items and task history")).toBeNull();
   });
 
   /**
-   * Acceptance criterion 1 — the declaration surface reaches the canonical route from the Action
-   * Selector, for every permitted operation the `/options` payload offers.
+   * Acceptance criterion 1 — every permitted operation the `/options` payload offers reaches the
+   * canonical route, is accepted by the real declare command, and arrives on the GM lifecycle
+   * surface as a reviewable Item action.
+   *
+   * #834 removed the Action Selector control that used to issue this declare, so the operation
+   * now comes from the served `/options` payload through `declareThroughAuthority` rather than
+   * from a button. The assertions are on the canonical action the real command minted and on the
+   * GM command the Inspector then offers for it — never on the payload this test wrote itself.
    */
-  it("declares each permitted Item operation from the Action Selector", async () => {
+  it("declares each permitted Item operation through the canonical authority", async () => {
     for (const operation of ["drop", "stow"] as const) {
       const encounter = buildOpportunityEncounter();
       const server = createServer(encounter);
-      await renderPanel(encounter);
+      const declared = await declareThroughAuthority({ encounter, itemOperation: operation });
 
-      fireEvent.click(
-        screen.getByRole("button", {
-          name: `Crowbar: ${operation === "drop" ? "Drop" : "Stow / unequip"}`,
-        }),
-      );
-
-      await waitFor(() => expect(mocks.updateItemInteraction).toHaveBeenCalled());
-      expect(lastPayload()).toMatchObject({
-        encounterId: "encounter-1",
-        expectedItemRevision: CURRENT_ITEM_REVISION,
-        expectedRevision: encounter.updatedAt,
-        itemId: ITEM_ID,
-        itemOperation: operation,
-        operation: "declare",
-        participantId: OWNER,
-      });
-      expect(lastPayload().recipientParticipantId).toBeUndefined();
       // The real `declareCombatGenericAction` accepted it, so this is the production shape.
       expect(server.itemActions).toHaveLength(1);
       expect(server.itemActions[0]!.itemInteraction?.operation).toBe(operation);
+      expect(server.itemActions[0]!.itemInteraction?.itemId).toBe(ITEM_ID);
+      expect(server.itemActions[0]!.itemInteraction?.itemRevision).toBe(CURRENT_ITEM_REVISION);
+      expect(server.itemActions[0]!.itemInteraction?.recipientParticipantId).toBeUndefined();
+      expect(server.itemActions[0]!.ownerParticipantId).toBe(OWNER);
       expect(server.itemActions[0]!.status).toBe("declared");
+      // And it is the action the GM Inspector picks up: the command offered for `declared` is
+      // review, which `renderPanel`'s anchor requires before it resolves.
+      await renderPanel(declared);
+      expect(screen.queryByRole("button", { name: "Start Item action" })).toBeNull();
+
       cleanup();
       vi.clearAllMocks();
     }
@@ -625,47 +686,46 @@ describe("Item interaction without GenericCombatActionPanel (#356)", () => {
   it("declares pass with its recipient", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    await renderPanel(encounter);
 
-    // The button is disabled until a recipient is chosen, so a bad payload cannot be sent.
-    expect(screen.getByRole("button", { name: "Crowbar: Pass / give" })).toHaveProperty(
-      "disabled",
-      true,
-    );
-    fireEvent.change(screen.getByLabelText("Pass Crowbar to"), { target: { value: OTHER } });
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Pass / give" }));
+    // The removed surface disabled its own button until a recipient was chosen. That guard was
+    // never the only one: `resolveDeclaration` refuses a recipient-less `pass` outright, and that
+    // refusal is what keeps a half-declared pass out of the canonical state.
+    await expect(
+      declareThroughAuthority({ encounter, itemOperation: "pass" }),
+    ).rejects.toThrowError("The selected Item is no longer available.");
+    expect(server.itemActions).toHaveLength(0);
 
-    await waitFor(() => expect(mocks.updateItemInteraction).toHaveBeenCalledTimes(1));
-    expect(lastPayload()).toMatchObject({
-      expectedItemRevision: CURRENT_ITEM_REVISION,
+    const declared = await declareThroughAuthority({
+      encounter,
       itemOperation: "pass",
-      operation: "declare",
       recipientParticipantId: OTHER,
     });
+
+    expect(server.itemActions).toHaveLength(1);
+    expect(server.itemActions[0]!.itemInteraction?.operation).toBe("pass");
     expect(server.itemActions[0]!.itemInteraction?.recipientParticipantId).toBe(OTHER);
+    expect(server.itemActions[0]!.intent).toContain("to City guard");
+    await renderPanel(declared);
   });
 
   it("declares use with its intentDetail", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    await renderPanel(encounter);
-
-    expect(screen.getByRole("button", { name: "Crowbar: Use / interact" })).toHaveProperty(
-      "disabled",
-      true,
-    );
-    fireEvent.change(screen.getByLabelText("How will you use Crowbar?"), {
-      target: { value: "Lever the portcullis winch." },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Use / interact" }));
-
-    await waitFor(() => expect(mocks.updateItemInteraction).toHaveBeenCalledTimes(1));
-    expect(lastPayload()).toMatchObject({
+    const declared = await declareThroughAuthority({
+      encounter,
       intentDetail: "Lever the portcullis winch.",
       itemOperation: "use",
-      operation: "declare",
     });
+
+    // The detail reaches the canonical action's own intent, which is the text the GM reviews and
+    // the Combat Log keeps. (The removed surface also disabled its button until the detail was
+    // typed; `use` has no server-side detail guard, so nothing covers that input requirement any
+    // more — stated in the lane report rather than silently dropped.)
+    expect(server.itemActions).toHaveLength(1);
+    expect(server.itemActions[0]!.itemInteraction?.operation).toBe("use");
     expect(server.itemActions[0]!.intent).toContain("Lever the portcullis winch.");
+    expect(server.itemActions[0]!.intent).toContain("Use / interact with Crowbar");
+    await renderPanel(declared);
   });
 
   /**
@@ -676,14 +736,12 @@ describe("Item interaction without GenericCombatActionPanel (#356)", () => {
   it("carries an Item action from declared to a committed item_resolution", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    const { view } = await renderPanel(encounter);
-
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Drop" }));
-    await waitFor(() => expect(server.itemActions).toHaveLength(1));
+    const declared = await declareThroughAuthority({ encounter, itemOperation: "drop" });
+    expect(server.itemActions).toHaveLength(1);
     const actionId = server.itemActions[0]!.id;
+    const { view } = await renderPanel(declared);
 
     // Review. The action's status is the only thing that decides which command is offered.
-    await rerenderWith(view, server.encounter, "Review Item action");
     const reviewFields = screen.getByLabelText("Item action review fields");
     // The fieldset carries inputs only; the command is the Current action button beside it.
     expect(within(reviewFields).queryByRole("button")).toBeNull();
@@ -756,11 +814,9 @@ describe("Item interaction without GenericCombatActionPanel (#356)", () => {
   it("carries a changed reviewed duration and blocks an incomplete one", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    const { view } = await renderPanel(encounter);
-
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Drop" }));
-    await waitFor(() => expect(server.itemActions).toHaveLength(1));
-    await rerenderWith(view, server.encounter, "Review Item action");
+    const declared = await declareThroughAuthority({ encounter, itemOperation: "drop" });
+    expect(server.itemActions).toHaveLength(1);
+    await renderPanel(declared);
 
     const reviewFields = screen.getByLabelText("Item action review fields");
     fireEvent.change(within(reviewFields).getByLabelText("Reviewed duration"), {
@@ -790,11 +846,10 @@ describe("Item interaction without GenericCombatActionPanel (#356)", () => {
   it("does not offer a later command before the mandatory GM review", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    const { view } = await renderPanel(encounter);
-
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Drop" }));
-    await waitFor(() => expect(server.itemActions).toHaveLength(1));
-    await rerenderWith(view, server.encounter, "Review Item action");
+    const declared = await declareThroughAuthority({ encounter, itemOperation: "drop" });
+    expect(server.itemActions[0]!.status).toBe("declared");
+    // `renderPanel`'s anchor is the review command, so the Inspector is on this action.
+    await renderPanel(declared);
 
     expect(screen.queryByRole("button", { name: "Start Item action" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Resolve Item action" })).toBeNull();
@@ -804,55 +859,97 @@ describe("Item interaction without GenericCombatActionPanel (#356)", () => {
   it("offers the GM interrupt and cancel commands for an open Item action", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    const { view } = await renderPanel(encounter);
-
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Drop" }));
-    await waitFor(() => expect(server.itemActions).toHaveLength(1));
-    await rerenderWith(view, server.encounter, "Cancel Item action");
+    const declared = await declareThroughAuthority({ encounter, itemOperation: "drop" });
+    expect(server.itemActions).toHaveLength(1);
+    const { view } = await renderPanel(declared, "Cancel Item action");
+    expect(screen.getByRole("button", { name: "Interrupt Item action" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel Item action" }));
     await waitFor(() => expect(server.itemActions[0]!.status).toBe("cancelled"));
     expect(lastPayload()).toMatchObject({ operation: "cancel" });
-    // A finished Item action leaves the Inspector — its history belongs to the Combat Log.
-    await rerenderWith(view, server.encounter, "Crowbar: Drop");
+    // A finished Item action leaves the Inspector — its history belongs to the Combat Log. The
+    // Inspector heading is the positive control for that absence.
+    view.rerender(
+      <CombatRoundManagerPanel
+        encounter={server.encounter}
+        scenarioParticipants={participants()}
+      />,
+    );
+    await screen.findByRole("heading", { name: /Combat inspector — The Gladiator · Round 1/ });
     expect(screen.queryByRole("button", { name: "Cancel Item action" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Interrupt Item action" })).toBeNull();
   });
 
   /**
-   * Acceptance criterion 3 — `expectedItemRevision` staleness behaviour is unchanged. The
-   * declaration surface sends the revision the `/options` payload served, and the Item authority
-   * refuses it when the Item has moved on. Nothing in this lane sits between those two facts.
+   * Acceptance criterion 3 — `expectedItemRevision` staleness behaviour is unchanged. A declare
+   * that carries the revision the `/options` payload served is refused when the Item itself has
+   * moved on, and no Item action is created.
+   *
+   * The surface that used to carry that revision and show the refusal is gone with #834, so the
+   * declare is issued here with exactly the revision the mocked `/options` served — never with a
+   * constant — and the authority's refusal is asserted on the rejection rather than on a
+   * feedback line that no longer exists. The user-visible half of this property has no Combat
+   * surface left to be asserted on; the route's own 404 is covered by
+   * `apps/api/src/routes/scenarios/combatItemInteractionRoutes` and its tests.
    */
-  it("sends the served expectedItemRevision and surfaces the authority's refusal when it is stale", async () => {
+  it("refuses the served expectedItemRevision when the Item has moved on", async () => {
     const encounter = buildOpportunityEncounter();
-    // The Item's real revision has moved on since the options payload the surface is holding.
+    // The Item's real revision has moved on since the options payload the caller is holding.
     const server = createServer(encounter, CURRENT_ITEM_REVISION);
     mocks.loadItemOptions.mockResolvedValue(itemOptionsPayload(STALE_ITEM_REVISION));
-    await renderPanel(encounter);
 
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Drop" }));
+    // The panel is mounted and still reads `/options` itself, for the canonical Disarm controls,
+    // so the stale payload really is the one production code was served. The Inspector heading is
+    // this test's positive control: no Item declaration surface renders beside it any more.
+    render(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants()}
+      />,
+    );
+    await screen.findByRole("heading", { name: /Combat inspector — The Gladiator · Round 1/ });
+    expect(mocks.loadItemOptions).toHaveBeenCalledWith("encounter-1");
+    expect(screen.queryByText("Items in this Combat")).toBeNull();
 
-    await waitFor(() => expect(mocks.updateItemInteraction).toHaveBeenCalledTimes(1));
-    // The stale revision is carried verbatim — the client neither repairs nor omits it.
+    await expect(
+      declareThroughAuthority({ encounter, itemOperation: "drop" }),
+    ).rejects.toThrowError("The selected Item is no longer available.");
+
+    // The revision was carried verbatim — neither repaired nor omitted — and refused on its merits.
     expect(lastPayload().expectedItemRevision).toBe(STALE_ITEM_REVISION);
-    // And the authority's refusal reaches the user, with no Item action created.
-    await screen.findByText("The selected Item is no longer available.");
+    expect(server.itemRevision).toBe(CURRENT_ITEM_REVISION);
     expect(server.itemActions).toHaveLength(0);
   });
 
-  it("refuses a stale encounter revision without creating an Item action", async () => {
+  it("refuses a stale encounter revision and surfaces it without changing the Item action", async () => {
     const encounter = buildOpportunityEncounter();
     const server = createServer(encounter);
-    await renderPanel(encounter);
+    const declared = await declareThroughAuthority({ encounter, itemOperation: "drop" });
+    await renderPanel(declared);
 
-    mocks.updateItemInteraction.mockRejectedValueOnce(
-      new Error("The canonical Item action changed. Refresh and review the latest state."),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Crowbar: Drop" }));
+    // The canonical action moves on behind this GM's back — another client reviewed it — so the
+    // revision the Inspector holds is now stale. No second Item action is created, which the
+    // one-live-Item-action rule would refuse anyway.
+    await mocks.updateItemInteraction({
+      actionId: server.itemActions[0]!.id,
+      encounterId: "encounter-1",
+      expectedRevision: server.encounter.updatedAt,
+      operation: "review",
+    });
+    expect(server.itemActions[0]!.status).toBe("reviewed");
+    const revisionBeforeRefusal = server.encounter.updatedAt;
+    expect(revisionBeforeRefusal).not.toBe(declared.updatedAt);
 
+    fireEvent.click(screen.getByRole("button", { name: "Review Item action" }));
+
+    // The GM's own command carried the stale revision it held, the authority refused it, and the
+    // refusal reaches the user on the retained surface.
     await screen.findByText(
       "The canonical Item action changed. Refresh and review the latest state.",
     );
-    expect(server.itemActions).toHaveLength(0);
+    expect(lastPayload()).toMatchObject({ expectedRevision: declared.updatedAt });
+    expect(server.encounter.updatedAt).toBe(revisionBeforeRefusal);
+    expect(server.itemActions[0]!.status).toBe("reviewed");
   });
 });
