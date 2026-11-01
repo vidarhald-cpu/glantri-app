@@ -10,10 +10,11 @@ import {
  * The GM half of the canonical Item action lifecycle, for the Combat Inspector — Forgejo issue
  * #356, completing M7's client side (Combat Panel Contract §12.14).
  *
- * The declaration half already exists and is reused unchanged:
- * `apps/web/src/features/combat-generic-actions/CombatItemInteractionPanel.tsx`, mounted by the
- * Action Selector under the §12.4 row "Item operations … Action selector, secondary action".
- * This file carries the GM's `review` / `activate` / `resolve` commands and their inputs, the
+ * The Combat declaration surface that used to sit beside this one in the Action Selector was
+ * removed for Alpha by Forgejo issue #834, so no Combat Inspector or player control declares an
+ * Item action any more; the canonical Item interaction route remains the authority and is
+ * unchanged. This file carries the GM's `review` / `activate` / `resolve` commands and their
+ * inputs for an Item action that already exists, the
  * §12.4 row "Lifecycle commands … Current action", split exactly as the settled M5 and M6 rulings
  * require (§12.17): the review **fields** are inputs only, and the resolve command's player-safe
  * result text and audience are resolve-command inputs.

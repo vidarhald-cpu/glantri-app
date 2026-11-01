@@ -320,7 +320,6 @@ import {
   type PlayerEncounterMovementId,
 } from "@/lib/campaigns/playerEncounter";
 import { loadCanonicalContent } from "@/lib/content/loadCanonicalContent";
-import { CombatItemInteractionPanel } from "@/features/combat-generic-actions/CombatItemInteractionPanel";
 import {
   buildCombatItemActionReviewDraftFromAction,
   buildCombatItemActionReviewDuration,
@@ -9974,9 +9973,10 @@ export default function CombatRoundManagerPanel({
   /**
    * The canonical GM Item action lifecycle — Forgejo issue #356, M7's client half.
    *
-   * The declaration half is the existing `CombatItemInteractionPanel`, mounted by the Action
-   * Selector; this is the GM's `review` / `activate` / `resolve` side, plus the two finish
-   * commands. Every authorizing field comes from the projected canonical round state — the
+   * This is the GM's `review` / `activate` / `resolve` side, plus the two finish commands. The
+   * declaration surface that used to sit beside it in the Action Selector is removed (Forgejo
+   * issue #834), so for Alpha an Item action reaches this lifecycle from the canonical Item
+   * interaction route rather than from a Combat Inspector control. Every authorizing field comes from the projected canonical round state — the
    * action's own id and the encounter's current revision — never from a draft, and the operation
    * offered is the one the action's status allows. This adds no command, route, client function
    * or domain type: `updateCombatItemInteractionOnServer` already accepts each of these
@@ -13140,29 +13140,6 @@ export default function CombatRoundManagerPanel({
                           declarationRecorded={Boolean(inspector.participant?.declaration)}
                           declarationIntent={inspectorDisplayDraft.declarationIntent}
                           distancePreferenceOptions={inspectorDisplayDistancePreferenceOptions}
-                          itemInteractionControls={
-                            inspector.participant && !inspectorIsHistorical ? (
-                              <CombatItemInteractionPanel
-                                encounter={{
-                                  ...encounter,
-                                  combatRoundState: roundState,
-                                  updatedAt: roundView.encounterRevision ?? encounter.updatedAt,
-                                }}
-                                isGm
-                                onEncounterUpdated={(nextEncounter) => {
-                                  const nextRoundState = initializeCombatRoundState({
-                                    encounter: nextEncounter,
-                                  });
-                                  if (
-                                    acceptCanonicalEncounterState(nextEncounter, nextRoundState)
-                                  ) {
-                                    onEncounterUpdated?.(nextEncounter);
-                                  }
-                                }}
-                                participantId={inspector.participant.participantId}
-                              />
-                            ) : undefined
-                          }
                           movementId={inspectorDisplayDraft.movementId}
                           movementIntent={inspectorDisplayDraft.movementIntent}
                           onActionChange={(actionId) =>

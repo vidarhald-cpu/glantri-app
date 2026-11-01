@@ -25,6 +25,14 @@ const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
  * This spec therefore uses an ordinary Chargen-path Character, creates no Item at all, and
  * deliberately never reconciles. Adding a reconcile to its setup would reintroduce precisely the
  * blind spot that let the defect escape.
+ *
+ * Forgejo issue #834 — coverage reduction, stated. Step 5 above was a property of the removed
+ * `Items in this Combat` block, and the block is gone from the Combat UI with no replacement, so
+ * the rendered half of this spec is **unreachable through the UI** and is not asserted any more.
+ * Steps 1-4 — the #599/#773 staleness path itself — are where the defect lived and are still
+ * asserted here, at the `/options` endpoint, including after the player's own Combat page has
+ * loaded and issued its own reads. The page visit is retained for exactly that reason: it is the
+ * step that used to poison the Scenario.
  */
 
 async function postJson<T>(
@@ -47,7 +55,7 @@ async function itemOptionsStatus(request: APIRequestContext, encounterId: string
 test.describe("Combat Item interactions on an unreconciled ordinary Scenario", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
 
-  test("keeps Item options available across the Combat page's own equipment read and resolves the panel", async ({
+  test("keeps Item options available across the Combat page's own equipment read and renders no Item block", async ({
     browser,
     page: gmPage,
   }) => {
@@ -142,22 +150,30 @@ test.describe("Combat Item interactions on an unreconciled ordinary Scenario", (
     expect(await itemOptionsStatus(gmPage.request, encounterId)).toBe(200);
 
     // The workspace polls `GET /encounters/:id/revision` every few seconds, so `networkidle`
-    // never settles here. Wait for the document and then for the panel's own resolved state.
+    // never settles here. Wait for the document, then for a surface the Combat page renders, so
+    // that the page has really loaded and issued its own reads before the endpoint is re-checked.
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`, {
       waitUntil: "domcontentloaded",
     });
-    const panel = playerPage.getByLabel("Items in this Combat");
-    await expect(panel).toHaveCount(1);
-    // A Combat with no Items must reach the resolved empty state, not sit on the loading branch.
-    await expect(panel.getByText("No available Items.")).toBeVisible();
-    await expect(panel.getByText("Loading Items…")).toHaveCount(0);
-    // Forgejo issue #771 R2-4: the failed-load line is now the short `Items unavailable.`, not
-    // the server's reconciliation sentence. Narrowed to the new text; the property is the same
-    // one — a healthy load must not reach the failed state.
-    await expect(panel.getByText("Items unavailable.")).toHaveCount(0);
+    await expect(playerPage.getByText(/^Action selector/)).toBeVisible();
+
+    // Forgejo issue #834 — the `Items in this Combat` block is gone from this surface and nothing
+    // replaced it. Asserted after the positive control above, so this is a real absence on a
+    // rendered Combat surface rather than an absence on an unrendered page.
+    await expect(playerPage.getByLabel("Items in this Combat")).toHaveCount(0);
+    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(0);
+    await expect(playerPage.getByText("No available Items.", { exact: true })).toHaveCount(0);
+    await expect(playerPage.getByText("Loading Items\u2026", { exact: true })).toHaveCount(0);
+    await expect(playerPage.getByText("Items unavailable.", { exact: true })).toHaveCount(0);
     await expect(
-      panel.getByText("Scenario equipment changed outside play.", { exact: false }),
+      playerPage.getByText("Scenario equipment changed outside play.", { exact: false }),
     ).toHaveCount(0);
+
+    // The property the removed rendered assertions stood for, measured where it actually lives:
+    // the Combat page's own equipment reads must not have poisoned the Item options endpoint for
+    // any viewer. This is the #599/#773 regression and it survives the UI removal intact.
+    expect(await itemOptionsStatus(playerContext.request, encounterId)).toBe(200);
+    expect(await itemOptionsStatus(gmPage.request, encounterId)).toBe(200);
 
     await playerContext.close();
   });

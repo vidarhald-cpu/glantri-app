@@ -301,14 +301,6 @@ interface PlayerCombatActionSelectorPanelProps {
   declarationRecorded?: boolean;
   declarationIntent?: CombatDeclarationIntent;
   distancePreferenceOptions?: readonly PlayerCombatDistancePreferenceOption[];
-  /**
-   * The canonical Item interaction declaration surface, rendered in the secondary-action region —
-   * the Combat Panel Contract §12.4 destination "Item operations … Action selector, secondary
-   * action" (Forgejo issue #356). It is supplied as a slot so this panel keeps no encounter,
-   * revision or transport knowledge of its own; both call sites pass the existing
-   * `CombatItemInteractionPanel` unchanged.
-   */
-  itemInteractionControls?: ReactNode;
   movementId: PlayerEncounterMovementId | "";
   movementIntent?: MovementIntent;
   onActionChange: (actionId: PlayerEncounterActionId | "") => void;
@@ -1821,7 +1813,6 @@ export function PlayerCombatActionSelectorPanel({
   declarationRecorded = false,
   declarationIntent,
   distancePreferenceOptions = [],
-  itemInteractionControls,
   movementIntent,
   onActionChange,
   onAdditionalActionNotesChange,
@@ -2124,8 +2115,6 @@ export function PlayerCombatActionSelectorPanel({
           ) : null}
         </label>
       ) : null}
-
-      {itemInteractionControls}
 
       <fieldset
         style={{
