@@ -955,7 +955,34 @@ here is exactly the adversarial case the [floor](../../AGENTS.md#mandatory-qa-fl
 
 #### Redundant surface
 
-**None retired by M7.** `CombatItemInteractionPanel` stays mounted until A3.
+**None retired by M7.** `CombatItemInteractionPanel` was to stay mounted until A3.
+
+**Superseded for Alpha, not breached — 2026-11-01.** The Product Owner authorized removing the
+persistent Item block from the Combat declaration and inspector surfaces for Alpha, with no
+replacement panel, under Forgejo issue #834. That authorization is newer than this plan and
+explicit, and section 12 contracts intended work rather than describing what is mounted, so the
+sentence above records what M7 contracted and not current behaviour. Measured at the removal head:
+`apps/web/src/features/combat-generic-actions/CombatItemInteractionPanel.tsx` no longer exists, and
+no file in `apps/web` outside tests references `item_interaction`, so **no UI declares an Item
+action**.
+
+**M7's own outcome is untouched by that removal**, which is why this is supersession of a mounting
+plan and not of this contract:
+
+- the authority is unchanged — `combatItemInteractionService.ts` still carries the
+  `expectedItemRevision` guard, the serializable transaction and the `item_resolution` publication,
+  and `combatItemInteractionRoutes.ts` still serves both the declare route and its `/options`
+  sibling;
+- the GM lifecycle half of M7's client side remains mounted in
+  `apps/web/src/features/combat-round-manager/CombatRoundManagerPanel.tsx:8438-8506`, still calling
+  `updateCombatItemInteractionOnServer` (`:10014`), so `review`, `activate`, `resolve`, `interrupt`
+  and `cancel` stay live for an Item action that already exists in persisted state;
+- those controls render only when such an action exists, so the removal leaves no dead UI. The
+  Orchestrator measured the Alpha database at that head and found **no** persisted
+  `item_interaction`, so the retained path is real but currently has zero instances.
+
+Reader-facing current behaviour is in
+[Combat Round, Loadout and Actions section 5](../rules/combat-round-and-actions.md#5-items-in-the-fight).
 
 #### Acceptance checks
 
@@ -978,6 +1005,27 @@ capability is lost**.
 **A3 is gated on the parity matrix and on M8's Encounter-management access, not on any open
 Product Owner question.** M5 and M6 are settled; the destinations they fix are recorded in
 [12.17](#1217-m5-and-m6--settled-and-the-remaining-blockers-to-a3).
+
+**Superseded for Alpha in one respect — 2026-11-01, Forgejo issue #834.** The Product Owner
+authorized removing the persistent Item block from the Combat declaration and inspector surfaces
+for Alpha, with no replacement, and that removal has landed. It is newer than this plan and
+explicit, so it stands. What it changes about this section is recorded here, and nothing else:
+
+- the `CombatItemInteractionPanel` embedding that **Scope** and **Reused, by path** below list for
+  A3 to remove is already gone. It was removed outside A3 and without the parity matrix.
+- **`no capability is lost` does not hold for the two Item rows of
+  [12.4](#124-capability-mapping)** — Item operations, and pass recipient with per-Item intent
+  detail. Those rows name the Action selector as their destination; the Alpha removal **withdraws
+  the capability instead, with no destination**, because Item declaration is outside Alpha's
+  supported scope. That is a reduction of supported scope, not of quality.
+- what survives is the GM lifecycle half recorded in
+  [12.14](#1214-m7--item-interaction-authority) — `review`, `activate`, `resolve`, `interrupt` and
+  `cancel` for an Item action that already exists — plus the unchanged server-side authority.
+
+**This record re-plans nothing.** Parity row **P6**'s fallback clause was the gate on removing
+that embedding, and the embedding was removed under a different authorization. What that means for
+P6, for the Item rows of [12.4](#124-capability-mapping), and for A3's remaining scope is a Product
+Owner decision that has not been taken; this document does not anticipate it.
 
 #### Scope
 

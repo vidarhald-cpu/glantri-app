@@ -115,35 +115,14 @@ describe("PlayerCombatActionSelectorPanel", () => {
   });
 
   /**
-   * Forgejo issue #356 — the Action Selector is the declaration destination the Combat Panel
-   * Contract §12.4 names for Item operations ("Action selector, secondary action"), and it carries
-   * that surface as a slot so it keeps no encounter or transport knowledge of its own. Both call
-   * sites — the GM Combat Inspector and the player Combat page — pass the existing
-   * `CombatItemInteractionPanel` into it unchanged.
+   * Forgejo issue #834 — the persistent `Items in this Combat` block is removed from the Combat
+   * declaration surface for Alpha, with no replacement. The Action Selector no longer carries an
+   * Item slot of any kind, so neither call site can reintroduce one by passing a prop: there is
+   * no prop to pass. This asserts the Action Selector renders its own declaration fields and
+   * names no Item block.
    */
-  it("renders the supplied Item interaction declaration surface in the secondary-action region", () => {
-    render(
-      <PlayerCombatActionSelectorPanel
-        actionId=""
-        additionalActionNotes=""
-        itemInteractionControls={<div data-testid="item-interaction-surface">Items</div>}
-        movementId=""
-        onActionChange={vi.fn()}
-        onAdditionalActionNotesChange={vi.fn()}
-        onMovementChange={vi.fn()}
-        onSecondaryActionChange={vi.fn()}
-        secondaryActionId=""
-      />,
-    );
-
-    const surface = screen.getByTestId("item-interaction-surface");
-    expect(surface).toBeInTheDocument();
-    const region = screen.getByRole("combobox", { name: "Secondary action" }).closest("section");
-    expect(region?.contains(surface)).toBe(true);
-  });
-
-  it("omits the Item interaction region when no declaration surface is supplied", () => {
-    render(
+  it("renders no Item interaction region in the secondary-action area", () => {
+    const { container } = render(
       <PlayerCombatActionSelectorPanel
         actionId=""
         additionalActionNotes=""
@@ -156,7 +135,11 @@ describe("PlayerCombatActionSelectorPanel", () => {
       />,
     );
 
-    expect(screen.queryByTestId("item-interaction-surface")).toBeNull();
+    // Positive control: the region that used to hold the block is still rendered, so the absence
+    // assertions below are measured against a mounted Action Selector rather than nothing.
+    expect(screen.getByRole("combobox", { name: "Secondary action" })).toBeInTheDocument();
+    expect(screen.queryByText("Items in this Combat")).toBeNull();
+    expect(container.textContent).not.toContain("Items in this Combat");
   });
 
   it("keeps the selector prompt and shows the completed declaration state", () => {

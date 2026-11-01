@@ -37,10 +37,21 @@ player-facing `Actions and tasks`, generic-action, or similar declaration workfl
 Players record intent here; the GM adjudicates it through the established Combat
 workflow.
 
-The current standalone player panel that combines `Items in this Combat`, generic
-action/task declaration, Skill or Perception selection, Difficulty, and timing is a
-known nonconforming surface. It is not part of the target declaration architecture.
-Removing or replacing it requires separately authorized implementation.
+Recorded from the 2026-09-17 Combat Declaration UX ruling: the standalone player
+panel that combined `Items in this Combat`, generic action/task declaration, Skill
+or Perception selection, Difficulty, and timing was a known nonconforming surface.
+It is not part of the target declaration architecture. Removing or replacing it
+required separately authorized implementation.
+
+**Status, 2026-11-01: discharged — that panel no longer exists.** Its generic
+action and task half was deleted with `GenericCombatActionPanel` under Forgejo
+issue #335. Its Item half was removed from the Combat declaration and inspector
+surfaces under Forgejo issue #834, by Product Owner authorization for Alpha with
+no replacement panel and no Item operation offered anywhere on those surfaces;
+current behaviour is in
+[Combat Round, Loadout and Actions section 5](./combat-round-and-actions.md#5-items-in-the-fight).
+The principle above therefore constrains new work; it no longer describes a mounted
+surface awaiting removal.
 
 For example:
 
