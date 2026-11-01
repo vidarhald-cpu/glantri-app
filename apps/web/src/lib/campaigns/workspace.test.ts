@@ -190,13 +190,17 @@ describe("campaign workspace", () => {
       "character",
     ]);
 
+    // #848: the row entry the Product Owner could not find was labelled
+    // `Action`. Its destination was always `player-skill-rolls`, so the rename
+    // and the routing repair are one registry row.
     expect(buildCampaignPlayViews().map((view) => view.label)).toEqual([
       "Situation",
-      "Action",
+      "Skill rolls",
       "Map",
       "Blackboard",
       "Character",
     ]);
+    expect(buildCampaignPlayViews().map((view) => view.label)).not.toContain("Action");
   });
 
   it("targets each Play view at an existing canonical workspace tab", () => {
