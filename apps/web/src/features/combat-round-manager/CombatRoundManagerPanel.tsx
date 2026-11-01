@@ -8432,8 +8432,8 @@ export default function CombatRoundManagerPanel({
   /**
    * Current action owns the Item action commands and their inputs, under the same M5/M6 split the
    * Combat Task controls above follow: the review duration and the resolve command's player-safe
-   * text and audience are command inputs here, and the Item picker that declares the action lives
-   * in the Action Selector.
+   * text and audience are command inputs here. Forgejo issue #834 removed the Action Selector's
+   * Item picker, so nothing declares these actions; they come from the recorded round state.
    */
   const inspectorCombatItemActionLifecycleControls =
     inspectorCombatItemAction &&

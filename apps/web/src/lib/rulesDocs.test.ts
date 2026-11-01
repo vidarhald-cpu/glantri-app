@@ -390,6 +390,18 @@ describe("rules documentation registry", () => {
       "**Item interactions and canonical Disarm both still depend on the participant's equipment projection being current.**",
     );
     expect(combatRoundFlowed).toContain("the server refuses the round's Item options outright");
+    // The clause after that pin was the one false statement the #834 documentation pass shipped:
+    // it denied that any Combat surface still shows the stale-options refusal.
+    // `CombatDisarmDeclarationControls` is that surface, and the error the options route raises is
+    // rendered beside it on both — `CombatRoundManagerPanel.tsx:13221-13225` and
+    // `ScenarioPlayerCombatPageContent.tsx:5448-5452`, each gated on a `disarm` / `parry_disarm`
+    // draft action. No pin covered the false clause, which is how it reached QA; these two pin the
+    // corrected one in both directions, because a reader who believes the refusal is invisible
+    // looks for it in the wrong place.
+    expect(combatRoundFlowed).toContain(
+      "**the Disarm declaration is the Combat surface that reports that refusal.**",
+    );
+    expect(model.selectedDocument.markdown).not.toContain("no Combat surface shows that refusal");
     // Both strings below were copy of the removed block and existed nowhere else, so a registered
     // page that quotes either is describing a surface the reader cannot reach. `Items unavailable.`
     // is the old positive pin, inverted. The third assertion is unchanged: the long server-side

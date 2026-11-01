@@ -25,7 +25,7 @@ import {
  * `updateCombatItemInteractionOnServer` already accepts each of these operations.
  */
 
-/** The canonical Item action operations the GM issues. `declare` belongs to the Action Selector. */
+/** The canonical Item action operations the GM issues. Since #834 no surface offers `declare`. */
 export type CombatItemActionGmOperation =
   | "review"
   | "activate"

@@ -245,8 +245,11 @@ The canonical Item interaction authority itself is **unchanged**. It still owns 
 Combat behind its own revision guard and serializable transaction, it still publishes a resolved
 Item action to the audience the GM chose, and it still serves the round's permitted Item options
 to the GM and to each player at `GET /encounters/:id/combat-round/item-interactions/options`.
-Nothing renders them. These are the operations it carries, and the verb each one writes into the
-action's intent:
+**No surface lists those options as Item operations you can declare.** One surface does still read
+that response: the Disarm declaration of [section 7.2](#72-disarm-and-parry---disarm) fills its
+trapping-weapon and opponent-weapon choices out of it, and checks the choice against it again when
+the declaration is committed. These are the operations the authority carries, and the verb each one
+writes into the action's intent:
 
 | Operation | Verb in the action's intent | Meaning                       |
 | --------- | --------------------------- | ----------------------------- |
@@ -269,12 +272,22 @@ exists**, so with nothing left to declare one they do not appear in an ordinary 
 
 **Item interactions and canonical Disarm both still depend on the participant's equipment
 projection being current.** While the projection is stale the server refuses the round's Item
-options outright rather than serve a list built on a loadout it knows to be out of date, and no
-Combat surface shows that refusal any more — the removed block was what reported it. What you see
-instead is the equipment status of [section 4](#4-loadout-in-the-fight): the player sees
+options outright rather than serve a list built on a loadout it knows to be out of date, and
+**the Disarm declaration is the Combat surface that reports that refusal.** Choose `Disarm` or
+`Parry - Disarm` ([section 7.2](#72-disarm-and-parry---disarm)) and that declaration's weapon
+choices carry the server's reconciliation message, with all three selectors empty and disabled, so
+the Disarm cannot be committed — on the GM's Combat Inspector and on the player's Combat page
+alike. Choose any other action and the message does not appear, because those weapon choices are
+the only place in Combat that shows it. Beside it is the equipment status of
+[section 4](#4-loadout-in-the-fight): the player sees
 `Committed equipment is out of date. Ask the GM to refresh it.` and only the GM can reconcile.
 Disarm needs to know exactly which Item is in whose hand, so it cannot run against a stale
 projection either.
+
+**A second refusal is a different one, and it has no Combat surface.** When a declared Item
+operation names an Item whose own revision has moved on, the authority rejects the declaration; but
+only a declare reaches that guard, and no Combat surface declares an Item action, so nothing in play
+raises it. The guard itself is unchanged and runs on every declare the authority receives.
 
 ## 6. Distance
 
