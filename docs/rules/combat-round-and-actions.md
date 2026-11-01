@@ -121,8 +121,10 @@ Pass merely to draw a weapon. Observe Opponent is the exception, because it need
 declared on its own it is refused with a message asking you to choose a compatible primary action.
 
 An `Equip / Unequip` declaration **records an intention; it does not change your equipment.** The
-actual change happens through the ordinary Item controls and GM adjudication — see
-[section 5](#5-items-in-the-fight).
+actual change is made outside Combat, on the Character's `Equip Items` screen, and reaches a
+Combat already in progress only through the GM's reconciliation — see
+[section 4](#4-loadout-in-the-fight). No Combat surface performs it, and none offers an Item
+operation at all — see [section 5](#5-items-in-the-fight).
 
 ### 2.3 Movement and distance intentions
 
@@ -231,29 +233,48 @@ their reference.
 
 ## 5. Items in the fight
 
-`Items in this Combat` lists what the acting participant can do with an Item this round:
+**There is no Item panel in Combat.** Nothing on the player or GM declaration and inspector
+surfaces lists a participant's Items or offers an Item operation, and nothing replaced the
+per-round Item block that used to sit there: the Product Owner withdrew it from Alpha's supported
+scope on 2026-11-01, with no replacement (Forgejo issue #834). **No Combat surface declares an
+Item action in the current version.** The only Item intent a declaration carries is the one
+`Equip / Unequip` or `Small Action` records, and that is an intention for the GM, not a change —
+see [section 2.2](#22-secondary-actions-you-can-choose).
 
-| Operation      | Meaning                  |
-| -------------- | ------------------------ |
-| Draw / ready   | Bring an Item into use.  |
-| Stow / unequip | Put an Item away.        |
-| Drop           | Let an Item fall.        |
-| Pick up        | Take up a present Item.  |
-| Pass / give    | Hand an Item to someone. |
-| Use / interact | Use an Item.             |
+The canonical Item interaction authority itself is **unchanged**. It still owns Item mutation in
+Combat behind its own revision guard and serializable transaction, it still publishes a resolved
+Item action to the audience the GM chose, and it still serves the round's permitted Item options
+to the GM and to each player at `GET /encounters/:id/combat-round/item-interactions/options`.
+Nothing renders them. These are the operations it carries, and the verb each one writes into the
+action's intent:
 
-Each Item shows where it currently is — `Equipped`, `Held · On person`, `Stowed`, or
-`Present · Unheld` — and each declared Item action carries its own status through
-`Waiting for GM review`, `Reviewed — waiting to act`, `In progress`, and then `Completed`,
-`Interrupted` or `Cancelled`. A Combat with nothing to interact with says so — `No available Items.`
-to a player, `No supported Items for this participant.` to the GM. An empty panel is a resolved
-state, not a pending one.
+| Operation | Verb in the action's intent | Meaning                       |
+| --------- | --------------------------- | ----------------------------- |
+| `draw`    | `Draw / ready`              | Bring an Item into use.       |
+| `stow`    | `Stow / unequip`            | Put an Item away.             |
+| `drop`    | `Drop`                      | Let an Item fall.             |
+| `pickup`  | `Pick up`                   | Take up a present Item.       |
+| `pass`    | `Pass / give`               | Hand an Item to someone.      |
+| `use`     | `Use / interact with`       | Use or interact with an Item. |
 
-**Item interactions and canonical Disarm both depend on the participant's equipment projection
-being current.** If it is stale the panel reports `Items unavailable.` and they stay unavailable
-until the GM reconciles. This is the same reconciliation as
-[section 4](#4-loadout-in-the-fight) — Disarm needs to know exactly which Item is in whose hand, so
-it cannot run against a loadout the application knows to be out of date.
+**The GM's lifecycle commands remain, for an Item action that already exists.** When the Combat's
+recorded state holds an open Item action, the Combat Inspector offers it under
+`Current action · Item action`, naming the Item and that intent: `Review Item action` first,
+because review is mandatory, then `Start Item action`, then `Resolve Item action`, with
+`Interrupt Item action` and `Cancel Item action` available while the action is open. Resolving
+asks for the player-safe result and who receives it. The action's status reads
+`Waiting for GM review`, then `Reviewed`, then `Active`, and finishes as exactly one of
+`Completed`, `Interrupted` or `Cancelled`. Those controls render **only when such an action
+exists**, so with nothing left to declare one they do not appear in an ordinary Combat.
+
+**Item interactions and canonical Disarm both still depend on the participant's equipment
+projection being current.** While the projection is stale the server refuses the round's Item
+options outright rather than serve a list built on a loadout it knows to be out of date, and no
+Combat surface shows that refusal any more — the removed block was what reported it. What you see
+instead is the equipment status of [section 4](#4-loadout-in-the-fight): the player sees
+`Committed equipment is out of date. Ask the GM to refresh it.` and only the GM can reconcile.
+Disarm needs to know exactly which Item is in whose hand, so it cannot run against a stale
+projection either.
 
 ## 6. Distance
 
@@ -532,6 +553,10 @@ Honest limits, so nothing here is read as more than it is:
   surface offers, not to what a character would actually know.
 - **Equip / Unequip and Small Action are declarations, not resolutions.** The GM adjudicates them
   through the ordinary controls.
+- **No Combat surface declares an Item action.** The per-round Item block was withdrawn from
+  Alpha's supported scope and nothing replaced it. The GM's lifecycle commands for an Item action
+  that already exists are what remains, and the authority behind them is unchanged — see
+  [section 5](#5-items-in-the-fight).
 - **Perform Task does not resolve a skill roll inside Combat.** The GM assigns required rolls,
   timing and progress and uses the existing roll facility.
 - **Offensive Parry has no Phase 2 follow-up attack** and no forced-movement consequences.

@@ -370,13 +370,32 @@ describe("rules documentation registry", () => {
     expect(model.selectedDocument.markdown).toContain(
       "**Counterattack cannot currently be declared.**",
     );
-    // Item interactions and canonical Disarm need a current equipment projection (#599). The
-    // rule is unchanged and still pinned; #771 R2-4 only shortened the message the panel shows,
-    // so the quoted copy is narrowed to the new one-line text rather than dropped.
-    expect(model.selectedDocument.markdown).toContain("`Items unavailable.`");
-    expect(model.selectedDocument.markdown).toContain(
-      "they stay unavailable\nuntil the GM reconciles.",
+    // Item interactions and canonical Disarm need a current equipment projection (#599). That rule
+    // is unchanged and still pinned. What changed is the surface: Forgejo #834 withdrew the
+    // per-round Item block from the Combat declaration and inspector surfaces for Alpha, so the
+    // copy the previous two pins quoted — the panel's `Items unavailable.` line and the sentence
+    // built around it — exists nowhere now. They are retargeted at what the page says instead: the
+    // absence, the GM lifecycle half that survives for an action that already exists, and the
+    // projection rule restated against the surviving surfaces. Flowed, because these are prose
+    // sentences Prettier wraps at 100 columns rather than cells.
+    const combatRoundFlowed = model.selectedDocument.markdown.replace(/\s+/g, " ");
+    expect(combatRoundFlowed).toContain(
+      "**No Combat surface declares an Item action in the current version.**",
     );
+    expect(combatRoundFlowed).toContain(
+      "**The GM's lifecycle commands remain, for an Item action that already exists.**",
+    );
+    expect(model.selectedDocument.markdown).toContain("`Review Item action`");
+    expect(combatRoundFlowed).toContain(
+      "**Item interactions and canonical Disarm both still depend on the participant's equipment projection being current.**",
+    );
+    expect(combatRoundFlowed).toContain("the server refuses the round's Item options outright");
+    // Both strings below were copy of the removed block and existed nowhere else, so a registered
+    // page that quotes either is describing a surface the reader cannot reach. `Items unavailable.`
+    // is the old positive pin, inverted. The third assertion is unchanged: the long server-side
+    // staleness message is not this page's reader copy either.
+    expect(model.selectedDocument.markdown).not.toContain("Items in this Combat");
+    expect(model.selectedDocument.markdown).not.toContain("Items unavailable.");
     expect(model.selectedDocument.markdown).not.toContain(
       "The GM must reconcile it before dependent play can",
     );
