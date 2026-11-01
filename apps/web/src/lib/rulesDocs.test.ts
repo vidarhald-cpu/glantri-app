@@ -401,7 +401,7 @@ describe("rules documentation registry", () => {
     expect(combatRoundFlowed).toContain(
       "**the Disarm declaration is the Combat surface that reports that refusal.**",
     );
-    expect(model.selectedDocument.markdown).not.toContain("no Combat surface shows that refusal");
+    expect(combatRoundFlowed).not.toContain("no Combat surface shows that refusal");
     // Both strings below were copy of the removed block and existed nowhere else, so a registered
     // page that quotes either is describing a surface the reader cannot reach. `Items unavailable.`
     // is the old positive pin, inverted. The third assertion is unchanged: the long server-side
