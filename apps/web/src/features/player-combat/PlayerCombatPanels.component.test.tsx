@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { canonicalCombatModifierEffectSchema } from "@glantri/domain";
@@ -347,10 +347,49 @@ describe("PlayerCombatActionSelectorPanel", () => {
       />,
     );
 
-    expect(screen.getByRole("group", { name: "Relative position" })).toBeTruthy();
+    /*
+     * Forgejo issue #835. The `Relative position` group assertion is retargeted, not relaxed: the
+     * former `Relative position` and `Movement and facing` fieldsets are one `Position and
+     * movement` group, so this asserts the new accessible name, that exactly one such group exists
+     * on the panel, and that neither retired name is anywhere on the surface.
+     */
+    expect(screen.getByRole("group", { name: "Position and movement" })).toBeTruthy();
+    expect(screen.getAllByRole("group", { name: "Position and movement" })).toHaveLength(1);
+    expect(screen.queryByRole("group", { name: "Relative position" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Movement and facing" })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("Relative position");
+    expect(document.body.textContent).not.toContain("Movement and facing");
     expect(screen.getByText("Priority 1")).toBeInTheDocument();
     expect(screen.getByText("Visible guard")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("Hidden spy");
+
+    // The relative row carries intention, person, desired distance and the compact `+`, and the
+    // movement-direction and facing selects sit in the same group rather than a second one.
+    const positionGroup = screen.getByRole("group", { name: "Position and movement" });
+    for (const name of [
+      "Intention",
+      "Person",
+      "Desired distance",
+      "Movement direction",
+      "Facing",
+    ]) {
+      expect(within(positionGroup).getAllByRole("combobox", { name }), name).toHaveLength(1);
+    }
+    const addRelativeIntention = within(positionGroup).getAllByRole("button", {
+      name: "Add relative intention",
+    });
+    expect(addRelativeIntention).toHaveLength(1);
+    expect(addRelativeIntention[0]!.textContent).toBe("+");
+
+    // Adding a second relative intention adds a second compact row.
+    fireEvent.click(addRelativeIntention[0]!);
+    expect(onDeclarationIntentChange).toHaveBeenLastCalledWith({
+      primaryAction: { actionId: "move_only" },
+      relativePositions: [
+        { desiredDistance: 2, kind: "keep_distance", targetParticipantId: "visible-guard" },
+        { desiredDistance: 2, kind: "keep_distance", targetParticipantId: "visible-guard" },
+      ],
+    });
     fireEvent.change(screen.getByRole("combobox", { name: "Desired distance" }), {
       target: { value: "1" },
     });
@@ -473,7 +512,32 @@ describe("PlayerCombatActionSelectorPanel", () => {
     );
     expect(new Set(describedByIds).size).toBe(4);
 
-    // The descriptions are visible text, not hover-only tooltips.
+    /*
+     * Forgejo issue #835 compacted this section and required its explanatory paragraphs removed
+     * from the painted layout. R2-8's mechanism is untouched and is asserted above: each select's
+     * own `aria-describedby` target still holds the approved §7/§8 wording verbatim, so the
+     * accessible description is unchanged. What changed is that the paragraph is now visually
+     * hidden instead of drawn, so this assertion is retargeted from "is visible text" to the
+     * failure R2-8 was guarding against: a hover-only `title` tooltip, or a description taken out
+     * of the accessibility tree. A visually hidden `<p>` is announced unconditionally; a `title`
+     * is not. The visible-paragraph half of R2-8 is reported as a finding for a ruling.
+     */
+    for (const select of [...movementDirectionSelects, ...facingSelects]) {
+      expect(select).not.toHaveAttribute("title");
+      const description = document.getElementById(select.getAttribute("aria-describedby")!);
+      expect(description).toBeTruthy();
+      expect(description!.tagName).toBe("P");
+      expect(description).not.toHaveAttribute("hidden");
+      expect(description).not.toHaveAttribute("aria-hidden");
+      expect(window.getComputedStyle(description!).display).not.toBe("none");
+      expect(window.getComputedStyle(description!).visibility).not.toBe("hidden");
+      // The visually hidden signature: in the accessibility tree, out of the painted layout.
+      expect(description!.style.position).toBe("absolute");
+      expect(description!.style.width).toBe("1px");
+      expect(description!.style.height).toBe("1px");
+      expect(description!.style.overflow).toBe("hidden");
+    }
+    // The wording is still in the document, verbatim and once per select.
     expect(
       screen.getAllByText(
         "Movement Direction records the absolute direction in which the character intends to move.",
