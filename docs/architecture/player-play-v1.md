@@ -11,6 +11,25 @@
 which is the Product Owner specification in 22 numbered sections. This document
 records that specification durably; it does not extend or reinterpret it.
 
+> **Superseded in part — Product Owner ruling recorded 2026-11-02 (Forgejo #848, comment 19287).**
+> The composition this contract specifies for the **Action** view — Action stacking the existing player
+> Combat UI together with the Skill Roll / task widget — has been **ruled a defect** by the Product Owner.
+> The ruling, as recorded on [#848](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/848):
+>
+> > "#848 — Skill rolls: Combat/Skill-roll stacking is a defect. `Skill rolls` remains a first-class player
+> > destination even while Combat is active. Combat must not hijack or redirect it. Integrate if the rest of QA
+> > passed."
+>
+> The statements superseded are those that place the player Combat UI inside the Action / Skill Roll view: the
+> Action row of the [section 5](#5-the-five-play-views) table, the [section 10](#10-action-composition)
+> diagram, [section 10.2](#102-combat) and [section 10.3](#103-skill-roll) where they position Combat in that
+> view, and the **Player-visible outcome** of slice [P5](#p5--action-view-composition). Each is marked where it
+> appears. The original wording is retained unedited so that the history of the decision survives; where it
+> conflicts with the ruling, the ruling governs. Specification #282 is the source of the superseded wording and
+> is itself not edited. The ruling does not address the round tracker, compact current state or Recent Rolls /
+> Outcomes content, and this record makes no statement about them. The repair landed with
+> [#848](http://127.0.0.1:3001/recovery-admin/glantri-app/issues/848) at `d324b8a0`.
+
 This contract is the **player-facing composition and navigation** layer built on
 top of the integrated [Scenario Play Workspace](scenario-play-workspace.md)
 contract recorded for
@@ -211,6 +230,11 @@ Four architectural facts govern the arena:
 | **Map**        | Where are we?                                                       | The existing Map view and its internals, reached without losing Action state.                                                                        | Artifact identity, Map redesign, tactical rules.                           |
 | **Blackboard** | What are the players discussing?                                    | The existing Blackboard surface, under the settled #268 semantics.                                                                                   | Game-world state of any kind.                                              |
 | **Character**  | What can I currently do?                                            | The existing Character presentation: effective/current values, Skills, Physical State, encumbrance-dependent stats, and a current equipment summary. | A second Character model, a second inventory, a second calculation system. |
+
+> **Superseded in part (#848, Product Owner ruling, comment 19287; see [section 1](#1-status-and-scope)).**
+> The **Action** row above lists "the existing player Combat UI" among what Action owns. That composition is
+> ruled a defect and is no longer the design. The row is retained unedited as the record of the original
+> specification.
 
 Each view is detailed below: Situation in [section 8](#8-situation--the-main-new-v1-screen),
 Action in [section 10](#10-action-composition), Map in
@@ -536,6 +560,11 @@ Action answers: **"What am I doing now?"**
 └───────────────────────────────────────────────────────────────┘
 ```
 
+> **Superseded in part (#848, Product Owner ruling, comment 19287; see [section 1](#1-status-and-scope)).**
+> The "EXISTING PLAYER COMBAT UI — when Combat is active" block in the diagram above, stacked above
+> "EXISTING SKILL / TASK ROLL UI", is ruled a defect and is no longer the design. The diagram is retained
+> unedited as the record of the original specification.
+
 ### 10.1 Round tracker
 
 Players **do** need it — it is fundamental board-game state indicating whose turn
@@ -565,7 +594,16 @@ those already documented for Player Combat in
 and the Combat area contracts. Composition changes where the components sit, not
 what they mean.
 
+> **Superseded in part (#848, Product Owner ruling, comment 19287).** Reusing the current player Combat
+> interaction inside the Action view is superseded: the Product Owner ruled the Combat/Skill-roll stacking a
+> defect. The text above that places the player Combat UI in Action is retained as the original specification.
+
 ### 10.3 Skill Roll
+
+> **Superseded in part (#848, Product Owner ruling, comment 19287).** The placement instruction below, which
+> positions the Skill Roll / task widget relative to a Combat area in the same view, is superseded together
+> with the stacking it presupposes. The ruling states that `Skill rolls` "remains a first-class player
+> destination even while Combat is active" and that Combat "must not hijack or redirect it".
 
 Place the existing Skill Roll / task widget **below** the Combat area.
 
@@ -1155,6 +1193,11 @@ so the architecture keeps room for it and **no slice above absorbs it**.
   of thin adaptation.
 
 #### P5 — Action view composition
+
+> **Superseded in part (#848, Product Owner ruling, comment 19287; see [section 1](#1-status-and-scope)).**
+> The **Player-visible outcome** below includes "the existing player Combat UI when Combat is active" stacked in
+> the Action view. That composition is ruled a defect and is no longer the design. The slice text is retained
+> unedited as the record of the original specification.
 
 - **Player-visible outcome.** Action stacks round tracker (only while rounds are
   active), compact current state, the existing player Combat UI when Combat is
