@@ -2507,7 +2507,13 @@ describe("CombatRoundManagerPanel declaration form", () => {
 
     expect(within(phase1!).queryByText("OB")).not.toBeInTheDocument();
     expect(within(phase1!).queryByText("DMB")).not.toBeInTheDocument();
-    expect(within(phase1!).queryByText("DB")).not.toBeInTheDocument();
+    /*
+     * #877 — Product Owner ruling reversing the earlier Phase 1 Feint carve-out. Phase 1 stays free
+     * of *attack* presentation, but the Defense / Parry DB/DM/P mini-table is shown: the equipment
+     * is in hand throughout and a committed feint modifies the DB/parry bucket. This assertion
+     * previously pinned the table's absence.
+     */
+    expect(within(phase1!).getByText("DB")).toBeInTheDocument();
     expect(
       within(phase1!).queryByRole("combobox", { name: "Attack mode" }),
     ).not.toBeInTheDocument();
@@ -2533,8 +2539,12 @@ describe("CombatRoundManagerPanel declaration form", () => {
     expect(
       within(phase2!).queryByRole("combobox", { name: "Parry source" }),
     ).not.toBeInTheDocument();
-    // Phase 1 of a Feint is a Skill Contest: no defensive exchange, so no Defense / Parry group.
-    expect(within(phase1!).queryByText("Main hand")).not.toBeInTheDocument();
+    // #877: Phase 1 of a Feint carries the Defense / Parry group too (previously suppressed).
+    expect(within(phase1!).getByText("Main hand")).toBeInTheDocument();
+    expect(within(phase1!).getByText("Off hand")).toBeInTheDocument();
+    expect(
+      within(phase1!).queryByRole("combobox", { name: "Parry source" }),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("combobox", { name: "Feint method" }), {
       target: { value: "weapon" },
