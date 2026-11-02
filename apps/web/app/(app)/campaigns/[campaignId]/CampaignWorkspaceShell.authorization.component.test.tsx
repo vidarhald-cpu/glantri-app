@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -406,24 +406,41 @@ function primeActionView(input: {
   });
 }
 
-describe("Campaign Action composition by perspective and encounter state", () => {
-  it("stacks player Combat above Skill Roll for an active Encounter using the same tab", async () => {
+describe("Campaign Skill rolls composition by perspective and encounter state", () => {
+  /**
+   * #848. This assertion used to be its inverse: the player `Skill rolls`
+   * surface mounted the player Combat surface ABOVE the Skill roll screen
+   * whenever the Scenario was live and its Encounter active, and that mount is
+   * the mover the Product Owner saw as "a brief Skill-roll render followed by a
+   * Combat redirect". The URL never changed -- `router.replace` is never called
+   * with another tab here -- so the takeover was composition, not routing.
+   * Combat keeps its own `?tab=player-combat` entry in the same Play views row,
+   * which this test also asserts, so no player capability is lost.
+   */
+  it("keeps player Combat out of Skill rolls for an active Encounter and leaves its own entry", async () => {
     primeActionView({ encounterStatus: "active", perspective: "player" });
     render(<CampaignWorkspaceShell campaignId="campaign-1" />);
 
-    const combat = await screen.findByTestId("combat-surface");
-    const roleplay = screen.getByTestId("roleplay-surface");
-    expect(
-      combat.compareDocumentPosition(roleplay) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(combat).toHaveAttribute("data-tab", "player-skill-rolls");
+    const roleplay = await screen.findByTestId("roleplay-surface");
     expect(roleplay).toHaveAttribute("data-tab", "player-skill-rolls");
-    expect(combat).toHaveAttribute("data-read-only", "false");
     expect(roleplay).toHaveAttribute("data-read-only", "false");
+    expect(screen.queryByTestId("combat-surface")).not.toBeInTheDocument();
+
+    const playViews = screen.getByRole("navigation", { name: "Play views" });
+    expect(within(playViews).getByRole("link", { name: "Skill rolls" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-private&encounterId=encounter-private",
+    );
+    expect(within(playViews).queryByRole("link", { name: "Action" })).not.toBeInTheDocument();
+    expect(within(playViews).getByRole("link", { name: "Player combat" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-private&encounterId=encounter-private",
+    );
+    expect(mocks.replace).not.toHaveBeenCalledWith(expect.stringContaining("tab=player-combat"));
   });
 
   it.each(["draft", "paused"] as const)(
-    "keeps Combat out of a player's %s Encounter Action view",
+    "keeps Combat out of a player's %s Encounter Skill rolls view",
     async (encounterStatus) => {
       primeActionView({ encounterStatus, perspective: "player" });
       render(<CampaignWorkspaceShell campaignId="campaign-1" />);
@@ -436,7 +453,7 @@ describe("Campaign Action composition by perspective and encounter state", () =>
     },
   );
 
-  it("keeps the constrained Action state outside an Encounter", async () => {
+  it("keeps the constrained Skill rolls state outside an Encounter", async () => {
     primeActionView({ perspective: "player" });
     render(<CampaignWorkspaceShell campaignId="campaign-1" />);
 

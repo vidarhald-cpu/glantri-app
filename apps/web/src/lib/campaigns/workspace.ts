@@ -49,7 +49,7 @@ export interface CampaignPlayView {
 
 const orderedPlayViews: CampaignPlayView[] = [
   { canonicalTab: "scenario", id: "situation", label: "Situation" },
-  { canonicalTab: "player-skill-rolls", id: "action", label: "Action" },
+  { canonicalTab: "player-skill-rolls", id: "action", label: "Skill rolls" },
   { canonicalTab: "maps", id: "map", label: "Map" },
   { canonicalTab: "blackboard", id: "blackboard", label: "Blackboard" },
   { canonicalTab: "character", id: "character", label: "Character" },

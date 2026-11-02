@@ -146,7 +146,9 @@ test.describe("Player active-play sub-navigation", () => {
       const playViews = rendered.navs.find((nav) => nav.label === "Play views");
       expect(playViews?.links.map((link) => link.text)).toEqual([
         "Situation",
-        "Action",
+        // #848 renamed this row entry from `Action` to the name of the
+        // destination it already carried.
+        "Skill rolls",
         "Map",
         "Blackboard",
         "Character",
