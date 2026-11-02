@@ -330,11 +330,11 @@ export function CampaignWorkspaceNavigation({
  *
  * A player sees the one Play arena: a shared header naming the Scenario and the
  * active Encounter, and a single `Play views` row holding
- * `Situation | Action | Map | Blackboard | Character`, plus `Player combat`
+ * `Situation | Skill rolls | Map | Blackboard | Character`, plus `Player combat`
  * while an Encounter is active. The player Combat entry point keeps its own
- * `?tab=player-combat` route rather than being folded into Action — Action
- * composition is a later slice — but it no longer occupies a second contextual
- * row of its own (#787).
+ * `?tab=player-combat` route and is not composed into `Skill rolls`, which
+ * renders only the Skill roll screen (#848); it no longer occupies a second
+ * contextual row of its own (#787).
  *
  * A GM's navigation is unchanged: the Scenario and Encounter tools row as it
  * was, including the GM-only Combat link.
@@ -437,7 +437,7 @@ export function ScenarioPlayNavigation({
       label: view.label,
     })),
     // The player Combat entry point keeps its own `?tab=player-combat` route and
-    // is not folded into Action; it now sits inside the one Play views row
+    // is not folded into `Skill rolls`; it sits inside the one Play views row
     // instead of a second contextual row of its own (#787).
     ...(activeEncounterId
       ? [
@@ -813,8 +813,6 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
   const activeEncounterSummary = activeScenarioEncounters.find(
     (summary) => summary.id === workspaceState.activeEncounterId,
   );
-  const canComposeActionCombat =
-    activeScenario?.status === "live" && activeEncounterSummary?.status === "active";
   const activeEncounterId = activeEncounterSummary?.id;
   const shouldLoadActiveEncounter =
     canAccessGmEncounter &&
@@ -1598,30 +1596,25 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
               )}
             </>
           ) : workspaceState.activeScenarioId && workspaceState.activeEncounterId ? (
-            <>
-              {canComposeActionCombat ? (
-                <ScenarioPlayerCombatPageContent
-                  campaignId={campaignId}
-                  embedded
-                  encounterId={workspaceState.activeEncounterId}
-                  encounterTitle={activeEncounterSummary?.title}
-                  participantId={searchParams.get("participantId") ?? undefined}
-                  scenarioId={workspaceState.activeScenarioId}
-                  showParticipantSelector={false}
-                  showWorkspaceHeader={false}
-                  workspaceTab="player-skill-rolls"
-                />
-              ) : null}
-              <PlayerRoleplayingEncounterScreen
-                campaignId={campaignId}
-                embedded
-                encounterId={workspaceState.activeEncounterId}
-                scenarioId={workspaceState.activeScenarioId}
-                surface="skill-rolls"
-                workspaceTab="player-skill-rolls"
-                workspaceScreenName="Player skill rolls"
-              />
-            </>
+            /*
+             * The Skill rolls surface is the whole surface (#848). It previously
+             * mounted the player Combat surface above this screen whenever the
+             * Scenario was live and its Encounter active, which displaced the
+             * Skill roll grid down a 6,000-line Combat page as soon as the
+             * Combat projection arrived -- the "brief Skill-roll render followed
+             * by a Combat takeover" the Product Owner reported. Combat keeps its
+             * own entry in the same Play views row, so no player capability is
+             * lost by rendering only the Skill roll screen here.
+             */
+            <PlayerRoleplayingEncounterScreen
+              campaignId={campaignId}
+              embedded
+              encounterId={workspaceState.activeEncounterId}
+              scenarioId={workspaceState.activeScenarioId}
+              surface="skill-rolls"
+              workspaceTab="player-skill-rolls"
+              workspaceScreenName="Player skill rolls"
+            />
           ) : (
             <section style={panelStyle}>
               <strong>No player skill rolls are currently available.</strong>

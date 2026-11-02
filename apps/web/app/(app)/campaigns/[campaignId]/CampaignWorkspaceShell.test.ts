@@ -243,6 +243,11 @@ describe("CampaignWorkspaceShell roleplay encounter routing", () => {
     );
     expect(source).toContain("if (nextHref !== currentHref) {");
     expect(source).toContain("No participant is available for player combat.");
-    expect(source.match(/<ScenarioPlayerCombatPageContent/g)).toHaveLength(3);
+    // Two mounts, both on the `player-combat` tab: the GM inspection mount and
+    // the player's own. The third mount was the `player-skill-rolls` Action
+    // composition, removed by #848 so that Skill rolls renders only the Skill
+    // roll screen.
+    expect(source.match(/<ScenarioPlayerCombatPageContent/g)).toHaveLength(2);
+    expect(source).not.toContain("canComposeActionCombat");
   });
 });

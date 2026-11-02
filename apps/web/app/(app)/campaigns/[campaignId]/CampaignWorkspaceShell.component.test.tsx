@@ -242,7 +242,8 @@ describe("Scenario Play navigation", () => {
       within(playViews)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Situation", "Action", "Map", "Blackboard", "Character", "Player combat"]);
+    ).toEqual(["Situation", "Skill rolls", "Map", "Blackboard", "Character", "Player combat"]);
+    expect(within(playViews).queryByRole("link", { name: "Action" })).not.toBeInTheDocument();
 
     // #787: one contextual row only, and one Map/Blackboard entry each in it.
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
@@ -253,7 +254,7 @@ describe("Scenario Play navigation", () => {
       "href",
       "/campaigns/campaign-1?tab=scenario&scenarioId=scenario-1&encounterId=encounter-1",
     );
-    expect(within(playViews).getByRole("link", { name: "Action" })).toHaveAttribute(
+    expect(within(playViews).getByRole("link", { name: "Skill rolls" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-1&encounterId=encounter-1",
     );
@@ -270,10 +271,12 @@ describe("Scenario Play navigation", () => {
       "/campaigns/campaign-1?tab=character&scenarioId=scenario-1&encounterId=encounter-1",
     );
 
-    // The consolidated tabs are no longer separate player entry points.
+    // The consolidated tabs are no longer separate player entry points. `Skill
+    // rolls` is the one that remains, because #848 renamed this row's `Action`
+    // entry to the name of the destination it already carried.
     expect(within(playViews).queryByRole("link", { name: "Scenario" })).not.toBeInTheDocument();
     expect(within(playViews).queryByRole("link", { name: "Encounter" })).not.toBeInTheDocument();
-    expect(within(playViews).queryByRole("link", { name: "Skill rolls" })).not.toBeInTheDocument();
+    expect(within(playViews).getAllByRole("link", { name: "Skill rolls" })).toHaveLength(1);
 
     // A player never sees the GM-only Combat tooling.
     expect(screen.queryByRole("link", { name: "Combat" })).not.toBeInTheDocument();
@@ -323,7 +326,7 @@ describe("Scenario Play navigation", () => {
 
     expect(screen.getByRole("navigation", { name: "Play views" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Player combat" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Action" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Skill rolls" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-1",
     );
@@ -332,10 +335,10 @@ describe("Scenario Play navigation", () => {
   it("marks the Play view that presents each consolidated tab as current", () => {
     for (const [activeTab, currentView] of [
       ["scenario", "Situation"],
-      ["encounter", "Action"],
-      ["player-encounter", "Action"],
-      ["skill-rolls", "Action"],
-      ["player-skill-rolls", "Action"],
+      ["encounter", "Skill rolls"],
+      ["player-encounter", "Skill rolls"],
+      ["skill-rolls", "Skill rolls"],
+      ["player-skill-rolls", "Skill rolls"],
       ["maps", "Map"],
       ["blackboard", "Blackboard"],
       ["character", "Character"],
