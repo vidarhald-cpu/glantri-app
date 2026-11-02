@@ -635,7 +635,14 @@ function buildAttackReadyEncounter(): EncounterSession {
   });
 }
 
-function buildDefenseReviewEncounter(): EncounterSession {
+/**
+ * `ob` and `rollTotal` default to the connecting attack this suite already used. `resolveCombatToHit`
+ * derives `hit` from `ob - defenderDb + rollTotal`, so a lower pair produces the recorded miss
+ * #832's first acceptance case needs without asserting `hit` into the fixture by hand.
+ */
+function buildDefenseReviewEncounter(
+  options: { ob?: number; rollTotal?: number } = {},
+): EncounterSession {
   const encounter = buildAttackReadyEncounter();
   const state = combatRoundStateSchema.parse(encounter.combatRoundState);
   const opportunity = state.participants.find(
@@ -652,10 +659,10 @@ function buildDefenseReviewEncounter(): EncounterSession {
     declarationId: opportunity.declarationId,
     defenderDb: 20,
     defenderParticipantId: "encounter-defender",
-    ob: 40,
+    ob: options.ob ?? 40,
     phase: "phase1",
     rollD20: 10,
-    rollTotal: 10,
+    rollTotal: options.rollTotal ?? 10,
     rolledAt: "2026-07-23T10:02:10.000Z",
     weaponInstanceId: opportunity.weaponInstanceId,
     weaponName: "Long sword",
@@ -1389,7 +1396,13 @@ describe("CombatRoundManagerPanel defense review", () => {
     scenarioParticipantWithDefenseLoadout(),
   ];
 
-  it("renders mandatory GM awareness and per-source override controls", async () => {
+  /**
+   * #832: the generic awareness checkbox is gone and the per-hand sources stay independently
+   * selectable, including both at once. The absence is paired with the two per-hand checkboxes and
+   * the mounted region as positive controls, so it is asserted where the removed control would
+   * have rendered rather than where no review renders at all.
+   */
+  it("offers independently selectable per-hand sources, names the combination, and carries no awareness control", async () => {
     render(
       <CombatRoundManagerPanel
         encounter={buildDefenseReviewEncounter()}
@@ -1398,25 +1411,64 @@ describe("CombatRoundManagerPanel defense review", () => {
     );
 
     const choices = await screen.findByLabelText("Defense review choices");
-    const awareness = within(choices).getByRole("checkbox", {
-      name: "Defender is aware of this attack",
-    });
     const sword = within(choices).getByRole("checkbox", {
       name: "Main hand: Defender sword",
     });
     const shield = within(choices).getByRole("checkbox", {
       name: "Off hand: Round shield",
     });
-    expect(awareness).toBeChecked();
+    expect(within(choices).getAllByRole("checkbox")).toHaveLength(2);
+    expect(
+      within(choices).queryByRole("checkbox", { name: "Defender is aware of this attack" }),
+    ).toBeNull();
+    expect(
+      within(choices).queryByText(/This review is committed for this exact attack/),
+    ).toBeNull();
     expect(sword).toBeChecked();
     expect(shield).toBeChecked();
 
-    fireEvent.click(awareness);
+    expect(
+      within(choices).getByText("Defender sword + Round shield · DB — · DM — · P —"),
+    ).toBeTruthy();
+
     fireEvent.click(shield);
-    expect(awareness).not.toBeChecked();
     expect(sword).toBeChecked();
     expect(shield).not.toBeChecked();
+    expect(within(choices).getByText("Defender sword · DB — · DM — · P —")).toBeTruthy();
+    fireEvent.click(sword);
+    expect(sword).not.toBeChecked();
+    expect(shield).not.toBeChecked();
+    expect(
+      within(choices).getByText("No defense source selected · DB — · DM — · P —"),
+    ).toBeTruthy();
+    fireEvent.click(shield);
+    expect(sword).not.toBeChecked();
+    expect(shield).toBeChecked();
+    expect(within(choices).getByText("Round shield · DB — · DM — · P —")).toBeTruthy();
+    fireEvent.click(sword);
+    expect(sword).toBeChecked();
+    expect(shield).toBeChecked();
+    expect(
+      within(choices).getByText("Defender sword + Round shield · DB — · DM — · P —"),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Commit defense review" })).toBeTruthy();
+  });
+
+  /**
+   * #832 acceptance 1. The miss is the recorded `hit === false` of the exact incoming attack. The
+   * live commit control is the positive control: the defense-review task is mounted on this very
+   * render, so the choices region would have rendered here had the attack connected.
+   */
+  it("asks for no defense review when the attack already missed", async () => {
+    render(
+      <CombatRoundManagerPanel
+        encounter={buildDefenseReviewEncounter({ ob: 20, rollTotal: 3 })}
+        scenarioParticipants={participants()}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Commit defense review" })).toBeTruthy();
+    expect(screen.queryByLabelText("Defense review choices")).toBeNull();
   });
 
   it("commits the rendered choices once and advances to the latest canonical snapshot", async () => {
@@ -1438,16 +1490,15 @@ describe("CombatRoundManagerPanel defense review", () => {
     );
 
     const choices = await screen.findByLabelText("Defense review choices");
-    fireEvent.click(
-      within(choices).getByRole("checkbox", { name: "Defender is aware of this attack" }),
-    );
     fireEvent.click(within(choices).getByRole("checkbox", { name: "Off hand: Round shield" }));
     fireEvent.click(screen.getByRole("button", { name: "Commit defense review" }));
 
     await waitFor(() => expect(mocks.commitDefenseReview).toHaveBeenCalledTimes(1));
+    // #832 removed the GM awareness control, so the committed awareness is the canonical
+    // attacker-visibility default the server also records as `awarenessDefault`.
     expect(mocks.commitDefenseReview).toHaveBeenCalledWith(
       expect.objectContaining({
-        aware: false,
+        aware: true,
         executionGroupId: expect.any(String),
         sourceSelections: expect.arrayContaining([
           { included: true, itemId: "defender-sword" },
