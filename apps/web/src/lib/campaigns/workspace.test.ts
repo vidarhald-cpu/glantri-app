@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { EncounterSession, Scenario, ScenarioParticipant } from "@glantri/domain";
+import type {
+  EncounterSession,
+  PlayerCampaignHomeRecord,
+  Scenario,
+  ScenarioParticipant,
+} from "@glantri/domain";
 
 import {
   buildCampaignEncounterHref,
@@ -9,6 +14,9 @@ import {
   buildCampaignTaskHref,
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
+  buildPlayerCampaignResumeHref,
+  getPlayerCampaignResumeLabel,
+  PLAYER_COMBAT_PLAY_ENTRY_LABEL,
   resolveActiveCampaignPlayView,
   resolveCampaignTaskTargetId,
   resolveCampaignWorkspaceState,
@@ -201,6 +209,39 @@ describe("campaign workspace", () => {
       "Character",
     ]);
     expect(buildCampaignPlayViews().map((view) => view.label)).not.toContain("Action");
+  });
+
+  it("names the player Combat row entry `Combat` and routes it to the player Combat tab", () => {
+    // #849: the entry was labelled `Player combat`; the specified row says `Combat`.
+    expect(PLAYER_COMBAT_PLAY_ENTRY_LABEL).toBe("Combat");
+    // It stays outside the five registry Play views: the entry is conditional on
+    // an active Encounter and keeps its own route (#848, #849).
+    expect(buildCampaignPlayViews().map((view) => view.label)).not.toContain("Combat");
+    expect(buildCampaignPlayViews().map((view) => view.canonicalTab)).not.toContain(
+      "player-combat",
+    );
+  });
+
+  it("builds the folded Campaign Home resume action from the server's resume target", () => {
+    const record = (resume: PlayerCampaignHomeRecord["resume"]) =>
+      ({
+        campaign: { id: "camp-1" },
+        characters: [],
+        resume,
+        scenarios: [],
+      }) as unknown as PlayerCampaignHomeRecord;
+
+    const combat = record({ encounterId: "enc-1", scenarioId: "scn-1", tab: "player-combat" });
+    expect(getPlayerCampaignResumeLabel(combat)).toBe("Continue combat");
+    expect(buildPlayerCampaignResumeHref(combat)).toBe(
+      "/campaigns/camp-1?tab=player-combat&scenarioId=scn-1&encounterId=enc-1",
+    );
+    expect(getPlayerCampaignResumeLabel(record({ tab: "encounter" }))).toBe("Continue encounter");
+    expect(getPlayerCampaignResumeLabel(record({ tab: "scenario" }))).toBe("Continue scenario");
+    expect(getPlayerCampaignResumeLabel(record({ tab: "campaign" }))).toBe("Open campaign");
+    expect(buildPlayerCampaignResumeHref(record({ tab: "campaign" }))).toBe(
+      "/campaigns/camp-1?tab=campaign",
+    );
   });
 
   it("targets each Play view at an existing canonical workspace tab", () => {

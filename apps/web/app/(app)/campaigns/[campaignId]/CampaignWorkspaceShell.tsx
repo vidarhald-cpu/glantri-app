@@ -45,6 +45,7 @@ import {
   buildCampaignWorkspaceHref,
   buildCampaignWorkspaceTabs,
   isLiveCampaignScenario,
+  PLAYER_COMBAT_PLAY_ENTRY_LABEL,
   resolveActiveCampaignPlayView,
   resolveCampaignTaskTargetId,
   resolveCampaignWorkspaceState,
@@ -55,6 +56,12 @@ import EncounterDetail from "@/features/encounters/EncounterDetail";
 import CampaignDetailPageContent from "./CampaignDetailPageContent";
 import CampaignWorkspaceLoadErrorState from "./CampaignWorkspaceLoadErrorState";
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
+import {
+  buildPlayerScenarioContext,
+  PlayerCampaignHomeSummary,
+  usePlayerCampaignHome,
+  type PlayerScenarioContext,
+} from "./PlayerCampaignLanding";
 import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
 import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
 import ScenarioDetailPageContent from "./scenarios/[scenarioId]/ScenarioDetailPageContent";
@@ -94,6 +101,8 @@ interface CurrentScenarioContextPanelProps {
   }) => string;
   canAccessGmEncounter: boolean;
   encounters: EncounterSessionSummary[];
+  /** The folded Campaign Home lines for each Scenario: Characters played and the current Encounter. */
+  playerContext?: Record<string, PlayerScenarioContext>;
   scenarios: Array<Scenario | PlayerAccessibleScenario>;
 }
 
@@ -101,6 +110,7 @@ export function CurrentScenarioContextPanel({
   buildWorkspaceHref,
   canAccessGmEncounter,
   encounters,
+  playerContext,
   scenarios,
 }: CurrentScenarioContextPanelProps) {
   return (
@@ -142,6 +152,9 @@ export function CurrentScenarioContextPanel({
                   }}
                 >
                   <strong>{scenario.name}</strong>
+                  {playerContext?.[scenario.id]?.characters.length ? (
+                    <small>Playing as {playerContext[scenario.id]!.characters.join(", ")}</small>
+                  ) : null}
                   <Link
                     href={buildCampaignScenarioHref({
                       campaignId: scenario.campaignId,
@@ -181,6 +194,9 @@ export function CurrentScenarioContextPanel({
                   ) : (
                     <small>No active Encounter yet.</small>
                   )}
+                  {activeEncounters.length === 0 && playerContext?.[scenario.id]?.encounterTitle ? (
+                    <small>Current encounter: {playerContext[scenario.id]!.encounterTitle}</small>
+                  ) : null}
                 </article>
               );
             })}
@@ -194,12 +210,12 @@ export function CurrentScenarioContextPanel({
 /**
  * The Campaign-level navigation above the Scenario Play arena.
  *
- * A player's Campaign row carries the Blackboard and Maps tools, which are the
- * same `?tab=blackboard` and `?tab=maps` destinations the Play views row names
- * `Blackboard` and `Map`. While the Play arena is on screen that row is the one
- * active-play sub-navigation, so the Campaign row drops its duplicate pair
- * (#787). It keeps them whenever no Play arena is rendered, which is the only
- * state in which they are the sole way to reach those tabs.
+ * A player's Campaign row carries `Campaigns`, `Campaign` and the Blackboard and
+ * Maps tools. While the Play arena is on screen the Play views row is the one
+ * player navigation level (#787, #849): it names `Blackboard` and `Map` itself,
+ * and `Campaigns` in the application navigation reaches the same Campaign
+ * landing `Campaign` does, so the Campaign row renders nothing at all. It is the
+ * player's only row whenever no Play arena is rendered, and is unchanged there.
  *
  * A GM's navigation is unchanged.
  */
@@ -248,6 +264,10 @@ export function CampaignWorkspaceNavigation({
   ];
 
   if (!canManageCampaign) {
+    if (playArenaPresent) {
+      return null;
+    }
+
     return (
       <nav
         aria-label="Campaign navigation"
@@ -269,18 +289,16 @@ export function CampaignWorkspaceNavigation({
         >
           Campaign
         </Link>
-        {playArenaPresent
-          ? null
-          : relatedLinks.map((link) => (
-              <Link
-                aria-current={activeTab === link.id ? "page" : undefined}
-                href={link.href}
-                key={link.id}
-                style={commonLinkStyle}
-              >
-                {link.label}
-              </Link>
-            ))}
+        {relatedLinks.map((link) => (
+          <Link
+            aria-current={activeTab === link.id ? "page" : undefined}
+            href={link.href}
+            key={link.id}
+            style={commonLinkStyle}
+          >
+            {link.label}
+          </Link>
+        ))}
       </nav>
     );
   }
@@ -328,13 +346,13 @@ export function CampaignWorkspaceNavigation({
 /**
  * Navigation inside a live Scenario.
  *
- * A player sees the one Play arena: a shared header naming the Scenario and the
- * active Encounter, and a single `Play views` row holding
- * `Situation | Skill rolls | Map | Blackboard | Character`, plus `Player combat`
- * while an Encounter is active. The player Combat entry point keeps its own
- * `?tab=player-combat` route and is not composed into `Skill rolls`, which
- * renders only the Skill roll screen (#848); it no longer occupies a second
- * contextual row of its own (#787).
+ * A player sees one line: the Scenario and active Encounter as compact context
+ * (plain text, not links, so they are not a second navigation hierarchy) and the
+ * single `Play views` row holding
+ * `Situation | Skill rolls | Map | Blackboard | Character`, plus `Combat` while
+ * an Encounter is active (#849; the entry was labelled `Player combat`). The
+ * player Combat entry keeps its own `?tab=player-combat` route and is not
+ * composed into `Skill rolls`, which renders only the Skill roll screen (#848).
  *
  * A GM's navigation is unchanged: the Scenario and Encounter tools row as it
  * was, including the GM-only Combat link.
@@ -348,6 +366,7 @@ export function ScenarioPlayNavigation({
   canAccessGmEncounter,
   scenarioId,
   scenarioName,
+  scenarioStatus,
 }: {
   activeEncounterId?: string;
   activeEncounterTitle?: string;
@@ -361,6 +380,8 @@ export function ScenarioPlayNavigation({
   canAccessGmEncounter: boolean;
   scenarioId: string;
   scenarioName: string;
+  /** Shown beside the name only when the Scenario is not simply live. */
+  scenarioStatus?: string;
 }) {
   if (canAccessGmEncounter) {
     return (
@@ -436,9 +457,10 @@ export function ScenarioPlayNavigation({
       key: view.id,
       label: view.label,
     })),
-    // The player Combat entry point keeps its own `?tab=player-combat` route and
-    // is not folded into `Skill rolls`; it sits inside the one Play views row
-    // instead of a second contextual row of its own (#787).
+    // The player Combat entry keeps its own `?tab=player-combat` route and is not
+    // folded into `Skill rolls`; it sits inside the one Play views row (#787).
+    // Whether it is present at all depends on `activeEncounterId`; that
+    // condition is unchanged and awaits a Product Owner ruling (#849).
     ...(activeEncounterId
       ? [
           {
@@ -449,19 +471,30 @@ export function ScenarioPlayNavigation({
               tab: "player-combat" as const,
             }),
             key: "player-combat",
-            label: "Player combat",
+            label: PLAYER_COMBAT_PLAY_ENTRY_LABEL,
           },
         ]
       : []),
   ];
 
   return (
-    <div style={{ display: "grid", gap: "0.5rem" }}>
+    <div
+      style={{
+        alignItems: "baseline",
+        columnGap: "1.25rem",
+        display: "flex",
+        flexWrap: "wrap",
+        rowGap: "0.35rem",
+      }}
+    >
       <section
         aria-label="Play header"
         style={{ alignItems: "baseline", display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
       >
         <strong>{scenarioName}</strong>
+        {scenarioStatus && scenarioStatus !== "live" ? (
+          <small>{formatScenarioStatus(scenarioStatus)}</small>
+        ) : null}
         {activeEncounterTitle ? (
           <span
             data-testid="play-header-encounter"
@@ -806,6 +839,16 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
     activeScenario.status !== "archived" &&
     !canAccessGmEncounter,
   );
+  const playerCampaignHome = usePlayerCampaignHome({
+    campaignId,
+    enabled:
+      Boolean(currentUser) &&
+      !loading &&
+      !workspaceLoadError &&
+      !canAccessGmEncounter &&
+      accessMode === "player" &&
+      workspaceState.activeTab === "campaign",
+  });
   const activeScenarioRoundNumber =
     activeScenario && "liveState" in activeScenario
       ? activeScenario.liveState?.roundNumber
@@ -1257,7 +1300,27 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
         playArenaPresent={playArenaPresent}
       />
 
-      {activeScenario ? (
+      {activeScenario && playArenaPresent ? (
+        /*
+         * The player's one play-navigation level (#849): Scenario and Encounter as
+         * compact context and the Play views row on a single line. The Campaign
+         * and Scenario breadcrumb is not rendered here; it repeated the same
+         * names and links the row and the application navigation already carry.
+         */
+        <section style={{ ...panelStyle, gap: "0.5rem", padding: "0.5rem 1rem" }}>
+          <ScenarioPlayNavigation
+            activeEncounterId={activeEncounterSummary?.id}
+            activeEncounterTitle={activeEncounterSummary?.title}
+            activeTab={workspaceState.activeTab}
+            buildWorkspaceHref={buildWorkspaceHref}
+            campaignId={campaignId}
+            canAccessGmEncounter={canAccessGmEncounter}
+            scenarioId={activeScenario.id}
+            scenarioName={activeScenario.name}
+            scenarioStatus={activeScenario.status}
+          />
+        </section>
+      ) : activeScenario ? (
         <section style={{ ...panelStyle, gap: "0.5rem", padding: "0.75rem 1rem" }}>
           <nav
             aria-label="Scenario and Encounter context"
@@ -1352,6 +1415,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                 buildWorkspaceHref={buildWorkspaceHref}
                 canAccessGmEncounter={canAccessGmEncounter}
                 encounters={encounterSummaries}
+                playerContext={buildPlayerScenarioContext(playerCampaignHome)}
                 scenarios={liveScenarios}
               />
               <section style={panelStyle}>
@@ -1360,6 +1424,7 @@ export default function CampaignWorkspaceShell({ campaignId }: CampaignWorkspace
                   {accessibleCampaign?.description ||
                     "No campaign description has been written yet."}
                 </div>
+                <PlayerCampaignHomeSummary state={playerCampaignHome} />
                 {completedScenarios.length > 0 ? (
                   <section style={{ display: "grid", gap: "0.5rem" }}>
                     <h3 style={{ margin: 0 }}>Completed history</h3>

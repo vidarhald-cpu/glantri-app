@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   loadEncounterSummaries: vi.fn(),
   loadMyParticipant: vi.fn(),
   loadParticipants: vi.fn(),
+  loadPlayerHome: vi.fn(),
   replace: vi.fn(),
   searchParams: new URLSearchParams(),
   setCurrentUser: vi.fn(),
@@ -58,6 +59,10 @@ vi.mock("@/lib/api/localServiceClient", () => ({
   loadScenarioEncounterSummaries: mocks.loadEncounterSummaries,
   loadScenarioMyParticipant: mocks.loadMyParticipant,
   loadScenarioParticipants: mocks.loadParticipants,
+}));
+
+vi.mock("@/lib/api/campaignClient", () => ({
+  loadPlayerCampaignHome: mocks.loadPlayerHome,
 }));
 
 vi.mock("@/lib/campaigns/gmCombatRefresh", () => ({ pollGmCombatSnapshot: vi.fn() }));
@@ -432,7 +437,7 @@ describe("Campaign Skill rolls composition by perspective and encounter state", 
       "/campaigns/campaign-1?tab=player-skill-rolls&scenarioId=scenario-private&encounterId=encounter-private",
     );
     expect(within(playViews).queryByRole("link", { name: "Action" })).not.toBeInTheDocument();
-    expect(within(playViews).getByRole("link", { name: "Player combat" })).toHaveAttribute(
+    expect(within(playViews).getByRole("link", { name: "Combat" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-private&encounterId=encounter-private",
     );
@@ -496,5 +501,99 @@ describe("Campaign Skill rolls composition by perspective and encounter state", 
     const combat = await screen.findByTestId("combat-surface");
     expect(combat).toHaveAttribute("data-read-only", "true");
     expect(combat).toHaveAttribute("data-tab", "player-combat");
+  });
+});
+
+describe("Campaign workspace navigation levels by perspective (#849)", () => {
+  function navigationLabels(): string[] {
+    return screen.getAllByRole("navigation").map((nav) => nav.getAttribute("aria-label") ?? "");
+  }
+
+  it("gives a player in a live Scenario exactly one navigation level above the content", async () => {
+    primeActionView({ encounterStatus: "active", perspective: "player" });
+    render(<CampaignWorkspaceShell campaignId="campaign-1" />);
+
+    await screen.findByTestId("roleplay-surface");
+
+    // No Campaign row, no Campaign > Scenario > Encounter breadcrumb: one nav.
+    expect(navigationLabels()).toEqual(["Play views"]);
+    expect(
+      screen.queryByRole("navigation", { name: "Scenario and Encounter context" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("navigation", { name: "Campaign navigation" }),
+    ).not.toBeInTheDocument();
+
+    // The Scenario and Encounter survive as compact, link-free context.
+    const header = screen.getByRole("region", { name: "Play header" });
+    expect(within(header).getByText("Private Council Session")).toBeVisible();
+    expect(within(header).getByText("Encounter · Council encounter")).toBeVisible();
+    expect(within(header).queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("navigation", { name: "Play views" }))
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Situation", "Skill rolls", "Map", "Blackboard", "Character", "Combat"]);
+  });
+
+  it("leaves the GM's three navigation rows as they were", async () => {
+    primeActionView({ encounterStatus: "active", perspective: "gm" });
+    render(<CampaignWorkspaceShell campaignId="campaign-1" />);
+
+    await screen.findByTestId("roleplay-surface");
+
+    expect(navigationLabels()).toEqual([
+      "Campaign tasks",
+      "Related Campaign tools",
+      "Scenario and Encounter context",
+      "Scenario and Encounter tools",
+    ]);
+  });
+
+  it("folds Campaign Home into the player's Campaign landing without a second Scenario list", async () => {
+    primeActionView({ encounterStatus: "active", perspective: "player" });
+    mocks.searchParams = new URLSearchParams("tab=campaign");
+    mocks.loadPlayerHome.mockResolvedValue([
+      {
+        campaign: {
+          description: "A tense week at court.",
+          id: "campaign-1",
+          name: "The Lost Seal",
+          status: "active",
+        },
+        characters: [{ id: "character-1", name: "Test Hero" }],
+        resume: {
+          encounterId: "encounter-private",
+          scenarioId: "scenario-private",
+          tab: "player-combat",
+        },
+        scenarios: [
+          {
+            characters: [{ id: "character-1", name: "Test Hero" }],
+            encounter: { id: "encounter-private", status: "active", title: "Council encounter" },
+            scenario: actionPlayerScenario,
+          },
+        ],
+      },
+    ]);
+    render(<CampaignWorkspaceShell campaignId="campaign-1" />);
+
+    expect(await screen.findByText("Your character")).toBeVisible();
+    expect(screen.getByText("Test Hero")).toBeVisible();
+    expect(screen.getByText("Playing as Test Hero")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Continue combat" })).toHaveAttribute(
+      "href",
+      "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-private&encounterId=encounter-private",
+    );
+    // One Scenario list: the name appears once, in the Current Scenario card.
+    expect(screen.getAllByText("Private Council Session")).toHaveLength(1);
+    expect(mocks.loadPlayerHome).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not ask for a player's Campaign Home on the GM landing or off the landing", async () => {
+    primeActionView({ encounterStatus: "active", perspective: "player" });
+    render(<CampaignWorkspaceShell campaignId="campaign-1" />);
+    await screen.findByTestId("roleplay-surface");
+    expect(mocks.loadPlayerHome).not.toHaveBeenCalled();
   });
 });

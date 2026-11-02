@@ -224,9 +224,10 @@ test.describe("Player Skill rolls surface", () => {
         "Map",
         "Blackboard",
         "Character",
-        "Player combat",
+        "Combat",
       ]);
       expect(rowLabels).not.toContain("Action");
+      expect(rowLabels).not.toContain("Player combat");
 
       // The measured bound for the hold window below.
       const combatLatency = await measureCombatRenderLatency({ fixture, page: playerPage });
@@ -248,7 +249,7 @@ test.describe("Player Skill rolls surface", () => {
 
       // Acceptance 4: no player capability is lost — Combat keeps its own entry
       // in the same row and still opens the active Combat.
-      await playViews(playerPage).getByRole("link", { name: "Player combat" }).click();
+      await playViews(playerPage).getByRole("link", { name: "Combat", exact: true }).click();
       await playerPage.waitForURL(/tab=player-combat/);
       await expect(
         playerPage.getByText(COMBAT_SURFACE_MARKER, { exact: true }).first(),
@@ -330,22 +331,21 @@ test.describe("Player Skill rolls surface", () => {
       const start = `/campaigns/${campaignId}?tab=scenario&scenarioId=${scenarioId}&encounterId=${encounterId}`;
 
       // Acceptance 3: Situation, Map, Blackboard, Character and the Combat entry
-      // under its current name all still open. The Combat entry is NOT renamed
-      // here — that is lane P2.
+      // all still open. #849 renamed the Combat entry from `Player combat`.
       for (const [label, tab] of [
         ["Situation", "scenario"],
         ["Skill rolls", "player-skill-rolls"],
         ["Map", "maps"],
         ["Blackboard", "blackboard"],
         ["Character", "character"],
-        ["Player combat", "player-combat"],
+        ["Combat", "player-combat"],
       ] as const) {
         await playerPage.goto(start);
         await expect(playViews(playerPage)).toBeVisible();
-        await playViews(playerPage).getByRole("link", { name: label }).click();
+        await playViews(playerPage).getByRole("link", { name: label, exact: true }).click();
         await playerPage.waitForURL(new RegExp(`tab=${tab}(&|$)`));
         await expect(
-          playViews(playerPage).getByRole("link", { name: label }),
+          playViews(playerPage).getByRole("link", { name: label, exact: true }),
           `${label} must be the current Play view after opening it`,
         ).toHaveAttribute("aria-current", "page");
         console.log(`#848 OPENED ${label} -> ${new URL(playerPage.url()).search}`);
