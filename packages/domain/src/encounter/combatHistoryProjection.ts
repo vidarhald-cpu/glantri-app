@@ -4,7 +4,10 @@ import type {
   CombatStepEventType,
 } from "./combatStepEventSchema";
 import { projectCombatResultEnvelope, type CombatResultEnvelope } from "./combatResultEnvelope";
-import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
+import {
+  deriveLegacyCombatStepEvents,
+  isCombatDeclarationEventObservationScreened,
+} from "./combatStepEvents";
 import {
   buildCombatLogProjection,
   projectCombatLogForViewer,
@@ -703,15 +706,67 @@ function projectEventIdentities(input: {
  * `parry` → `{ attackHit, brawlingContestOpened, parryPurpose, status, success }` (`:10610`,
  * legacy `:648`, narrower). Nothing is added to or moved into those buckets here.
  *
- * `offensive_parry_brawling`, `critical`, `damage_committed`, `hit_location` and the distance
- * maneuvers are deliberately absent: #862 scopes them to later lanes or holds them, and the last
- * four have no populated `publicOutcome` to admit.
+ * **`damage_committed` joined them in #863 (rows 2 and 3).** Its `publicOutcome` was
+ * `{ status: "committed" }` and now also carries the committed damage amount, the critical grade,
+ * the hit location and the short critical result title — four values promoted from the same event's
+ * `involvedOutcome` by `buildCombatCommittedDamagePublicOutcome`, on both writer paths. The
+ * admission here is what lets a bystander reach that bucket at all: `outcomeScope` stays
+ * `"involved"`, so `involvedPresentationRestricted` (`combatResultEnvelope.ts:199`) still withholds
+ * `resultPresentation` — `conciseOutcome`, `publicCombatNote`, `standardConsequences`,
+ * `committedConsequences` — and the legacy damage-review note, and the field-level projection below
+ * still requires `involved` for `involvedOutcome` and `ownRoll` for `rollerPrivate`. A bystander
+ * therefore receives the four promoted facts and the visible identities, and no armour arithmetic.
+ *
+ * `offensive_parry_brawling`, `critical`, `hit_location` and the distance maneuvers remain
+ * deliberately absent. The standalone `critical` and `hit_location` events carry no `publicOutcome`
+ * at all and #863 explicitly does not author one on them; the rest are scoped to later lanes.
+ * `damage_proposed` is refused outright at the top of `shouldProjectPlayerEvent` and stays refused.
  */
 const TABLE_VISIBLE_OUTCOME_EVENT_TYPES: readonly CombatStepEventType[] = [
   "attack",
+  "damage_committed",
   "initiative",
   "parry",
 ];
+
+/**
+ * Whether a round's declarations have been **committed**, and their content is therefore
+ * publishable to a participant that did not declare them (#863 row 1).
+ *
+ * This is the declaration counterpart of `isCombatInitiativeCommitted`, and the rule is the
+ * Product Owner's: *committed/revealed declarations are public after the existing declaration
+ * timing allows them*. "The existing declaration timing" is already defined three times in this
+ * codebase and all three agree, so this adds no fourth definition of the boundary — it names the
+ * one condition they share:
+ *
+ * - the session body withholds another participant's declaration while
+ *   `currentStep === "select_actions"` (`encounterRoutes.ts`,
+ *   `buildPlayerFacingRoundParticipantForViewer`);
+ * - the Combat Log filters an unpublished declaration round, supplied from
+ *   `progression.boundary.kind === "declaration"` in `projectCombatHistory` below;
+ * - `boundaryForStep` (`combatProgressionProjection/internal.ts`) maps exactly `pre_declaration`
+ *   and `select_actions` onto the `declaration` boundary.
+ *
+ * Reading the canonical boundary rather than the raw step is therefore the same condition and one
+ * step stricter: it also withholds during `pre_declaration`, where no declaration can have been
+ * committed yet.
+ *
+ * **Fail-closed, and this direction is the whole point of the row.** An active round whose
+ * boundary is not known is reported as not committed. The tracker path has no timing gate of its
+ * own — `shouldProjectPlayerEvent` admits a declaration event as soon as its owner is visible,
+ * with no round or step check — so the content gate must carry the timing with it or this lane
+ * publishes declarations *during* the declaration step and breaks the commitment rule the ruling
+ * explicitly preserved.
+ */
+function isCombatDeclarationCommitted(input: {
+  boundary?: CombatProgressionBoundaryKind;
+  /** True for any round that is not the active one; archived rounds are published in full. */
+  historical: boolean;
+}): boolean {
+  if (input.historical) return true;
+  if (!input.boundary) return false;
+  return input.boundary !== "declaration";
+}
 
 function shouldProjectPlayerEvent(input: {
   event: CombatStepEvent;
@@ -831,6 +886,14 @@ function shouldProjectPlayerEvent(input: {
 }
 
 export function projectCombatHistoryEvent(input: {
+  /**
+   * Declaration publication timing for this event's round (#863 row 1), normally supplied by
+   * `projectCombatHistory` through `projectRound` from `isCombatDeclarationCommitted`. Omitting it
+   * withholds the public declaration content and the declared target from a viewer that did not
+   * declare it, which is the fail-closed direction; it changes nothing for the declarer or the GM,
+   * and nothing for any other event type.
+   */
+  declarationCommitted?: boolean;
   event: CombatStepEvent;
   /**
    * Initiative publication timing for this event's round and step (#862 F1), normally supplied by
@@ -874,17 +937,35 @@ export function projectCombatHistoryEvent(input: {
     gm || allIdentitiesVisible
       ? input.event.id
       : `round:${input.event.roundNumber}:event:${input.event.sequence}`;
+  /*
+   * #863 row 1. Whether this viewer may receive this declaration's committed *content* — the
+   * action, secondary-action and movement labels in `publicOutcome`, and the declared target
+   * identity. The GM and the declarer always may. Anyone else may only once the round's
+   * declarations are committed, which is the condition the session body and the Combat Log both
+   * already apply and which the tracker path previously had no equivalent of.
+   *
+   * It is deliberately a *content* gate rather than an admission gate. The declaration event's own
+   * admission to a visible participant is a safe progression fact and must stay
+   * (`shouldProjectPlayerEvent`, #507 Tier 3): the DE tracker cell distinguishes submitted work
+   * from an ordinary pending declaration, and withholding the event would take that back.
+   */
+  const declarationContentPublished =
+    input.event.type === "declaration" && (gm || involved || input.declarationCommitted === true);
   const identities = projectEventIdentities({
     event: input.event,
     labels,
     viewer: input.viewer,
-  }).filter(
-    (identity) =>
-      input.event.type !== "declaration" ||
-      gm ||
-      involved ||
-      (identity.role !== "target" && identity.role !== "defender"),
-  );
+  }).filter((identity) => {
+    if (input.event.type !== "declaration") return true;
+    if (identity.role !== "target" && identity.role !== "defender") return true;
+    if (gm || involved) return true;
+    /*
+     * The declared target rides free on the Declaration row once the step has closed — except on an
+     * observing declaration, where `declarationTargetParticipantId` puts the *observed* opponent in
+     * the target slot and the session body screens exactly that from a non-controller.
+     */
+    return declarationContentPublished && !isCombatDeclarationEventObservationScreened(input.event);
+  });
   const resultEnvelope = projectCombatResultEnvelope({
     event: allIdentitiesVisible
       ? input.event
@@ -916,7 +997,22 @@ export function projectCombatHistoryEvent(input: {
         ownRoll && hasFacts(input.event.facts.rollerPrivate)
           ? playerFacingEventFacts(input.event.facts.rollerPrivate, input.viewer)
           : undefined,
-      publicOutcome: playerFacingEventFacts(input.event.facts.publicOutcome, input.viewer),
+      /*
+       * #863 row 1. A declaration's public bucket is withheld in full from a viewer that neither
+       * declared it nor is the GM until the round's declarations are committed. Withholding the
+       * whole bucket rather than the three named keys is the fail-closed choice: a later writer
+       * that adds a fourth public declaration fact inherits the timing condition instead of
+       * slipping past a key list nobody updated.
+       *
+       * No other event type reaches this branch, so nothing else changes. At this baseline a
+       * declaration's `publicOutcome` holds exactly the three labels `declarationPublicOutcome`
+       * authors, and before #863 it was empty — so the withheld state is byte-equal to what every
+       * bystander received before this lane.
+       */
+      publicOutcome:
+        input.event.type === "declaration" && !declarationContentPublished
+          ? {}
+          : playerFacingEventFacts(input.event.facts.publicOutcome, input.viewer),
     },
     // Canonical event/opportunity ids may embed participant or attack lineage. Player read models
     // use sequence-scoped aliases unless every referenced identity is visible to that viewer.
@@ -1182,9 +1278,10 @@ function projectSnapshot(input: {
 function projectRound(input: {
   events: readonly CombatStepEvent[];
   /**
-   * The canonical progression boundary of the **active** round (#862 F1). Supplied so that
-   * initiative publication timing is decided from the same boundary the web tracker reads, rather
-   * than from a second derivation. Undefined on an archived round, where `historical` settles it.
+   * The canonical progression boundary of the **active** round (#862 F1, and #863 row 1). Supplied
+   * so that initiative and declaration publication timing are decided from the same boundary the
+   * web tracker and the Combat Log read, rather than from a second derivation. Undefined on an
+   * archived round, where `historical` settles it.
    */
   activeRoundBoundary?: CombatProgressionBoundaryKind;
   /** True for a round that is not the active one, which is published in full. */
@@ -1201,6 +1298,10 @@ function projectRound(input: {
     events: input.events
       .map((event) =>
         projectCombatHistoryEvent({
+          declarationCommitted: isCombatDeclarationCommitted({
+            boundary: input.activeRoundBoundary,
+            historical: input.historical,
+          }),
           event,
           initiativeCommitted: isCombatInitiativeCommitted({
             boundary: input.activeRoundBoundary,
@@ -1364,8 +1465,17 @@ export function projectCombatHistory(input: {
               sourceRevision: input.source.revision,
               state,
             }),
-            unpublishedDeclarationRoundNumber:
-              progression.boundary.kind === "declaration" ? state.roundNumber : undefined,
+            /*
+             * #863 row 1 reuses this one condition rather than adding a fourth definition of
+             * declaration timing: the Combat Log's filter and the tracker path's content gate now
+             * read the same predicate against the same boundary.
+             */
+            unpublishedDeclarationRoundNumber: isCombatDeclarationCommitted({
+              boundary: progression.boundary.kind,
+              historical: false,
+            })
+              ? undefined
+              : state.roundNumber,
             viewer: input.viewer,
           }),
         }

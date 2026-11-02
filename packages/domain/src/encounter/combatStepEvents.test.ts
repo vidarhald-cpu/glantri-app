@@ -1178,3 +1178,155 @@ describe("deriveLegacyCombatStepEvents", () => {
     expect(events[5]?.ownerParticipantId).toBe(ATTACKER_ID);
   });
 });
+
+/*
+ * #863 row 1 — the declaration event's public fact bucket.
+ *
+ * Authoring is tested here; *publication* is not, and the distinction is the whole risk of this
+ * row. The bucket is authored unconditionally and `projectCombatHistoryEvent` withholds it from a
+ * viewer that did not declare it until the round's declarations are committed. The two directions
+ * of that timing gate are measured in `combatHistoryProjection.test.ts`.
+ */
+describe("#863 row 1 — declaration public outcome", () => {
+  const declaration = (overrides: Record<string, unknown> = {}) =>
+    combatRoundParticipantStateSchema.parse({
+      declaration: {
+        actionId: "attack_parry",
+        additionalActionNotes: "Hold the doorway.",
+        movementId: "walk_pace",
+        movementIntent: { distancePreferences: [], mode: "set_distance_preferences" },
+        phaseContexts: {
+          phase1: {
+            modifierBuckets: {
+              general: [],
+              situationDb: [],
+              situationInitiative: [],
+              situationObSkill: [],
+            },
+            targetParticipantId: DEFENDER_ID,
+          },
+        },
+        roundNumber: 1,
+        secondaryActionId: "talk_shout",
+        submittedAt: "2026-01-01T00:01:00.000Z",
+        submittedBy: "player",
+        ...overrides,
+      },
+      label: "Declarer",
+      participantId: ATTACKER_ID,
+    });
+
+  const declarationEvent = (participant: ReturnType<typeof declaration>) => {
+    const events = deriveLegacyCombatStepEvents({
+      commands: [
+        command({
+          createdAt: "2026-01-01T00:01:00.000Z",
+          id: "declaration-command",
+          participantId: ATTACKER_ID,
+          type: "declare_action",
+        }),
+      ],
+      encounterId: ENCOUNTER_ID,
+      participants: [participant],
+      roundNumber: 1,
+    });
+    const event = events.find((entry) => entry.type === "declaration");
+    if (!event) throw new Error("Expected a derived declaration event.");
+    return event;
+  };
+
+  it("authors exactly the action, secondary-action and movement labels, and nothing private", () => {
+    const event = declarationEvent(declaration());
+
+    // Field by field, and the key set exactly: `jsonb` does not preserve key order, so a
+    // stringify comparison would be unsound in either direction.
+    expect(event.facts.publicOutcome.actionLabel).toBe("Single attack");
+    expect(event.facts.publicOutcome.secondaryActionLabel).toBe("Talk / Shout");
+    expect(event.facts.publicOutcome.movementLabel).toBe("Set distance preferences");
+    expect(Object.keys(event.facts.publicOutcome).sort()).toEqual([
+      "actionLabel",
+      "movementLabel",
+      "secondaryActionLabel",
+    ]);
+
+    // Every field #863 names as staying private, proved absent as a key of the public bucket.
+    for (const key of [
+      "actionId",
+      "additionalActionNotes",
+      "intent",
+      "movementId",
+      "movementIntent",
+      "phaseContexts",
+      "secondaryActionContext",
+      "secondaryActionId",
+      "submittedBy",
+      "targetParticipantId",
+    ]) {
+      expect(
+        Object.hasOwn(event.facts.publicOutcome, key),
+        `${key} must not be a key of the declaration public bucket`,
+      ).toBe(false);
+    }
+
+    // Positive control on the other side of the boundary: the involved bucket is unchanged, so
+    // this row adds a bucket rather than relocating or re-keying one.
+    expect(event.facts.involvedOutcome).toMatchObject({
+      actionId: "attack_parry",
+      actionLabel: "Single attack",
+      additionalActionNotes: "Hold the doorway.",
+      movementLabel: "Set distance preferences",
+      secondaryActionId: "talk_shout",
+      secondaryActionLabel: "Talk / Shout",
+      submittedBy: "player",
+      targetParticipantId: DEFENDER_ID,
+    });
+  });
+
+  it("withholds the secondary-action label on an observing declaration, which is the screen the session body already applies", () => {
+    const observing = declarationEvent(
+      declaration({
+        secondaryActionContext: { action: "observe_opponent", targetParticipantId: DEFENDER_ID },
+        secondaryActionId: "observe_opponent",
+      }),
+    );
+
+    expect(observing.facts.publicOutcome.actionLabel).toBe("Single attack");
+    expect(observing.facts.publicOutcome.movementLabel).toBe("Set distance preferences");
+    expect(Object.hasOwn(observing.facts.publicOutcome, "secondaryActionLabel")).toBe(false);
+    // The involved audience still receives it, so the screen is a projection and not a deletion.
+    expect(observing.facts.involvedOutcome.secondaryActionLabel).toBe("Observe Opponent");
+
+    /*
+     * Discrimination: the same fixture with any other secondary action publishes the label, so
+     * the assertion above is measuring the observation screen rather than an absent value.
+     * `secondaryActionContext` is a discriminated union whose only member is `observe_opponent`
+     * (measured: any other `action` fails `combatRoundParticipantStateSchema`), so the control
+     * varies `secondaryActionId` with no context — which is also why the screen reads
+     * `secondaryActionContext?.action ?? secondaryActionId` and catches both shapes.
+     */
+    const shouting = declarationEvent(declaration({ secondaryActionId: "talk_shout" }));
+    expect(shouting.facts.publicOutcome.secondaryActionLabel).toBe("Talk / Shout");
+    const screenedByIdAlone = declarationEvent(
+      declaration({ secondaryActionId: "observe_opponent" }),
+    );
+    expect(Object.hasOwn(screenedByIdAlone.facts.publicOutcome, "secondaryActionLabel")).toBe(
+      false,
+    );
+  });
+
+  it("authors no public label a declaration does not carry", () => {
+    const bare = declarationEvent(
+      combatRoundParticipantStateSchema.parse({
+        declaration: {
+          actionId: "attack_parry",
+          roundNumber: 1,
+          submittedAt: "2026-01-01T00:01:00.000Z",
+          submittedBy: "player",
+        },
+        label: "Declarer",
+        participantId: ATTACKER_ID,
+      }),
+    );
+    expect(Object.keys(bare.facts.publicOutcome)).toEqual(["actionLabel"]);
+  });
+});
