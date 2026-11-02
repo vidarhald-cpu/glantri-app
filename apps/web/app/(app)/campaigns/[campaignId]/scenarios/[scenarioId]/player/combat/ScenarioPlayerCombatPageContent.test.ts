@@ -407,11 +407,28 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("setHistoryInspection({");
     expect(source).toContain("setHistoryInspection(undefined)");
     expect(source).toContain("cell.cellKey === playerCombatTrackerModel.operationalCursorCellKey");
-    expect(source).toContain("if (!nextCell?.inspectable) return");
     /*
-     * #771. The `inspectable` guard above stays, and the visible-step wrapper is added in front
-     * of it: this surface still builds a `pre_declaration` cell that can be inspectable, so
-     * inspectability alone does not keep the inspector off a step with no rendered column.
+     * #862 V1 row 6. The player cursor used to refuse to move onto any non-`inspectable` cell
+     * (`if (!nextCell?.inspectable) return false;`) while the GM surface wrote the selection
+     * unconditionally. The Product Owner ruled that every rendered cell is a landing and the
+     * inspector may show nothing, so the guard is now a cell-existence check plus the shared-stage
+     * condition the tracker model already applies to the inspection cursor — borrowed from
+     * `buildProjectedCombatTrackerModel` rather than re-derived here, so a destination this handler
+     * accepts is always one the tracker will draw the cursor on.
+     *
+     * Both directions are asserted because the source text is a weak instrument on its own. The
+     * rendered proof is `apps/web/e2e/combat-visibility-v1.spec.ts`, which drives the whole round
+     * on the player surface after the shared board has reached every step and holds the
+     * one-highlighted-cell invariant and a no-private-field check after every press.
+     */
+    expect(source).toContain("if (!nextCell) return false;");
+    expect(source).not.toContain("if (!nextCell?.inspectable) return");
+    expect(source).toContain("isProjectedCombatTrackerStageReached({");
+    expect(source).toContain("activeRoundNumber: currentRound.roundNumber,");
+    /*
+     * #771. The visible-step wrapper, not the guard above, is what keeps the inspector off a step
+     * with no rendered column: this surface still builds a `pre_declaration` cell, so that step
+     * has a cell — and can even be inspectable — while having no column.
      *
      * Corrected mechanism (#783 F2): that cell is not inspectable through `combat_experience`
      * completion evidence. `buildProjectedCombatTrackerModel.ts` reads no completion evidence for

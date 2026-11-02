@@ -681,6 +681,27 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       const movement = factLabel(factValue(event, "movementLabel"));
       const submittedBy = factValue(event, "submittedBy");
       const target = identity(event, "target");
+      /*
+       * #862 V1 row 5. The summary used to read `"<who> declared an action."` unconditionally —
+       * for every viewer *including the GM*, with the action and the target already listed in the
+       * `outcomeRows` immediately below. It now names the committed action and target when those
+       * facts are present and keeps the old sentence when they are not.
+       *
+       * This is a wording change over facts already in hand, and it moves nothing across a bucket
+       * boundary. `action` comes from `factValue`, which reads `involvedOutcome` then
+       * `publicOutcome` and never `privateCalculation` or `gmReview`; `target` is the already
+       * projected `target` identity, which `projectCombatHistoryEvent` filters out for a viewer
+       * who is neither the GM nor involved. Both are the same two values rendered as
+       * `Action: …` / `Target: …` rows to this same viewer, so a reader who does not receive the
+       * facts receives the previous sentence and no new disclosure is created on any path. In
+       * particular the declaration timing rule is untouched: nothing is read here that the viewer
+       * was not already given.
+       *
+       * The declared *movement* label is deliberately not named. #862 places it in a later lane,
+       * so it stays an `outcomeRows` entry only.
+       */
+      const declarer = actor ?? attacker ?? "Participant";
+      const declaredSubject = action ?? "an action";
       return {
         outcomeRows: [
           ...resultRow(event, action ? `Action: ${action}` : undefined),
@@ -700,7 +721,9 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
               ]
             : []),
         ],
-        summary: `${actor ?? attacker ?? "Participant"} declared an action.`,
+        summary: target
+          ? `${declarer} declared ${declaredSubject} against ${target}.`
+          : `${declarer} declared ${declaredSubject}.`,
       };
     }
     case "feint_feasibility":

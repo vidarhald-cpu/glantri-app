@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildProjectedCombatTrackerModel,
   getProjectedCombatHistoryCellEvents,
+  isProjectedCombatTrackerStageReached,
 } from "./buildProjectedCombatTrackerModel";
 
 function event(overrides: Partial<ProjectedCombatHistoryEvent> = {}): ProjectedCombatHistoryEvent {
@@ -1184,5 +1185,63 @@ describe("buildProjectedCombatTrackerModel", () => {
       executable: false,
     });
     expect(model.cells["1:aria:phase_1_actions"].marker).not.toBe("?");
+  });
+
+  /*
+   * #862 V1 row 6. `isProjectedCombatTrackerStageReached` is the shared-stage rule this module
+   * already applied to the inspection cursor, now exported so the player Combat surface's
+   * keyboard/arrow handler applies the same one instead of deriving step order a second time. The
+   * cases below are the contract that handler depends on; the model-side consequence stays pinned
+   * by "does not allow local inspection to move ahead of canonical current work" above.
+   */
+  describe("isProjectedCombatTrackerStageReached", () => {
+    it("reaches every step of a round that is not the active one", () => {
+      expect(
+        isProjectedCombatTrackerStageReached({
+          activeRoundNumber: 2,
+          currentStep: "select_actions",
+          selection: { roundNumber: 1, step: "round_summary" },
+        }),
+      ).toBe(true);
+    });
+
+    it("reaches the canonical current step and everything before it", () => {
+      for (const step of [
+        "select_actions",
+        "review_action_modifiers",
+        "initiative_phase_1",
+      ] as const) {
+        expect(
+          isProjectedCombatTrackerStageReached({
+            activeRoundNumber: 1,
+            currentStep: "initiative_phase_1",
+            selection: { roundNumber: 1, step },
+          }),
+          step,
+        ).toBe(true);
+      }
+    });
+
+    it("does not reach an active-round step the shared board has not opened", () => {
+      for (const step of ["phase_1_actions", "phase_1_damage", "round_summary"] as const) {
+        expect(
+          isProjectedCombatTrackerStageReached({
+            activeRoundNumber: 1,
+            currentStep: "initiative_phase_1",
+            selection: { roundNumber: 1, step },
+          }),
+          step,
+        ).toBe(false);
+      }
+    });
+
+    it("gates nothing when there is no canonical current step to compare against", () => {
+      expect(
+        isProjectedCombatTrackerStageReached({
+          activeRoundNumber: 1,
+          selection: { roundNumber: 1, step: "round_summary" },
+        }),
+      ).toBe(true);
+    });
   });
 });

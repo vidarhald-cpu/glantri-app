@@ -1,4 +1,8 @@
-import type { CombatStepEvent, CombatStepEventFacts } from "./combatStepEventSchema";
+import type {
+  CombatStepEvent,
+  CombatStepEventFacts,
+  CombatStepEventType,
+} from "./combatStepEventSchema";
 import { projectCombatResultEnvelope, type CombatResultEnvelope } from "./combatResultEnvelope";
 import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
 import {
@@ -685,6 +689,28 @@ function projectEventIdentities(input: {
   );
 }
 
+/**
+ * Event types whose outcome is table state under the Product Owner's board-game rule (#854 ruling
+ * comment 19297, implemented as #862 lane V1): *what happened on the table is shared; what is
+ * private on another Character's sheet is not.*
+ *
+ * Exactly the three types that ruling names as `Alpha straightforward` and whose `publicOutcome`
+ * already carries precisely the board-visible fact and nothing else, measured at this baseline:
+ * `initiative` → `{ total }` (`combatRoundManager.ts:22945`, legacy `combatStepEvents.ts:405`,
+ * which also carries `resolutionType`); `attack` → `{ grazing, hit }` (`:23225`, legacy `:565`);
+ * `parry` → `{ attackHit, brawlingContestOpened, parryPurpose, status, success }` (`:10610`,
+ * legacy `:648`, narrower). Nothing is added to or moved into those buckets here.
+ *
+ * `offensive_parry_brawling`, `critical`, `damage_committed`, `hit_location` and the distance
+ * maneuvers are deliberately absent: #862 scopes them to later lanes or holds them, and the last
+ * four have no populated `publicOutcome` to admit.
+ */
+const TABLE_VISIBLE_OUTCOME_EVENT_TYPES: readonly CombatStepEventType[] = [
+  "attack",
+  "initiative",
+  "parry",
+];
+
 function shouldProjectPlayerEvent(input: {
   event: CombatStepEvent;
   viewer: Extract<CombatHistoryViewer, { kind: "player" }>;
@@ -700,6 +726,50 @@ function shouldProjectPlayerEvent(input: {
     input.event.type === "declaration" &&
     input.event.ownerParticipantId &&
     input.viewer.visibleParticipantIds.has(input.event.ownerParticipantId)
+  ) {
+    return true;
+  }
+
+  /*
+   * #862 V1. The second carve-out, shaped like the `declaration` one above: admission only. Before
+   * this, a viewer who controls no participant in the exchange and is not the roller had the whole
+   * event dropped, because `outcomeScope` is the `buildCandidate` default `"involved"`
+   * (`combatStepEvents.ts:270`) for every one of these types. The tracker was therefore not showing
+   * a reduced outcome for a third party's exchange; it was showing nothing.
+   *
+   * Deliberately a gate carve-out and not a non-`"involved"` `outcomeScope` on the writers, for
+   * three measured reasons:
+   *
+   *   1. `outcomeScope` is stored on each event's `visibility` record, so re-declaring it in the
+   *      writers would leave every already-recorded round unchanged.
+   *   2. `involvedPresentationRestricted` (`combatResultEnvelope.ts:199`) is
+   *      `outcomeScope === "involved" && !involved`. Widening the scope would therefore *also*
+   *      release `resultPresentation` — `conciseOutcome`, `publicCombatNote`,
+   *      `standardConsequences`, `committedConsequences` — and the legacy public note to a
+   *      bystander. That is a second disclosure nobody authorized. Keeping the scope `"involved"`
+   *      keeps the envelope restricted and `visibility.calculationAccess` at `"none"`.
+   *   3. The field-level projection in `projectCombatHistoryEvent` is untouched either way, so
+   *      `involvedOutcome` still needs `involved`, `privateCalculation`/`rollerPrivate` still needs
+   *      `ownRoll`, `gmReview` still needs the GM, and `defenseReview` still needs `ownRoll`. A
+   *      bystander receives `publicOutcome` and the visible identities, and nothing else.
+   *
+   * The visibility condition is the one the `"public"`/`"perceived"` branch below already uses —
+   * every identity the event references must be visible to this viewer — so an exchange involving
+   * someone the viewer cannot see stays withheld in full rather than arriving with an
+   * `"unseen attacker"` placeholder. `identityRefs` is additionally required to be non-empty:
+   * `Array.prototype.every` is true for an empty array, and an event that names nobody must not be
+   * admitted by a rule about visible participants.
+   *
+   * Initiative *rank* is not involved here and stays GM-only as ruled: it exists only on the step
+   * snapshot (`initiativeRank`), `projectSnapshot` never projects it to anyone, and the snapshot's
+   * `initiativeResult` remains `ownsSnapshot`-gated.
+   */
+  if (
+    TABLE_VISIBLE_OUTCOME_EVENT_TYPES.includes(input.event.type) &&
+    input.event.visibility.identityRefs.length > 0 &&
+    input.event.visibility.identityRefs.every((ref) =>
+      input.viewer.visibleParticipantIds.has(ref.participantId),
+    )
   ) {
     return true;
   }
