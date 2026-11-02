@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { createCharacterForE2e } from "./character-fixture";
 
 const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
@@ -77,6 +77,33 @@ async function getItemAction(
     `Item action ${actionId} is absent from the payload this viewer is served`,
   ).toBeTruthy();
   return action!;
+}
+
+/**
+ * Forgejo issue #834 — the persistent `Items in this Combat` block is removed from the Combat
+ * declaration/inspector UI for Alpha, on both the GM and player surfaces, with no replacement
+ * surface. This asserts the removal positively: the block's heading, its accessible name, each
+ * of its three resolved-state lines, and its per-Item operation buttons are all absent.
+ *
+ * A caller pairs this with a positive control for the surface the block used to render inside —
+ * otherwise an unrendered page would satisfy every absence here.
+ */
+async function expectNoCombatItemBlock(page: Page): Promise<void> {
+  await expect(page.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(0);
+  await expect(page.getByLabel("Items in this Combat")).toHaveCount(0);
+  for (const line of [
+    "No available Items.",
+    "No supported Items for this participant.",
+    "Loading Items\u2026",
+    "Items unavailable.",
+  ]) {
+    await expect(page.getByText(line, { exact: true })).toHaveCount(0);
+  }
+  await expect(
+    page.getByRole("button", {
+      name: /: (Draw \/ ready|Drop|Pass \/ give|Pick up|Stow \/ unequip|Use \/ interact)$/,
+    }),
+  ).toHaveCount(0);
 }
 
 async function gmCompleteItemAction(input: {
@@ -278,10 +305,17 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
 
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
-    // Forgejo issue #356 — M7's client half. The canonical Item declaration surface is now the
-    // player's own, mounted in the Action Selector (Combat Panel Contract §12.4), where before it
-    // reached only the GM through `GenericCombatActionPanel`.
-    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(1);
+    // Forgejo issue #834 — the persistent `Items in this Combat` block is removed from the player
+    // Combat surface for Alpha, with no replacement surface. The Action Selector is asserted
+    // first as a positive control: the block used to render inside it, so its presence is what
+    // makes the absence below a real measurement rather than a vacuous one on an unrendered page.
+    await expect(playerPage.getByText(/^Action selector/)).toBeVisible();
+    await expect(playerPage.getByRole("heading", { name: "Items in this Combat" })).toHaveCount(0);
+    await expect(playerPage.getByLabel("Items in this Combat")).toHaveCount(0);
+    // No replacement Item surface appeared in its place: every string and control the removed
+    // block owned is absent. (A broad `/Item/` heading match is not used — the surviving
+    // Equipment and Combat Log surfaces legitimately name Items.)
+    await expectNoCombatItemBlock(playerPage);
     // A3, Forgejo issue #335 — no Combat surface embeds Encounter Item presence any more, and no
     // "Actions and tasks" panel is rendered. Presence itself is asserted on the payload.
     await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toHaveCount(0);
@@ -340,6 +374,11 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     // A3 — the GM's Combat Inspector renders no "Actions and tasks" panel, and the resolution the
     // GM authored is read from the payload the Inspector itself renders from.
     await expect(gmPage.getByRole("heading", { name: "Actions and tasks" })).toHaveCount(0);
+    // Forgejo issue #834 — the GM surface's own absence proof is **not** taken here. At this
+    // point Round 1 still sits on its Combat Experience check, so the Inspector renders no
+    // Action Selector and the removed block would not have rendered at the baseline either: an
+    // absence asserted here would measure nothing. It is taken at the end of this test instead,
+    // once the Inspector can be driven to a selected participant with the Action Selector up.
     expect(
       (await getItemAction(gmPage.request, encounterId, passAction!.id)).resolution?.text,
     ).toContain(`${itemName} changes hands.`);
@@ -385,9 +424,16 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await playerPage.reload();
     // A3 — the dropped Item's Encounter presence and its player-visible audience, read from the
     // payload `EncounterItemsPanel` consumes on its surviving surface outside Combat rather than
-    // from a Combat render that no longer exists. The Item is still named on the player's Combat
-    // page, by the canonical Item declaration surface (Forgejo issue #356).
-    await expect(playerPage.getByLabel("Items in this Combat")).toContainText(itemName);
+    // from a Combat render that no longer exists.
+    //
+    // Forgejo issue #834 — the Item is no longer named anywhere on the player's Combat surface:
+    // the block that named it is gone and nothing replaced it. The reload itself is the positive
+    // control for the page having re-rendered with the dropped Item present in the projection,
+    // which the `presentItems` payload assertion below reads.
+    await expect(playerPage.getByText(/^Action selector/)).toBeVisible();
+    await expectNoCombatItemBlock(playerPage);
+    // The Item name may still legitimately appear in the Combat Log's accepted `item_resolution`
+    // outcome, so the absence asserted here is the block and its controls, not the Item's name.
     await expect(playerPage.getByRole("heading", { name: "Encounter Items" })).toHaveCount(0);
     await gmPage.reload();
     await expect(gmPage.getByRole("heading", { name: "Encounter Items" })).toHaveCount(0);
@@ -444,6 +490,33 @@ test.describe("ACoV4 canonical Combat Item interactions", () => {
     await playerPage.goto(`/characters/${characterId}/equipment`);
     await expect(playerPage.getByText("On person", { exact: true })).toBeVisible();
     await expect(playerPage.locator(`input[value="${itemName}"]`)).toBeVisible();
+
+    // ---- Forgejo issue #834: the GM Combat Inspector renders no Items block. ----
+    //
+    // On the GM surface the removed block was mounted by the Inspector's Action Selector, under
+    // `inspector.participant && !inspectorIsHistorical`. With no participant selected the
+    // Inspector falls back to its phase-wide branch, which renders no Action Selector and would
+    // not have rendered the block at the baseline either — so a participant is selected first,
+    // by clicking this combatant's own enabled tracker cell, exactly as a GM would.
+    await gmPage.goto(
+      `/campaigns/${campaignId}?tab=combat&scenarioId=${scenarioId}&encounterId=${encounterId}`,
+    );
+    await expect(gmPage.getByRole("heading", { name: "Combat Round Manager" })).toBeVisible();
+    await gmPage
+      .locator('[aria-label="Combat round timeline grid"] tbody tr')
+      .filter({ hasText: characterName })
+      .locator("button:not([disabled])")
+      .first()
+      .click();
+    const inspectorHeading = gmPage.getByRole("heading", { name: /^Combat inspector — / });
+    await expect(inspectorHeading).toContainText(characterName);
+    // Positive controls: the Inspector holds a selected scenario participant and renders the
+    // Action Selector — the exact branch that embedded `Items in this Combat` on the GM surface.
+    // Without these two the absences below would pass on a page that renders no selector at all.
+    await expect(gmPage.getByText(/^Action selector/).first()).toBeVisible();
+    await expect(gmPage.getByRole("combobox", { name: "Secondary action" }).first()).toBeVisible();
+    // And the block, with every string and control it owned, is absent; nothing replaced it.
+    await expectNoCombatItemBlock(gmPage);
 
     await playerContext.close();
     await recipientContext.close();

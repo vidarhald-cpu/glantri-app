@@ -45,20 +45,6 @@ describe("ScenarioPlayerCombatPageContent", () => {
   });
 
   /**
-   * Forgejo #509 F2 — the Item panel is injected outside `controlsDisabled`, so the GM's read-only
-   * inspection must reach it as its own prop. (Behaviour is covered against the real panel in
-   * `CombatItemInteractionPanel.test.tsx`; this pins the wiring, as the page is not mountable here.)
-   */
-  it("wires GM read-only inspection into the Item interaction panel", () => {
-    const source = readSource();
-    const start = source.indexOf("<CombatItemInteractionPanel");
-    const end = source.indexOf("/>", start);
-
-    expect(start).toBeGreaterThan(-1);
-    expect(source.slice(start, end)).toContain("readOnly={readOnlyInspection}");
-  });
-
-  /**
    * A3, Forgejo issue #335 — Combat Panel Contract §12.15. The retired
    * `GenericCombatActionPanel` carried the declaration intent for this surface's GM branch. The
    * §12.4 destination for intent text is the Action Selector, and that wiring is what survives
@@ -74,42 +60,24 @@ describe("ScenarioPlayerCombatPageContent", () => {
   });
 
   /**
-   * A3, Forgejo issue #335 — the two §12.4 rows the retired read-only "Items and task history"
-   * render used to carry on this surface. Item operations now reach the player through the Action
-   * Selector mount of `CombatItemInteractionPanel` (#356), and action and task history is read
-   * from the Combat Log, its §12.4 destination. Neither is a render of the retired panel.
+   * A3, Forgejo issue #335 — action and task history is read from the Combat Log, its §12.4
+   * destination, and this surface mounts no second declaration channel of its own.
+   *
+   * Forgejo issue #834 — the Item half of this test is now an absence. The persistent
+   * `Items in this Combat` block is removed from the player Combat surface for Alpha with no
+   * replacement, so neither the panel nor the Action Selector slot that carried it may reappear
+   * here. The Action Selector itself is asserted positively, so the absences below are measured
+   * against a surface that still mounts the region the block used to sit in.
    */
-  it("routes player Item operations to the Action Selector and task history to the Combat Log", () => {
+  it("keeps task history on the Combat Log and mounts no Item declaration surface", () => {
     const source = readSource();
 
     expect(source).not.toContain("showGenericDeclarationControls");
-    expect(source).toContain("<CombatItemInteractionPanel");
     expect(source).toContain("<CombatLog");
-    expect(source.indexOf("<CombatItemInteractionPanel")).toBeGreaterThan(
-      source.indexOf("<PlayerCombatActionSelectorPanel"),
-    );
-  });
-
-  /**
-   * Forgejo issue #356 — M7's client half. The canonical Item declaration surface now reaches the
-   * player through the Action Selector, the Combat Panel Contract §12.4 destination, rather than
-   * only through the `GenericCombatActionPanel` subtree that A3 (#335) deletes. The existing
-   * `CombatItemInteractionPanel` is mounted unchanged, as a component.
-   */
-  it("mounts the canonical Item declaration surface in the player Action Selector", () => {
-    const source = readSource();
-    const selector = source.indexOf("<PlayerCombatActionSelectorPanel");
-    const slot = source.indexOf("itemInteractionControls={", selector);
-
-    expect(selector).toBeGreaterThan(-1);
-    expect(slot).toBeGreaterThan(selector);
-    const mount = source.slice(slot, slot + 1200);
-    expect(mount).toContain("<CombatItemInteractionPanel");
-    expect(mount).toContain("encounter={encounterSession}");
-    expect(mount).toContain("isGm={isGameMaster}");
-    expect(mount).toContain("participantId={selectedRoundParticipant.participantId}");
-    // Keyed to the projection so a visibility change refreshes the offered Item options.
-    expect(mount).toContain("key={`${encounterSession.id}:${projectionCacheKey}`}");
+    expect(source).toContain("<PlayerCombatActionSelectorPanel");
+    expect(source).not.toContain("CombatItemInteractionPanel");
+    expect(source).not.toContain("itemInteractionControls");
+    expect(source).not.toContain("Items in this Combat");
   });
 
   it("uses canonical board positioning for Current task and tracker-local keyboard navigation", () => {
@@ -548,7 +516,13 @@ describe("ScenarioPlayerCombatPageContent", () => {
     expect(source).toContain("!refreshCoordinator.isCurrent(refreshRequestId)");
     expect(source).toContain("refreshCoordinator.invalidate()");
     expect(source).toContain("setEncounterSession(undefined)");
-    expect(source).toContain("key={`${encounterSession.id}:${projectionCacheKey}`}");
+    // Forgejo issue #834 — the removed `Items in this Combat` block carried
+    // `key={`${encounterSession.id}:${projectionCacheKey}`}`, which re-mounted it when the
+    // viewer's privacy-filtered projection changed without the encounter revision moving. That
+    // React key is gone with the block. The same projection-keyed invalidation survives for the
+    // Item options this surface still consumes (the canonical Disarm weapons), as the effect's
+    // own dependency, and that is what is pinned here instead.
+    expect(source).toContain("}, [encounterId, encounterSession?.updatedAt, projectionCacheKey]);");
     expect(source).toContain("loadRevision: loadEncounterRevision");
     expect(source).toContain("setRevisionBoundHistory(result.history)");
     expect(source).toContain("setSelectableParticipants([...result.participants])");
