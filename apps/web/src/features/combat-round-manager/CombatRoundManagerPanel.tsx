@@ -261,6 +261,7 @@ import {
   playerCombatTopPanelRowStyle,
   sanitizePlayerCombatModifierContext,
   type PlayerCombatModifierBucketView,
+  type PlayerCombatParrySourceOption,
   type PlayerCombatPhaseCardView,
 } from "@/features/player-combat/PlayerCombatPanels";
 import {
@@ -611,7 +612,6 @@ interface CombatDefenseReviewSourceOption {
 }
 
 interface CombatDefenseReviewDraft {
-  aware: boolean;
   includedByItemId: Record<string, boolean>;
 }
 
@@ -2701,6 +2701,43 @@ function formatSelectedCombatParrySourceName(input: {
   ].filter((label): label is string => Boolean(label));
 
   return labels.length > 0 ? labels.join(" + ") : "No parry source selected";
+}
+
+/**
+ * The one defensive-mode row the GM's main-hand/off-hand inclusion resolves to, named with that
+ * row's own `DB`, `DM` and `Parry` cells (#832 acceptance 4).
+ *
+ * `options` are `parrySourceOptions` — the identical derived row set the Defense / Parry
+ * mini-table's own source selector offers and displays — so the defense review and that
+ * mini-table name one combination rather than two. Both hands resolve to the `Combined` row and
+ * one hand to that hand's own row, which is the correspondence the canonical resolver already
+ * derives from the committed snapshot's included sources. This selects an existing derived row: it
+ * defines no value and sums nothing the derivation did not already sum.
+ *
+ * `selectedLabels` are the Item names the GM has included. They name the selection when the
+ * defender's derived rows are unavailable, so the line never contradicts the checked boxes beside
+ * it; the values then read `—` rather than being invented.
+ */
+function formatSelectedCombatDefenseCombination(input: {
+  mainHandLabel?: string;
+  offHandLabel?: string;
+  options?: readonly PlayerCombatParrySourceOption[];
+  selectedLabels: readonly string[];
+  selection: CombatParrySourceSelection;
+}): string {
+  const options = input.options ?? [];
+  const row =
+    input.selection.usedMainHand && input.selection.usedOffHand
+      ? options.find((option) => option.id.startsWith("Combined|"))
+      : input.selection.usedMainHand
+        ? options.find((option) => option.sourceName === input.mainHandLabel)
+        : input.selection.usedOffHand
+          ? options.find((option) => option.sourceName === input.offHandLabel)
+          : undefined;
+  const name =
+    row?.sourceName ?? (input.selectedLabels.join(" + ") || "No defense source selected");
+
+  return `${name} · DB ${row?.db ?? "—"} · DM ${row?.dm ?? "—"} · P ${row?.parry ?? "—"}`;
 }
 
 function getCombatParrySelectionKey(input: {
@@ -8186,17 +8223,6 @@ export default function CombatRoundManagerPanel({
       ? currentActionPresentation.primaryAction.descriptor
       : undefined;
   const inspectorDefenseReviewAttackId = inspectorDefenseReviewDescriptor?.attackResultId;
-  const inspectorDefenseReviewAttacker = inspectorDefenseReviewDescriptor?.attackerParticipantId
-    ? encounter.participants.find(
-        (participant) => participant.id === inspectorDefenseReviewDescriptor.attackerParticipantId,
-      )
-    : undefined;
-  const inspectorDefenseReviewAttackerScenario = inspectorDefenseReviewAttacker
-    ? findScenarioParticipantForEncounterParticipant({
-        encounterParticipant: inspectorDefenseReviewAttacker,
-        scenarioParticipants: effectiveScenarioParticipants,
-      })
-    : undefined;
   const inspectorDefenseReviewDefender = inspectorDefenseReviewDescriptor?.defenderParticipantId
     ? encounter.participants.find(
         (participant) => participant.id === inspectorDefenseReviewDescriptor.defenderParticipantId,
@@ -8211,42 +8237,72 @@ export default function CombatRoundManagerPanel({
   const inspectorDefenseReviewDefenderState = inspectorDefenseReviewDefenderScenario
     ? resolvedCharacterStateByParticipantId[inspectorDefenseReviewDefenderScenario.id]
     : undefined;
-  const inspectorDefenseReviewVisibility =
-    inspectorDefenseReviewAttackerScenario?.visibilityOverrides?.visibility;
-  const inspectorDefenseReviewDefaultAware =
-    inspectorDefenseReviewVisibility !== "hidden" && inspectorDefenseReviewVisibility !== "gm_only";
   const inspectorDefenseReviewSources = buildCombatDefenseReviewSourceOptions({
     participant: inspectorDefenseReviewDefenderScenario,
     resolvedEquipmentState: inspectorDefenseReviewDefenderState?.equipmentState,
   });
+  /**
+   * The committed attack-result fact for this exact incoming attack (#832 finding 2). A `hit` of
+   * `false` is the recorded miss, read from the stored result rather than re-derived from damage,
+   * prose or the table label. A pending missile has no attack result yet — the review itself
+   * materializes its ordinary result — so it is never read as a miss here.
+   */
+  const inspectorDefenseReviewAttackResult = inspectorDefenseReviewAttackId
+    ? getCombatRoundAttackResultById({
+        attackResultId: inspectorDefenseReviewAttackId,
+        state: roundState,
+      })
+    : undefined;
+  const inspectorDefenseReviewAttackMissed = inspectorDefenseReviewAttackResult?.hit === false;
   const inspectorDefenseReviewDraft = inspectorDefenseReviewAttackId
     ? (defenseReviewDrafts[inspectorDefenseReviewAttackId] ?? {
-        aware: inspectorDefenseReviewDefaultAware,
         includedByItemId: Object.fromEntries(
           inspectorDefenseReviewSources.map((source) => [source.itemId, true]),
         ),
       })
     : undefined;
+  /**
+   * The GM's per-hand inclusion, expressed in the same `usedMainHand`/`usedOffHand` terms the
+   * canonical resolver derives from the committed snapshot's included sources, so one selection
+   * drives both the commit and the displayed combination.
+   */
+  const inspectorDefenseReviewSelection: CombatParrySourceSelection = {
+    usedMainHand: inspectorDefenseReviewSources.some(
+      (source) =>
+        source.slot === "mainHand" &&
+        (inspectorDefenseReviewDraft?.includedByItemId[source.itemId] ?? true),
+    ),
+    usedOffHand: inspectorDefenseReviewSources.some(
+      (source) =>
+        source.slot === "offHand" &&
+        (inspectorDefenseReviewDraft?.includedByItemId[source.itemId] ?? true),
+    ),
+  };
+  /**
+   * The derived phase loadout the Defense / Parry mini-table on this very panel is built from,
+   * taken only when the inspected participant is this review's defender so the review can never
+   * name another participant's combination.
+   */
+  const inspectorDefenseReviewPhaseLoadout =
+    inspectorDefenseReviewDescriptor?.phase &&
+    inspectorDefenseReviewDefenderScenario &&
+    selectedScenarioParticipant?.id === inspectorDefenseReviewDefenderScenario.id
+      ? inspectorPhaseLoadoutSummaries[inspectorDefenseReviewDescriptor.phase]
+      : undefined;
+  const inspectorDefenseReviewCombination = formatSelectedCombatDefenseCombination({
+    mainHandLabel: inspectorDefenseReviewPhaseLoadout?.mainHandParryItemLabel,
+    offHandLabel: inspectorDefenseReviewPhaseLoadout?.offHandParryItemLabel,
+    options: inspectorDefenseReviewPhaseLoadout?.parrySourceOptions,
+    selectedLabels: inspectorDefenseReviewSources
+      .filter((source) => inspectorDefenseReviewDraft?.includedByItemId[source.itemId] ?? true)
+      .map((source) => source.label),
+    selection: inspectorDefenseReviewSelection,
+  });
   const inspectorDefenseReviewControls =
-    inspectorDefenseReviewAttackId && inspectorDefenseReviewDraft ? (
+    inspectorDefenseReviewAttackId &&
+    inspectorDefenseReviewDraft &&
+    !inspectorDefenseReviewAttackMissed ? (
       <div aria-label="Defense review choices" style={{ display: "grid", gap: "0.45rem" }}>
-        <label style={{ alignItems: "center", display: "flex", gap: "0.45rem" }}>
-          <input
-            checked={inspectorDefenseReviewDraft.aware}
-            disabled={saving || inspectorIsInspectionOnly}
-            onChange={(event) =>
-              setDefenseReviewDrafts((current) => ({
-                ...current,
-                [inspectorDefenseReviewAttackId]: {
-                  ...inspectorDefenseReviewDraft,
-                  aware: event.target.checked,
-                },
-              }))
-            }
-            type="checkbox"
-          />
-          Defender is aware of this attack
-        </label>
         {inspectorDefenseReviewSources.length > 0 ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
             {inspectorDefenseReviewSources.map((source) => (
@@ -8280,8 +8336,8 @@ export default function CombatRoundManagerPanel({
             No shield or weapon defense source is currently equipped.
           </span>
         )}
-        <span style={{ color: "#5e5a50", fontSize: "0.82rem" }}>
-          This review is committed for this exact attack and will not change if the loadout changes.
+        <span style={{ color: "#5e5a50", fontSize: "0.88rem" }}>
+          {inspectorDefenseReviewCombination}
         </span>
       </div>
     ) : null;
@@ -11697,9 +11753,13 @@ export default function CombatRoundManagerPanel({
         })
       : undefined;
     const visibility = attackerScenarioParticipant?.visibilityOverrides?.visibility;
+    /**
+     * Awareness is the canonical attacker-visibility fact, not a GM choice: #832 removed the
+     * generic `Defender is aware` checkbox, so the review commits the same default the server
+     * records as `awarenessDefault` and never reports an override.
+     */
     const defaultAware = visibility !== "hidden" && visibility !== "gm_only";
     const draft = defenseReviewDrafts[attackId] ?? {
-      aware: defaultAware,
       includedByItemId: Object.fromEntries(sources.map((source) => [source.itemId, true])),
     };
 
@@ -11709,7 +11769,7 @@ export default function CombatRoundManagerPanel({
         {
           attackId,
           attackerParticipantId: descriptor.attackerParticipantId,
-          aware: draft.aware,
+          aware: defaultAware,
           currentEncounter: encounter,
           defenderParticipantId: descriptor.defenderParticipantId,
           encounterId: encounter.id,
