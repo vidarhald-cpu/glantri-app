@@ -1117,7 +1117,21 @@ describe("combat history projection", () => {
       role: "attacker",
       visibility: "visible",
     });
-    expect(uninvolved).toBeUndefined();
+    /*
+     * #862 V1. This used to assert `uninvolved` was `undefined` — the whole event was dropped for
+     * a viewer controlling neither side. Under the Product Owner's board-game rule (#854 ruling
+     * 19297) an attack and its hit/miss are table state, so the event now reaches a bystander.
+     * The assertion is re-pinned, not relaxed: what this test is actually about — the calculation
+     * reaching only the roller and the involved detail only the two parties — is asserted harder
+     * on the bystander than a single `toBeUndefined()` could manage.
+     */
+    expect(uninvolved, "the attack event itself is table state and now arrives").toBeDefined();
+    expect(uninvolved?.facts.publicOutcome).toEqual({});
+    expect(uninvolved?.facts.involvedOutcome).toBeUndefined();
+    expect(uninvolved?.facts.privateCalculation).toBeUndefined();
+    expect(uninvolved?.facts.gmReview).toBeUndefined();
+    expect(JSON.stringify(uninvolved)).not.toContain("18 + 4");
+    expect(JSON.stringify(uninvolved)).not.toContain("rollD20");
     expect(roller?.ownerParticipantId).toBe("aria");
   });
   it("gives no player the attack result's workbook import provenance; the GM keeps it (#517 ruling E2)", () => {
@@ -1914,5 +1928,522 @@ describe("combat history projection", () => {
 
     expect(projection?.facts.gmReview).toEqual({ override: "private" });
     expect(projection?.facts.privateCalculation).toEqual({ calculation: "18 + 4", rollD20: 18 });
+  });
+
+  /*
+   * #862 V1 — the board-game rule (#854 ruling comment 19297) for a **bystander**: a viewer who
+   * controls no participant in the exchange and is not the roller.
+   *
+   * The fixture is deliberately three participations wide. A two-participation encounter cannot
+   * express this defect for `attack` or `parry`, because the viewer's own Character is then one of
+   * the two sides and the viewer is `involved`; only a third participation makes the viewer a
+   * bystander to the exchange. `cyra` controls nothing in any exchange below.
+   *
+   * Every event's facts are written in the buckets the production writers use, measured at this
+   * baseline. Each row is asserted in **both** directions on the projected payload: the public
+   * fact arrives, and the named private fields do not.
+   */
+  describe("#862 V1 — table-visible outcomes reach a bystander and private calculation does not", () => {
+    /** `cyra` sees Aria and Borin, controls only herself, and rolls nothing below. */
+    const bystander = player(["cyra"], ["aria", "borin", "cyra"]);
+
+    const initiativeEvent = event({
+      facts: {
+        gmReview: { gmInitiativeNote: "gm-only" },
+        involvedOutcome: {},
+        publicOutcome: { resolutionType: "rolled", total: 18 },
+        rollerPrivate: {
+          baseInitiative: 4,
+          modifierAdjustment: 2,
+          rolls: [6, 6],
+          rollTotal: 12,
+          total: 18,
+        },
+      },
+      id: "event-initiative-aria",
+      ownerParticipantId: "aria",
+      rollerParticipantId: "aria",
+      sequence: 0,
+      step: "initiative_phase_1",
+      type: "initiative",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "actor" },
+          { participantId: "aria", role: "roller" },
+        ],
+        involvedParticipantIds: ["aria"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+
+    const attackEvent = event({
+      facts: {
+        gmReview: { gmAttackNote: "gm-only" },
+        involvedOutcome: { tableResult: "Hit for 7", weaponDmb: 3, weaponName: "Broadsword" },
+        publicOutcome: { grazing: false, hit: true },
+        rollerPrivate: {
+          defenderDb: -12,
+          lookupTotal: 94,
+          ob: 80,
+          openEndedD10s: [],
+          rollD20: 14,
+          rollTotal: 94,
+        },
+      },
+      id: "event-attack-aria-borin",
+      ownerParticipantId: "aria",
+      phase: "phase1",
+      rollerParticipantId: "aria",
+      sequence: 1,
+      step: "phase_1_actions",
+      type: "attack",
+      visibility: {
+        identityRefs: [
+          { participantId: "borin", role: "target" },
+          { participantId: "aria", role: "attacker" },
+          { participantId: "borin", role: "defender" },
+          { participantId: "aria", role: "roller" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+
+    const parryEvent = event({
+      facts: {
+        gmReview: { gmParryNote: "gm-only" },
+        involvedOutcome: { resultLabel: "Parry held", status: "resolved", success: true },
+        publicOutcome: {
+          attackHit: true,
+          brawlingContestOpened: false,
+          parryPurpose: "defensive",
+          status: "resolved",
+          success: true,
+        },
+        rollerPrivate: {
+          combinedParryScore: 46,
+          modifierAdjustment: -2,
+          modifierBreakdown: [{ label: "Shield", value: 4 }],
+          openEndedD10s: [],
+          rollD20: 11,
+          rollTotal: 55,
+          targetNumber: 50,
+          total: 55,
+        },
+      },
+      id: "event-parry-borin",
+      ownerParticipantId: "borin",
+      phase: "phase1",
+      rollerParticipantId: "borin",
+      sequence: 2,
+      step: "review_phase_2_actions",
+      type: "parry",
+      visibility: {
+        identityRefs: [
+          { participantId: "aria", role: "target" },
+          { participantId: "aria", role: "attacker" },
+          { participantId: "borin", role: "defender" },
+          { participantId: "borin", role: "roller" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "borin",
+      },
+    });
+
+    /** Negative control: the same event type, with one identity this viewer cannot see. */
+    const unseenAttackEvent = event({
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: { grazing: false, hit: true },
+        rollerPrivate: { ob: 77 },
+      },
+      id: "event-attack-hidden-borin",
+      ownerParticipantId: "hidden",
+      phase: "phase1",
+      rollerParticipantId: "hidden",
+      sequence: 3,
+      step: "phase_1_actions",
+      type: "attack",
+      visibility: {
+        identityRefs: [
+          { participantId: "borin", role: "target" },
+          { participantId: "hidden", role: "attacker" },
+          { participantId: "borin", role: "defender" },
+          { participantId: "hidden", role: "roller" },
+        ],
+        involvedParticipantIds: ["hidden", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "hidden",
+      },
+    });
+
+    /** Negative control: a type #862 does not admit, between the same two visible participants. */
+    const criticalEvent = event({
+      facts: {
+        gmReview: { authenticProvenance: "gm-only" },
+        involvedOutcome: { criticalGrade: "C", criticalTitle: "Shattered knee" },
+        publicOutcome: {},
+        rollerPrivate: { finalCriticalRoll: 88 },
+      },
+      id: "event-critical-aria-borin",
+      ownerParticipantId: "aria",
+      phase: "phase1",
+      rollerParticipantId: "aria",
+      sequence: 4,
+      step: "phase_1_damage",
+      type: "critical",
+      visibility: {
+        identityRefs: [
+          { participantId: "borin", role: "target" },
+          { participantId: "aria", role: "attacker" },
+          { participantId: "aria", role: "roller" },
+        ],
+        involvedParticipantIds: ["aria", "borin"],
+        outcomeScope: "involved",
+        rollerParticipantId: "aria",
+      },
+    });
+
+    /*
+     * `currentStep` is what `buildCombatProgressionProjection` derives the canonical boundary from,
+     * measured: `initiative_phase_1` yields boundary `phase1_initiative` and `phase_1_actions`
+     * yields `phase1_resolution`. Initiative is committed only *past* its own boundary, so those
+     * two values are the two sides of the publication-timing rule (#862 F1) and the default below
+     * is the committed one.
+     */
+    const roundState = (currentStep: CombatRoundState["currentStep"] = "phase_1_actions") =>
+      combatRoundStateSchema.parse({
+        currentStep,
+        encounterId: "encounter-1",
+        events: [initiativeEvent, attackEvent, parryEvent, unseenAttackEvent, criticalEvent],
+        participants: [
+          { label: "Aria", participantId: "aria" },
+          { label: "Borin", participantId: "borin" },
+          { label: "Cyra", participantId: "cyra" },
+        ],
+        roundNumber: 1,
+      });
+
+    const projectionFor = (
+      viewer: Parameters<typeof projectCombatHistory>[0]["viewer"],
+      currentStep?: CombatRoundState["currentStep"],
+    ) =>
+      projectCombatHistory({
+        participants,
+        source: historySource(roundState(currentStep)),
+        viewer,
+      });
+
+    const bystanderProjection = (currentStep?: CombatRoundState["currentStep"]) =>
+      projectionFor(bystander, currentStep);
+
+    const bystanderEvent = (id: string) =>
+      bystanderProjection().activeRound.events.find((candidate) => candidate.id === id);
+
+    it("row 1 — delivers the committed initiative total and withholds the roller's calculation", () => {
+      const projection = bystanderProjection();
+      const projected = projection.activeRound.events.find(
+        (candidate) => candidate.type === "initiative",
+      );
+
+      // Direction 1: the public fact arrives for a viewer who controls nobody in this roll.
+      expect(projected, "the initiative event must reach a bystander at all").toBeDefined();
+      expect(projected?.facts.publicOutcome).toEqual({ resolutionType: "rolled", total: 18 });
+
+      // Direction 2: every field #862 names private is absent from the projected payload.
+      expect(projected?.facts.privateCalculation).toBeUndefined();
+      expect(projected?.facts.involvedOutcome).toBeUndefined();
+      expect(projected?.facts.gmReview).toBeUndefined();
+      const serialized = JSON.stringify(projected);
+      for (const field of ["baseInitiative", "modifierAdjustment", "rolls", "rollTotal"]) {
+        expect(serialized, `initiative ${field} must stay owner-only`).not.toContain(field);
+      }
+      // Ruled explicitly: total public, calculation and rank private.
+      const whole = JSON.stringify(projection);
+      expect(whole).not.toContain("initiativeRank");
+      expect(whole).not.toContain("rankTotal");
+      // The envelope stays involved-restricted, so `outcomeScope` is still `"involved"` and the
+      // bystander gets no calculation access. Admission is the only thing that changed.
+      expect(projected?.resultEnvelope?.visibility).toMatchObject({
+        calculationAccess: "none",
+        outcomeScope: "involved",
+      });
+      expect(projected?.resultEnvelope?.calculationReferences).toEqual([]);
+      expect(projected?.resultEnvelope?.privateDiagnostics).toEqual([]);
+    });
+
+    /*
+     * #862 F1. Initiative carries its own publication-timing rule, exactly as declarations do: the
+     * ruling makes the *final* number public, not one the round is still producing. #862's row 1
+     * said `initiativeIsCommitted` "already gates the reveal", which is true of the web tracker's
+     * hover and false of the combat-history inspector — `buildCombatEventResultModel` takes no
+     * progression, boundary or commitment input at all, so a web-layer condition would leave the
+     * total in the payload and merely decline to draw it. The condition therefore lives at the
+     * admission gate, and the tests below assert **both sides of the boundary** and **all three**
+     * audiences that must not change.
+     */
+    describe("initiative publication timing", () => {
+      /** Boundary `phase1_initiative`: the round is still taking the phase-1 rolls. */
+      const UNCOMMITTED = "initiative_phase_1" as const;
+      /** Boundary `phase1_resolution`: the round has moved past them. */
+      const COMMITTED = "phase_1_actions" as const;
+      const initiativeOf = (projection: ReturnType<typeof projectCombatHistory>) =>
+        projection.activeRound.events.find((candidate) => candidate.type === "initiative");
+
+      it("withholds an uncommitted initiative total from a bystander entirely", () => {
+        const projection = bystanderProjection(UNCOMMITTED);
+
+        // Not reduced — absent. The fact never enters the payload, so no reader can render it.
+        expect(initiativeOf(projection)).toBeUndefined();
+        const serialized = JSON.stringify(projection.activeRound.events);
+        expect(serialized).not.toContain("event-initiative-aria");
+        expect(serialized, "the total itself must not appear anywhere").not.toContain("18");
+      });
+
+      it("delivers it to the same bystander once the boundary has passed", () => {
+        const projected = initiativeOf(bystanderProjection(COMMITTED));
+
+        expect(projected, "the committed total is table state").toBeDefined();
+        expect(projected?.facts.publicOutcome).toEqual({ resolutionType: "rolled", total: 18 });
+        expect(projected?.facts.privateCalculation).toBeUndefined();
+        expect(projected?.facts.involvedOutcome).toBeUndefined();
+        expect(projected?.facts.gmReview).toBeUndefined();
+      });
+
+      it("archives are published in full regardless of the active round's boundary", () => {
+        // An archived round is past; `historical` settles it without consulting the boundary.
+        const archived = projectCombatHistory({
+          participants,
+          source: historySource(
+            combatRoundStateSchema.parse({
+              currentStep: UNCOMMITTED,
+              encounterId: "encounter-1",
+              events: [],
+              participants: [
+                { label: "Aria", participantId: "aria" },
+                { label: "Cyra", participantId: "cyra" },
+              ],
+              roundNumber: 2,
+              rounds: [
+                {
+                  encounterId: "encounter-1",
+                  events: [initiativeEvent],
+                  participants: [
+                    { label: "Aria", participantId: "aria" },
+                    { label: "Cyra", participantId: "cyra" },
+                  ],
+                  roundNumber: 1,
+                },
+              ],
+            }),
+          ),
+          viewer: bystander,
+        });
+
+        const projected = archived.archivedRounds[0]?.events.find(
+          (candidate) => candidate.type === "initiative",
+        );
+        expect(projected?.facts.publicOutcome).toEqual({ resolutionType: "rolled", total: 18 });
+        expect(projected?.facts.privateCalculation).toBeUndefined();
+      });
+
+      /*
+       * The three audiences the repair must not touch. Each is asserted on **both** sides of the
+       * boundary, because "unchanged" is a claim about both states, not about the convenient one.
+       */
+      it("changes nothing for the roller, an involved party or the GM, on either side", () => {
+        const roller = player(["aria"], ["aria", "borin", "cyra"]);
+        const involved = player(["borin"], ["aria", "borin", "cyra"]);
+
+        for (const currentStep of [UNCOMMITTED, COMMITTED] as const) {
+          const rollerInitiative = initiativeOf(projectionFor(roller, currentStep));
+          expect(rollerInitiative, `roller, ${currentStep}`).toBeDefined();
+          expect(rollerInitiative?.facts.publicOutcome).toEqual({
+            resolutionType: "rolled",
+            total: 18,
+          });
+          expect(
+            rollerInitiative?.facts.privateCalculation,
+            `roller calc, ${currentStep}`,
+          ).toMatchObject({ baseInitiative: 4, rolls: [6, 6], rollTotal: 12 });
+
+          const gmInitiative = initiativeOf(projectionFor({ kind: "gm" }, currentStep));
+          expect(gmInitiative, `GM, ${currentStep}`).toBeDefined();
+          expect(gmInitiative?.facts.privateCalculation, `GM calc, ${currentStep}`).toMatchObject({
+            rolls: [6, 6],
+          });
+          expect(gmInitiative?.facts.gmReview, `GM review, ${currentStep}`).toEqual({
+            gmInitiativeNote: "gm-only",
+          });
+
+          /*
+           * The involved party is the control that proves the condition is confined to the
+           * bystander carve-out. Borin controls no participant in Aria's *initiative* roll and so
+           * is a bystander to it — he must be refused before commitment like any other. What must
+           * not change is his access to the exchange he *is* involved in, which is asserted next.
+           */
+          const involvedProjection = projectionFor(involved, currentStep);
+          const involvedAttack = involvedProjection.activeRound.events.find(
+            (candidate) => candidate.id === "event-attack-aria-borin",
+          );
+          expect(
+            involvedAttack?.facts.involvedOutcome,
+            `involved attack, ${currentStep}`,
+          ).toMatchObject({ weaponName: "Broadsword" });
+          const involvedParry = involvedProjection.activeRound.events.find(
+            (candidate) => candidate.id === "event-parry-borin",
+          );
+          expect(
+            involvedParry?.facts.privateCalculation,
+            `involved parry, ${currentStep}`,
+          ).toMatchObject({ combinedParryScore: 46 });
+        }
+      });
+
+      it("admits attack and parry on both sides of the initiative boundary", () => {
+        // The condition is attached to the initiative arm only; rows 2-4 are unaffected by it.
+        for (const currentStep of [UNCOMMITTED, COMMITTED] as const) {
+          const types = bystanderProjection(currentStep)
+            .activeRound.events.map((candidate) => candidate.type)
+            .sort();
+          expect(types, `admitted types at ${currentStep}`).toEqual(
+            currentStep === UNCOMMITTED ? ["attack", "parry"] : ["attack", "initiative", "parry"],
+          );
+        }
+      });
+    });
+
+    it("rows 2 and 3 — delivers attacker, target and hit/miss without the attack calculation", () => {
+      const projected = bystanderEvent("event-attack-aria-borin");
+
+      expect(projected, "the attack event must reach a bystander at all").toBeDefined();
+      expect(projected?.facts.publicOutcome).toEqual({ grazing: false, hit: true });
+      expect(
+        projected?.identities.map((identity) => `${identity.role}:${identity.displayName}`),
+      ).toEqual(["target:Borin", "attacker:Aria", "defender:Borin", "roller:Aria"]);
+
+      expect(projected?.facts.privateCalculation).toBeUndefined();
+      expect(projected?.facts.involvedOutcome).toBeUndefined();
+      expect(projected?.facts.gmReview).toBeUndefined();
+      expect(projected?.facts.defenseReview).toBeUndefined();
+      const serialized = JSON.stringify(projected);
+      for (const field of [
+        "defenderDb",
+        "lookupTotal",
+        '"ob"',
+        "openEndedD10s",
+        "rollD20",
+        "rollTotal",
+        "weaponName",
+        "weaponDmb",
+        "tableResult",
+      ]) {
+        expect(serialized, `attack ${field} must not reach a bystander`).not.toContain(field);
+      }
+      expect(serialized).not.toContain("Broadsword");
+      expect(serialized).not.toContain("Hit for 7");
+    });
+
+    it("row 4 — delivers the parry outcome without the defender's parry calculation", () => {
+      const projected = bystanderEvent("event-parry-borin");
+
+      expect(projected, "the parry event must reach a bystander at all").toBeDefined();
+      expect(projected?.facts.publicOutcome).toEqual({
+        attackHit: true,
+        brawlingContestOpened: false,
+        parryPurpose: "defensive",
+        status: "resolved",
+        success: true,
+      });
+
+      expect(projected?.facts.privateCalculation).toBeUndefined();
+      expect(projected?.facts.involvedOutcome).toBeUndefined();
+      expect(projected?.facts.gmReview).toBeUndefined();
+      const serialized = JSON.stringify(projected);
+      for (const field of [
+        "combinedParryScore",
+        "modifierAdjustment",
+        "modifierBreakdown",
+        "targetNumber",
+        "rollD20",
+        "rollTotal",
+        "resultLabel",
+      ]) {
+        expect(serialized, `parry ${field} must not reach a bystander`).not.toContain(field);
+      }
+      expect(serialized).not.toContain("Parry held");
+    });
+
+    it("admits none of it when a participant in the exchange is not visible", () => {
+      const projection = bystanderProjection();
+
+      expect(
+        projection.activeRound.events.find(
+          (candidate) => candidate.id === "event-attack-hidden-borin",
+        ),
+        "an exchange with an unseen participant stays withheld in full",
+      ).toBeUndefined();
+      const serialized = JSON.stringify(projection.activeRound.events);
+      expect(serialized).not.toContain('"hidden"');
+      expect(serialized).not.toContain("unseen attacker");
+    });
+
+    it("does not widen any event type outside the three #862 admits", () => {
+      const projection = bystanderProjection();
+
+      // `critical` between the same two visible participants: still dropped. The carve-out is
+      // type-scoped, so this proves it is not a general relaxation of the involvement scope.
+      expect(
+        projection.activeRound.events.find((candidate) => candidate.type === "critical"),
+      ).toBeUndefined();
+      const serialized = JSON.stringify(projection);
+      expect(serialized).not.toContain("Shattered knee");
+      expect(serialized).not.toContain("criticalGrade");
+      expect(serialized).not.toContain("finalCriticalRoll");
+      expect(serialized).not.toContain("authenticProvenance");
+
+      // And the admitted set is exactly the three types plus nothing else from this fixture.
+      expect(projection.activeRound.events.map((candidate) => candidate.type).sort()).toEqual([
+        "attack",
+        "initiative",
+        "parry",
+      ]);
+    });
+
+    it("keeps every one of those facts for the parties who already had them", () => {
+      // Positive control on the other side of the gate: the change must not have narrowed the
+      // roller's or the GM's view of the same three events.
+      const gm = projectCombatHistory({
+        participants,
+        source: historySource(
+          combatRoundStateSchema.parse({ events: [initiativeEvent, attackEvent, parryEvent] }),
+        ),
+        viewer: { kind: "gm" },
+      });
+      const gmInitiative = gm.activeRound.events.find(
+        (candidate) => candidate.type === "initiative",
+      );
+      expect(gmInitiative?.facts.privateCalculation).toMatchObject({ rolls: [6, 6], total: 18 });
+      expect(gmInitiative?.facts.gmReview).toEqual({ gmInitiativeNote: "gm-only" });
+
+      const defender = projectCombatHistory({
+        participants,
+        source: historySource(combatRoundStateSchema.parse({ events: [attackEvent, parryEvent] })),
+        viewer: player(["borin"], ["aria", "borin"]),
+      });
+      const defenderAttack = defender.activeRound.events.find(
+        (candidate) => candidate.type === "attack",
+      );
+      expect(defenderAttack?.facts.involvedOutcome).toMatchObject({ weaponName: "Broadsword" });
+      expect(defenderAttack?.facts.privateCalculation).toBeUndefined();
+      const defenderParry = defender.activeRound.events.find(
+        (candidate) => candidate.type === "parry",
+      );
+      expect(defenderParry?.facts.privateCalculation).toMatchObject({ combinedParryScore: 46 });
+    });
   });
 });

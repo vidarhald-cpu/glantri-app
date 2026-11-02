@@ -77,6 +77,7 @@ import {
   getProjectedCombatHistoryCellEvents,
   getCombatProgressionPresentationTasks,
   isCombatViewRevisionUnchanged,
+  isProjectedCombatTrackerStageReached,
   PlayerCombatHistoryInspector,
   resolveProjectedCombatHistoryPanelSnapshot,
   createDefaultCombatLogSelection,
@@ -5103,7 +5104,7 @@ export default function ScenarioPlayerCombatPageContent({
   /*
    * #771 R2-3. Shared by the tracker's arrow keys and by the four arrow buttons added to the
    * `Combat history` header. The buttons are presentation over this one path, not a second one:
-   * the move, the `inspectable` guard and the resulting state write are exactly what the keyboard
+   * the move, the cell-existence guard and the resulting state write are exactly what the keyboard
    * already did, so the buttons cannot reach a cell the keyboard could not. Returns whether the
    * selection actually moved, which is what the key handler needs in order to decide whether to
    * consume the key event.
@@ -5133,11 +5134,13 @@ export default function ScenarioPlayerCombatPageContent({
     const nextSelection =
       "stepOffset" in move
         ? /*
-           * #771. `visibleSteps` is this tracker model's own rendered column list. The
-           * `inspectable` guard below is not a substitute for it: this surface still builds a
-           * `pre_declaration` cell, and that cell can be inspectable while having no column —
-           * a landing the player could reach and then see nothing highlighted. The ruled
-           * traversal order (#215 ruling 2) is untouched; only hidden steps are skipped.
+           * #771. `visibleSteps` is this tracker model's own rendered column list, and it is the
+           * only thing keeping navigation off a column-less step. Neither the `inspectable` guard
+           * this path used to carry nor the cell-existence guard that replaced it (#862 V1 row 6)
+           * is a substitute for it: this surface builds a `pre_declaration` cell, so that step has
+           * a cell — and can even be inspectable — while having no column, which would be a
+           * landing the player could reach and then see nothing highlighted. The ruled traversal
+           * order (#215 ruling 2) is untouched; only hidden steps are skipped.
            *
            * Corrected mechanism (#783 F2): the hidden cell is *not* made inspectable by
            * completion evidence keyed to it. `buildProjectedCombatTrackerModel.ts` derives
@@ -5167,7 +5170,56 @@ export default function ScenarioPlayerCombatPageContent({
       playerCombatTrackerModel.cells[
         `${nextSelection.roundNumber}:${nextSelection.participantId}:${nextSelection.step}`
       ];
-    if (!nextCell?.inspectable) return false;
+    /*
+     * #862 V1 row 6. This guard used to require the destination cell to be inspectable, and it did
+     * not skip to the next inspectable cell — it refused to move at all, so the player's arrow keys
+     * and the four arrow buttons could not traverse a rendered-but-blank tracker cell. The GM
+     * surface never had that guard (`CombatRoundManagerPanel.tsx` `moveSelection` writes the
+     * selection unconditionally and does not mention `inspectable`), so this was a player-path
+     * divergence rather than a shared rule. The Product Owner's rule is that every rendered cell
+     * is a landing and the inspector may show nothing.
+     *
+     * What remains is the existence check. `buildProjectedCombatTrackerModel` builds a cell for
+     * every row × round × step, so a missing key means there is no cell to inspect at all.
+     * Column-less steps stay skipped by `getAdjacentVisibleCombatRoundTimelineStepSelection` and
+     * its `visibleSteps` argument above, which this guard was never doing: it is the visible-step
+     * wrapper, not `inspectable`, that keeps the inspector off a step with no rendered column.
+     *
+     * This grants no data. As the comment on this function already records, the move writes an
+     * inspection selection only; execution permission lives in `authorizeCombatProgressionTask`.
+     * `PlayerCombatHistoryInspector` renders only the projected events and the projected snapshot,
+     * every panel conditional on its own recorded content, so a landing on a cell with neither
+     * shows the `Historical context` card and `CombatEventResultList`'s own
+     * "No recorded result for this step." — the same empty state the GM surface already shows.
+     * The shared mouse path (`disabled={!cell.inspectable}` in `CombatTracker.tsx`) is
+     * deliberately untouched: it affects the GM surface too and #862 lists it out of scope.
+     *
+     * The shared-stage condition that follows is not a replacement guard and it is not
+     * `inspectable`: it is the *same* rule `buildProjectedCombatTrackerModel` already applies to
+     * the inspection cursor, borrowed rather than re-derived. Measured at this baseline, that model
+     * refuses to draw the cursor on an active-round cell past the canonical current step
+     * (`selectedStageReached`; `docs/architecture/combat-ux-principles.md`: "a future no-work stage
+     * remains neutral until the shared board reaches it"; pinned by its own test "does not allow
+     * local inspection to move ahead of canonical current work"). Without this condition a forward
+     * press on a live round would move the inspector while the highlight stayed on the current
+     * step — a selection the tracker will not draw, which is the state #771 exists to prevent.
+     *
+     * So every *reached* rendered cell is a landing, blank or not, which is row 6's subject.
+     * Whether a player may additionally inspect ahead of the shared board is a change to that
+     * documented rule rather than a consequence of removing `inspectable`, and is recorded as a
+     * finding on #862 rather than decided here.
+     */
+    if (!nextCell) return false;
+    if (
+      currentRound &&
+      !isProjectedCombatTrackerStageReached({
+        activeRoundNumber: currentRound.roundNumber,
+        currentStep: currentRound.currentStep,
+        selection: nextSelection,
+      })
+    ) {
+      return false;
+    }
     setRecentResultFocus(undefined);
     setRecentResultRequest(undefined);
     setHistoryInspection({

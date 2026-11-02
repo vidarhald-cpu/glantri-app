@@ -8215,6 +8215,350 @@ describe("scenarios route contract", () => {
     expect(JSON.stringify(response.json().history.progression)).not.toContain("diagnostics");
   });
 
+  /*
+   * #862 V1 — measured at the reader, not at the projection function.
+   *
+   * `GET /encounters/:encounterId/combat-history` (`encounterRoutes.ts:8222`) is the only server
+   * caller of `projectCombatHistory` (`:8390`), so this is the route that decides what a player
+   * actually receives. `perspectiveParticipantId` makes the route build a real
+   * `kind: "player"` viewer from one participant's scope (`:8324-8334`), which is how a bystander
+   * reading is obtained here without a second authenticated account.
+   *
+   * Three participations, deliberately: the exchange is Gladiator → City guard, and the viewer
+   * controls North archer, so the viewer is `involved` in nothing and is the roller of nothing. A
+   * two-participation fixture cannot express that for an attack or a parry.
+   */
+  it("serves table-visible initiative, attack and parry outcomes to a bystander without any private calculation (#862)", async () => {
+    const storedEvent = (overrides: Record<string, unknown>) => ({
+      completeness: "complete" as const,
+      encounterId: "encounter-1",
+      missingFacts: [],
+      occurredAt: "2026-01-01T00:01:00.000Z",
+      roundNumber: 1,
+      schemaVersion: 1,
+      source: { kind: "canonical" as const, sourceIds: [] },
+      status: "recorded" as const,
+      ...overrides,
+    });
+    const encounterParticipants = makeFourCombatEncounterParticipants().slice(0, 3);
+    const roundParticipants = encounterParticipants.map((participant) => ({
+      label: participant.label,
+      participantId: participant.id,
+    }));
+    const initiativeStoredEvent = storedEvent({
+      facts: {
+        gmReview: { gmInitiativeNote: "GM only" },
+        involvedOutcome: {},
+        publicOutcome: { total: 18 },
+        rollerPrivate: {
+          baseInitiative: 4,
+          modifierAdjustment: 2,
+          rolls: [6, 6],
+          rollTotal: 12,
+          total: 18,
+        },
+      },
+      id: "event-initiative",
+      rollerParticipantId: "encounter-participant-1",
+      sequence: 0,
+      step: "initiative_phase_1",
+      type: "initiative",
+      visibility: {
+        identityRefs: [{ participantId: "encounter-participant-1", role: "roller" }],
+        involvedParticipantIds: ["encounter-participant-1"],
+        outcomeScope: "involved",
+        rollerParticipantId: "encounter-participant-1",
+      },
+    });
+    /*
+     * #862 F1. Two encounters, one per side of the initiative publication boundary.
+     *
+     * `archiveInitiative: false` leaves all three events in the **active** round, whose canonical
+     * progression boundary this harness derives as `declaration` — before `phase1_initiative`, so
+     * the total is not yet committed. (Measured: the route recomputes the boundary from the round's
+     * own work, so a supplied `currentStep` does not steer it.)
+     *
+     * `archiveInitiative: true` puts the same initiative event in a **completed** round. An
+     * archived round is past by definition and therefore committed whatever the active round is
+     * doing, which is the committed side proved through the same route.
+     */
+    const encounterFor = (archiveInitiative: boolean) =>
+      makeCombatEncounter({
+        participants: encounterParticipants,
+        currentRound: archiveInitiative ? 2 : 1,
+        combatRoundState: {
+          encounterId: "encounter-1",
+          participants: roundParticipants,
+          rounds: archiveInitiative
+            ? [
+                {
+                  encounterId: "encounter-1",
+                  events: [initiativeStoredEvent],
+                  participants: roundParticipants,
+                  roundNumber: 1,
+                },
+              ]
+            : [],
+          roundNumber: archiveInitiative ? 2 : 1,
+          events: archiveInitiative
+            ? []
+            : [
+                initiativeStoredEvent,
+                storedEvent({
+                  facts: {
+                    gmReview: {},
+                    involvedOutcome: { tableResult: "Hit for 7", weaponName: "Broadsword" },
+                    publicOutcome: { grazing: false, hit: true },
+                    rollerPrivate: {
+                      defenderDb: -12,
+                      lookupTotal: 94,
+                      ob: 80,
+                      openEndedD10s: [],
+                      rollD20: 14,
+                      rollTotal: 94,
+                    },
+                  },
+                  id: "event-attack",
+                  phase: "phase1",
+                  rollerParticipantId: "encounter-participant-1",
+                  sequence: 1,
+                  step: "phase_1_actions",
+                  type: "attack",
+                  visibility: {
+                    identityRefs: [
+                      { participantId: "encounter-participant-2", role: "target" },
+                      { participantId: "encounter-participant-1", role: "attacker" },
+                      { participantId: "encounter-participant-2", role: "defender" },
+                      { participantId: "encounter-participant-1", role: "roller" },
+                    ],
+                    involvedParticipantIds: ["encounter-participant-1", "encounter-participant-2"],
+                    outcomeScope: "involved",
+                    rollerParticipantId: "encounter-participant-1",
+                  },
+                }),
+                storedEvent({
+                  facts: {
+                    gmReview: {},
+                    involvedOutcome: { resultLabel: "Parry held" },
+                    publicOutcome: {
+                      attackHit: true,
+                      brawlingContestOpened: false,
+                      parryPurpose: "defensive",
+                      status: "resolved",
+                      success: true,
+                    },
+                    rollerPrivate: {
+                      combinedParryScore: 46,
+                      modifierBreakdown: [{ label: "Shield", value: 4 }],
+                      rollD20: 11,
+                      rollTotal: 55,
+                      targetNumber: 50,
+                    },
+                  },
+                  id: "event-parry",
+                  phase: "phase1",
+                  rollerParticipantId: "encounter-participant-2",
+                  sequence: 2,
+                  step: "review_phase_2_actions",
+                  type: "parry",
+                  visibility: {
+                    identityRefs: [
+                      { participantId: "encounter-participant-1", role: "target" },
+                      { participantId: "encounter-participant-1", role: "attacker" },
+                      { participantId: "encounter-participant-2", role: "defender" },
+                      { participantId: "encounter-participant-2", role: "roller" },
+                    ],
+                    involvedParticipantIds: ["encounter-participant-1", "encounter-participant-2"],
+                    outcomeScope: "involved",
+                    rollerParticipantId: "encounter-participant-2",
+                  },
+                }),
+              ],
+        },
+      });
+    const readAll = async (archiveInitiative: boolean) => {
+      setupCombatDeclarationRoute({
+        /*
+         * `combatExperienceResolved: false` without an open window is the one branch of this
+         * helper that passes the supplied `combatRoundState` through verbatim rather than
+         * re-initialising it.
+         */
+        combatExperienceResolved: false,
+        encounter: encounterFor(archiveInitiative),
+        participants: [
+          makeCombatScenarioParticipant(),
+          makeCombatScenarioParticipant({
+            id: "participant-2",
+            snapshot: { displayName: "City guard" },
+          }),
+          makeCombatScenarioParticipant({
+            id: "participant-3",
+            snapshot: { displayName: "North archer" },
+          }),
+        ],
+        user: mocks.adminUser,
+      });
+      const app = await buildScenarioTestApp();
+      const read = (perspective?: string) =>
+        app.inject({
+          method: "GET",
+          url: `/encounters/encounter-1/combat-history${
+            perspective ? `?perspectiveParticipantId=${perspective}` : ""
+          }`,
+        });
+      const responses = await Promise.all([
+        read(),
+        read("participant-1"),
+        read("participant-2"),
+        read("participant-3"),
+      ]);
+      await app.close();
+      return responses;
+    };
+    const [gm, attacker, defender, bystander] = await readAll(false);
+    /*
+     * The archived read's positive control: the GM must see the archived initiative event, or the
+     * bystander assertion below could pass because the archived round never carried one.
+     */
+    const [gmArchived, , , bystanderArchived] = await readAll(true);
+    expect(
+      (
+        gmArchived.json().history.archivedRounds as Array<{ events: Array<{ id: string }> }>
+      ).flatMap((round) => round.events.map((event) => event.id)),
+      "GM positive control on the archived round",
+    ).toEqual(["event-initiative"]);
+    for (const response of [gm, attacker, defender, bystander, bystanderArchived]) {
+      expect(response.statusCode, response.body).toBe(200);
+    }
+    const events = (response: typeof gm) =>
+      (
+        response.json().history.activeRound.events as Array<{
+          facts: Record<string, unknown>;
+          id: string;
+          type: string;
+        }>
+      ).filter((event) => event.id.startsWith("event-"));
+    const bystanderEvent = (id: string) =>
+      events(bystander).find((candidate) => candidate.id === id);
+
+    // Positive control on the fixture itself: the GM reader must see all three events, or the
+    // bystander assertions below could pass because the events never existed.
+    expect(
+      events(gm)
+        .map((event) => event.id)
+        .sort(),
+    ).toEqual(["event-attack", "event-initiative", "event-parry"]);
+
+    /*
+     * Direction 1 — every table-visible fact reaches the bystander through the real route, subject
+     * to initiative's own publication timing (#862 F1): this round's boundary is still
+     * `declaration`, so the attack and parry outcomes arrive and the uncommitted initiative total
+     * does not. The committed side is asserted further down from the archived round.
+     */
+    expect(
+      events(bystander)
+        .map((event) => event.id)
+        .sort(),
+      "a bystander gets attack and parry, and no uncommitted initiative",
+    ).toEqual(["event-attack", "event-parry"]);
+    expect(bystanderEvent("event-attack")?.facts.publicOutcome).toEqual({
+      grazing: false,
+      hit: true,
+    });
+    expect(bystanderEvent("event-parry")?.facts.publicOutcome).toEqual({
+      attackHit: true,
+      brawlingContestOpened: false,
+      parryPurpose: "defensive",
+      status: "resolved",
+      success: true,
+    });
+
+    // Direction 2 — nothing #862 names private reaches the bystander anywhere in the body.
+    for (const event of events(bystander)) {
+      expect(event.facts.privateCalculation).toBeUndefined();
+      expect(event.facts.involvedOutcome).toBeUndefined();
+      expect(event.facts.gmReview).toBeUndefined();
+    }
+    const bystanderBody = bystander.body;
+    for (const field of [
+      "baseInitiative",
+      "modifierAdjustment",
+      "rolls",
+      "rollTotal",
+      "defenderDb",
+      "lookupTotal",
+      '"ob"',
+      "openEndedD10s",
+      "rollD20",
+      "combinedParryScore",
+      "modifierBreakdown",
+      "targetNumber",
+      "weaponName",
+      "tableResult",
+      "resultLabel",
+      "Broadsword",
+      "Hit for 7",
+      "Parry held",
+      "GM only",
+      "initiativeRank",
+      "rankTotal",
+    ]) {
+      expect(bystanderBody, `${field} must not reach a bystander`).not.toContain(field);
+    }
+
+    // The parties who already had those facts keep them: the change is admission, not relocation.
+    const attackerAttack = events(attacker).find((event) => event.id === "event-attack");
+    expect(attackerAttack?.facts.privateCalculation).toMatchObject({ ob: 80, rollD20: 14 });
+    const defenderParry = events(defender).find((event) => event.id === "event-parry");
+    expect(defenderParry?.facts.privateCalculation).toMatchObject({ combinedParryScore: 46 });
+    expect(events(gm).find((event) => event.id === "event-initiative")?.facts.gmReview).toEqual({
+      gmInitiativeNote: "GM only",
+    });
+
+    /*
+     * #862 F1, both sides of the initiative publication boundary, both at this route.
+     *
+     * Uncommitted (the reads above): the bystander receives no initiative event at all — not a
+     * reduced one — and the total is nowhere in the response body. The roller and the GM are
+     * unaffected in the same state, which is what confines the condition to the bystander arm.
+     */
+    expect(
+      bystander.body,
+      "the uncommitted total must not be anywhere in the bystander's body",
+    ).not.toContain("event-initiative");
+    expect(bystander.body).not.toContain('"total"');
+    expect(
+      events(attacker)
+        .map((event) => event.id)
+        .sort(),
+      "the roller still receives their own uncommitted initiative",
+    ).toEqual(["event-attack", "event-initiative", "event-parry"]);
+    expect(
+      events(attacker).find((event) => event.id === "event-initiative")?.facts.privateCalculation,
+    ).toMatchObject({ rolls: [6, 6], total: 18 });
+
+    /*
+     * Committed: the same event in an archived round. The bystander now receives the total, and
+     * still none of the calculation — admission acquired a timing condition, not a new redaction.
+     */
+    const archivedEvents = (
+      bystanderArchived.json().history.archivedRounds as Array<{
+        events: Array<{ facts: Record<string, unknown>; id: string }>;
+      }>
+    ).flatMap((round) => round.events);
+    const archivedInitiative = archivedEvents.find((event) => event.id === "event-initiative");
+    expect(archivedInitiative, "a committed initiative total is table state").toBeDefined();
+    expect(archivedInitiative?.facts.publicOutcome).toEqual({ total: 18 });
+    expect(archivedInitiative?.facts.privateCalculation).toBeUndefined();
+    expect(archivedInitiative?.facts.gmReview).toBeUndefined();
+    for (const field of ["baseInitiative", "modifierAdjustment", "rolls", "rollTotal", "GM only"]) {
+      expect(
+        bystanderArchived.body,
+        `${field} must not reach a bystander even once the total is committed`,
+      ).not.toContain(field);
+    }
+  });
+
   it("projects an active typed Critical consequence only to its affected Player and the GM", async () => {
     const criticalRuntime = {
       bleed: {

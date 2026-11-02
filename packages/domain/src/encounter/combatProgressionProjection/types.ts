@@ -34,6 +34,43 @@ export const COMBAT_PROGRESSION_BOUNDARIES = [
 
 export type CombatProgressionBoundaryKind = (typeof COMBAT_PROGRESSION_BOUNDARIES)[number];
 
+/**
+ * Whether a round's initiative total for one initiative step has been **committed**, and is
+ * therefore publishable.
+ *
+ * Initiative carries its own publication-timing rule, exactly as declarations do: the ruling on
+ * #854 (comment 19297) makes the **final** initiative number public, not a number the round is
+ * still producing. A round that is already archived is committed in full; the active round's
+ * phase-1 and phase-2 totals are committed only once the canonical progression boundary has
+ * advanced **past** `phase1_initiative` / `phase2_initiative` respectively.
+ *
+ * This is the single definition of that rule. It lives here, beside `COMBAT_PROGRESSION_BOUNDARIES`,
+ * because the rule is nothing but a comparison against that canonical order — a second hand-written
+ * copy of the order is how the two would drift. Both the server-side admission gate
+ * (`shouldProjectPlayerEvent`, #862 F1) and the web tracker's reveal (`initiativeIsCommitted` in
+ * `buildProjectedCombatTrackerModel.ts`) call this, so no surface can publish a total another one
+ * is still withholding.
+ *
+ * Fail-closed: a step that is not an initiative step, and an active round whose boundary is not
+ * known, are both reported as not committed.
+ */
+export function isCombatInitiativeCommitted(input: {
+  boundary?: CombatProgressionBoundaryKind;
+  /** True for any round that is not the active one; archived rounds are published in full. */
+  historical: boolean;
+  step: CombatRoundStep;
+}): boolean {
+  if (input.historical) return true;
+  if (input.step !== "initiative_phase_1" && input.step !== "initiative_phase_2") return false;
+  if (!input.boundary) return false;
+  const committedAfter: CombatProgressionBoundaryKind =
+    input.step === "initiative_phase_1" ? "phase1_initiative" : "phase2_initiative";
+  return (
+    COMBAT_PROGRESSION_BOUNDARIES.indexOf(input.boundary) >
+    COMBAT_PROGRESSION_BOUNDARIES.indexOf(committedAfter)
+  );
+}
+
 /** Shared visible tracker step for a boundary when its exact current task is ownerless or hidden. */
 export function getCombatRoundStepForProgressionBoundary(
   boundary: CombatProgressionBoundaryKind,

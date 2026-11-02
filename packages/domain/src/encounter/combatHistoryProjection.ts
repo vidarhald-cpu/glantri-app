@@ -1,4 +1,8 @@
-import type { CombatStepEvent, CombatStepEventFacts } from "./combatStepEventSchema";
+import type {
+  CombatStepEvent,
+  CombatStepEventFacts,
+  CombatStepEventType,
+} from "./combatStepEventSchema";
 import { projectCombatResultEnvelope, type CombatResultEnvelope } from "./combatResultEnvelope";
 import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
 import {
@@ -18,7 +22,9 @@ import {
 } from "./combatReadModels";
 import {
   buildCombatProgressionProjection,
+  isCombatInitiativeCommitted,
   projectCombatProgressionPresentation,
+  type CombatProgressionBoundaryKind,
   type CombatProgressionPresentationProjection,
   type CombatProgressionProjection,
 } from "./combatProgressionProjection";
@@ -685,8 +691,36 @@ function projectEventIdentities(input: {
   );
 }
 
+/**
+ * Event types whose outcome is table state under the Product Owner's board-game rule (#854 ruling
+ * comment 19297, implemented as #862 lane V1): *what happened on the table is shared; what is
+ * private on another Character's sheet is not.*
+ *
+ * Exactly the three types that ruling names as `Alpha straightforward` and whose `publicOutcome`
+ * already carries precisely the board-visible fact and nothing else, measured at this baseline:
+ * `initiative` → `{ total }` (`combatRoundManager.ts:22945`, legacy `combatStepEvents.ts:405`,
+ * which also carries `resolutionType`); `attack` → `{ grazing, hit }` (`:23225`, legacy `:565`);
+ * `parry` → `{ attackHit, brawlingContestOpened, parryPurpose, status, success }` (`:10610`,
+ * legacy `:648`, narrower). Nothing is added to or moved into those buckets here.
+ *
+ * `offensive_parry_brawling`, `critical`, `damage_committed`, `hit_location` and the distance
+ * maneuvers are deliberately absent: #862 scopes them to later lanes or holds them, and the last
+ * four have no populated `publicOutcome` to admit.
+ */
+const TABLE_VISIBLE_OUTCOME_EVENT_TYPES: readonly CombatStepEventType[] = [
+  "attack",
+  "initiative",
+  "parry",
+];
+
 function shouldProjectPlayerEvent(input: {
   event: CombatStepEvent;
+  /**
+   * Whether this event's round has committed the initiative total for this event's step, from
+   * `isCombatInitiativeCommitted` against the same canonical progression boundary the web tracker
+   * reads. Absent means not committed: every caller that cannot establish the timing withholds.
+   */
+  initiativeCommitted?: boolean;
   viewer: Extract<CombatHistoryViewer, { kind: "player" }>;
 }): boolean {
   if (input.event.type === "damage_proposed") return false;
@@ -700,6 +734,67 @@ function shouldProjectPlayerEvent(input: {
     input.event.type === "declaration" &&
     input.event.ownerParticipantId &&
     input.viewer.visibleParticipantIds.has(input.event.ownerParticipantId)
+  ) {
+    return true;
+  }
+
+  /*
+   * #862 V1. The second carve-out, shaped like the `declaration` one above: admission only. Before
+   * this, a viewer who controls no participant in the exchange and is not the roller had the whole
+   * event dropped, because `outcomeScope` is the `buildCandidate` default `"involved"`
+   * (`combatStepEvents.ts:270`) for every one of these types. The tracker was therefore not showing
+   * a reduced outcome for a third party's exchange; it was showing nothing.
+   *
+   * Deliberately a gate carve-out and not a non-`"involved"` `outcomeScope` on the writers, for
+   * three measured reasons:
+   *
+   *   1. `outcomeScope` is stored on each event's `visibility` record, so re-declaring it in the
+   *      writers would leave every already-recorded round unchanged.
+   *   2. `involvedPresentationRestricted` (`combatResultEnvelope.ts:199`) is
+   *      `outcomeScope === "involved" && !involved`. Widening the scope would therefore *also*
+   *      release `resultPresentation` — `conciseOutcome`, `publicCombatNote`,
+   *      `standardConsequences`, `committedConsequences` — and the legacy public note to a
+   *      bystander. That is a second disclosure nobody authorized. Keeping the scope `"involved"`
+   *      keeps the envelope restricted and `visibility.calculationAccess` at `"none"`.
+   *   3. The field-level projection in `projectCombatHistoryEvent` is untouched either way, so
+   *      `involvedOutcome` still needs `involved`, `privateCalculation`/`rollerPrivate` still needs
+   *      `ownRoll`, `gmReview` still needs the GM, and `defenseReview` still needs `ownRoll`. A
+   *      bystander receives `publicOutcome` and the visible identities, and nothing else.
+   *
+   * The visibility condition is the one the `"public"`/`"perceived"` branch below already uses —
+   * every identity the event references must be visible to this viewer — so an exchange involving
+   * someone the viewer cannot see stays withheld in full rather than arriving with an
+   * `"unseen attacker"` placeholder. `identityRefs` is additionally required to be non-empty:
+   * `Array.prototype.every` is true for an empty array, and an event that names nobody must not be
+   * admitted by a rule about visible participants.
+   *
+   * Initiative *rank* is not involved here and stays GM-only as ruled: it exists only on the step
+   * snapshot (`initiativeRank`), `projectSnapshot` never projects it to anyone, and the snapshot's
+   * `initiativeResult` remains `ownsSnapshot`-gated.
+   *
+   * **Initiative also carries a publication-timing condition (#862 F1).** The ruling makes the
+   * *final* initiative number public, not a number the round is still producing, and initiative has
+   * its own commitment rule exactly as declarations do. The web tracker's hover already honoured it
+   * (`"initiative roll recorded."` until the boundary passes `phase1_initiative`/`phase2_initiative`),
+   * but the combat-history inspector does not and cannot: `buildCombatEventResultModel` takes no
+   * progression, boundary or commitment input of any kind, so a web-layer condition would leave the
+   * fact in the payload and merely decline to render it. It is therefore applied **here**, at the
+   * gate, so an uncommitted total never reaches a bystander at all.
+   *
+   * It is attached to this carve-out and to nothing else, which is what confines it to bystanders.
+   * The roller and any involved party reach the event through the `involved || ownRoll` branch
+   * below, and the GM never enters this function — so what those three receive is unchanged in both
+   * states. `initiativeCommitted` is computed by `projectRound` from
+   * `isCombatInitiativeCommitted`, the single shared definition of the rule in
+   * `combatProgressionProjection/types.ts`; the step order is not re-derived here.
+   */
+  if (
+    TABLE_VISIBLE_OUTCOME_EVENT_TYPES.includes(input.event.type) &&
+    (input.event.type !== "initiative" || input.initiativeCommitted === true) &&
+    input.event.visibility.identityRefs.length > 0 &&
+    input.event.visibility.identityRefs.every((ref) =>
+      input.viewer.visibleParticipantIds.has(ref.participantId),
+    )
   ) {
     return true;
   }
@@ -737,12 +832,23 @@ function shouldProjectPlayerEvent(input: {
 
 export function projectCombatHistoryEvent(input: {
   event: CombatStepEvent;
+  /**
+   * Initiative publication timing for this event's round and step (#862 F1), normally supplied by
+   * `projectCombatHistory` through `projectRound`. Omitting it withholds an uncommitted initiative
+   * total from a bystander, which is the fail-closed direction; it changes nothing for the roller,
+   * an involved party or the GM.
+   */
+  initiativeCommitted?: boolean;
   participants: readonly CombatHistoryParticipantInput[];
   viewer: CombatHistoryViewer;
 }): ProjectedCombatHistoryEvent | undefined {
   if (
     input.viewer.kind === "player" &&
-    !shouldProjectPlayerEvent({ event: input.event, viewer: input.viewer })
+    !shouldProjectPlayerEvent({
+      event: input.event,
+      initiativeCommitted: input.initiativeCommitted,
+      viewer: input.viewer,
+    })
   ) {
     return undefined;
   }
@@ -1075,6 +1181,14 @@ function projectSnapshot(input: {
 
 function projectRound(input: {
   events: readonly CombatStepEvent[];
+  /**
+   * The canonical progression boundary of the **active** round (#862 F1). Supplied so that
+   * initiative publication timing is decided from the same boundary the web tracker reads, rather
+   * than from a second derivation. Undefined on an archived round, where `historical` settles it.
+   */
+  activeRoundBoundary?: CombatProgressionBoundaryKind;
+  /** True for a round that is not the active one, which is published in full. */
+  historical: boolean;
   labels: ReadonlyMap<string, string>;
   observationRelationships: readonly CombatObservationRelationship[];
   participants: readonly CombatHistoryParticipantInput[];
@@ -1088,6 +1202,11 @@ function projectRound(input: {
       .map((event) =>
         projectCombatHistoryEvent({
           event,
+          initiativeCommitted: isCombatInitiativeCommitted({
+            boundary: input.activeRoundBoundary,
+            historical: input.historical,
+            step: event.step,
+          }),
           participants: input.participants,
           viewer: input.viewer,
         }),
@@ -1195,6 +1314,8 @@ export function projectCombatHistory(input: {
         roundNumber: round.roundNumber,
         stepSnapshots: round.stepSnapshots,
       }),
+      // An archived round is past; its initiative totals are final (#862 F1).
+      historical: true,
       labels,
       observationRelationships: round.observationRelationships,
       participants: visibleParticipants,
@@ -1217,6 +1338,15 @@ export function projectCombatHistory(input: {
         roundNumber: state.roundNumber,
         stepSnapshots: state.stepSnapshots,
       }),
+      /*
+       * #862 F1. The active round's initiative publication timing is decided from the same
+       * canonical progression boundary the web tracker's reveal reads, taken from the `progression`
+       * this function has already computed a few lines above. Nothing new is threaded in and no
+       * step order is derived a second time: `isCombatInitiativeCommitted` compares this boundary
+       * against `COMBAT_PROGRESSION_BOUNDARIES`, and the web calls the same predicate.
+       */
+      activeRoundBoundary: progression.boundary.kind,
+      historical: false,
       labels,
       observationRelationships: state.observationRelationships,
       participants: visibleParticipants,

@@ -297,7 +297,14 @@ describe("buildCombatEventResultModel", () => {
         { text: "Target: Scyrian cavalry guy" },
         { text: "Declared by: GM" },
       ],
-      summary: "The Gladiator declared an action.",
+      /*
+       * #862 V1 row 5. This assertion previously pinned `"The Gladiator declared an action."` with
+       * the action and the target present in the very same `outcomeRows` above — it was the
+       * repository's own pin on the defect, and the Product Owner's ruling (#854 comment 19297)
+       * reverses it. The declared *movement* is deliberately still not named: #862 places the
+       * movement label in a later lane, so it stays an `outcomeRows` entry only.
+       */
+      summary: "The Gladiator declared Parry against Scyrian cavalry guy.",
     });
     expect(model.items[1]?.outcomeRows).toEqual([
       expect.objectContaining({ text: "DB/Parry: -1 → -2" }),
@@ -988,5 +995,112 @@ describe("buildCombatEventResultModel", () => {
     expect(model.items[2]?.outcomeRows.map((row) => row.text)).toContain(
       "Scyrian receives Skill/OB -2 and DB/Parry -2 in Phase 2.",
     );
+  });
+
+  /*
+   * #862 V1 row 5. The summary names the committed action and target *from facts already in hand*.
+   * The point of this block is that the wording cannot create a disclosure: it is driven only by
+   * `factValue` (which reads `involvedOutcome` then `publicOutcome`, never `privateCalculation` or
+   * `gmReview`) and by the already-projected `target` identity. So the cases below are shaped like
+   * the payloads `projectCombatHistoryEvent` actually produces for each viewer, and the bystander
+   * shape — no `involvedOutcome`, `target`/`defender` identities filtered out — must still get the
+   * old sentence.
+   */
+  describe("#862 V1 — the declaration summary names what the viewer already has", () => {
+    const declaration = (overrides: Partial<ProjectedCombatHistoryEvent>) =>
+      buildCombatEventResultModel([
+        event("declaration", 1, { step: "select_actions", ...overrides }),
+      ]).items[0];
+
+    it("names the action and the target when both are projected", () => {
+      const item = declaration({
+        facts: { involvedOutcome: { actionLabel: "Attack" }, publicOutcome: {} },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "Scyrian",
+            participantId: "scyrian",
+            role: "target",
+            visibility: "visible",
+          },
+        ],
+      });
+
+      expect(item?.summary).toBe("The Gladiator declared Attack against Scyrian.");
+    });
+
+    it("names the action alone when no target identity is projected", () => {
+      const item = declaration({
+        facts: { involvedOutcome: { actionLabel: "Observe Opponent" }, publicOutcome: {} },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+      });
+
+      expect(item?.summary).toBe("The Gladiator declared Observe Opponent.");
+    });
+
+    it("keeps the previous wording for a bystander's projected declaration", () => {
+      /*
+       * Exactly the payload `projectCombatHistoryEvent` builds for a viewer who is neither the GM
+       * nor involved: the `declaration` carve-out admits the event, `involvedOutcome` is dropped
+       * because `involved` is false, and the `target`/`defender` identities are filtered out. No
+       * action fact and no target identity, therefore no new sentence and nothing named that the
+       * viewer did not already receive.
+       */
+      const item = declaration({
+        facts: { publicOutcome: {} },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+      });
+
+      expect(item?.summary).toBe("The Gladiator declared an action.");
+      expect(item?.outcomeRows).toEqual([]);
+      expect(JSON.stringify(item)).not.toContain("Scyrian");
+    });
+
+    it("names a target it was given even with no action fact", () => {
+      const item = declaration({
+        facts: { publicOutcome: {} },
+        identities: [
+          {
+            displayName: "The Gladiator",
+            participantId: "gladiator",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "Scyrian",
+            participantId: "scyrian",
+            role: "target",
+            visibility: "visible",
+          },
+        ],
+      });
+
+      expect(item?.summary).toBe("The Gladiator declared an action against Scyrian.");
+    });
+
+    it("falls back to Participant when no identity is projected at all", () => {
+      expect(declaration({ facts: { publicOutcome: {} } })?.summary).toBe(
+        "Participant declared an action.",
+      );
+    });
   });
 });

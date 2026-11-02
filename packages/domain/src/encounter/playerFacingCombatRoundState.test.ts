@@ -477,4 +477,79 @@ describe("#517 player-facing encounter: non-assignability from stored values at 
 
     expect(player.breakOffProposals).toHaveLength(1);
   });
+
+  /*
+   * #862 V1 — the second half of the gate proof. A carve-out in `shouldProjectPlayerEvent` covers
+   * only that gate's callers, so the other player-reachable carrier of combat round state has to
+   * be measured rather than assumed. The session body does not go through the event gate at all:
+   * `events` is `neverPlayerFacing`, a `z.array(z.never())`, so this path cannot carry a combat
+   * step event to any player whatever the gate decides. Measured here rather than read, because
+   * nothing in the repository was asserting it.
+   */
+  it("#862 — the player session body still carries no combat step events at all", () => {
+    const storedEvent = {
+      completeness: "complete" as const,
+      encounterId: "encounter-1",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {},
+        publicOutcome: { grazing: false, hit: true },
+        rollerPrivate: { ob: 80 },
+      },
+      id: "event-attack",
+      missingFacts: [],
+      occurredAt: TIMESTAMP,
+      roundNumber: 1,
+      schemaVersion: 1,
+      sequence: 0,
+      source: { kind: "canonical" as const, sourceIds: [] },
+      status: "recorded" as const,
+      step: "phase_1_actions" as const,
+      type: "attack" as const,
+      visibility: {
+        identityRefs: [{ participantId: "hero", role: "attacker" as const }],
+        involvedParticipantIds: ["hero", "guard"],
+        outcomeScope: "involved" as const,
+        rollerParticipantId: "hero",
+      },
+    };
+    const state = combatRoundStateSchema.parse({
+      ...storedRoundStateInput(),
+      events: [storedEvent],
+    });
+    expect(state.events, "the fixture must really hold an event, or this proves nothing").toEqual([
+      expect.objectContaining({ id: "event-attack" }),
+    ]);
+
+    /*
+     * `events: []` is the override `buildPlayerFacingCombatRoundStateForUser` itself passes
+     * (`encounterRoutes.ts:6719`). It is not optional decoration: without it `buildPlayerFacing`
+     * throws `Expected never, received object` on the stored event rather than quietly dropping
+     * it, which is a stronger property than "zeroes events" and is asserted below.
+     */
+    const player = buildPlayerFacing(playerFacingCombatRoundStateSchema, state, {
+      events: [],
+      participants: state.participants.map((participant) =>
+        buildPlayerFacingCombatRoundParticipant({ participant }),
+      ),
+    });
+
+    expect(player.events).toEqual([]);
+    expect(player.stepSnapshots).toEqual([]);
+    expect(player.rounds).toEqual([]);
+    expect(player.defenseSnapshots).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("event-attack");
+    // Fail-closed, both ways in: the schema refuses a combat step event outright, so neither a
+    // caller writing one directly nor a builder forgetting the override can publish one.
+    expect(() =>
+      playerFacingCombatRoundStateSchema.parse({ ...player, events: [storedEvent] }),
+    ).toThrow(/Expected never/);
+    expect(() =>
+      buildPlayerFacing(playerFacingCombatRoundStateSchema, state, {
+        participants: state.participants.map((participant) =>
+          buildPlayerFacingCombatRoundParticipant({ participant }),
+        ),
+      }),
+    ).toThrow(/Expected never/);
+  });
 });

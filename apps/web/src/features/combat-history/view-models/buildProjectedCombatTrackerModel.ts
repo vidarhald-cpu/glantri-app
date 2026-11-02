@@ -2,6 +2,7 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
   getCombatRoundStepForProgressionBoundary,
+  isCombatInitiativeCommitted,
   type CombatHistoryProjection,
   type CombatProgressionPresentationProjection,
   type CombatRoundStep,
@@ -118,29 +119,51 @@ function markerForEvents(input: {
   return { kind: "not_reached", marker: "·" };
 }
 
+/**
+ * Whether the shared canonical board has reached a cell's stage.
+ *
+ * This is the rule recorded in `docs/architecture/combat-ux-principles.md` — *"Canonical stage
+ * order gates active-round presentation … a future no-work stage remains neutral until the shared
+ * board reaches it"* — and pinned by this module's own test *"does not allow local inspection to
+ * move ahead of canonical current work"*. Archived rounds are reached in full; in the active round
+ * a cell is reached only up to the canonical current step.
+ *
+ * Exported for the player Combat surface's keyboard/arrow handler (#862 V1 row 6), which must
+ * refuse a destination this model would then refuse to draw the inspection cursor on. Sharing the
+ * predicate is the point: deriving step order a second time in the page is how the two would
+ * drift, and a selection the tracker will not highlight is exactly the "landing the player could
+ * reach and then see nothing highlighted" that #771 was about.
+ */
+export function isProjectedCombatTrackerStageReached(input: {
+  activeRoundNumber: number;
+  currentStep?: CombatRoundStep;
+  selection: { roundNumber: number; step: CombatRoundStep };
+}): boolean {
+  if (input.selection.roundNumber !== input.activeRoundNumber) return true;
+  const currentStepIndex = input.currentStep ? COMBAT_ROUND_STEPS.indexOf(input.currentStep) : -1;
+  if (currentStepIndex < 0) return true;
+  return COMBAT_ROUND_STEPS.indexOf(input.selection.step) <= currentStepIndex;
+}
+
+/*
+ * #862 F1. This used to carry its own hand-written copy of the boundary order. The rule — a round's
+ * initiative total is publishable only once the canonical boundary has advanced past that phase's
+ * initiative step — now has one definition, `isCombatInitiativeCommitted` in
+ * `combatProgressionProjection/types.ts`, compared against the canonical
+ * `COMBAT_PROGRESSION_BOUNDARIES`. The server-side admission gate calls the same predicate, so this
+ * surface and the projection that feeds it cannot disagree about when a total becomes public. The
+ * behaviour here is unchanged; only the source of the rule moved.
+ */
 function initiativeIsCommitted(input: {
   historical: boolean;
   progression?: CombatProgressionPresentationProjection;
   step: CombatRoundStep;
 }): boolean {
-  if (input.historical) return true;
-  if (input.step !== "initiative_phase_1" && input.step !== "initiative_phase_2") return false;
-  const boundary = input.progression?.boundary.kind;
-  if (!boundary) return false;
-  const boundaryOrder: readonly CombatProgressionPresentationProjection["boundary"]["kind"][] = [
-    "declaration",
-    "phase1_modifier_review",
-    "phase1_initiative",
-    "phase1_resolution",
-    "phase2_modifier_review",
-    "phase2_initiative",
-    "phase2_resolution",
-    "round_end",
-    "round_boundary",
-  ];
-  const committedAfter =
-    input.step === "initiative_phase_1" ? "phase1_initiative" : "phase2_initiative";
-  return boundaryOrder.indexOf(boundary) > boundaryOrder.indexOf(committedAfter);
+  return isCombatInitiativeCommitted({
+    boundary: input.progression?.boundary.kind,
+    historical: input.historical,
+    step: input.step,
+  });
 }
 
 function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown {
@@ -386,12 +409,14 @@ export function buildProjectedCombatTrackerModel(input: {
           step: currentStep,
         }
       : undefined;
-  const selectedRoundIsActive = input.selected?.roundNumber === activeRoundNumber;
-  const selectedStepIndex = input.selected ? COMBAT_ROUND_STEPS.indexOf(input.selected.step) : -1;
   const currentStepIndex = currentStep ? COMBAT_ROUND_STEPS.indexOf(currentStep) : -1;
   const selectedStageReached =
     input.selected !== undefined &&
-    (!selectedRoundIsActive || currentStepIndex < 0 || selectedStepIndex <= currentStepIndex);
+    isProjectedCombatTrackerStageReached({
+      activeRoundNumber,
+      currentStep,
+      selection: input.selected,
+    });
   const cursorSelection = selectedStageReached ? input.selected : operationalSelection;
   const operationalCursorCellKey = operationalSelection
     ? buildCombatTrackerCellKey(operationalSelection)
