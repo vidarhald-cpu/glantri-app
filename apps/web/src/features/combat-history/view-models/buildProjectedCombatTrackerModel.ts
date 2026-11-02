@@ -2,6 +2,7 @@ import {
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
   getCombatRoundStepForProgressionBoundary,
+  isCombatInitiativeCommitted,
   type CombatHistoryProjection,
   type CombatProgressionPresentationProjection,
   type CombatRoundStep,
@@ -144,29 +145,25 @@ export function isProjectedCombatTrackerStageReached(input: {
   return COMBAT_ROUND_STEPS.indexOf(input.selection.step) <= currentStepIndex;
 }
 
+/*
+ * #862 F1. This used to carry its own hand-written copy of the boundary order. The rule — a round's
+ * initiative total is publishable only once the canonical boundary has advanced past that phase's
+ * initiative step — now has one definition, `isCombatInitiativeCommitted` in
+ * `combatProgressionProjection/types.ts`, compared against the canonical
+ * `COMBAT_PROGRESSION_BOUNDARIES`. The server-side admission gate calls the same predicate, so this
+ * surface and the projection that feeds it cannot disagree about when a total becomes public. The
+ * behaviour here is unchanged; only the source of the rule moved.
+ */
 function initiativeIsCommitted(input: {
   historical: boolean;
   progression?: CombatProgressionPresentationProjection;
   step: CombatRoundStep;
 }): boolean {
-  if (input.historical) return true;
-  if (input.step !== "initiative_phase_1" && input.step !== "initiative_phase_2") return false;
-  const boundary = input.progression?.boundary.kind;
-  if (!boundary) return false;
-  const boundaryOrder: readonly CombatProgressionPresentationProjection["boundary"]["kind"][] = [
-    "declaration",
-    "phase1_modifier_review",
-    "phase1_initiative",
-    "phase1_resolution",
-    "phase2_modifier_review",
-    "phase2_initiative",
-    "phase2_resolution",
-    "round_end",
-    "round_boundary",
-  ];
-  const committedAfter =
-    input.step === "initiative_phase_1" ? "phase1_initiative" : "phase2_initiative";
-  return boundaryOrder.indexOf(boundary) > boundaryOrder.indexOf(committedAfter);
+  return isCombatInitiativeCommitted({
+    boundary: input.progression?.boundary.kind,
+    historical: input.historical,
+    step: input.step,
+  });
 }
 
 function projectedFact(event: ProjectedCombatHistoryEvent, key: string): unknown {

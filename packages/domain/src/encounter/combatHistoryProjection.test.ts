@@ -2108,21 +2108,43 @@ describe("combat history projection", () => {
       },
     });
 
-    const bystanderProjection = () =>
+    /*
+     * `currentStep` is what `buildCombatProgressionProjection` derives the canonical boundary from,
+     * measured: `initiative_phase_1` yields boundary `phase1_initiative` and `phase_1_actions`
+     * yields `phase1_resolution`. Initiative is committed only *past* its own boundary, so those
+     * two values are the two sides of the publication-timing rule (#862 F1) and the default below
+     * is the committed one.
+     */
+    const roundState = (currentStep: CombatRoundState["currentStep"] = "phase_1_actions") =>
+      combatRoundStateSchema.parse({
+        currentStep,
+        encounterId: "encounter-1",
+        events: [initiativeEvent, attackEvent, parryEvent, unseenAttackEvent, criticalEvent],
+        participants: [
+          { label: "Aria", participantId: "aria" },
+          { label: "Borin", participantId: "borin" },
+          { label: "Cyra", participantId: "cyra" },
+        ],
+        roundNumber: 1,
+      });
+
+    const projectionFor = (
+      viewer: Parameters<typeof projectCombatHistory>[0]["viewer"],
+      currentStep?: CombatRoundState["currentStep"],
+    ) =>
       projectCombatHistory({
         participants,
-        source: historySource(
-          combatRoundStateSchema.parse({
-            events: [initiativeEvent, attackEvent, parryEvent, unseenAttackEvent, criticalEvent],
-          }),
-        ),
-        viewer: bystander,
+        source: historySource(roundState(currentStep)),
+        viewer,
       });
+
+    const bystanderProjection = (currentStep?: CombatRoundState["currentStep"]) =>
+      projectionFor(bystander, currentStep);
 
     const bystanderEvent = (id: string) =>
       bystanderProjection().activeRound.events.find((candidate) => candidate.id === id);
 
-    it("row 1 — delivers the initiative total and withholds the roller's calculation", () => {
+    it("row 1 — delivers the committed initiative total and withholds the roller's calculation", () => {
       const projection = bystanderProjection();
       const projected = projection.activeRound.events.find(
         (candidate) => candidate.type === "initiative",
@@ -2152,6 +2174,147 @@ describe("combat history projection", () => {
       });
       expect(projected?.resultEnvelope?.calculationReferences).toEqual([]);
       expect(projected?.resultEnvelope?.privateDiagnostics).toEqual([]);
+    });
+
+    /*
+     * #862 F1. Initiative carries its own publication-timing rule, exactly as declarations do: the
+     * ruling makes the *final* number public, not one the round is still producing. #862's row 1
+     * said `initiativeIsCommitted` "already gates the reveal", which is true of the web tracker's
+     * hover and false of the combat-history inspector — `buildCombatEventResultModel` takes no
+     * progression, boundary or commitment input at all, so a web-layer condition would leave the
+     * total in the payload and merely decline to draw it. The condition therefore lives at the
+     * admission gate, and the tests below assert **both sides of the boundary** and **all three**
+     * audiences that must not change.
+     */
+    describe("initiative publication timing", () => {
+      /** Boundary `phase1_initiative`: the round is still taking the phase-1 rolls. */
+      const UNCOMMITTED = "initiative_phase_1" as const;
+      /** Boundary `phase1_resolution`: the round has moved past them. */
+      const COMMITTED = "phase_1_actions" as const;
+      const initiativeOf = (projection: ReturnType<typeof projectCombatHistory>) =>
+        projection.activeRound.events.find((candidate) => candidate.type === "initiative");
+
+      it("withholds an uncommitted initiative total from a bystander entirely", () => {
+        const projection = bystanderProjection(UNCOMMITTED);
+
+        // Not reduced — absent. The fact never enters the payload, so no reader can render it.
+        expect(initiativeOf(projection)).toBeUndefined();
+        const serialized = JSON.stringify(projection.activeRound.events);
+        expect(serialized).not.toContain("event-initiative-aria");
+        expect(serialized, "the total itself must not appear anywhere").not.toContain("18");
+      });
+
+      it("delivers it to the same bystander once the boundary has passed", () => {
+        const projected = initiativeOf(bystanderProjection(COMMITTED));
+
+        expect(projected, "the committed total is table state").toBeDefined();
+        expect(projected?.facts.publicOutcome).toEqual({ resolutionType: "rolled", total: 18 });
+        expect(projected?.facts.privateCalculation).toBeUndefined();
+        expect(projected?.facts.involvedOutcome).toBeUndefined();
+        expect(projected?.facts.gmReview).toBeUndefined();
+      });
+
+      it("archives are published in full regardless of the active round's boundary", () => {
+        // An archived round is past; `historical` settles it without consulting the boundary.
+        const archived = projectCombatHistory({
+          participants,
+          source: historySource(
+            combatRoundStateSchema.parse({
+              currentStep: UNCOMMITTED,
+              encounterId: "encounter-1",
+              events: [],
+              participants: [
+                { label: "Aria", participantId: "aria" },
+                { label: "Cyra", participantId: "cyra" },
+              ],
+              roundNumber: 2,
+              rounds: [
+                {
+                  encounterId: "encounter-1",
+                  events: [initiativeEvent],
+                  participants: [
+                    { label: "Aria", participantId: "aria" },
+                    { label: "Cyra", participantId: "cyra" },
+                  ],
+                  roundNumber: 1,
+                },
+              ],
+            }),
+          ),
+          viewer: bystander,
+        });
+
+        const projected = archived.archivedRounds[0]?.events.find(
+          (candidate) => candidate.type === "initiative",
+        );
+        expect(projected?.facts.publicOutcome).toEqual({ resolutionType: "rolled", total: 18 });
+        expect(projected?.facts.privateCalculation).toBeUndefined();
+      });
+
+      /*
+       * The three audiences the repair must not touch. Each is asserted on **both** sides of the
+       * boundary, because "unchanged" is a claim about both states, not about the convenient one.
+       */
+      it("changes nothing for the roller, an involved party or the GM, on either side", () => {
+        const roller = player(["aria"], ["aria", "borin", "cyra"]);
+        const involved = player(["borin"], ["aria", "borin", "cyra"]);
+
+        for (const currentStep of [UNCOMMITTED, COMMITTED] as const) {
+          const rollerInitiative = initiativeOf(projectionFor(roller, currentStep));
+          expect(rollerInitiative, `roller, ${currentStep}`).toBeDefined();
+          expect(rollerInitiative?.facts.publicOutcome).toEqual({
+            resolutionType: "rolled",
+            total: 18,
+          });
+          expect(
+            rollerInitiative?.facts.privateCalculation,
+            `roller calc, ${currentStep}`,
+          ).toMatchObject({ baseInitiative: 4, rolls: [6, 6], rollTotal: 12 });
+
+          const gmInitiative = initiativeOf(projectionFor({ kind: "gm" }, currentStep));
+          expect(gmInitiative, `GM, ${currentStep}`).toBeDefined();
+          expect(gmInitiative?.facts.privateCalculation, `GM calc, ${currentStep}`).toMatchObject({
+            rolls: [6, 6],
+          });
+          expect(gmInitiative?.facts.gmReview, `GM review, ${currentStep}`).toEqual({
+            gmInitiativeNote: "gm-only",
+          });
+
+          /*
+           * The involved party is the control that proves the condition is confined to the
+           * bystander carve-out. Borin controls no participant in Aria's *initiative* roll and so
+           * is a bystander to it — he must be refused before commitment like any other. What must
+           * not change is his access to the exchange he *is* involved in, which is asserted next.
+           */
+          const involvedProjection = projectionFor(involved, currentStep);
+          const involvedAttack = involvedProjection.activeRound.events.find(
+            (candidate) => candidate.id === "event-attack-aria-borin",
+          );
+          expect(
+            involvedAttack?.facts.involvedOutcome,
+            `involved attack, ${currentStep}`,
+          ).toMatchObject({ weaponName: "Broadsword" });
+          const involvedParry = involvedProjection.activeRound.events.find(
+            (candidate) => candidate.id === "event-parry-borin",
+          );
+          expect(
+            involvedParry?.facts.privateCalculation,
+            `involved parry, ${currentStep}`,
+          ).toMatchObject({ combinedParryScore: 46 });
+        }
+      });
+
+      it("admits attack and parry on both sides of the initiative boundary", () => {
+        // The condition is attached to the initiative arm only; rows 2-4 are unaffected by it.
+        for (const currentStep of [UNCOMMITTED, COMMITTED] as const) {
+          const types = bystanderProjection(currentStep)
+            .activeRound.events.map((candidate) => candidate.type)
+            .sort();
+          expect(types, `admitted types at ${currentStep}`).toEqual(
+            currentStep === UNCOMMITTED ? ["attack", "parry"] : ["attack", "initiative", "parry"],
+          );
+        }
+      });
     });
 
     it("rows 2 and 3 — delivers attacker, target and hit/miss without the attack calculation", () => {
