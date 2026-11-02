@@ -67,6 +67,15 @@ These are the five views of
 Scenario-container arena of
 [PPV1 §4](../architecture/player-play-v1.md#4-player-play-v1-information-architecture).
 
+> **Superseded in part by a Product Owner ruling (#848, comment 19287, recorded 2026-11-02).** This section
+> adopts the five views of PPV1 §5 by reference. PPV1 §5 and §10 specify the **Action** view as composing the
+> existing player Combat UI together with the Skill Roll / task widget; the Product Owner ruled that
+> "Combat/Skill-roll stacking is a defect" and that `Skill rolls` "remains a first-class player destination even
+> while Combat is active". The reference above is to PPV1 as superseded in part; the record, with the ruling
+> quoted in full, is in
+> [PPV1 §1](../architecture/player-play-v1.md#1-status-and-scope). The five-view tab set stated above is not
+> itself changed by this note.
+
 **GM-specific features live inside these same structures.** Live play does
 **not** gain GM-only tabs such as `Admin`, `Artifact Manager` or
 `Encounter Manager`, and it does not gain a parallel GM arena.
