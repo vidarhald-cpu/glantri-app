@@ -110,6 +110,28 @@ describe("Campaign workspace current Scenario context", () => {
     );
   });
 
+  it("adds the folded Campaign Home line to a Scenario card without a second Scenario list", () => {
+    render(
+      <CurrentScenarioContextPanel
+        buildWorkspaceHref={buildWorkspaceHref}
+        canAccessGmEncounter={false}
+        encounters={[]}
+        playerContext={{
+          "scenario-1": { characters: ["Aldric", "Brenna"], encounterTitle: "Waiting outside" },
+        }}
+        scenarios={scenarios}
+      />,
+    );
+
+    expect(screen.getAllByText("The Library")).toHaveLength(1);
+    expect(screen.getByText("Playing as Aldric, Brenna")).toBeVisible();
+    // The Scenario with no named Character gets no line.
+    expect(screen.getAllByText(/^Playing as/)).toHaveLength(1);
+    // A current Encounter that is not active is still named, as Campaign Home did.
+    expect(screen.getByText("Current encounter: Waiting outside")).toBeVisible();
+    expect(screen.getAllByText("No active Encounter yet.")).toHaveLength(2);
+  });
+
   it("keeps Campaign Home available when no live Scenario exists", () => {
     render(
       <CurrentScenarioContextPanel
@@ -182,8 +204,8 @@ describe("Campaign workspace task navigation", () => {
     expect(within(navigation).queryByRole("link", { name: "Membership" })).not.toBeInTheDocument();
   });
 
-  it("drops the player Campaign row's duplicate Blackboard and Maps while the Play arena is on screen", () => {
-    render(
+  it("renders no player Campaign row at all while the Play arena is on screen", () => {
+    const { container } = render(
       <CampaignWorkspaceNavigation
         activeTab="scenario"
         campaignId="campaign-1"
@@ -192,14 +214,27 @@ describe("Campaign workspace task navigation", () => {
       />,
     );
 
+    // #849: the Play views row is the player's one navigation level there.
+    expect(container).toBeEmptyDOMElement();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("keeps the player Campaign row as the only row when no Play arena is on screen", () => {
+    render(
+      <CampaignWorkspaceNavigation
+        activeTab="campaign"
+        campaignId="campaign-1"
+        canManageCampaign={false}
+      />,
+    );
+
     const navigation = screen.getByRole("navigation", { name: "Campaign navigation" });
     expect(
       within(navigation)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Campaigns", "Campaign"]);
-    expect(within(navigation).queryByRole("link", { name: "Blackboard" })).not.toBeInTheDocument();
-    expect(within(navigation).queryByRole("link", { name: "Maps" })).not.toBeInTheDocument();
+    ).toEqual(["Campaigns", "Campaign", "Blackboard", "Maps"]);
   });
 
   it("keeps the GM Campaign rows unchanged while a Play arena is on screen", () => {
@@ -242,8 +277,11 @@ describe("Scenario Play navigation", () => {
       within(playViews)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Situation", "Skill rolls", "Map", "Blackboard", "Character", "Player combat"]);
+    ).toEqual(["Situation", "Skill rolls", "Map", "Blackboard", "Character", "Combat"]);
     expect(within(playViews).queryByRole("link", { name: "Action" })).not.toBeInTheDocument();
+    expect(
+      within(playViews).queryByRole("link", { name: "Player combat" }),
+    ).not.toBeInTheDocument();
 
     // #787: one contextual row only, and one Map/Blackboard entry each in it.
     expect(screen.getAllByRole("navigation")).toHaveLength(1);
@@ -278,18 +316,56 @@ describe("Scenario Play navigation", () => {
     expect(within(playViews).queryByRole("link", { name: "Encounter" })).not.toBeInTheDocument();
     expect(within(playViews).getAllByRole("link", { name: "Skill rolls" })).toHaveLength(1);
 
-    // A player never sees the GM-only Combat tooling.
-    expect(screen.queryByRole("link", { name: "Combat" })).not.toBeInTheDocument();
+    // The player's `Combat` is the one entry in the row, not the GM's Combat
+    // tool: it opens the player Combat route.
+    expect(screen.getAllByRole("link", { name: "Combat" })).toHaveLength(1);
 
-    // Existing routes remain reachable: Player combat keeps its own route and
-    // now sits inside the one row rather than a second contextual row.
+    // Existing routes remain reachable: Combat keeps its own route and sits
+    // inside the one row rather than a second contextual row.
     expect(
       screen.queryByRole("navigation", { name: "Retained Play entry points" }),
     ).not.toBeInTheDocument();
-    expect(within(playViews).getByRole("link", { name: "Player combat" })).toHaveAttribute(
+    expect(within(playViews).getByRole("link", { name: "Combat" })).toHaveAttribute(
       "href",
       "/campaigns/campaign-1?tab=player-combat&scenarioId=scenario-1&encounterId=encounter-1",
     );
+  });
+
+  it("puts the compact Scenario and Encounter context and the Play views on one line, as plain text", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeEncounterId="encounter-1"
+        activeEncounterTitle="Search the stacks"
+        activeTab="scenario"
+        canAccessGmEncounter={false}
+        scenarioStatus="live"
+      />,
+    );
+
+    const header = screen.getByRole("region", { name: "Play header" });
+    const playViews = screen.getByRole("navigation", { name: "Play views" });
+    // Context and row share one parent, and the context holds no links.
+    expect(header.parentElement).toBe(playViews.parentElement);
+    expect(within(header).queryByRole("link")).not.toBeInTheDocument();
+    // A live Scenario carries no status text: "Active" was breadcrumb noise.
+    expect(within(header).queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("navigation")).toHaveLength(1);
+  });
+
+  it("still states a Scenario status that is not simply live", () => {
+    render(
+      <ScenarioPlayNavigation
+        {...playNavigationProps}
+        activeTab="scenario"
+        canAccessGmEncounter={false}
+        scenarioStatus="paused"
+      />,
+    );
+
+    expect(
+      within(screen.getByRole("region", { name: "Play header" })).getByText("Paused"),
+    ).toBeVisible();
   });
 
   it("names the Scenario and the active Encounter in the shared Play header", () => {
@@ -325,6 +401,7 @@ describe("Scenario Play navigation", () => {
     ).not.toBeInTheDocument();
 
     expect(screen.getByRole("navigation", { name: "Play views" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Combat" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Player combat" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Skill rolls" })).toHaveAttribute(
       "href",
@@ -363,7 +440,7 @@ describe("Scenario Play navigation", () => {
     }
   });
 
-  it("marks the retained player Combat entry current from inside the one Play views row", () => {
+  it("marks the player Combat entry current from inside the one Play views row", () => {
     render(
       <ScenarioPlayNavigation
         {...playNavigationProps}
@@ -378,8 +455,8 @@ describe("Scenario Play navigation", () => {
     const current = within(playViews)
       .getAllByRole("link")
       .filter((link) => link.getAttribute("aria-current") === "page");
-    expect(current.map((link) => link.textContent)).toEqual(["Player combat"]);
-    expect(within(playViews).getByRole("link", { name: "Player combat" })).toBeVisible();
+    expect(current.map((link) => link.textContent)).toEqual(["Combat"]);
+    expect(within(playViews).getByRole("link", { name: "Combat" })).toBeVisible();
   });
 
   it("leaves the GM Scenario and Encounter tools unchanged", () => {

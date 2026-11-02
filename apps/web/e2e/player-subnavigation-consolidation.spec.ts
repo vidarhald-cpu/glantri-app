@@ -131,14 +131,11 @@ test.describe("Player active-play sub-navigation", () => {
       expect(rendered.mapEntries).toBe(1);
       expect(rendered.blackboardEntries).toBe(1);
 
-      // Exactly one contextual sub-navigation row of Play entry points. The
-      // unlabelled row is the global application nav outside this surface; the
-      // breadcrumb is the Scenario/Encounter path, not a row of views.
-      expect(rendered.navLabels.filter((label) => label !== "")).toEqual([
-        "Campaign navigation",
-        "Scenario and Encounter context",
-        "Play views",
-      ]);
+      // Exactly one navigation level above the content (#849): the Play views
+      // row. The unlabelled row is the global application nav outside this
+      // surface. #787 left a Campaign row and a Scenario/Encounter breadcrumb
+      // above it; both repeated names the row and the app navigation carry.
+      expect(rendered.navLabels.filter((label) => label !== "")).toEqual(["Play views"]);
       expect(rendered.navLabels.filter((label) => label === "Retained Play entry points")).toEqual(
         [],
       );
@@ -152,7 +149,7 @@ test.describe("Player active-play sub-navigation", () => {
         "Map",
         "Blackboard",
         "Character",
-        "Player combat",
+        "Combat",
       ]);
 
       // No capability lost: every Play route is still reachable from this row.
@@ -166,9 +163,6 @@ test.describe("Player active-play sub-navigation", () => {
         `${base}?tab=character&${context}`,
         `${base}?tab=player-combat&${context}`,
       ]);
-
-      const campaignNav = rendered.navs.find((nav) => nav.label === "Campaign navigation");
-      expect(campaignNav?.links.map((link) => link.text)).toEqual(["Campaigns", "Campaign"]);
     } finally {
       await playerContext.close();
     }
