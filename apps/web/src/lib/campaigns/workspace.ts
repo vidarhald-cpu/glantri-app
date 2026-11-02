@@ -5,6 +5,7 @@ import {
   type EncounterSession,
   type EncounterSessionSummary,
   type PlayerAccessibleScenario,
+  type PlayerCampaignHomeRecord,
   type Scenario,
   type ScenarioParticipant,
 } from "@glantri/domain";
@@ -57,6 +58,35 @@ const orderedPlayViews: CampaignPlayView[] = [
 
 export function buildCampaignPlayViews(): CampaignPlayView[] {
   return orderedPlayViews;
+}
+
+/**
+ * The player's Combat entry in the one Play views row. It keeps its own
+ * `player-combat` route and is not folded into `Skill rolls`; the label is the
+ * specified `Combat` (#849), not the registry's `Player combat`, which also has
+ * to stay distinguishable from the GM's `Combat` tab in the GM row.
+ */
+export const PLAYER_COMBAT_PLAY_ENTRY_LABEL = "Combat";
+
+/**
+ * Where a player's Campaign landing resumes: the Combat, Encounter or Scenario
+ * the server named in the player's Campaign Home record, or the landing itself.
+ * This is the folded `Continue ...` action of the former Campaign Home page.
+ */
+export function buildPlayerCampaignResumeHref(record: PlayerCampaignHomeRecord): string {
+  return buildCampaignWorkspaceHref({
+    campaignId: record.campaign.id,
+    encounterId: record.resume.encounterId,
+    scenarioId: record.resume.scenarioId,
+    tab: record.resume.tab,
+  });
+}
+
+export function getPlayerCampaignResumeLabel(record: PlayerCampaignHomeRecord): string {
+  if (record.resume.tab === "player-combat") return "Continue combat";
+  if (record.resume.tab === "encounter") return "Continue encounter";
+  if (record.resume.tab === "scenario") return "Continue scenario";
+  return "Open campaign";
 }
 
 /**
