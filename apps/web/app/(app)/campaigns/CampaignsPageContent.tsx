@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import type { Campaign, PlayerCampaignHomeRecord } from "@glantri/domain";
@@ -12,7 +13,11 @@ import {
   loadCampaignBrowserRecordsForUser,
 } from "@/lib/campaigns/access";
 import { formatScenarioStatus } from "@/lib/campaigns/scenarioStatusLabel";
-import { buildCampaignWorkspaceHref } from "@/lib/campaigns/workspace";
+import {
+  buildCampaignWorkspaceHref,
+  buildPlayerCampaignResumeHref,
+  getPlayerCampaignResumeLabel,
+} from "@/lib/campaigns/workspace";
 
 const panelStyle = {
   border: "1px solid #d9ddd8",
@@ -21,22 +26,6 @@ const panelStyle = {
   gap: "0.75rem",
   padding: "1rem",
 } as const;
-
-function buildPlayerResumeHref(record: PlayerCampaignHomeRecord): string {
-  return buildCampaignWorkspaceHref({
-    campaignId: record.campaign.id,
-    encounterId: record.resume.encounterId,
-    scenarioId: record.resume.scenarioId,
-    tab: record.resume.tab,
-  });
-}
-
-function getPlayerResumeLabel(record: PlayerCampaignHomeRecord): string {
-  if (record.resume.tab === "player-combat") return "Continue combat";
-  if (record.resume.tab === "encounter") return "Continue encounter";
-  if (record.resume.tab === "scenario") return "Continue scenario";
-  return "Open campaign";
-}
 
 function PlayerCampaignCard({ record }: { record: PlayerCampaignHomeRecord }) {
   const characterLabel = record.characters.length === 1 ? "Your character" : "Your characters";
@@ -89,7 +78,7 @@ function PlayerCampaignCard({ record }: { record: PlayerCampaignHomeRecord }) {
 
       <div>
         <Link
-          href={buildPlayerResumeHref(record)}
+          href={buildPlayerCampaignResumeHref(record)}
           style={{
             background: "#2f5d62",
             borderRadius: 8,
@@ -100,14 +89,21 @@ function PlayerCampaignCard({ record }: { record: PlayerCampaignHomeRecord }) {
             textDecoration: "none",
           }}
         >
-          {getPlayerResumeLabel(record)}
+          {getPlayerCampaignResumeLabel(record)}
         </Link>
       </div>
     </article>
   );
 }
 
+/**
+ * `Campaigns` for a player. A player belongs to one Campaign, and the Campaign
+ * landing carries what the former Campaign Home page showed (#849), so one
+ * Campaign opens straight into it. Several Campaigns, which no current product
+ * flow creates, keep the list below; no multi-Campaign UX is designed here.
+ */
 export default function CampaignsPageContent() {
+  const router = useRouter();
   const { currentUser, loading: sessionLoading } = useSessionUser();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [playerCampaigns, setPlayerCampaigns] = useState<PlayerCampaignHomeRecord[]>([]);
@@ -156,6 +152,17 @@ export default function CampaignsPageContent() {
     void handleRefreshCampaigns();
   }, [currentUser, sessionLoading]);
 
+  const soleCampaignId =
+    !canManageCampaigns && !loading && !error && playerCampaigns.length === 1
+      ? playerCampaigns[0]?.campaign.id
+      : undefined;
+
+  useEffect(() => {
+    if (soleCampaignId) {
+      router.replace(buildCampaignWorkspaceHref({ campaignId: soleCampaignId, tab: "campaign" }));
+    }
+  }, [router, soleCampaignId]);
+
   async function handleCreateCampaign() {
     try {
       setError(undefined);
@@ -197,9 +204,7 @@ export default function CampaignsPageContent() {
   return (
     <section style={{ display: "grid", gap: "1rem", maxWidth: 1040 }}>
       <div>
-        <h1 style={{ marginBottom: "0.5rem" }}>
-          {canManageCampaigns ? "Campaigns" : "Campaign Home"}
-        </h1>
+        <h1 style={{ marginBottom: "0.5rem" }}>Campaigns</h1>
         <p style={{ margin: 0 }}>
           {canManageCampaigns
             ? "Basic GM campaign management for scenarios, campaign NPC rosters, and assets. Reusable templates now live in the shared Templates library."
@@ -243,6 +248,8 @@ export default function CampaignsPageContent() {
 
       {sessionLoading || loading ? (
         <div>Loading campaigns...</div>
+      ) : soleCampaignId ? (
+        <div>Opening your Campaign...</div>
       ) : canManageCampaigns ? (
         campaigns.length > 0 ? (
           <div style={{ display: "grid", gap: "0.75rem" }}>
