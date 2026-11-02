@@ -567,14 +567,88 @@ const compactWideFieldLabelStyle = {
  * approved §7/§8 definition of the field it records, quoted verbatim, as its own description. The
  * description is a sibling of the `<label>` rather than inside it, because text inside a wrapping
  * label becomes part of the control's accessible name.
+ *
+ * Forgejo issue #835 kept that mechanism and changed only where the text is drawn. #835 requires
+ * the explanatory paragraphs removed from this section, and R2-8's two per-field sentences were the
+ * only paragraphs left in it, so each one is now rendered visually hidden: the `<p>` still exists,
+ * still holds the §7/§8 wording verbatim, and is still the select's `aria-describedby` target, so
+ * the accessible description is unchanged, while nothing of it is painted. R2-8 also asked that the
+ * description not be a hover-only `title` tooltip; a visually hidden description is announced
+ * unconditionally rather than on hover, so that requirement still holds. **The visible-paragraph
+ * half of R2-8 is a Product Owner choice this lane could not reconcile with #835 acceptance item 2;
+ * it is reported as a finding, and restoring it is a change to this one constant.**
  */
 const declarationFieldDescriptionStyle = {
-  color: "#4f554d",
-  fontSize: "0.76rem",
-  lineHeight: 1.3,
-  margin: 0,
-  maxWidth: "26rem",
+  border: 0,
+  clip: "rect(0 0 0 0)",
+  clipPath: "inset(50%)",
+  height: "1px",
+  margin: "-1px",
+  overflow: "hidden",
+  padding: 0,
+  position: "absolute",
+  whiteSpace: "nowrap",
+  width: "1px",
 } as const;
+
+/**
+ * Forgejo issue #835. One compact `Position and movement` section replaces the former
+ * `Relative position` and `Movement and facing` fieldsets. Composition only: every control, its
+ * accessible name, its option set, its disabled condition and the declaration state it commits are
+ * carried over unchanged. In particular `Movement direction` and `Facing` share the final row but
+ * remain two independent selects writing two independent fields — neither defaults from the other.
+ */
+const positionAndMovementFieldsetStyle = {
+  border: "1px solid #d9ddd8",
+  borderRadius: 8,
+  display: "grid",
+  gap: "0.4rem",
+  margin: 0,
+  minWidth: 0,
+  padding: "0.5rem 0.7rem 0.6rem",
+} as const;
+
+const positionRowStyle = {
+  alignItems: "flex-end",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.4rem",
+  minWidth: 0,
+} as const;
+
+const positionRowPriorityStyle = {
+  fontSize: "0.78rem",
+  paddingBottom: "0.25rem",
+  whiteSpace: "nowrap",
+} as const;
+
+const positionRowControlsStyle = {
+  display: "flex",
+  gap: "0.2rem",
+  paddingBottom: "0.05rem",
+} as const;
+
+const positionRowIconButtonStyle = {
+  lineHeight: 1,
+  minWidth: "1.85rem",
+  padding: "0.2rem 0.35rem",
+} as const;
+
+const positionRowFieldLabelStyle = {
+  display: "grid",
+  gap: "0.1rem",
+  maxWidth: "9.5rem",
+  minWidth: 0,
+} as const;
+
+const positionRowTextFieldLabelStyle = {
+  display: "grid",
+  gap: "0.1rem",
+  maxWidth: "12rem",
+  minWidth: 0,
+} as const;
+
+const positionRowFieldCaptionStyle = { fontSize: "0.78rem", fontWeight: 600 } as const;
 
 const declarationFieldWithDescriptionStyle = {
   display: "grid",
@@ -1883,6 +1957,39 @@ export function PlayerCombatActionSelectorPanel({
     ["left", "Left"],
     ["forward_left", "Forward/left"],
   ] as const;
+  /**
+   * Forgejo issue #835. The `Add relative intention` action is unchanged; only its control is now
+   * the compact `+` that the contract's target interaction asks for. It is rendered once — on the
+   * last relative row, or alone when there is no row yet — so the accessible name stays unique.
+   */
+  const addRelativeIntention = () => {
+    const firstTarget = distancePreferenceOptions[0];
+    commitDeclarationIntent({
+      ...effectiveDeclarationIntent,
+      relativePositions: [
+        ...effectiveDeclarationIntent.relativePositions,
+        firstTarget
+          ? {
+              desiredDistance: firstTarget.currentDistance,
+              kind: "keep_distance",
+              targetParticipantId: firstTarget.id,
+            }
+          : { formation: "Formation", kind: "hold_formation" },
+      ],
+    });
+  };
+  const addRelativeIntentionControl = (
+    <button
+      aria-label="Add relative intention"
+      disabled={controlsDisabled}
+      onClick={addRelativeIntention}
+      style={positionRowIconButtonStyle}
+      title="Add relative intention"
+      type="button"
+    >
+      +
+    </button>
+  );
 
   return (
     <section style={playerCombatPanelCardStyle}>
@@ -2116,90 +2223,22 @@ export function PlayerCombatActionSelectorPanel({
         </label>
       ) : null}
 
-      <fieldset
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 8,
-          display: "grid",
-          gap: "0.65rem",
-          margin: 0,
-          minWidth: 0,
-          padding: "0.75rem",
-        }}
-      >
+      <fieldset style={positionAndMovementFieldsetStyle}>
         <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
-          Relative position
+          Position and movement
         </legend>
         {effectiveDeclarationIntent.relativePositions.map((position, index) => (
-          <section
+          <div
             key={`${index}:${position.kind}`}
             style={{
+              ...positionRowStyle,
               borderTop: index ? "1px solid #e6e0d2" : undefined,
-              display: "grid",
-              gap: "0.45rem",
-              paddingTop: index ? "0.55rem" : undefined,
+              paddingTop: index ? "0.4rem" : undefined,
             }}
           >
-            <div
-              style={{
-                alignItems: "center",
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "0.35rem",
-                justifyContent: "space-between",
-              }}
-            >
-              <strong style={{ fontSize: "0.84rem" }}>Priority {index + 1}</strong>
-              <span style={{ display: "flex", gap: "0.25rem" }}>
-                <button
-                  disabled={controlsDisabled || index === 0}
-                  onClick={() => {
-                    const next = [...effectiveDeclarationIntent.relativePositions];
-                    [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
-                    commitDeclarationIntent({
-                      ...effectiveDeclarationIntent,
-                      relativePositions: next,
-                    });
-                  }}
-                  type="button"
-                >
-                  Up
-                </button>
-                <button
-                  disabled={
-                    controlsDisabled ||
-                    index === effectiveDeclarationIntent.relativePositions.length - 1
-                  }
-                  onClick={() => {
-                    const next = [...effectiveDeclarationIntent.relativePositions];
-                    [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
-                    commitDeclarationIntent({
-                      ...effectiveDeclarationIntent,
-                      relativePositions: next,
-                    });
-                  }}
-                  type="button"
-                >
-                  Down
-                </button>
-                <button
-                  disabled={controlsDisabled}
-                  onClick={() =>
-                    commitDeclarationIntent({
-                      ...effectiveDeclarationIntent,
-                      relativePositions: effectiveDeclarationIntent.relativePositions.filter(
-                        (_, candidateIndex) => candidateIndex !== index,
-                      ),
-                    })
-                  }
-                  type="button"
-                >
-                  Remove
-                </button>
-              </span>
-            </div>
-            <label style={compactFieldLabelStyle}>
-              <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Intention</span>
+            <strong style={positionRowPriorityStyle}>Priority {index + 1}</strong>
+            <label style={positionRowFieldLabelStyle}>
+              <span style={positionRowFieldCaptionStyle}>Intention</span>
               <select
                 disabled={controlsDisabled}
                 onChange={(event) => {
@@ -2232,8 +2271,8 @@ export function PlayerCombatActionSelectorPanel({
               </select>
             </label>
             {position.kind === "hold_formation" ? (
-              <label style={compactWideFieldLabelStyle}>
-                <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Formation</span>
+              <label style={positionRowTextFieldLabelStyle}>
+                <span style={positionRowFieldCaptionStyle}>Formation</span>
                 <input
                   disabled={controlsDisabled}
                   maxLength={500}
@@ -2249,8 +2288,8 @@ export function PlayerCombatActionSelectorPanel({
               </label>
             ) : (
               <>
-                <label style={compactFieldLabelStyle}>
-                  <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Person</span>
+                <label style={positionRowFieldLabelStyle}>
+                  <span style={positionRowFieldCaptionStyle}>Person</span>
                   <select
                     disabled={controlsDisabled}
                     onChange={(event) =>
@@ -2275,8 +2314,8 @@ export function PlayerCombatActionSelectorPanel({
                     ))}
                   </select>
                 </label>
-                <label style={compactFieldLabelStyle}>
-                  <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Desired distance</span>
+                <label style={positionRowFieldLabelStyle}>
+                  <span style={positionRowFieldCaptionStyle}>Desired distance</span>
                   <select
                     disabled={controlsDisabled}
                     onChange={(event) =>
@@ -2298,8 +2337,8 @@ export function PlayerCombatActionSelectorPanel({
                   </select>
                 </label>
                 {position.kind === "adjust_distance" ? (
-                  <label style={compactWideFieldLabelStyle}>
-                    <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Intended speed</span>
+                  <label style={positionRowTextFieldLabelStyle}>
+                    <span style={positionRowFieldCaptionStyle}>Intended speed</span>
                     <input
                       disabled={controlsDisabled}
                       maxLength={100}
@@ -2317,99 +2356,128 @@ export function PlayerCombatActionSelectorPanel({
                 ) : null}
               </>
             )}
-          </section>
+            <span style={positionRowControlsStyle}>
+              <button
+                disabled={controlsDisabled || index === 0}
+                onClick={() => {
+                  const next = [...effectiveDeclarationIntent.relativePositions];
+                  [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                  commitDeclarationIntent({
+                    ...effectiveDeclarationIntent,
+                    relativePositions: next,
+                  });
+                }}
+                style={positionRowIconButtonStyle}
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                disabled={
+                  controlsDisabled ||
+                  index === effectiveDeclarationIntent.relativePositions.length - 1
+                }
+                onClick={() => {
+                  const next = [...effectiveDeclarationIntent.relativePositions];
+                  [next[index], next[index + 1]] = [next[index + 1]!, next[index]!];
+                  commitDeclarationIntent({
+                    ...effectiveDeclarationIntent,
+                    relativePositions: next,
+                  });
+                }}
+                style={positionRowIconButtonStyle}
+                type="button"
+              >
+                Down
+              </button>
+              <button
+                disabled={controlsDisabled}
+                onClick={() =>
+                  commitDeclarationIntent({
+                    ...effectiveDeclarationIntent,
+                    relativePositions: effectiveDeclarationIntent.relativePositions.filter(
+                      (_, candidateIndex) => candidateIndex !== index,
+                    ),
+                  })
+                }
+                style={positionRowIconButtonStyle}
+                type="button"
+              >
+                Remove
+              </button>
+              {index === effectiveDeclarationIntent.relativePositions.length - 1
+                ? addRelativeIntentionControl
+                : null}
+            </span>
+          </div>
         ))}
-        <button
-          disabled={controlsDisabled}
-          onClick={() => {
-            const firstTarget = distancePreferenceOptions[0];
-            commitDeclarationIntent({
-              ...effectiveDeclarationIntent,
-              relativePositions: [
-                ...effectiveDeclarationIntent.relativePositions,
-                firstTarget
-                  ? {
-                      desiredDistance: firstTarget.currentDistance,
-                      kind: "keep_distance",
-                      targetParticipantId: firstTarget.id,
-                    }
-                  : { formation: "Formation", kind: "hold_formation" },
-              ],
-            });
+        {effectiveDeclarationIntent.relativePositions.length === 0 ? (
+          <div style={positionRowStyle}>
+            <span style={positionRowFieldCaptionStyle}>Relative intentions</span>
+            <span style={positionRowControlsStyle}>{addRelativeIntentionControl}</span>
+          </div>
+        ) : null}
+        <div
+          style={{
+            ...positionRowStyle,
+            borderTop: "1px solid #e6e0d2",
+            paddingTop: "0.4rem",
           }}
-          type="button"
         >
-          Add relative intention
-        </button>
-      </fieldset>
-
-      <fieldset
-        style={{
-          border: "1px solid #d9ddd8",
-          borderRadius: 8,
-          display: "grid",
-          gap: "0.65rem",
-          margin: 0,
-          minWidth: 0,
-          padding: "0.75rem",
-        }}
-      >
-        <legend style={{ fontSize: "0.88rem", fontWeight: 700, padding: "0 0.25rem" }}>
-          Movement and facing
-        </legend>
-        <div style={declarationFieldWithDescriptionStyle}>
-          <label style={compactFieldLabelStyle}>
-            <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Movement direction</span>
-            <select
-              aria-describedby={movementDirectionDescriptionId}
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                commitDeclarationIntent({
-                  ...effectiveDeclarationIntent,
-                  movementDirection: (event.target.value ||
-                    undefined) as CombatDeclarationIntent["movementDirection"],
-                })
-              }
-              value={effectiveDeclarationIntent.movementDirection ?? ""}
-            >
-              <option value="">None / blank</option>
-              {directionOptions.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p id={movementDirectionDescriptionId} style={declarationFieldDescriptionStyle}>
-            Movement Direction records the absolute direction in which the character intends to
-            move.
-          </p>
-        </div>
-        <div style={declarationFieldWithDescriptionStyle}>
-          <label style={compactFieldLabelStyle}>
-            <span style={{ fontSize: "0.84rem", fontWeight: 600 }}>Facing</span>
-            <select
-              aria-describedby={facingDescriptionId}
-              disabled={controlsDisabled}
-              onChange={(event) =>
-                commitDeclarationIntent({
-                  ...effectiveDeclarationIntent,
-                  facing: (event.target.value || undefined) as CombatDeclarationIntent["facing"],
-                })
-              }
-              value={effectiveDeclarationIntent.facing ?? ""}
-            >
-              <option value="">None / blank</option>
-              {directionOptions.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p id={facingDescriptionId} style={declarationFieldDescriptionStyle}>
-            Facing records the direction/orientation the character intends to maintain or reach.
-          </p>
+          <div style={declarationFieldWithDescriptionStyle}>
+            <label style={positionRowFieldLabelStyle}>
+              <span style={positionRowFieldCaptionStyle}>Movement direction</span>
+              <select
+                aria-describedby={movementDirectionDescriptionId}
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  commitDeclarationIntent({
+                    ...effectiveDeclarationIntent,
+                    movementDirection: (event.target.value ||
+                      undefined) as CombatDeclarationIntent["movementDirection"],
+                  })
+                }
+                value={effectiveDeclarationIntent.movementDirection ?? ""}
+              >
+                <option value="">None / blank</option>
+                {directionOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p id={movementDirectionDescriptionId} style={declarationFieldDescriptionStyle}>
+              Movement Direction records the absolute direction in which the character intends to
+              move.
+            </p>
+          </div>
+          <div style={declarationFieldWithDescriptionStyle}>
+            <label style={positionRowFieldLabelStyle}>
+              <span style={positionRowFieldCaptionStyle}>Facing</span>
+              <select
+                aria-describedby={facingDescriptionId}
+                disabled={controlsDisabled}
+                onChange={(event) =>
+                  commitDeclarationIntent({
+                    ...effectiveDeclarationIntent,
+                    facing: (event.target.value || undefined) as CombatDeclarationIntent["facing"],
+                  })
+                }
+                value={effectiveDeclarationIntent.facing ?? ""}
+              >
+                <option value="">None / blank</option>
+                {directionOptions.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p id={facingDescriptionId} style={declarationFieldDescriptionStyle}>
+              Facing records the direction/orientation the character intends to maintain or reach.
+            </p>
+          </div>
         </div>
       </fieldset>
 

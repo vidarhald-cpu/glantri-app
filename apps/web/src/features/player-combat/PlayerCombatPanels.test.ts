@@ -22,6 +22,18 @@ function readSource(): string {
   return readFileSync(sourcePath, "utf8");
 }
 
+/**
+ * The source with every comment stripped, so a heading assertion is made against text that can
+ * actually render. Forgejo issue #835 retired the `Relative position` and `Movement and facing`
+ * headings and records both names in a comment explaining what replaced them; an assertion over
+ * the raw source could no longer tell a retired heading from the note about its retirement.
+ */
+function readRenderableSource(): string {
+  return readSource()
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
+}
+
 describe("PlayerCombatPanels", () => {
   it("labels percentage-applied Parry modifier rows as percentages", () => {
     expect(
@@ -69,13 +81,23 @@ describe("PlayerCombatPanels", () => {
   });
 
   it("renders the approved relative-position, movement, and facing declaration controls", () => {
-    const source = readSource();
+    const source = readRenderableSource();
 
-    expect(source).toContain("Relative position");
+    /*
+     * Forgejo issue #835. The two heading assertions this test used to carry — `Relative position`
+     * and `Movement and facing` — are retargeted at the composition that replaced them rather than
+     * relaxed: one `Position and movement` section, declared through one fieldset style, with
+     * neither retired heading left anywhere that can render, and the compact `+` carrying the
+     * unchanged `Add relative intention` action name.
+     */
+    expect(source).toContain("Position and movement");
+    expect(source).toContain("positionAndMovementFieldsetStyle");
+    expect(source).not.toContain("Relative position");
+    expect(source).not.toContain("Movement and facing");
+    expect(source).toContain('aria-label="Add relative intention"');
     expect(source).toContain("Keep distance");
     expect(source).toContain("Adjust distance");
     expect(source).toContain("Hold formation");
-    expect(source).toContain("Movement and facing");
     expect(source).toContain("Movement direction");
     expect(source).toContain("directionOptions");
     expect(source).toContain("distancePreferenceOptions");
@@ -84,6 +106,55 @@ describe("PlayerCombatPanels", () => {
     expect(source).not.toContain(">How<");
     expect(source).not.toContain("Expected time");
     expect(source).not.toContain("PLAYER_ENCOUNTER_MOVEMENT_OPTIONS.map");
+  });
+
+  /**
+   * Forgejo issue #835 is composition only, and the #771 R2-8 distinction it must preserve is that
+   * movement direction is the absolute direction the character intends to move and is **not**
+   * facing. Sharing one row is presentation; the two fields stay two fields. This checks the two
+   * shapes that would silently merge them — one commit writing both keys from one event, or one
+   * key defaulting from the other — and the rendered proof that they are separately settable is in
+   * `apps/web/e2e/position-and-movement-composition.spec.ts`.
+   */
+  it("keeps movement direction and facing as two independent declaration commits", () => {
+    const source = readRenderableSource();
+
+    const collapsed = source.replace(/\s+/g, " ");
+
+    expect(collapsed).toContain(
+      'movementDirection: (event.target.value || undefined) as CombatDeclarationIntent["movementDirection"],',
+    );
+    expect(collapsed).toContain(
+      'facing: (event.target.value || undefined) as CombatDeclarationIntent["facing"],',
+    );
+    // Neither key appears in the other key's commit, so neither select writes both fields.
+    expect(
+      collapsed.match(
+        /commitDeclarationIntent\(\{ \.\.\.effectiveDeclarationIntent, movementDirection:[^}]*facing:/,
+      ),
+    ).toBeNull();
+    expect(
+      collapsed.match(
+        /commitDeclarationIntent\(\{ \.\.\.effectiveDeclarationIntent, facing:[^}]*movementDirection:/,
+      ),
+    ).toBeNull();
+    // Neither field defaults from the other.
+    expect(collapsed).not.toContain("facing: effectiveDeclarationIntent.movementDirection");
+    expect(collapsed).not.toContain("movementDirection: effectiveDeclarationIntent.facing");
+    expect(collapsed).not.toContain("facing ?? effectiveDeclarationIntent.movementDirection");
+    expect(collapsed).not.toContain("movementDirection ?? effectiveDeclarationIntent.facing");
+    // The #835 compaction removes the section's explanatory paragraphs from the painted layout.
+    // The #771 R2-7 paragraph stays gone, and the R2-8 per-field wording stays verbatim as each
+    // select's own `aria-describedby` description.
+    expect(source).not.toContain("The GM resolves feasibility.");
+    expect(source).toContain("aria-describedby={movementDirectionDescriptionId}");
+    expect(source).toContain("aria-describedby={facingDescriptionId}");
+    expect(source).toContain(
+      "Movement Direction records the absolute direction in which the character intends to",
+    );
+    expect(source).toContain(
+      "Facing records the direction/orientation the character intends to maintain or reach.",
+    );
   });
 
   it("keeps alternate task outcomes above one primary action", () => {
