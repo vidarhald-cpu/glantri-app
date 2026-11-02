@@ -75,6 +75,18 @@
 - Open text is private to the declaring player and GM unless a combat action explicitly makes it public.
 - The Action Selector stores intent; it does not resolve rolls, damage, or round advancement.
 
+> **Superseded in part by a Product Owner ruling (#835, comment 19291, recorded 2026-11-02) — Position and
+> movement section only.** Forgejo #771 finding **R2-8** required explanatory text for the `Movement direction`
+> and `Facing` fields to be _visible_ text (the two sentences are quoted from
+> [Combat Declarations](../rules/combat-declarations.md) sections 7 and 8; that rules document is not changed).
+> The Product Owner ruled on #835:
+>
+> > "keep the compact UI. Do not restore the bulky visible explanatory paragraphs. Clear labels/captions are
+> > sufficient visually; screen-reader-only explanatory text may remain."
+>
+> R2-8's requirement that this text be visible is therefore superseded **for the Position and movement
+> section only**. It is not recorded as superseded for any other section or field.
+
 ### Shared Phase Panels
 
 - Purpose: compact display and permitted editing of phase-specific details for the selected round action.
@@ -411,6 +423,15 @@ That side is already governed by
 [Player Play V1 section 10](../architecture/player-play-v1.md#10-action-composition) and its
 [canonical-detail and click-through rule](../architecture/player-play-v1.md#13-canonical-detail-and-click-through-rule).
 Those decisions are cross-referenced, not duplicated or reopened.
+
+> **Superseded in part by a Product Owner ruling (#848, comment 19287, recorded 2026-11-02).** The
+> paragraph above describes Character information "around and below Combat" on Action, and cross-references
+> Player Play V1 section 10, which specifies the Action view as composing the existing player Combat UI
+> together with the Skill Roll / task widget. The Product Owner ruled that "Combat/Skill-roll stacking is a
+> defect" and that `Skill rolls` "remains a first-class player destination even while Combat is active". The
+> composition superseded is recorded, with the ruling quoted in full, in
+> [Player Play V1 section 1](../architecture/player-play-v1.md#1-status-and-scope). This section's original
+> wording is retained unedited; the ruling does not address the Character-information relocation it records.
 
 ### 12.10 Proposed bounded implementation slice
 
