@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
+import { deriveLegacyCombatStepEvents } from "./combatStepEvents";
+
 import type { EncounterParticipant, EncounterSession } from "./session";
 import type { HitLocationTarget } from "./hitLocation";
 import type { CombatEffect } from "./combatEffects";
@@ -114,6 +116,7 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundCriticalRoll,
   recordCombatCriticalBleedTreatmentCommand,
+  buildCombatCommittedDamagePublicOutcome,
   reviewCombatRoundDamageResult,
   recordCombatRoundInitiative,
   recordCombatRoundNoAttackPhaseReview,
@@ -12394,7 +12397,16 @@ describe("combat round manager", () => {
       type: "damage_committed",
     });
     expect(committed.state.events.at(-1)?.facts.gmReview).toBeDefined();
+    /*
+     * #863 rows 2 and 3 changed this expectation deliberately. The bucket used to be exactly
+     * `{ status: "committed" }`; it now also carries the committed amount, the hit location and —
+     * when the review resolved one — the critical grade and short title. This exchange is
+     * non-critical, so the two critical keys are correctly absent, which is what makes this the
+     * negative half of the promotion: a value the round did not produce is not invented.
+     */
     expect(committed.state.events.at(-1)?.facts.publicOutcome).toEqual({
+      finalCommittedDamage: 2,
+      hitLocation: "chest",
       status: "committed",
     });
     expect(committed.state.phaseResolutionResults[0]?.damageProposal.status).toBe("committed");
@@ -14021,6 +14033,200 @@ describe("combat round manager", () => {
       step: "D1",
     });
     expect(cleared.phaseResolutionResults[0]?.damageProposal.status).toBe("drafted");
+  });
+
+  /*
+   * #863 rows 2 and 3 — the `damage_committed` public fact bucket, measured on both writers.
+   *
+   * The round is driven through the real production functions rather than hand-assembled, because
+   * the claim is about what the writers author: an attack that defeats a parry, a hit location, a
+   * damage result, a critical roll, a GM review that resolves the catalogue proposal, and a commit.
+   * The weapon is `edged` / `BS`, which is what maps onto the `sharp` critical family and therefore
+   * yields a real catalogue `title` rather than an injected one.
+   *
+   * Assertions are field by field and never a stringify comparison: these buckets are persisted in
+   * a Prisma `Json` (`jsonb`) column, which does not preserve key order, so string equality would
+   * be an unsound instrument whichever way it came out.
+   */
+  it("promotes the committed damage amount, critical grade, hit location and critical title into the damage_committed public bucket on both writer paths, with no armour arithmetic (#863 rows 2-3)", () => {
+    const pending = prepareFailedParryPendingDamage({
+      weaponCriticalCode: "BS",
+      weaponDamageClass: "edged",
+    });
+    const afterLocation = recordTestHitLocation({
+      attackResult: pending.attackResult,
+      hitLocationRolls: [17],
+      state: pending.state,
+    });
+    const afterDamage = recordCombatRoundDamageResult({
+      attackResult: pending.attackResult,
+      defenderDm: 0,
+      dmb: 8,
+      state: afterLocation,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    });
+    const afterCritical = recordCombatRoundCriticalRoll({
+      attackResult: pending.attackResult,
+      criticalDice: [4, 5],
+      rolledByParticipantId: "gladiator",
+      state: afterDamage,
+      submittedBy: "gm",
+      updatedAt: "2026-01-01T00:05:30.000Z",
+    });
+    const attackResultId = afterCritical.phaseResolutionResults[0]?.damageResult?.attackResultId;
+    if (!attackResultId) throw new Error("Expected a pending damage result to review.");
+    const reviewed = reviewCombatRoundDamageResult({
+      attackResultId,
+      review: { additionalEffects: [], operationalConsequences: [] },
+      reviewedAt: "2026-01-01T00:05:45.000Z",
+      reviewedByUserId: "gm-1",
+      state: afterCritical,
+    });
+    const storedTitle =
+      reviewed.phaseResolutionResults[0]?.damageResult?.review?.criticalEffectProposal?.title;
+    expect(
+      storedTitle,
+      "positive control: the GM review must actually hold a catalogue critical title, or the title half of row 3 would be measuring an absent value",
+    ).toBe("Forearm gash; hand unusable");
+
+    const committed = commitCombatRoundPhaseDamage({
+      attackerScenarioParticipantId: "scenario-gladiator",
+      command: { createdAt: "2026-01-01T00:06:00.000Z", createdByUserId: "gm-1" },
+      defenderScenarioParticipantId: "scenario-guard",
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      state: reviewed,
+    });
+
+    // ---- The canonical writer ----
+    const canonical = committed.state.events.find((entry) => entry.type === "damage_committed");
+    if (!canonical) throw new Error("Expected a canonical damage_committed event.");
+    const canonicalPublic = canonical.facts.publicOutcome;
+    expect(canonicalPublic.status).toBe("committed");
+    expect(typeof canonicalPublic.finalCommittedDamage).toBe("number");
+    expect(canonicalPublic.finalCommittedDamage).toBe(
+      canonical.facts.involvedOutcome.finalCommittedDamage,
+    );
+    expect(canonicalPublic.criticalGrade).toBe(canonical.facts.involvedOutcome.criticalGrade);
+    expect(canonicalPublic.hitLocation).toBe(canonical.facts.involvedOutcome.hitLocation);
+    expect(canonicalPublic.criticalTitle).toBe(storedTitle);
+    expect(canonicalPublic.criticalGrade).toBe("b");
+    expect(canonicalPublic.hitLocation).toBe("rightArm");
+
+    /*
+     * The negative half, on the bucket this lane authors rather than on a rendered surface. Every
+     * damage-arithmetic input, the proposed amount, and every resolved-critical field #863 defers
+     * to #871 must be absent as a *key*, not merely undefined — `Object.hasOwn` rather than a
+     * value check, because an explicitly-undefined key still serialises into the payload shape.
+     */
+    const forbiddenPublicKeys = [
+      "armorModifier",
+      "armorCriticalModifier",
+      "bleed",
+      "bleedKind",
+      "bleedRate",
+      "cancelledActions",
+      "computedCriticalGrade",
+      "computedTotalDamage",
+      "conditions",
+      "criticalDice",
+      "criticalDiceTotal",
+      "damageLookupTotal",
+      "damageRoll",
+      "defenderDm",
+      "dmb",
+      "effectiveArmorClass",
+      "effectiveArmorCoverageLabel",
+      "effectiveArmorModifier",
+      "effectiveArmorRegion",
+      "effectiveArmorValue",
+      "effectiveDamageLookupTotal",
+      "finalCriticalRoll",
+      "hitLookupTotal",
+      "gmReview",
+      "mortality",
+      "operationalConsequences",
+      "proposedDamage",
+      "rawTotalDamage",
+      "review",
+      "selfStaunch",
+      "totalDamage",
+      "treatment",
+      "urgency",
+    ] as const;
+    for (const key of forbiddenPublicKeys) {
+      expect(
+        Object.hasOwn(canonicalPublic, key),
+        `canonical writer: ${key} must not be a key of the damage_committed public bucket`,
+      ).toBe(false);
+    }
+    expect(
+      Object.keys(canonicalPublic).sort(),
+      "the public bucket is exactly the four promoted facts plus the status it already carried",
+    ).toEqual(["criticalGrade", "criticalTitle", "finalCommittedDamage", "hitLocation", "status"]);
+
+    // ---- The legacy derivation, from the same stored round ----
+    /*
+     * This is the second writer. Which of the two produced a round's `damage_committed` event
+     * depends on how that round was created, so the fact has to be authored on both or it is
+     * present on one path and absent on the other. Derived here from the same state the canonical
+     * writer just wrote, so the only variable is the writer.
+     */
+    const legacy = deriveLegacyCombatStepEvents({
+      commands: committed.state.commands,
+      encounterId: "encounter-1",
+      participants: committed.state.participants,
+      phaseResolutionResults: committed.state.phaseResolutionResults,
+      roundEndReview: committed.state.roundEndReview,
+      roundNumber: committed.state.roundNumber,
+      stepSnapshots: committed.state.stepSnapshots,
+    }).find((entry) => entry.type === "damage_committed");
+    if (!legacy) throw new Error("Expected a legacy-derived damage_committed event.");
+    const legacyPublic = legacy.facts.publicOutcome;
+    expect(legacyPublic.status).toBe("committed");
+    expect(legacyPublic.finalCommittedDamage).toBe(canonicalPublic.finalCommittedDamage);
+    expect(legacyPublic.criticalGrade).toBe(canonicalPublic.criticalGrade);
+    expect(legacyPublic.hitLocation).toBe(canonicalPublic.hitLocation);
+    expect(legacyPublic.criticalTitle).toBe(canonicalPublic.criticalTitle);
+    for (const key of forbiddenPublicKeys) {
+      expect(
+        Object.hasOwn(legacyPublic, key),
+        `legacy derivation: ${key} must not be a key of the damage_committed public bucket`,
+      ).toBe(false);
+    }
+  });
+
+  /*
+   * The shared definition in isolation. Both writers call it, so its boundaries are the row's
+   * boundaries: a non-primitive under a promoted key is dropped rather than carried, which is what
+   * stops an unreviewed field travelling inside a reviewed one.
+   */
+  it("drops a non-primitive or absent value from the committed-damage public bucket (#863 rows 2-3)", () => {
+    expect(
+      buildCombatCommittedDamagePublicOutcome({
+        criticalGrade: "c",
+        criticalTitle: "Shattered knee",
+        finalCommittedDamage: 14,
+        hitLocation: "leg",
+      }),
+    ).toEqual({
+      criticalGrade: "c",
+      criticalTitle: "Shattered knee",
+      finalCommittedDamage: 14,
+      hitLocation: "leg",
+      status: "committed",
+    });
+    expect(buildCombatCommittedDamagePublicOutcome({})).toEqual({ status: "committed" });
+    expect(
+      buildCombatCommittedDamagePublicOutcome({
+        criticalGrade: { grade: "c" },
+        criticalTitle: ["Shattered knee"],
+        finalCommittedDamage: "14",
+        hitLocation: "   ",
+      }),
+      "a nested object, an array, a numeric string and a blank string are all refused",
+    ).toEqual({ status: "committed" });
   });
 
   it("waits for GM progression after final phase-one D1 damage", () => {

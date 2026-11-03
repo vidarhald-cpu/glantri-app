@@ -6,6 +6,7 @@ import {
   combatRoundCommandSchema,
   combatRoundStateSchema,
   combatStepEventSchema,
+  buildCombatCommittedDamagePublicOutcome,
   buildCombatHistorySourceViewFromState,
   buildCombatRoundAttackRollResult,
   buildCombatRoundPhaseResolutionResult,
@@ -1509,7 +1510,23 @@ describe("combat history projection", () => {
       expect(combatant?.facts.gmReview).toBeUndefined();
       expect(JSON.stringify(combatant)).not.toContain("sharp|arm|12");
     }
-    expect(uninvolved).toBeUndefined();
+    /*
+     * #863 rows 2 and 3 changed this expectation deliberately. `damage_committed` is now a
+     * table-visible outcome type, so a bystander who can see both combatants receives the event
+     * rather than having it dropped. **What it carries is the whole point of the change**, and this
+     * event is a pre-#863 record whose `publicOutcome` is empty: the bystander therefore receives
+     * the two visible identities and nothing else. The authentic Critical provenance this test
+     * exists for stays GM-only on that path too, and so does the Bleed rate — which #863 defers to
+     * #871 — so the assertion is strengthened rather than relaxed.
+     */
+    expect(uninvolved, "a bystander now receives the event itself").toBeDefined();
+    expect(uninvolved?.facts.publicOutcome).toEqual({});
+    expect(uninvolved?.facts.involvedOutcome).toBeUndefined();
+    expect(uninvolved?.facts.gmReview).toBeUndefined();
+    expect(uninvolved?.facts.privateCalculation).toBeUndefined();
+    expect(JSON.stringify(uninvolved)).not.toContain("sharp|arm|12");
+    expect(JSON.stringify(uninvolved)).not.toContain("rateValuePerRound");
+    expect(JSON.stringify(uninvolved)).not.toContain("Bleed");
     expect(gm?.facts.gmReview).toMatchObject({ critKey: "sharp|arm|12" });
   });
 
@@ -2445,5 +2462,524 @@ describe("combat history projection", () => {
       );
       expect(defenderParry?.facts.privateCalculation).toMatchObject({ combinedParryScore: 46 });
     });
+  });
+});
+
+/*
+ * #863 — three rows of the board-game visibility ruling become public table state.
+ *
+ * `cyra` is the bystander throughout: she sees Aria and Borin, controls only herself, declares
+ * nothing and rolls nothing. Every claim is measured in **both** directions on the projected
+ * payload — the public fact arrives, and the named private fields do not — and the timing rows are
+ * additionally driven in both states of the gate rather than only in the state that passes.
+ *
+ * Assertions are field by field. These buckets are persisted in a Prisma `Json` (`jsonb`) column,
+ * which does not preserve key order, so a stringify comparison would be an unsound instrument.
+ */
+describe("#863 V2 — declaration content after the step closes, committed damage, and critical facts", () => {
+  /** `cyra` sees Aria and Borin, controls only herself, and declares and rolls nothing below. */
+  const bystander = player(["cyra"], ["aria", "borin", "cyra"]);
+  const declarer = player(["aria"], ["aria", "borin", "cyra"]);
+
+  const ariaDeclaration = (overrides: Record<string, unknown> = {}) => ({
+    declaration: {
+      actionId: "attack_parry",
+      additionalActionNotes: "Hold the doorway.",
+      movementIntent: { distancePreferences: [], mode: "hold_position" },
+      phaseContexts: {
+        phase1: {
+          modifierBuckets: {
+            general: [],
+            situationDb: [],
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+          targetParticipantId: "borin",
+        },
+      },
+      roundNumber: 1,
+      secondaryActionId: "talk_shout",
+      submittedAt: "2026-01-01T00:01:00.000Z",
+      submittedBy: "player",
+      ...overrides,
+    },
+    label: "Aria",
+    participantId: "aria",
+  });
+
+  /**
+   * `currentStep` is what `buildCombatProgressionProjection` derives the canonical boundary from.
+   * `select_actions` and `pre_declaration` both map onto the `declaration` boundary
+   * (`boundaryForStep`), and every later step maps onto a later boundary — so these are the two
+   * sides of the declaration publication-timing rule.
+   */
+  const declarationRound = (
+    currentStep: CombatRoundState["currentStep"],
+    declarationOverrides: Record<string, unknown> = {},
+  ) =>
+    combatRoundStateSchema.parse({
+      currentStep,
+      encounterId: "encounter-1",
+      events: [],
+      participants: [
+        ariaDeclaration(declarationOverrides),
+        { label: "Borin", participantId: "borin" },
+        { label: "Cyra", participantId: "cyra" },
+      ],
+      roundNumber: 1,
+    });
+
+  const declarationEventFor = (
+    viewer: Parameters<typeof projectCombatHistory>[0]["viewer"],
+    currentStep: CombatRoundState["currentStep"],
+    declarationOverrides: Record<string, unknown> = {},
+  ) => {
+    const projection = projectCombatHistory({
+      participants,
+      source: historySource(declarationRound(currentStep, declarationOverrides)),
+      viewer,
+    });
+    return projection.activeRound.events.find(
+      (entry) => entry.type === "declaration" && entry.ownerParticipantId === "aria",
+    );
+  };
+
+  it("withholds declaration content from a bystander while the declaration step is open, and publishes it once the step closes (#863 row 1)", () => {
+    /*
+     * The withheld direction first, and this is the direction a test that only drove a closed
+     * step could not see. The event itself must still arrive: its admission is a safe progression
+     * fact (#507 Tier 3) that lets the DE tracker cell distinguish submitted work from a pending
+     * declaration, and this lane must not take that back.
+     */
+    for (const openStep of ["pre_declaration", "select_actions"] as const) {
+      const open = declarationEventFor(bystander, openStep);
+      expect(
+        open,
+        `bystander, ${openStep}: the declaration event itself is still admitted`,
+      ).toBeDefined();
+      expect(
+        open?.facts.publicOutcome,
+        `bystander, ${openStep}: no committed declaration content`,
+      ).toEqual({});
+      expect(
+        open?.facts.involvedOutcome,
+        `bystander, ${openStep}: the involved bucket still requires involvement`,
+      ).toBeUndefined();
+      expect(
+        open?.identities.map((identity) => identity.role),
+        `bystander, ${openStep}: the declared target is not named`,
+      ).not.toContain("target");
+    }
+
+    // The published direction, on the same fixture with only the step moved on.
+    const closed = declarationEventFor(bystander, "review_action_modifiers");
+    expect(closed?.facts.publicOutcome.actionLabel).toBe("Single attack");
+    expect(closed?.facts.publicOutcome.secondaryActionLabel).toBe("Talk / Shout");
+    expect(closed?.facts.publicOutcome.movementLabel).toBe("Hold position");
+    expect(
+      closed?.identities.find((identity) => identity.role === "target"),
+      "bystander, step closed: the declared target rides free on the Declaration row",
+    ).toMatchObject({ displayName: "Borin", participantId: "borin", visibility: "visible" });
+    expect(
+      closed?.facts.involvedOutcome,
+      "bystander, step closed: still no involved bucket — only the public one opened",
+    ).toBeUndefined();
+    expect(closed?.facts.privateCalculation).toBeUndefined();
+    expect(closed?.facts.gmReview).toBeUndefined();
+
+    // Field by field, every private declaration field #863 names.
+    for (const key of [
+      "additionalActionNotes",
+      "intent",
+      "movementIntent",
+      "phaseContexts",
+      "secondaryActionContext",
+      "secondaryActionId",
+      "submittedBy",
+    ]) {
+      expect(
+        Object.hasOwn(closed?.facts.publicOutcome ?? {}, key),
+        `bystander, step closed: ${key} must not reach the public bucket`,
+      ).toBe(false);
+    }
+
+    /*
+     * The two viewers who were never gated, as controls: a lane that broke either of these would
+     * look identical on the bystander assertions above.
+     */
+    const ownDeclarationWhileOpen = declarationEventFor(declarer, "select_actions");
+    expect(
+      ownDeclarationWhileOpen?.facts.involvedOutcome,
+      "the declarer's own declaration is unchanged while the step is open",
+    ).toMatchObject({ actionLabel: "Single attack", submittedBy: "player" });
+    expect(ownDeclarationWhileOpen?.facts.publicOutcome.actionLabel).toBe("Single attack");
+    const gmWhileOpen = declarationEventFor({ kind: "gm" }, "select_actions");
+    expect(gmWhileOpen?.facts.involvedOutcome).toMatchObject({
+      additionalActionNotes: "Hold the doorway.",
+    });
+    expect(
+      gmWhileOpen?.identities.find((identity) => identity.role === "target")?.displayName,
+    ).toBe("Borin");
+  });
+
+  it("withholds the observed opponent from a bystander even after the step closes (#863 row 1)", () => {
+    /*
+     * `declarationTargetParticipantId` reads `secondaryActionContext.targetParticipantId` first,
+     * so on an observing declaration the event's target slot holds the *observed* opponent. The
+     * session body screens exactly that from a non-controller, and publishing it here would route
+     * the same fact through a second channel.
+     */
+    const observing = declarationEventFor(bystander, "review_action_modifiers", {
+      secondaryActionContext: { action: "observe_opponent", targetParticipantId: "borin" },
+      secondaryActionId: "observe_opponent",
+    });
+    expect(observing?.facts.publicOutcome.actionLabel).toBe("Single attack");
+    expect(Object.hasOwn(observing?.facts.publicOutcome ?? {}, "secondaryActionLabel")).toBe(false);
+    expect(
+      observing?.identities.map((identity) => identity.role),
+      "bystander: the observed opponent is not named",
+    ).not.toContain("target");
+
+    // The GM still sees both, so this is a projection rather than a deletion.
+    const gmObserving = declarationEventFor({ kind: "gm" }, "review_action_modifiers", {
+      secondaryActionContext: { action: "observe_opponent", targetParticipantId: "borin" },
+      secondaryActionId: "observe_opponent",
+    });
+    expect(gmObserving?.facts.involvedOutcome?.secondaryActionLabel).toBe("Observe Opponent");
+    expect(
+      gmObserving?.identities.find((identity) => identity.role === "target")?.displayName,
+    ).toBe("Borin");
+  });
+
+  /*
+   * Rows 2 and 3. The event's facts are written in the buckets the production writers use: the
+   * public bucket is built by the one shared definition both writers call, so this fixture cannot
+   * drift from what they author. `combatRoundManager.test.ts` measures that authoring end to end
+   * through the real commit; this measures what the projection then releases, and to whom.
+   */
+  const damageCommittedEvent = event({
+    facts: {
+      gmReview: {
+        additionalEffects: [],
+        computedCriticalGrade: "c",
+        operationalConsequences: [],
+        review: {
+          bleedRate: "1/3",
+          criticalEffectProposal: { title: "Shattered knee" },
+          mortality: "none",
+          selfStaunch: false,
+          treatment: "surgery",
+          urgency: "immediate",
+        },
+      },
+      involvedOutcome: {
+        criticalGrade: "c",
+        criticalTitle: "Shattered knee",
+        finalCommittedDamage: 17,
+        hitLocation: "leg",
+      },
+      publicOutcome: buildCombatCommittedDamagePublicOutcome({
+        criticalGrade: "c",
+        criticalTitle: "Shattered knee",
+        finalCommittedDamage: 17,
+        hitLocation: "leg",
+      }),
+      rollerPrivate: {
+        armorModifier: -8,
+        damageLookupTotal: 94,
+        damageRoll: 12,
+        defenderDm: 0,
+        dmb: 8,
+        hitLookupTotal: 94,
+      },
+    },
+    id: "event-damage-committed-aria-borin",
+    ownerParticipantId: "borin",
+    phase: "phase1",
+    rollerParticipantId: "aria",
+    sequence: 1,
+    status: "committed",
+    step: "phase_1_damage",
+    type: "damage_committed",
+    visibility: {
+      identityRefs: [
+        { participantId: "aria", role: "attacker" },
+        { participantId: "borin", role: "defender" },
+        { participantId: "borin", role: "target" },
+      ],
+      involvedParticipantIds: ["aria", "borin"],
+      outcomeScope: "involved",
+      rollerParticipantId: "aria",
+    },
+  });
+
+  /** Negative control: the proposal stage of the same exchange, which stays refused outright. */
+  const damageProposedEvent = event({
+    facts: {
+      gmReview: {},
+      involvedOutcome: { criticalGrade: "c", selectedHitLocation: "leg", totalDamage: 19 },
+      publicOutcome: {},
+      rollerPrivate: { armorModifier: -8, damageRoll: 12 },
+    },
+    id: "event-damage-proposed-aria-borin",
+    ownerParticipantId: "borin",
+    phase: "phase1",
+    rollerParticipantId: "aria",
+    sequence: 0,
+    status: "proposed",
+    step: "phase_1_damage",
+    type: "damage_proposed",
+    visibility: {
+      identityRefs: [
+        { participantId: "aria", role: "attacker" },
+        { participantId: "borin", role: "defender" },
+      ],
+      involvedParticipantIds: ["aria", "borin"],
+      outcomeScope: "involved",
+      rollerParticipantId: "aria",
+    },
+  });
+
+  const damageProjection = (viewer: Parameters<typeof projectCombatHistory>[0]["viewer"]) =>
+    projectCombatHistory({
+      continuingConsequences: [
+        {
+          criticalEffects: [],
+          effects: [],
+          ownerParticipantId: "scenario-participant-borin",
+          participantId: "borin",
+        },
+      ],
+      participants,
+      source: historySource(
+        combatRoundStateSchema.parse({
+          currentStep: "phase_1_damage",
+          encounterId: "encounter-1",
+          events: [damageProposedEvent, damageCommittedEvent],
+          participants: [
+            { label: "Aria", participantId: "aria" },
+            { label: "Borin", participantId: "borin" },
+            { label: "Cyra", participantId: "cyra" },
+          ],
+          roundNumber: 1,
+        }),
+      ),
+      viewer,
+    });
+
+  it("publishes the committed damage amount, critical grade, hit location and title to a bystander, and nothing else from that event (#863 rows 2-3)", () => {
+    const projection = damageProjection(bystander);
+    const committed = projection.activeRound.events.find(
+      (entry) => entry.type === "damage_committed",
+    );
+    if (!committed)
+      throw new Error("Expected the bystander to receive the damage_committed event.");
+
+    expect(committed.facts.publicOutcome.finalCommittedDamage).toBe(17);
+    expect(committed.facts.publicOutcome.criticalGrade).toBe("c");
+    expect(committed.facts.publicOutcome.hitLocation).toBe("leg");
+    expect(committed.facts.publicOutcome.criticalTitle).toBe("Shattered knee");
+    expect(committed.facts.publicOutcome.status).toBe("committed");
+    expect(
+      committed.identities.map((identity) => identity.displayName).sort(),
+      "the exchange's visible identities, which the Combat Log already names to every player",
+    ).toEqual(["Aria", "Borin", "Borin"]);
+
+    // The other three buckets, which this lane does not widen.
+    expect(committed.facts.involvedOutcome).toBeUndefined();
+    expect(committed.facts.privateCalculation).toBeUndefined();
+    expect(committed.facts.gmReview).toBeUndefined();
+    expect(committed.facts.defenseReview).toBeUndefined();
+
+    /*
+     * The negative assertion, taken on the serialized payload rather than on any one bucket,
+     * because a field can reach a reader through a bucket nobody was looking at. Every damage
+     * arithmetic input and every resolved-critical field #863 defers to #871.
+     */
+    const serialized = JSON.stringify(committed);
+    for (const field of [
+      "armorModifier",
+      "bleed",
+      "bleedKind",
+      "bleedRate",
+      "computedCriticalGrade",
+      "condition",
+      "damageLookupTotal",
+      "damageRoll",
+      "defenderDm",
+      "dmb",
+      "gmReview",
+      "hitLookupTotal",
+      "mortality",
+      "operationalConsequences",
+      "selfStaunch",
+      "totalDamage",
+      "treatment",
+      "urgency",
+    ]) {
+      expect(
+        serialized,
+        `bystander: ${field} must not appear anywhere in the projected damage_committed payload`,
+      ).not.toContain(field);
+    }
+
+    // `resultPresentation` stays restricted because `outcomeScope` was not widened.
+    expect(committed.resultEnvelope?.publicCombatNote).toBeUndefined();
+    expect(committed.resultEnvelope?.standardConsequences).toEqual([]);
+    expect(committed.resultEnvelope?.committedConsequences).toEqual([]);
+    expect(committed.resultEnvelope?.privateDiagnostics).toEqual([]);
+
+    // `damage_proposed` is still refused outright.
+    expect(
+      projection.activeRound.events.some((entry) => entry.type === "damage_proposed"),
+      "bystander: damage_proposed stays refused",
+    ).toBe(false);
+
+    /*
+     * The continuing-consequence rule this lane must not moot: `currentConsequences` is
+     * GM-or-affected-controller, and the only consequence here belongs to Borin.
+     */
+    expect(
+      projection.currentConsequences,
+      "bystander: no continuing-consequence entry for a participant the viewer does not control",
+    ).toEqual([]);
+  });
+
+  it("leaves the involved parties and the GM with exactly what they had (#863 rows 2-3)", () => {
+    const involved = damageProjection(player(["borin"], ["aria", "borin", "cyra"]));
+    const committed = involved.activeRound.events.find(
+      (entry) => entry.type === "damage_committed",
+    );
+    expect(committed?.facts.involvedOutcome).toMatchObject({
+      criticalGrade: "c",
+      criticalTitle: "Shattered knee",
+      finalCommittedDamage: 17,
+      hitLocation: "leg",
+    });
+    expect(
+      committed?.facts.gmReview,
+      "an involved party is not the GM and receives no GM review",
+    ).toBeUndefined();
+    expect(
+      committed?.facts.privateCalculation,
+      "the defender did not roll the damage, so the roller-private calculation stays withheld",
+    ).toBeUndefined();
+    /*
+     * Measured, not assumed: `damage_proposed` is refused to *every* player, involved or not —
+     * `shouldProjectPlayerEvent` refuses it before any visibility question is asked. The GM below
+     * is therefore the control for that refusal, and this lane leaves it exactly as it was.
+     */
+    expect(
+      involved.activeRound.events.some((entry) => entry.type === "damage_proposed"),
+      "an involved party does not reach the proposal stage either",
+    ).toBe(false);
+
+    const roller = damageProjection(player(["aria"], ["aria", "borin", "cyra"]));
+    expect(
+      roller.activeRound.events.find((entry) => entry.type === "damage_committed")?.facts
+        .privateCalculation,
+    ).toMatchObject({ armorModifier: -8, damageLookupTotal: 94 });
+
+    const gm = damageProjection({ kind: "gm" });
+    expect(
+      gm.activeRound.events.find((entry) => entry.type === "damage_committed")?.facts.gmReview,
+    ).toMatchObject({ computedCriticalGrade: "c" });
+    expect(
+      gm.activeRound.events.some((entry) => entry.type === "damage_proposed"),
+      "control for the refusal: the proposal stage exists in the round and only the GM reaches it",
+    ).toBe(true);
+  });
+
+  it("stays sane at the Alpha sizing floor of roughly 200 participants (#819 standing rule 2)", () => {
+    /*
+     * One declaration per even participant plus one committed-damage event per pair, projected for
+     * the bystander, at the Alpha sizing floor.
+     *
+     * **The correctness claim is the projected counts**, which is what this test asserts: the
+     * bystander reaches every one of the 100 damage events and 100 declarations, so the gate is a
+     * per-event decision that does not degrade or truncate at size.
+     *
+     * The wall-clock bound is a crash barrier, not the sizing evidence, and it is deliberately
+     * loose because a timing assertion in a unit suite is a flake generator. The sizing evidence
+     * is a differential measured against the baseline tree and recorded on the PR: at 200
+     * participants the bystander went from 101 projected events at 4710-5114 ms (baseline
+     * `847fb53a`) to 200 projected events at 3983-4539 ms (this head), with the GM unchanged at
+     * 200 events and 4450-4870 ms in both trees. So this lane doubles what a bystander receives
+     * without adding wall clock, and the four-to-five seconds at this size is pre-existing
+     * projection cost that the GM has always paid — reported, not introduced.
+     */
+    const size = 200;
+    const roster = Array.from({ length: size }, (_, index) => ({
+      displayName: `Combatant ${index}`,
+      participantId: `p-${index}`,
+    }));
+    const started = Date.now();
+    const projection = projectCombatHistory({
+      participants: roster,
+      source: historySource(
+        combatRoundStateSchema.parse({
+          currentStep: "phase_1_damage",
+          encounterId: "encounter-1",
+          events: Array.from({ length: size / 2 }, (_, index) =>
+            event({
+              ...damageCommittedEvent,
+              id: `event-damage-${index}`,
+              ownerParticipantId: `p-${index * 2 + 1}`,
+              rollerParticipantId: `p-${index * 2}`,
+              sequence: index,
+              visibility: {
+                identityRefs: [
+                  { participantId: `p-${index * 2}`, role: "attacker" },
+                  { participantId: `p-${index * 2 + 1}`, role: "defender" },
+                ],
+                involvedParticipantIds: [`p-${index * 2}`, `p-${index * 2 + 1}`],
+                outcomeScope: "involved",
+                rollerParticipantId: `p-${index * 2}`,
+              },
+            }),
+          ),
+          participants: roster.map((entry, index) => ({
+            ...(index % 2 === 0
+              ? {
+                  declaration: {
+                    actionId: "attack_parry",
+                    roundNumber: 1,
+                    submittedAt: "2026-01-01T00:01:00.000Z",
+                    submittedBy: "player",
+                  },
+                }
+              : {}),
+            label: entry.displayName,
+            participantId: entry.participantId,
+          })),
+          roundNumber: 1,
+        }),
+      ),
+      viewer: {
+        controlledParticipantIds: new Set(["p-0"]),
+        kind: "player",
+        visibleParticipantIds: new Set(roster.map((entry) => entry.participantId)),
+      },
+    });
+    const elapsedMs = Date.now() - started;
+
+    expect(projection.rows).toHaveLength(size);
+    expect(
+      projection.activeRound.events.filter((entry) => entry.type === "damage_committed"),
+    ).toHaveLength(size / 2);
+    expect(
+      projection.activeRound.events.filter((entry) => entry.type === "declaration"),
+    ).toHaveLength(size / 2);
+    expect(
+      projection.activeRound.events.find(
+        (entry) => entry.type === "damage_committed" && entry.ownerParticipantId === "p-3",
+      )?.facts.publicOutcome.finalCommittedDamage,
+      "a bystander's view of an exchange it is not part of still carries the committed amount at this size",
+    ).toBe(17);
+    // Loose on purpose: see the comment at the top of this test. The measured range on this
+    // machine is 4.0-5.4s for either viewer, in both the baseline and this tree.
+    expect(elapsedMs, `projection took ${elapsedMs}ms at ${size} participants`).toBeLessThan(
+      30_000,
+    );
   });
 });
