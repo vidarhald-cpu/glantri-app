@@ -153,11 +153,27 @@ export function isGlobalCombatRoundParticipantStep(step: CombatRoundStep): boole
   return isGlobalCombatRoundStep(step);
 }
 
+/**
+ * The tracker's top-to-bottom row order.
+ *
+ * Forgejo issue #875: this is the order the GM's initiative commit recorded. The projection
+ * carries it when one is supplied; when it is not — the inspection-selection path below calls this
+ * without a projection — the record is read from the round state directly, because the raw
+ * `state.participants` order this used to return is encounter insertion order, which is what made
+ * the top row stop being the next actor at the `phase1_initiative` boundary.
+ *
+ * Insertion order remains the answer only when no initiative has ever been committed, where there
+ * is no record to render and nothing has yet claimed an order. Participants the record does not
+ * name — those who joined after the last commit — follow the recorded order, after the
+ * participants recorded as never having rolled.
+ */
 export function getCombatRoundManagerDisplayParticipantIds(
   state: CombatRoundState,
   progression?: CombatProgressionPresentationProjection,
 ): string[] {
-  const committedOrder = progression?.executionOrder?.participantIds;
+  const committedOrder =
+    progression?.executionOrder?.participantIds ??
+    state.committedInitiativeOrders.at(-1)?.entries.map((entry) => entry.participantId);
   if (!committedOrder) {
     return state.participants.map((participant) => participant.participantId);
   }

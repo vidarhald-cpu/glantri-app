@@ -928,6 +928,53 @@ export const combatRoundInitiativesSchema = z.object({
     .optional(),
 });
 
+/**
+ * One participant's place in a committed initiative order, Forgejo issue #875.
+ *
+ * This is a record, not a view of current state. `initiativeResult` is a copy taken at the commit,
+ * so a later re-roll, override or modifier cannot restate it, and `initiativePublished` records
+ * whether that commit put the total in front of the table, which take-back restores (#876).
+ * A participant who has not rolled is recorded too, with no result and nothing published, so the
+ * record carries the whole committed sequence rather than only its rolled part.
+ */
+export const combatRoundCommittedInitiativeOrderEntrySchema = z
+  .object({
+    initiativePublished: z.boolean().default(false),
+    initiativeResult: combatRoundInitiativeResultSchema.optional(),
+    participantId: idSchema,
+  })
+  .strict();
+export type CombatRoundCommittedInitiativeOrderEntry = z.infer<
+  typeof combatRoundCommittedInitiativeOrderEntrySchema
+>;
+
+/**
+ * The order the GM committed, Forgejo issue #875 (Product Owner ruling of 2026-11-03).
+ *
+ * Committing initiative appends one of these; nothing else writes one. The tracker renders the
+ * entries of the most recent record in the order they are stored, so a phase change, a completed
+ * resolution or a withdrawn action cannot re-sort it, and a round before its own first commit
+ * renders the previous commit's record.
+ *
+ * The boundary this sits on: **current values are calculated, history is recorded, and nothing
+ * crosses.** Only the order is recorded here. Displayed OB/DB/initiative figures, and the derived
+ * current initiative group that decides whether an effect is deferred, stay calculated from
+ * current state and must not be read from this record.
+ */
+export const combatRoundCommittedInitiativeOrderSchema = z
+  .object({
+    commandId: idSchema,
+    committedAt: z.string().datetime(),
+    entries: z.array(combatRoundCommittedInitiativeOrderEntrySchema).default([]),
+    phase: combatRoundPhaseSchema,
+    roundNumber: z.number().int().positive(),
+    version: z.literal(1).default(1),
+  })
+  .strict();
+export type CombatRoundCommittedInitiativeOrder = z.infer<
+  typeof combatRoundCommittedInitiativeOrderSchema
+>;
+
 export const combatExperienceTriggerSchema = z.enum([
   "combat_start",
   "phase1_attack",
@@ -2992,6 +3039,7 @@ export interface CompletedCombatRound {
   breakOffProposals: CombatBreakOffProposal[];
   combatExperienceDifficulty?: number;
   commands: z.infer<typeof combatRoundCommandSchema>[];
+  committedInitiativeOrders: CombatRoundCommittedInitiativeOrder[];
   completedAt?: string;
   completedByUserId?: string;
   continuedContacts: z.infer<typeof continuedContactSchema>[];
@@ -3030,6 +3078,7 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
       breakOffProposals: z.array(combatBreakOffProposalSchema).default([]),
       combatExperienceDifficulty: z.number().int().positive().optional(),
       commands: z.array(combatRoundCommandSchema).default([]),
+      committedInitiativeOrders: z.array(combatRoundCommittedInitiativeOrderSchema).default([]),
       continuedContacts: z.array(continuedContactSchema).default([]),
       disarmAttempts: z.array(combatDisarmAttemptSchema).default([]),
       disarmUnbalancedConditions: z.array(combatDisarmUnbalancedConditionSchema).default([]),
@@ -3068,6 +3117,7 @@ export interface CombatRoundState {
   activeParticipantId?: string;
   combatExperienceDifficulty?: number;
   commands: z.infer<typeof combatRoundCommandSchema>[];
+  committedInitiativeOrders: CombatRoundCommittedInitiativeOrder[];
   continuedContacts: z.infer<typeof continuedContactSchema>[];
   disarmAttempts: CombatDisarmAttempt[];
   disarmUnbalancedConditions: z.infer<typeof combatDisarmUnbalancedConditionSchema>[];
@@ -3106,6 +3156,8 @@ const activeCombatRoundStateShape = {
   activeParticipantId: idSchema.optional(),
   combatExperienceDifficulty: z.number().int().positive().optional(),
   commands: z.array(combatRoundCommandSchema).default([]),
+  /** #875: the committed initiative orders, appended one per GM initiative commit. */
+  committedInitiativeOrders: z.array(combatRoundCommittedInitiativeOrderSchema).default([]),
   continuedContacts: z.array(continuedContactSchema).default([]),
   disarmAttempts: z.array(combatDisarmAttemptSchema).default([]),
   disarmUnbalancedConditions: z.array(combatDisarmUnbalancedConditionSchema).default([]),
@@ -9522,6 +9574,46 @@ function buildCombatRoundInitiativeCommitUndoFacts(input: {
   });
 }
 
+/**
+ * Records the order the GM is committing, Forgejo issue #875.
+ *
+ * The sequence is taken once, here, from `sortCombatRoundParticipantsByInitiative` — descending
+ * committed initiative, then the participant's index in `state.participants`, with participants
+ * who have not rolled last. From this point it is a record: the tracker renders it rather than
+ * re-deriving an order, so nothing short of another commit can re-sort the rows.
+ *
+ * `initiativePublished` is the publication state this commit creates: committing puts the totals
+ * of the committed phase in front of the table, so an entry with a recorded total is published and
+ * an entry without one has nothing to publish. Which participants a given viewer may see remains a
+ * current-state question answered by the per-viewer projection, not by this record.
+ */
+function buildCombatRoundCommittedInitiativeOrder(input: {
+  commandId: string;
+  committedAt: string;
+  phase: CombatRoundPhase;
+  state: CombatRoundState;
+}): CombatRoundCommittedInitiativeOrder {
+  return combatRoundCommittedInitiativeOrderSchema.parse({
+    commandId: input.commandId,
+    committedAt: input.committedAt,
+    entries: sortCombatRoundParticipantsByInitiative({
+      phase: input.phase,
+      state: input.state,
+    }).map((participant) => {
+      const initiativeResult = participant.initiatives[input.phase];
+
+      return {
+        initiativePublished: initiativeResult !== undefined,
+        initiativeResult,
+        participantId: participant.participantId,
+      };
+    }),
+    phase: input.phase,
+    roundNumber: input.state.roundNumber,
+    version: 1,
+  });
+}
+
 export function commitCombatRoundPhaseInitiativeResolution(input: {
   command: {
     commandId?: string;
@@ -9662,6 +9754,17 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     state: combatRoundStateSchema.parse({
       ...stateAfterPhaseOpen,
       commands: [...stateAfterPhaseOpen.commands, committedCommand],
+      // #875: the commit is the only writer of a committed order, and it appends rather than
+      // replaces, so an earlier commit's order survives as the record take-back returns to.
+      committedInitiativeOrders: [
+        ...stateAfterPhaseOpen.committedInitiativeOrders,
+        buildCombatRoundCommittedInitiativeOrder({
+          commandId: committedCommand.id,
+          committedAt: input.command.createdAt,
+          phase: input.phase,
+          state: normalized,
+        }),
+      ],
       currentCursor: afterCommitCursor,
       currentStep: selectedStep,
       phaseResolutionCursor: firstCombatExperienceParticipantId
@@ -19393,6 +19496,7 @@ function buildCompletedCombatRound(input: {
     activeParticipantId: normalized.activeParticipantId,
     breakOffProposals: normalized.breakOffProposals,
     commands: normalized.commands,
+    committedInitiativeOrders: normalized.committedInitiativeOrders,
     continuedContacts: normalized.continuedContacts,
     disarmAttempts: normalized.disarmAttempts,
     disarmUnbalancedConditions: normalized.disarmUnbalancedConditions,
@@ -19842,6 +19946,10 @@ export function initializeCombatRoundState(input: {
     activeParticipantId,
     combatExperienceDifficulty: existing?.combatExperienceDifficulty,
     commands,
+    // #875: carried through whole. Unlike the collections above, this is a record of what the GM
+    // committed, so it is not filtered by the current roster: an entry for a participant who has
+    // since left is dropped where the order is rendered, not where it is stored.
+    committedInitiativeOrders: existing?.committedInitiativeOrders ?? [],
     currentCursor: fallbackCursor
       ? fallbackCursor
       : canUseExistingCurrentCursor
@@ -25997,6 +26105,11 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
         undo.adjustDistanceProposals,
       ),
       commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+      // #875: the undone commit's order record leaves with its command, so the tracker falls back
+      // to the record of the commit before it rather than keeping an order no command stands for.
+      committedInitiativeOrders: normalized.committedInitiativeOrders.filter(
+        (record) => record.commandId !== command.id,
+      ),
       currentCursor: undo.navigation.currentCursor ?? undefined,
       currentStep: undo.navigation.currentStep,
       feintProposals: restoreProposalOrder(normalized.feintProposals, undo.feintProposals),
@@ -26019,6 +26132,10 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
   return combatRoundStateSchema.parse({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
+    // #875: as above — the record goes with the command it was written by.
+    committedInitiativeOrders: normalized.committedInitiativeOrders.filter(
+      (record) => record.commandId !== command.id,
+    ),
     currentCursor: command.beforeCursor,
     currentStep: selectedStep,
     phaseResolutionCursor: undefined,

@@ -53,6 +53,7 @@ const internalRoundStateShape = (
   | "adjustDistanceProposals"
   | "breakOffProposals"
   | "commands"
+  | "committedInitiativeOrders"
   | "continuedContacts"
   | "currentCursor"
   | "defenseSnapshots"
@@ -111,6 +112,10 @@ const neverPlayerFacing = z.array(z.never()).default([]);
  *
  * Not player-facing:
  * - `gmBacktrackHold` — the GM's clear-current-step hold; the projection always removed it;
+ * - `committedInitiativeOrders` — the committed initiative order records (#875). A player reads the
+ *   committed order from `progression.executionOrder`, which the per-viewer presentation already
+ *   narrows to the participants that viewer may see; the records themselves name every participant
+ *   and carry every rolled total, so they are not named here and no player receives them;
  * - `defenseSnapshots`, `events`, `rounds`, `stepSnapshots` — always empty for players, as before.
  */
 export const playerFacingCombatRoundStateSchema = playerFacingObject(

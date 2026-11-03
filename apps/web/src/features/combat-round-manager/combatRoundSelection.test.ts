@@ -962,3 +962,116 @@ describe("combat round manager selection", () => {
     });
   });
 });
+
+describe("#875 the tracker renders the committed order record", () => {
+  const initiativeResult = (total: number) => ({
+    baseInitiative: 0,
+    modifierAdjustment: 0,
+    rolls: [total],
+    rollTotal: total,
+    total,
+  });
+
+  /**
+   * Encounter insertion order is top, middle, bottom. The record says middle, bottom, top, so a
+   * rendered order of middle, bottom, top cannot have come from insertion order.
+   */
+  function withRecord(participantIds: string[], entries: Array<[string, number | undefined]>) {
+    const base = initializeCombatRoundState({
+      encounter: encounter({
+        participants: participantIds.map((id) => participant({ id, label: id })),
+      }),
+    });
+    return {
+      ...base,
+      committedInitiativeOrders: [
+        {
+          commandId: "command-875",
+          committedAt: "2026-01-01T00:03:00.000Z",
+          entries: entries.map(([participantId, total]) => ({
+            initiativePublished: total !== undefined,
+            ...(total === undefined ? {} : { initiativeResult: initiativeResult(total) }),
+            participantId,
+          })),
+          phase: "phase1" as const,
+          roundNumber: base.roundNumber,
+          version: 1 as const,
+        },
+      ],
+    };
+  }
+
+  it("reads the record from the round state when no projection is supplied", () => {
+    const state = withRecord(
+      ["top", "middle", "bottom"],
+      [
+        ["middle", 9],
+        ["bottom", 4],
+        ["top", undefined],
+      ],
+    );
+
+    expect(state.participants.map((entry) => entry.participantId)).toEqual([
+      "top",
+      "middle",
+      "bottom",
+    ]);
+    expect(getCombatRoundManagerDisplayParticipantIds(state)).toEqual(["middle", "bottom", "top"]);
+  });
+
+  it("places a participant the record does not name after the whole recorded order", () => {
+    const state = withRecord(
+      ["top", "middle", "bottom", "newcomer"],
+      [
+        ["middle", 9],
+        ["bottom", 4],
+        ["top", undefined],
+      ],
+    );
+
+    expect(getCombatRoundManagerDisplayParticipantIds(state)).toEqual([
+      "middle",
+      "bottom",
+      "top",
+      "newcomer",
+    ]);
+  });
+
+  it("drops a recorded participant who has left the round", () => {
+    const state = withRecord(
+      ["top", "middle"],
+      [
+        ["middle", 9],
+        ["departed", 7],
+        ["top", undefined],
+      ],
+    );
+
+    expect(getCombatRoundManagerDisplayParticipantIds(state)).toEqual(["middle", "top"]);
+  });
+
+  it("prefers the projection's order when one is supplied", () => {
+    const state = withRecord(
+      ["top", "middle", "bottom"],
+      [
+        ["middle", 9],
+        ["bottom", 4],
+        ["top", undefined],
+      ],
+    );
+
+    expect(
+      getCombatRoundManagerDisplayParticipantIds(
+        state,
+        committedOrder("phase1", ["bottom", "top", "middle"]),
+      ),
+    ).toEqual(["bottom", "top", "middle"]);
+  });
+
+  it("falls back to insertion order only when nothing has ever been committed", () => {
+    const state = initializeCombatRoundState({ encounter: encounter() });
+
+    expect(state.committedInitiativeOrders).toEqual([]);
+    expect(getCombatRoundManagerDisplayParticipantIds(state)).toEqual(["top", "middle", "bottom"]);
+  });
+});

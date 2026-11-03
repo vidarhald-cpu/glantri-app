@@ -15,6 +15,7 @@ import {
   recordCombatRoundHitLocationRoll,
   recordCombatRoundParryResult as recordCanonicalCombatRoundParryResult,
   rollCombatRoundCombatExperience,
+  sortCombatRoundParticipantsByInitiative,
   undoLatestCombatRoundCommand,
   type CombatRoundCursorStep,
   type CombatRoundState,
@@ -3409,5 +3410,149 @@ describe("authorizeCombatProgressionTask", () => {
         proposalId: "distance-proposal",
       }),
     ).toMatchObject({ ok: true });
+  });
+});
+
+describe("#875 — the projection renders the committed order record", () => {
+  /** An initiative result whose rolls are legal d6 values summing to `total`. */
+  const initiative = (total: number) => {
+    const rolls: number[] = [];
+    let remaining = total;
+    while (remaining > 6) {
+      rolls.push(6);
+      remaining -= 6;
+    }
+    rolls.push(remaining);
+    return { baseInitiative: 0, modifierAdjustment: 0, rolls, rollTotal: total, total };
+  };
+
+  /**
+   * hero and guard are in that insertion order; the record says guard first, so an order of
+   * guard, hero cannot have come from insertion order or from a tie-break on it.
+   */
+  const record = {
+    commandId: "command-875",
+    committedAt: "2026-07-19T10:00:00.000Z",
+    entries: [
+      { initiativePublished: true, initiativeResult: initiative(9), participantId: "guard" },
+      { initiativePublished: true, initiativeResult: initiative(4), participantId: "hero" },
+    ],
+    phase: "phase1" as const,
+    roundNumber: 2,
+    version: 1 as const,
+  };
+
+  it("returns the recorded order at the phase-1 initiative boundary, which had none", () => {
+    const withoutRecord = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "i1",
+        currentStep: "initiative_phase_1",
+      }),
+    );
+    const withRecord = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "i1",
+        currentStep: "initiative_phase_1",
+        overrides: { committedInitiativeOrders: [record] },
+      }),
+    );
+
+    expect(withoutRecord.executionOrder).toBeUndefined();
+    expect(withRecord.executionOrder).toMatchObject({
+      participantIds: ["guard", "hero"],
+      phase: "phase1",
+    });
+  });
+
+  it("renders the record even when current initiative would sort the other way", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "A1",
+        currentStep: "phase_1_actions",
+        overrides: { committedInitiativeOrders: [record] },
+        // Current initiative now says hero is first. The record still says guard.
+        participantOverrides: [
+          { initiatives: { phase1: initiative(20) } },
+          { initiatives: { phase1: initiative(1) } },
+        ],
+      }),
+    );
+
+    expect(
+      sortCombatRoundParticipantsByInitiative({
+        phase: "phase1",
+        state: state({
+          participantOverrides: [
+            { initiatives: { phase1: initiative(20) } },
+            { initiatives: { phase1: initiative(1) } },
+          ],
+        }),
+      }).map((entry) => entry.participantId),
+    ).toEqual(["hero", "guard"]);
+    expect(projection.executionOrder?.participantIds).toEqual(["guard", "hero"]);
+  });
+
+  it("keeps the derived current initiative group calculated beside the recorded order", () => {
+    const declaration = (targetParticipantId: string) => ({
+      actionId: "attack_parry",
+      committed: true,
+      phaseContexts: { phase1: { attackModeId: "mode-punch", targetParticipantId } },
+      roundNumber: 2,
+      secondaryActionId: "open",
+      submittedBy: "player",
+    });
+    const projection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "guard",
+        cursorStep: "A1",
+        currentStep: "phase_1_actions",
+        overrides: { committedInitiativeOrders: [record] },
+        // Current initiative is 3 and 12; the record says 9 and 4. The derived group must follow
+        // current state, so a group value of 9 would mean the record had crossed the boundary.
+        participantOverrides: [
+          { declaration: declaration("guard"), initiatives: { phase1: initiative(3) } },
+          { declaration: declaration("hero"), initiatives: { phase1: initiative(12) } },
+        ],
+      }),
+    );
+
+    // The order is the record; the current group is still derived from current initiative.
+    expect(projection.executionOrder?.participantIds).toEqual(["guard", "hero"]);
+    expect(projection.executionOrder?.currentInitiativeValue).toBe(12);
+    expect(
+      projection.executionOrder?.initiativeGroups?.map((group) => [
+        group.initiativeValue,
+        group.participantIds,
+      ]),
+    ).toEqual([
+      [12, ["guard"]],
+      [3, ["hero"]],
+    ]);
+  });
+
+  it("drops a recorded participant who has left the round, and never adds one", () => {
+    const projection = buildCombatProgressionProjection(
+      state({
+        cursorParticipantId: "hero",
+        cursorStep: "i1",
+        currentStep: "initiative_phase_1",
+        overrides: {
+          committedInitiativeOrders: [
+            {
+              ...record,
+              entries: [
+                ...record.entries,
+                { initiativePublished: false, participantId: "departed" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(projection.executionOrder?.participantIds).toEqual(["guard", "hero"]);
   });
 });
