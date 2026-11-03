@@ -7,6 +7,14 @@ import {
   buildPlayerSafeCombatScopeForUser,
   hasCombatDistanceVisibility,
 } from "./combatPlayerVisibility";
+import {
+  advanceCombatRoundStep,
+  commitCombatRoundPhaseInitiativeResolution,
+  initializeCombatRoundState,
+  recordCombatRoundDeclaration,
+  recordCombatRoundInitiative,
+  type CombatRoundState,
+} from "./combatRoundManager";
 import { encounterSessionSchema, roleplayStateSchema } from "./session";
 
 const now = "2026-09-15T10:00:00.000Z";
@@ -133,6 +141,109 @@ describe("shared Combat player visibility", () => {
       );
     },
   );
+
+  /**
+   * #894 acceptance criterion 4, at the **record** level: a hidden participant stays hidden from a
+   * viewer even when initiative is published.
+   *
+   * Two participations, which a per-viewer claim requires: the viewer controls `scenario-a` and
+   * `scenario-b`, and `scenario-c` belongs to another user. The hide is written into
+   * `roleplayState.visibility` — the per-viewer matrix the GM's reachable control writes and this
+   * gate consults — in the shape `updateRoleplayVisibility` produces (`viewer -> target ->
+   * boolean`). `ScenarioParticipant.visibilityOverrides` is deliberately untouched: it has no
+   * production write path and nothing here is wired to it (#798 ruling D1).
+   *
+   * The publication is real rather than stipulated: a genuine phase-1 initiative commit runs over
+   * this very Encounter, and the stored record is asserted to publish the hidden participant's
+   * total before visibility is measured. The commit's own record is also `neverPlayerFacing`, so
+   * it reaches no player at all (#875, #895); this case measures the separate per-viewer gate.
+   */
+  it("#894 criterion 4 — a hidden participant stays hidden once initiative is published", () => {
+    const input = fixture();
+    const hidden = input.encounter.participants[2]!;
+    const viewer = input.encounter.participants[0]!;
+
+    // Past the first round, so the combat-start Combat Experience window is not the thing under
+    // test here; the publication boundary is.
+    input.encounter.currentRound = 3;
+    let state: CombatRoundState = initializeCombatRoundState({ encounter: input.encounter });
+    for (const combatant of state.participants) {
+      state = recordCombatRoundDeclaration({
+        declaration: {
+          phaseContexts: {
+            phase1: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+              targetParticipantId: combatant.participantId === viewer.id ? hidden.id : viewer.id,
+            },
+          },
+          roundNumber: state.roundNumber,
+        },
+        participantId: combatant.participantId,
+        state,
+        submittedBy: "gm",
+      });
+    }
+    for (let guard = 0; guard < 60 && state.currentStep !== "initiative_phase_1"; guard += 1) {
+      state = advanceCombatRoundStep(state);
+    }
+    expect(state.currentStep).toBe("initiative_phase_1");
+    for (const [index, combatant] of state.participants.entries()) {
+      state = recordCombatRoundInitiative({
+        command: { createdAt: "2026-09-15T10:02:00.000Z", createdByUserId: "gm-1" },
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [index + 2],
+          rollTotal: index + 2,
+          total: index + 2,
+        },
+        participantId: combatant.participantId,
+        phase: "phase1",
+        state,
+        submittedBy: "gm",
+      });
+    }
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-09-15T10:03:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state,
+    });
+
+    // Publication established, not assumed: the hidden participant's total is published by this
+    // commit's own record. Without this the visibility measurement below would be vacuous.
+    const publishedEntry = committed.state.committedInitiativeOrders
+      .at(-1)
+      ?.entries.find((entry) => entry.participantId === hidden.id);
+    expect(publishedEntry?.initiativePublished).toBe(true);
+    expect(publishedEntry?.initiativeResult?.total).toBe(4);
+
+    // CONTROL: with the GM's row saying visible, this gate admits the participant through the
+    // exact field the measurement reads, so a clean result below is a real exclusion.
+    input.encounter.combatRoundState = committed.state;
+    input.encounter.roleplayState = roleplayStateSchema.parse({
+      visibility: { [viewer.id]: { [hidden.id]: true } },
+    });
+    expect(buildPlayerSafeCombatScopeForUser(input).visibleParticipantIds).toEqual(
+      aliases(input, [0, 1, 2]),
+    );
+
+    // MEASUREMENT: the GM hides it from this one viewer, and no alias of it survives.
+    input.encounter.roleplayState = roleplayStateSchema.parse({
+      visibility: { [viewer.id]: { [hidden.id]: false } },
+    });
+    const scope = buildPlayerSafeCombatScopeForUser(input);
+    expect(scope.visibleParticipantIds).toEqual(aliases(input, [0, 1]));
+    for (const alias of getCombatDistanceParticipantAliases(hidden)) {
+      expect(scope.visibleParticipantIds.has(alias), alias).toBe(false);
+    }
+    // The viewer's own participations are untouched, so the hide is per target, not a blackout.
+    expect(scope.controlledEncounterParticipantIds).toEqual(aliases(input, [0, 1]));
+  });
 
   it("preserves inactive, unrelated, archived, and explicit-membership control rules", () => {
     const input = fixture();

@@ -71,6 +71,32 @@ export function isCombatInitiativeCommitted(input: {
   );
 }
 
+/**
+ * The canonical progression boundary a cursor stands on.
+ *
+ * It lives here, beside `COMBAT_PROGRESSION_BOUNDARIES` and `isCombatInitiativeCommitted`, for the
+ * same reason the predicate does: both are nothing but a reading of that canonical order, and a
+ * caller that needs the boundary a cursor produces must not hand-write a second copy of the
+ * mapping. `buildCombatProgressionProjection` derives the projected boundary with exactly this
+ * call, so a caller using it reads the same boundary the projection will report.
+ *
+ * Ruling 2 (#215): `pre_declaration` (`PD`) and `select_actions` (`DE`) share the one `declaration`
+ * authorization boundary. See `boundaryForStep` in `./internal` for why that reuse is safe.
+ */
+export function boundaryForCursorStep(
+  step: CombatRoundCursorStep,
+  hasParticipant: boolean,
+): CombatProgressionBoundaryKind {
+  if (step === "PD" || step === "DE") return "declaration";
+  if (step === "M1") return "phase1_modifier_review";
+  if (step === "i1") return "phase1_initiative";
+  if (step === "A1" || step === "P1" || step === "D1") return "phase1_resolution";
+  if (step === "M2") return "phase2_modifier_review";
+  if (step === "i2") return "phase2_initiative";
+  if (step === "A2" || step === "P2" || step === "D2") return "phase2_resolution";
+  return hasParticipant ? "round_end" : "round_boundary";
+}
+
 /** Shared visible tracker step for a boundary when its exact current task is ownerless or hidden. */
 export function getCombatRoundStepForProgressionBoundary(
   boundary: CombatProgressionBoundaryKind,

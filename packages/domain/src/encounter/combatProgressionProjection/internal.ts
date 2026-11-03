@@ -313,21 +313,12 @@ export function deepFreeze<T>(value: T): T {
   return value;
 }
 
-export function boundaryForCursorStep(
-  step: CombatRoundCursorStep,
-  hasParticipant: boolean,
-): CombatProgressionBoundaryKind {
-  // Ruling 2 (#215): `pre_declaration` (`PD`) and `select_actions` (`DE`) share the one
-  // `declaration` authorization boundary. See `boundaryForStep` for why that reuse is safe.
-  if (step === "PD" || step === "DE") return "declaration";
-  if (step === "M1") return "phase1_modifier_review";
-  if (step === "i1") return "phase1_initiative";
-  if (step === "A1" || step === "P1" || step === "D1") return "phase1_resolution";
-  if (step === "M2") return "phase2_modifier_review";
-  if (step === "i2") return "phase2_initiative";
-  if (step === "A2" || step === "P2" || step === "D2") return "phase2_resolution";
-  return hasParticipant ? "round_end" : "round_boundary";
-}
+// #894 moved `boundaryForCursorStep` to `./types`, beside `COMBAT_PROGRESSION_BOUNDARIES` and
+// `isCombatInitiativeCommitted`, so `combatRoundManager` can read the boundary its initiative
+// commit produces without hand-writing a second copy of the mapping. `./types` imports nothing
+// from `combatRoundManager` at runtime, so that edge stays type-only. Re-exported here so this
+// folder's existing callers are unchanged.
+export { boundaryForCursorStep } from "./types";
 
 /**
  * Ruling 2 (#215): the `declaration` boundary is a deliberately coarse authorization *family*, not a
