@@ -69,6 +69,7 @@ import {
   type CombatDistance,
   combatRoundInitiativeResultSchema,
   movementIntentSchema,
+  type CombatRoundCommittedInitiativeOrder,
   type CombatRoundState,
   type MovementIntent,
   type CombatEffectsState,
@@ -35209,6 +35210,125 @@ describe("#517 privacy hardening Tier 3", () => {
       }
     } finally {
       for (const restore of restores.reverse()) restore();
+    }
+  });
+
+  /*
+   * #895 — the committed initiative order records, measured at the reader (#875).
+   *
+   * `commitCombatRoundPhaseInitiativeResolution` is the only writer of
+   * `committedInitiativeOrders`, and the fixture above runs it, so the record this narrows is the
+   * one production writes. The record names every participant and carries every rolled total, and
+   * the Product Owner ruled on 2026-11-03 that a participant hidden from a viewer must not become
+   * exposed through initiative, so no player receives one.
+   *
+   * Measured at the response a player actually receives, not at the projection function, the way
+   * #862 is measured at its route. Both player shapes are read because they behaved differently
+   * before the repair: the legacy body did not carry the key at all, and the `active-v1` body
+   * carried the record, because `activeStateFromEncounter` re-parses the projected state with the
+   * internal `activeCombatRoundStateSchema`. The GM read is the control — without it a change that
+   * withheld the record from the GM too would pass this test.
+   *
+   * The record's own totals are deliberately not the current ones. It is a copy taken at the
+   * commit, which a later re-roll cannot restate, so distinct values prove a player's response
+   * carries none of the record's values rather than merely agreeing with current state.
+   */
+  it("delivers no committed initiative order record to a player, legacy or active-v1, while the GM keeps it whole (#895)", async () => {
+    const COMMAND_SENTINEL = "SECRET_COMMITTED_ORDER_COMMAND";
+    const RECORDED_TOTALS = [9731, 4829] as const;
+    const fixture = preparePhaseCombatExperienceBackOutRouteFixture({
+      gladiatorInitiative: 9,
+      guardInitiative: 4,
+    });
+    const writtenByTheCommit = fixture.roundState.committedInitiativeOrders.at(-1);
+    const recordedOrder: CombatRoundCommittedInitiativeOrder = {
+      ...writtenByTheCommit!,
+      commandId: COMMAND_SENTINEL,
+      entries: (writtenByTheCommit?.entries ?? []).map((entry, index) => ({
+        ...entry,
+        initiativeResult: entry.initiativeResult && {
+          ...entry.initiativeResult,
+          total: RECORDED_TOTALS[index]!,
+        },
+      })),
+    };
+    const roundState: CombatRoundState = {
+      ...fixture.roundState,
+      committedInitiativeOrders: [recordedOrder],
+    };
+
+    /*
+     * The store must really hold the record this test narrows, or a player-side `[]` proves
+     * nothing: one record, two entries, both rolled totals published, and the sentinel.
+     */
+    expect(roundState.committedInitiativeOrders).toEqual([
+      expect.objectContaining({
+        commandId: COMMAND_SENTINEL,
+        entries: [
+          expect.objectContaining({
+            initiativePublished: true,
+            initiativeResult: expect.objectContaining({ total: RECORDED_TOTALS[0] }),
+            participantId: "encounter-participant-1",
+          }),
+          expect.objectContaining({
+            initiativePublished: true,
+            initiativeResult: expect.objectContaining({ total: RECORDED_TOTALS[1] }),
+            participantId: "encounter-participant-2",
+          }),
+        ],
+        phase: "phase1",
+      }),
+    ]);
+
+    const read = async (user: typeof mocks.playerUser, headers: Record<string, string> = {}) => {
+      setupCombatDeclarationRoute({
+        combatExperienceResolved: false,
+        encounter: { ...fixture.encounter, combatRoundState: roundState },
+        participants: fixture.participants,
+        user,
+      });
+      const app = await buildScenarioTestApp();
+      const response = await app.inject({ headers, method: "GET", url: "/encounters/encounter-1" });
+      await app.close();
+      return response;
+    };
+    const committedOrdersOf = (response: { json: () => unknown }, legacy: boolean) =>
+      (legacy
+        ? (response.json() as unknown as { encounter: { combatRoundState: CombatRoundState } })
+            .encounter.combatRoundState
+        : (response.json() as unknown as { activeCombatState: CombatRoundState }).activeCombatState
+      ).committedInitiativeOrders;
+
+    // The control: the GM receives the record whole, in both shapes.
+    for (const [label, headers, legacy] of [
+      ["legacy", {}, true],
+      ["active-v1", ACTIVE_RESPONSE_HEADERS, false],
+    ] as Array<[string, Record<string, string>, boolean]>) {
+      const gm = await read(mocks.adminUser, headers);
+      expect(gm.statusCode, `GM ${label}: ${gm.body}`).toBe(200);
+      const orders = committedOrdersOf(gm, legacy);
+      expect(orders, label).toHaveLength(1);
+      expect(orders[0]?.commandId, label).toBe(COMMAND_SENTINEL);
+      expect(
+        orders[0]?.entries.map((entry) => entry.initiativeResult?.total),
+        label,
+      ).toEqual([...RECORDED_TOTALS]);
+      expect(gm.body, label).toContain(COMMAND_SENTINEL);
+      for (const total of RECORDED_TOTALS) expect(gm.body, label).toContain(String(total));
+    }
+
+    // Narrowed to nothing for a player, by value, in both shapes.
+    for (const [label, headers, legacy] of [
+      ["legacy", {}, true],
+      ["active-v1", ACTIVE_RESPONSE_HEADERS, false],
+    ] as Array<[string, Record<string, string>, boolean]>) {
+      const player = await read(mocks.playerUser, headers);
+      expect(player.statusCode, `player ${label}: ${player.body}`).toBe(200);
+      expect(committedOrdersOf(player, legacy), label).toEqual([]);
+      expect(player.body, label).not.toContain(COMMAND_SENTINEL);
+      for (const total of RECORDED_TOTALS) {
+        expect(player.body, `${label} ${total}`).not.toContain(String(total));
+      }
     }
   });
 

@@ -552,4 +552,88 @@ describe("#517 player-facing encounter: non-assignability from stored values at 
       }),
     ).toThrow(/Expected never/);
   });
+  /*
+   * #895 — the schema half of #875's privacy repair, committed.
+   *
+   * `committedInitiativeOrders` is `neverPlayerFacing`, so the guarantee is refusal rather than
+   * silent emptying: handing `buildPlayerFacing` a stored round state whose record is populated
+   * throws `Expected never, received object` instead of quietly dropping the record. That is what
+   * makes the `committedInitiativeOrders: []` override in
+   * `buildPlayerFacingCombatRoundStateForUser` (`encounterRoutes.ts`) impossible to forget, and a
+   * caller writing a record straight into a parsed player state is refused the same way.
+   * Independent QA measured this refusal (#895); nothing in the repository was asserting it.
+   */
+  it("#895 — refuses a populated committed initiative order rather than emptying it", () => {
+    const storedOrder = {
+      commandId: "command-commit-initiative",
+      committedAt: TIMESTAMP,
+      entries: [
+        {
+          initiativePublished: true,
+          initiativeResult: { baseInitiative: 2, rolls: [4], rollTotal: 4, total: 6 },
+          participantId: "hero",
+        },
+        {
+          initiativePublished: true,
+          initiativeResult: { baseInitiative: 1, rolls: [3], rollTotal: 3, total: 4 },
+          participantId: "guard",
+        },
+      ],
+      phase: "phase1" as const,
+      roundNumber: 1,
+      version: 1 as const,
+    };
+    const state = combatRoundStateSchema.parse({
+      ...storedRoundStateInput(),
+      committedInitiativeOrders: [storedOrder],
+    });
+    expect(
+      state.committedInitiativeOrders,
+      "the fixture must really hold a committed record, or this proves nothing",
+    ).toEqual([
+      expect.objectContaining({
+        commandId: "command-commit-initiative",
+        entries: [
+          expect.objectContaining({
+            initiativeResult: expect.objectContaining({ total: 6 }),
+            participantId: "hero",
+          }),
+          expect.objectContaining({
+            initiativeResult: expect.objectContaining({ total: 4 }),
+            participantId: "guard",
+          }),
+        ],
+      }),
+    ]);
+    const projectedParticipants = () =>
+      state.participants.map((participant) =>
+        buildPlayerFacingCombatRoundParticipant({ participant }),
+      );
+
+    // Refusal, not silent emptying, and named: the record's own key is what the schema rejects.
+    const build = () =>
+      buildPlayerFacing(playerFacingCombatRoundStateSchema, state, {
+        events: [],
+        participants: projectedParticipants(),
+      });
+    expect(build).toThrow(/Expected never/);
+    expect(build).toThrow(/committedInitiativeOrders/);
+
+    // With the override the route itself passes, it parses, and the key a player reads is empty.
+    const player = buildPlayerFacing(playerFacingCombatRoundStateSchema, state, {
+      committedInitiativeOrders: [],
+      events: [],
+      participants: projectedParticipants(),
+    });
+
+    expect(player.committedInitiativeOrders).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("command-commit-initiative");
+    // Fail-closed the other way in too: a caller writing a record into a parsed player state.
+    expect(() =>
+      playerFacingCombatRoundStateSchema.parse({
+        ...player,
+        committedInitiativeOrders: [storedOrder],
+      }),
+    ).toThrow(/Expected never/);
+  });
 });
