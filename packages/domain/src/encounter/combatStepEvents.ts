@@ -3,6 +3,7 @@ import {
   combatAttackPhaseDefensivePenaltySchema,
 } from "./combatAttackPhasePenalty";
 import {
+  buildCombatCommittedDamagePublicOutcome,
   combatRoundCommandSchema,
   combatRoundEndReviewSchema,
   combatRoundParticipantStateSchema,
@@ -86,6 +87,23 @@ function booleanFact(record: Record<string, unknown>, key: string): boolean | un
   return typeof value === "boolean" ? value : undefined;
 }
 
+/**
+ * The short critical result title off a stored `commit_phase_damage` command's GM review (#863 row
+ * 3). The canonical writer reads `input.damageResult.review?.criticalEffectProposal?.title`; the
+ * command persists that same review under `facts.review`, so this reaches the identical value.
+ *
+ * Only the `title` string is read. The surrounding review carries the resolved critical effect —
+ * bleed rate and kind, mortality, urgency, conditions, treatment, self-staunch — which stays GM
+ * material and is deferred to #871; nothing but a primitive string leaves this function.
+ */
+function commandCriticalEffectTitle(record: Record<string, unknown>): string | undefined {
+  const review = record.review;
+  if (!review || typeof review !== "object" || Array.isArray(review)) return undefined;
+  const proposal = (review as Record<string, unknown>).criticalEffectProposal;
+  if (!proposal || typeof proposal !== "object" || Array.isArray(proposal)) return undefined;
+  return stringFact(proposal as Record<string, unknown>, "title");
+}
+
 function stringArrayFact(record: Record<string, unknown>, key: string): string[] {
   const value = record[key];
   return Array.isArray(value)
@@ -134,6 +152,98 @@ function declarationSecondaryActionLabel(
 ): string | undefined {
   const action = declaration.secondaryActionContext?.action ?? declaration.secondaryActionId;
   return action ? getCombatDeclarationActionLabel(action) : undefined;
+}
+
+/**
+ * Whether this declaration's secondary action is an opponent observation (#863 row 1).
+ *
+ * Two facts are screened from a non-controller when it is, and the screen is the session body's,
+ * not a new one: `buildPlayerFacingRoundParticipantForViewer`
+ * (`apps/api/src/routes/scenarios/encounterRoutes.ts`) already strips `secondaryActionId` and
+ * `secondaryActionContext` from another participant's declaration when the secondary action is
+ * `observe_opponent`, because the context carries the observed opponent.
+ *
+ * It bites twice here. The secondary-action *label* would name the observation, and
+ * `declarationTargetParticipantId` above reads `secondaryActionContext.targetParticipantId`
+ * **first**, so on an observing declaration the event's `targetParticipantId` is the observed
+ * opponent rather than a declared action target. Publishing either to a bystander would route
+ * through the tracker exactly what the session body screens, so both are withheld.
+ */
+function isObservationSecondaryAction(input: {
+  secondaryActionContextAction?: unknown;
+  secondaryActionId?: unknown;
+}): boolean {
+  return (
+    (input.secondaryActionContextAction ?? input.secondaryActionId) ===
+    COMBAT_DECLARATION_OBSERVE_OPPONENT_SECONDARY_ACTION
+  );
+}
+
+const COMBAT_DECLARATION_OBSERVE_OPPONENT_SECONDARY_ACTION = "observe_opponent";
+
+function isCombatDeclarationObservationScreened(
+  declaration: CombatRoundParticipantState["declaration"],
+): boolean {
+  if (!declaration) return false;
+  return isObservationSecondaryAction({
+    secondaryActionContextAction: declaration.secondaryActionContext?.action,
+    secondaryActionId: declaration.secondaryActionId,
+  });
+}
+
+/**
+ * The same screen, read off a recorded `declaration` event rather than off live round state, for
+ * `projectCombatHistoryEvent`. The two secondary-action fields it consults are the ones
+ * `declarationCandidate` records into `facts.involvedOutcome`, and they are read internally only:
+ * what leaves the projection is the decision, never these values.
+ */
+export function isCombatDeclarationEventObservationScreened(event: CombatStepEvent): boolean {
+  if (event.type !== "declaration") return false;
+  const context = event.facts.involvedOutcome.secondaryActionContext;
+  return isObservationSecondaryAction({
+    secondaryActionContextAction:
+      context && typeof context === "object" && !Array.isArray(context)
+        ? (context as Record<string, unknown>).action
+        : undefined,
+    secondaryActionId: event.facts.involvedOutcome.secondaryActionId,
+  });
+}
+
+/**
+ * The declaration event's public fact bucket (#863 row 1).
+ *
+ * Action label, secondary-action label and the declared movement label — the facts the session
+ * body already delivers to a non-controller once the declaration step has closed
+ * (`buildPlayerFacingRoundParticipantForViewer`), and which the Combat Log already narrates. They
+ * are authored here so that the Combat-history tracker path stops contradicting two surfaces that
+ * already ship them. The declared *target* is not a fact in this bucket: it is the event's already
+ * projected `target` identity, released by the same timing condition in
+ * `combatHistoryProjection.ts`.
+ *
+ * **Timing is not this function's business and must not be inferred from it.** The bucket is
+ * authored unconditionally and `projectCombatHistoryEvent` withholds it from a non-controller
+ * until the canonical progression boundary has left `declaration`. Authoring is not publication.
+ *
+ * **Deliberately absent:** `additionalActionNotes`, `intent`, `movementIntent`, `phaseContexts`,
+ * `submittedBy`, `actionId`/`movementId`/`secondaryActionId` (internal identifiers rather than
+ * reader-facing labels) and `secondaryActionContext`. They stay in `involvedOutcome`, which still
+ * requires `involved`. `secondaryActionLabel` is additionally withheld on an observing declaration
+ * — see `isCombatDeclarationObservationScreened`.
+ */
+function declarationPublicOutcome(
+  declaration: NonNullable<CombatRoundParticipantState["declaration"]>,
+  labels: { actionLabel?: string; movementLabel?: string; secondaryActionLabel?: string },
+): Record<string, unknown> {
+  const actionLabel =
+    labels.actionLabel && labels.actionLabel.trim().length > 0 ? labels.actionLabel : undefined;
+  const secondaryActionLabel = isCombatDeclarationObservationScreened(declaration)
+    ? undefined
+    : labels.secondaryActionLabel;
+  return {
+    ...(actionLabel === undefined ? {} : { actionLabel }),
+    ...(labels.movementLabel === undefined ? {} : { movementLabel: labels.movementLabel }),
+    ...(secondaryActionLabel === undefined ? {} : { secondaryActionLabel }),
+  };
 }
 
 function phaseStep(
@@ -484,6 +594,11 @@ function declarationCandidate(input: {
           submittedBy: declaration.submittedBy,
           targetParticipantId,
         },
+        publicOutcome: declarationPublicOutcome(declaration, {
+          actionLabel,
+          movementLabel,
+          secondaryActionLabel,
+        }),
         resultPresentation: {
           actionInstanceId: command?.value.id ?? declaration.id,
           calculationReferences: [],
@@ -862,7 +977,23 @@ function resolutionCandidates(input: {
               finalCommittedDamage: facts.finalCommittedDamage,
               status: resolution.damageProposal.status,
             },
-            publicOutcome: { status: "committed" },
+            /*
+             * #863 rows 2 and 3, legacy derivation. The same shared definition the canonical
+             * writer uses (`buildCombatCommittedDamagePublicOutcome`), fed from the stored
+             * `commit_phase_damage` command's own facts, which is where the canonical writer also
+             * reads three of the four. The fourth, the critical title, comes off the same review
+             * the command persisted.
+             *
+             * Authored on both paths deliberately: which writer produced a round's
+             * `damage_committed` event depends on how that round was created, and a fact present
+             * on one path and absent on the other is the defect this row is most exposed to.
+             */
+            publicOutcome: buildCombatCommittedDamagePublicOutcome({
+              criticalGrade: facts.criticalGrade,
+              criticalTitle: commandCriticalEffectTitle(facts),
+              finalCommittedDamage: facts.finalCommittedDamage,
+              hitLocation: facts.effectiveHitLocation,
+            }),
           },
           occurredAt: command?.value.createdAt ?? resolution.updatedAt,
           ownerParticipantId: resolution.defenderParticipantId,
@@ -1834,6 +1965,23 @@ function orphanCommandCandidates(input: {
                   : undefined
                 : booleanFact(facts, "success"),
             },
+            /*
+             * #863 rows 2 and 3, orphan-command derivation — the third `damage_committed` writer
+             * site, reached when a `commit_phase_damage` command has no phase resolution result to
+             * build from. Same shared definition, same command facts, same four promoted values —
+             * each one omitted when this command did not store it, because the promotion is of
+             * stored values only and never a re-derivation.
+             */
+            ...(mapping.type === "damage_committed"
+              ? {
+                  publicOutcome: buildCombatCommittedDamagePublicOutcome({
+                    criticalGrade: facts.criticalGrade,
+                    criticalTitle: commandCriticalEffectTitle(facts),
+                    finalCommittedDamage: facts.finalCommittedDamage,
+                    hitLocation: facts.effectiveHitLocation,
+                  }),
+                }
+              : {}),
             rollerPrivate: {
               finalTotal: numberFact(facts, "finalTotal"),
               hitLocationRolls: facts.hitLocationRolls,

@@ -1104,3 +1104,136 @@ describe("buildCombatEventResultModel", () => {
     });
   });
 });
+
+/*
+ * #863 — what a bystander's inspector actually draws from the newly public buckets.
+ *
+ * The server decides disclosure; this decides rendering. The two fixtures below are the payloads
+ * `projectCombatHistoryEvent` produces for a bystander at this head (measured in
+ * `combatHistoryProjection.test.ts`): no `involvedOutcome`, no `privateCalculation`, no `gmReview`,
+ * and the promoted facts in `publicOutcome` only. A row that renders from `publicOutcome` alone is
+ * the point — before this lane the bystander's `outcomeRows` were empty and the summary said
+ * nothing, which is what made the tracker contradict the Combat Log.
+ */
+describe("#863 V2 — a bystander's rendered damage and declaration rows", () => {
+  it("renders the committed amount, hit location, critical grade and critical title from the public bucket alone", () => {
+    const model = buildCombatEventResultModel([
+      event("damage_committed", 1, {
+        facts: {
+          publicOutcome: {
+            criticalGrade: "c",
+            criticalTitle: "Shattered knee",
+            finalCommittedDamage: 17,
+            hitLocation: "leg",
+            status: "committed",
+          },
+        },
+        identities: [
+          {
+            displayName: "Scyrian",
+            participantId: "attacker",
+            role: "attacker",
+            visibility: "visible",
+          },
+          {
+            displayName: "The Gladiator",
+            participantId: "defender",
+            role: "defender",
+            visibility: "visible",
+          },
+        ],
+        status: "committed",
+        step: "phase_1_damage",
+      }),
+    ]);
+    const displayedText = model.items.flatMap((item) => [
+      item.summary,
+      ...item.outcomeRows.map((row) => row.text),
+    ]);
+
+    expect(displayedText).toEqual([
+      "The Gladiator received 17 damage to the leg.",
+      "Critical C committed.",
+      "Critical result: Shattered knee",
+    ]);
+
+    // Nothing from the resolved critical effect, and no damage arithmetic, is rendered. These
+    // words cannot be drawn because the server never sent them — the control for that is the
+    // projection test; this is the control for the renderer not inventing them.
+    expect(displayedText.join(" ")).not.toMatch(
+      /Bleed|bleed|Mortality|Urgency|Treatment|staunch|Armor|armour|Lookup|Roll:/,
+    );
+  });
+
+  it("renders the committed declaration content and the declared target from the public bucket alone", () => {
+    const model = buildCombatEventResultModel([
+      event("declaration", 1, {
+        facts: {
+          publicOutcome: {
+            actionLabel: "Single attack",
+            movementLabel: "Hold position",
+            secondaryActionLabel: "Talk / Shout",
+          },
+        },
+        identities: [
+          {
+            displayName: "Scyrian",
+            participantId: "actor",
+            role: "actor",
+            visibility: "visible",
+          },
+          {
+            displayName: "The Gladiator",
+            participantId: "target",
+            role: "target",
+            visibility: "visible",
+          },
+        ],
+        step: "select_actions",
+      }),
+    ]);
+    const displayedText = model.items.flatMap((item) => [
+      item.summary,
+      ...item.outcomeRows.map((row) => row.text),
+    ]);
+
+    expect(displayedText).toEqual([
+      "Scyrian declared Single attack against The Gladiator.",
+      "Action: Single attack",
+      "Secondary action: Talk / Shout",
+      "Movement: Hold position",
+      "Target: The Gladiator",
+    ]);
+    // `submittedBy` is not a public declaration fact, so the `Declared by:` row the GM and the
+    // declarer see is correctly absent here.
+    expect(displayedText.join(" ")).not.toContain("Declared by:");
+  });
+
+  it("falls back to the previous wording when the declaration content is still withheld", () => {
+    /*
+     * The withheld state, which is what a bystander receives while the declaration step is open:
+     * an empty public bucket and no target identity. The renderer must show the progression fact
+     * and nothing more — this is the direction a test that only drove a closed step would miss.
+     */
+    const model = buildCombatEventResultModel([
+      event("declaration", 1, {
+        facts: { publicOutcome: {} },
+        identities: [
+          {
+            displayName: "Scyrian",
+            participantId: "actor",
+            role: "actor",
+            visibility: "visible",
+          },
+        ],
+        step: "select_actions",
+      }),
+    ]);
+    const displayedText = model.items.flatMap((item) => [
+      item.summary,
+      ...item.outcomeRows.map((row) => row.text),
+    ]);
+
+    expect(displayedText).toEqual(["Scyrian declared an action."]);
+  });
+});

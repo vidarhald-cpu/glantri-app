@@ -18077,6 +18077,61 @@ function buildCombatDamageResultPresentation(input: {
   });
 }
 
+/**
+ * The `damage_committed` public fact bucket (#863 rows 2 and 3).
+ *
+ * Four values that already exist on this one event are promoted from `involvedOutcome` into
+ * `publicOutcome`: the committed damage amount, the critical grade, the hit location and the short
+ * critical result title. Nothing is computed, re-derived, re-labelled or enriched from the critical
+ * catalogue — the promotion is of stored values, under the Product Owner's board-game ruling on
+ * #854 and the scope amendment recorded on #863 (comment 19605).
+ *
+ * **This is the single definition, and it exists because this event has two writers.** The
+ * canonical writer is `recordCombatRoundCommitPhaseDamageCommand` below; the legacy derivation is
+ * `combatStepEvents.ts`, which reaches the same facts off the stored `commit_phase_damage` command.
+ * Authoring the bucket twice by hand is how the fact ends up present on one path and absent on the
+ * other depending on how the round was created, so both writers call this.
+ *
+ * **Deliberately absent, and these absences are the boundary of the two rows:**
+ *
+ * - every armour value — `armorModifier`, `effectiveArmor*`, `damageLookupTotal`, `damageRoll`,
+ *   `defenderDm`, `dmb`, `hitLookupTotal` — and every other piece of damage arithmetic. The
+ *   committed amount is public; how it was reached is not;
+ * - the *proposed* amount. `damage_proposed` stays refused outright
+ *   (`combatHistoryProjection.ts`), and `computedTotalDamage`/`rawTotalDamage`/`totalDamage` are
+ *   not promoted here either;
+ * - every resolved critical effect: no bleed rate, no internal-versus-external bleed kind, no
+ *   mortality, no urgency, no condition list, no treatment or self-staunch state, no follow-up
+ *   risk. Those are deferred to #871. Only the short `title` crosses, and only as stored.
+ *
+ * Primitive-only by construction: a nested object under a promoted key is how an unreviewed field
+ * would travel inside a reviewed one, so a non-primitive is dropped rather than carried. The same
+ * discipline as `COMBAT_ACTIVITY_INVOLVED_OUTCOME_WHITELIST` in `combatActivityProjection.ts`.
+ */
+export function buildCombatCommittedDamagePublicOutcome(input: {
+  criticalGrade?: unknown;
+  criticalTitle?: unknown;
+  finalCommittedDamage?: unknown;
+  hitLocation?: unknown;
+}): Record<string, unknown> {
+  const text = (value: unknown): string | undefined =>
+    typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  const criticalGrade = text(input.criticalGrade);
+  const criticalTitle = text(input.criticalTitle);
+  const hitLocation = text(input.hitLocation);
+  const finalCommittedDamage =
+    typeof input.finalCommittedDamage === "number" && Number.isFinite(input.finalCommittedDamage)
+      ? input.finalCommittedDamage
+      : undefined;
+  return {
+    ...(criticalGrade === undefined ? {} : { criticalGrade }),
+    ...(criticalTitle === undefined ? {} : { criticalTitle }),
+    ...(finalCommittedDamage === undefined ? {} : { finalCommittedDamage }),
+    ...(hitLocation === undefined ? {} : { hitLocation }),
+    status: "committed",
+  };
+}
+
 function recordCombatRoundCommitPhaseDamageCommand(input: {
   attackerScenarioParticipantId?: string;
   command: {
@@ -18408,7 +18463,15 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
           finalCommittedDamage: command.facts.finalCommittedDamage,
           hitLocation: command.facts.effectiveHitLocation,
         },
-        publicOutcome: { status: "committed" },
+        // #863 rows 2 and 3. The same four values, promoted to table state through the one shared
+        // definition the legacy derivation also uses. Read from the same expressions as
+        // `involvedOutcome` directly above, so the public and involved buckets can never disagree.
+        publicOutcome: buildCombatCommittedDamagePublicOutcome({
+          criticalGrade: command.facts.criticalGrade,
+          criticalTitle: input.damageResult.review?.criticalEffectProposal?.title,
+          finalCommittedDamage: command.facts.finalCommittedDamage,
+          hitLocation: command.facts.effectiveHitLocation,
+        }),
         resultPresentation: buildCombatDamageResultPresentation({
           damageResult: input.damageResult,
           damageResultId,

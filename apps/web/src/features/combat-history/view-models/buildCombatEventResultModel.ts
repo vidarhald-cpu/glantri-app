@@ -440,8 +440,30 @@ function eventPresentation(event: ProjectedCombatHistoryEvent): {
       const total = factLabel(factValue(event, "finalCommittedDamage", "totalDamage"));
       const location = factLabel(factValue(event, "hitLocation", "selectedHitLocation"));
       const grade = factLabel(factValue(event, "criticalGrade"))?.toUpperCase();
+      /*
+       * #863 row 3. The short critical result title is table state now, so it is rendered. It was
+       * already recorded on this event's `involvedOutcome` and already narrated to every player by
+       * the Combat Log (`combatLogProjection.ts`, `projectDamage`), but no inspector row read it —
+       * so the tracker was the one surface contradicting the ruling.
+       *
+       * `factValue` reads `involvedOutcome` then `publicOutcome`, never `privateCalculation` or
+       * `gmReview`, so this row renders only what the server already handed this viewer. Nothing
+       * about the *resolved* critical effect is read: no bleed rate, bleed kind, mortality,
+       * urgency, condition, treatment or self-staunch state. Those are deferred to #871.
+       */
+      const criticalTitle = factLabel(factValue(event, "criticalTitle"));
       return {
-        outcomeRows: resultRow(event, grade ? `Critical ${grade} committed.` : undefined),
+        outcomeRows: [
+          ...resultRow(event, grade ? `Critical ${grade} committed.` : undefined),
+          ...(criticalTitle
+            ? [
+                {
+                  key: `${event.id}:outcome:critical-title`,
+                  text: `Critical result: ${criticalTitle}`,
+                },
+              ]
+            : []),
+        ],
         summary:
           defender && total
             ? `${defender} received ${total} damage${location ? ` to the ${location.toLowerCase()}` : ""}.`
