@@ -1889,7 +1889,15 @@ describe("player combat phase model", () => {
     });
   });
 
-  it("treats Phase 1 Feint as a contest and Phase 2 as the committed attack", () => {
+  /*
+   * Forgejo #877 — Product Owner ruling. This test used to pin `showDefenseContext: false` for
+   * Phase 1 of a Feint (named "treats Phase 1 Feint as a contest and Phase 2 as the committed
+   * attack"). That was an intentional design: Phase 1 is a skill contest, so defensive values were
+   * judged irrelevant. The Product Owner has overruled it — the equipment is in hand throughout and
+   * a committed feint writes its modifier into the DB/parry bucket — so the DB/DM/P mini table is
+   * shown in both Feint phases. The attack-side expectations are unchanged and still asserted.
+   */
+  it("shows the defense context in both Feint phases while Phase 1 keeps no attack content", () => {
     const phaseContext = createEmptyPlayerEncounterCombatContext();
     const defenseStats = buildPlayerCombatDefenseStats({
       mainHandParryItemLabel: "Broad sword",
@@ -1920,7 +1928,7 @@ describe("player combat phase model", () => {
     expect(phase1).toMatchObject({
       showAttackLocationSelector: false,
       showAttackStats: false,
-      showDefenseContext: false,
+      showDefenseContext: true,
     });
     expect(phase2).toMatchObject({
       showAttackLocationSelector: true,

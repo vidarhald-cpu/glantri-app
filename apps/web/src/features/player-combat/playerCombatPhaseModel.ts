@@ -1564,7 +1564,10 @@ export function buildPlayerCombatDefenseStats(input: {
   };
 }
 
-function getPhaseContentFlags(input: {
+/**
+ * Whether the phase panel shows its Attack content for this declaration. Unchanged by #877.
+ */
+function getAttackContentFlag(input: {
   actionId: PlayerEncounterActionId | "";
   phaseKey: PlayerCombatPhaseKey;
   secondaryActionId: PlayerEncounterActionId | "";
@@ -1595,6 +1598,25 @@ function getPhaseContentFlags(input: {
   };
 }
 
+/**
+ * Which mini-table groups a phase panel shows (Forgejo #877, Product Owner ruling).
+ *
+ * The Defense / Parry DB/DM/P mini-table is shown by default on every phase panel, in every
+ * declared action and both phases, because the equipment it reports is in hand throughout and
+ * does not stop being true between steps. Hiding it needs a specific stated reason — space
+ * pressure on a panel doing other work, with the table genuinely irrelevant — and none is
+ * declared today, so `defense` is unconditionally true. This reverses the earlier Phase 1 Feint
+ * carve-out, which hid the table in every step of a Feint-Attack Phase 1 (including the parry
+ * step) and was keyed on the declared action rather than on any step.
+ */
+function getPhaseContentFlags(input: {
+  actionId: PlayerEncounterActionId | "";
+  phaseKey: PlayerCombatPhaseKey;
+  secondaryActionId: PlayerEncounterActionId | "";
+}): { attack: boolean; defense: boolean } {
+  return { ...getAttackContentFlag(input), defense: true };
+}
+
 export function buildPlayerCombatPhasePanelModel(input: {
   actionId: PlayerEncounterActionId | "";
   attackStats: PlayerCombatAttackStatsView | null;
@@ -1611,7 +1633,6 @@ export function buildPlayerCombatPhasePanelModel(input: {
   });
   const isAdjustRangePhase =
     input.actionId === "adjust_range_attack" && input.phaseKey === "phase1";
-  const isFeintContestPhase = input.actionId === "feint_attack" && input.phaseKey === "phase1";
 
   return {
     attackStats: input.attackStats,
@@ -1626,9 +1647,6 @@ export function buildPlayerCombatPhasePanelModel(input: {
     phaseKey: input.phaseKey,
     showAttackLocationSelector: flags.attack,
     showAttackStats: Boolean(input.attackStats && flags.attack),
-    // Phase 1 Feint is a Skill Contest, not a weapon attack or defensive exchange. Its
-    // declaration preview is limited to the canonical contest profile. Phase 2 remains the
-    // ordinary committed attack and keeps the existing attack/defense context.
-    showDefenseContext: !isFeintContestPhase,
+    showDefenseContext: flags.defense,
   };
 }
