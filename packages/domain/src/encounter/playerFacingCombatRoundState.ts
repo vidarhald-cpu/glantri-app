@@ -53,6 +53,7 @@ const internalRoundStateShape = (
   | "adjustDistanceProposals"
   | "breakOffProposals"
   | "commands"
+  | "committedInitiativeOrders"
   | "continuedContacts"
   | "currentCursor"
   | "defenseSnapshots"
@@ -110,7 +111,17 @@ const neverPlayerFacing = z.array(z.never()).default([]);
  * participant's cursor) are withheld; these schemas decide which fields can carry them.
  *
  * Not player-facing:
- * - `gmBacktrackHold` — the GM's clear-current-step hold; the projection always removed it;
+ * - `gmBacktrackHold` — the GM's clear-current-step hold; the projection always removed it, and the
+ *   internal schema declares it optional with no default, so nothing re-adds the key;
+ * - `committedInitiativeOrders` — the committed initiative order records (#875). The records name
+ *   every participant and carry every rolled total, so no player receives one; a player reads the
+ *   committed order from `progression.executionOrder`, which the per-viewer presentation already
+ *   narrows to the participants that viewer may see. The field is named here as `neverPlayerFacing`
+ *   rather than left out: leaving it out did not keep the key out of a player response, because
+ *   `activeStateFromEncounter` re-parses the projected state with the internal
+ *   `activeCombatRoundStateSchema`, whose `.default([])` put the key back as an empty array on
+ *   every `active-v1` response. Named this way the key a player reads is declared by a
+ *   player-facing schema and only an empty list can parse into it;
  * - `defenseSnapshots`, `events`, `rounds`, `stepSnapshots` — always empty for players, as before.
  */
 export const playerFacingCombatRoundStateSchema = playerFacingObject(
@@ -122,6 +133,7 @@ export const playerFacingCombatRoundStateSchema = playerFacingObject(
     breakOffProposals: z.array(playerFacingCombatBreakOffProposalSchema).default([]),
     combatExperienceDifficulty: LEAF,
     commands: z.array(playerFacingCombatRoundCommandSchema).default([]),
+    committedInitiativeOrders: neverPlayerFacing,
     continuedContacts: z.array(playerFacingContinuedContactSchema).default([]),
     disarmAttempts: z.array(playerFacingCombatDisarmAttemptSchema).default([]),
     disarmUnbalancedConditions: z

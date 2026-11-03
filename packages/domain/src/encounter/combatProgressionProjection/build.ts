@@ -32,6 +32,25 @@ import type {
   CombatProgressionProjection,
 } from "./types";
 
+/**
+ * The order the tracker renders, and the derived initiative groups beside it.
+ *
+ * Forgejo issue #875 (Product Owner ruling of 2026-11-03): `participantIds` is **read from the
+ * record the GM's initiative commit wrote**, not recomputed. Only a commit appends a record, so
+ * advancing a phase, completing a resolution or withdrawing an action cannot re-sort the rows, and
+ * a round standing before its own first commit renders the previous commit's order. Participants
+ * no longer in the round are dropped; participants the record does not name — those who joined
+ * after the last commit — are not added here, and the trackers place them after the recorded order.
+ *
+ * `initiativeGroups` and the current group beside them stay **derived from current state**. They
+ * are the value that decides whether an effect is deferred or in force (#884), which the ruling
+ * keeps calculated: "the current state is in other words always calculated, and does not rely on
+ * history." Nothing here reads the record to answer anything but "in what order are the rows".
+ *
+ * With no record — a round state stored before this existed, or a combat before its first commit —
+ * the pre-existing derived order is returned unchanged at the boundaries that had one, and no
+ * order at the boundaries that had none. No order is fabricated for a commit that never happened.
+ */
 function committedExecutionOrder(
   state: CombatRoundState,
   boundaryKind: CombatProgressionBoundaryKind,
@@ -46,10 +65,19 @@ function committedExecutionOrder(
           boundaryKind === "round_boundary"
         ? "phase2"
         : undefined;
-  if (!phase) return undefined;
+  const recordedOrder = state.committedInitiativeOrders.at(-1);
+  if (!phase && !recordedOrder) return undefined;
 
-  const initiativeGroups = getCombatRoundInitiativeExecutionGroups({ phase, state });
+  const initiativeGroups = phase ? getCombatRoundInitiativeExecutionGroups({ phase, state }) : [];
   const currentGroup = initiativeGroups.find((group) => group.status === "current");
+  const presentParticipantIds = new Set(
+    state.participants.map((participant) => participant.participantId),
+  );
+  const derivedParticipantIds = phase
+    ? sortCombatRoundParticipantsByInitiative({ phase, state }).map(
+        (participant) => participant.participantId,
+      )
+    : [];
   return {
     ...(initiativeGroups.length > 0
       ? {
@@ -64,10 +92,12 @@ function committedExecutionOrder(
           })),
         }
       : {}),
-    participantIds: sortCombatRoundParticipantsByInitiative({ phase, state }).map(
-      (participant) => participant.participantId,
-    ),
-    phase,
+    participantIds: recordedOrder
+      ? recordedOrder.entries
+          .map((entry) => entry.participantId)
+          .filter((participantId) => presentParticipantIds.has(participantId))
+      : derivedParticipantIds,
+    phase: phase ?? recordedOrder!.phase,
   };
 }
 

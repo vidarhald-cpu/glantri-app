@@ -6685,6 +6685,10 @@ function buildPlayerFacingCombatRoundStateForUser(input: {
         }),
       )
       .filter((command): command is PlayerFacingCombatRoundCommand => Boolean(command)),
+    // #875: the stored committed initiative order records name every participant and carry every
+    // rolled total, so no player receives one. The player-facing schema declares the field as a
+    // list only an empty value parses into, so this override is what the player reads.
+    committedInitiativeOrders: [],
     continuedContacts: roundState.continuedContacts.filter((contact) =>
       isVisiblePair(contact.controllerParticipantId, contact.affectedParticipantId),
     ),

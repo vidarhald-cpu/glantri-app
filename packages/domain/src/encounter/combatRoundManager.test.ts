@@ -23856,3 +23856,169 @@ describe("[#215 S6] the duration-unit widening survives the production undo-rest
     expect(source).not.toContain("canonicalCombatModifierRolledQuantity");
   });
 });
+
+describe("#875 — committing initiative records the order it committed", () => {
+  const participants = [
+    participant({ id: "alpha", label: "Alpha" }),
+    participant({ id: "beta", label: "Beta" }),
+    participant({ id: "gamma", label: "Gamma" }),
+  ];
+
+  /** Declarations for all three, then standing on the given phase's initiative step. */
+  function atInitiative(phase: "phase1" | "phase2") {
+    let state = initializeCombatRoundState({ encounter: encounter({ participants }) });
+    for (const id of ["alpha", "beta", "gamma"]) {
+      state = declareTestRoundAction({
+        participantId: id,
+        phase1Target: id === "alpha" ? "beta" : "alpha",
+        phase2Target: id === "alpha" ? "beta" : "alpha",
+        state,
+      });
+    }
+    return advanceToStep(state, phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2");
+  }
+
+  function withInitiative(
+    state: ReturnType<typeof initializeCombatRoundState>,
+    phase: "phase1" | "phase2",
+    totals: Record<string, number>,
+  ) {
+    let next = state;
+    for (const [participantId, total] of Object.entries(totals)) {
+      next = recordCombatRoundInitiative({
+        command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [total],
+          rollTotal: total,
+          total,
+        },
+        participantId,
+        phase,
+        state: next,
+        submittedBy: "gm",
+      });
+    }
+    return next;
+  }
+
+  it("records the sequence, each rolled total and its publication state, never-rolled last", () => {
+    // beta 6, alpha 3, gamma never rolls. Insertion order is alpha, beta, gamma, so a recorded
+    // order of beta, alpha, gamma cannot have come from insertion order.
+    const rolled = withInitiative(atInitiative("phase1"), "phase1", { alpha: 3, beta: 6 });
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      nonParticipatingParticipantIds: new Set(["gamma"]),
+      phase: "phase1",
+      state: rolled,
+    });
+
+    expect(rolled.committedInitiativeOrders).toEqual([]);
+    expect(committed.state.committedInitiativeOrders).toHaveLength(1);
+    expect(committed.state.committedInitiativeOrders[0]).toMatchObject({
+      commandId: committed.command.id,
+      committedAt: "2026-01-01T00:03:00.000Z",
+      phase: "phase1",
+      roundNumber: rolled.roundNumber,
+      version: 1,
+    });
+    expect(
+      committed.state.committedInitiativeOrders[0]?.entries.map((entry) => ({
+        participantId: entry.participantId,
+        published: entry.initiativePublished,
+        total: entry.initiativeResult?.total,
+      })),
+    ).toEqual([
+      { participantId: "beta", published: true, total: 6 },
+      { participantId: "alpha", published: true, total: 3 },
+      { participantId: "gamma", published: false, total: undefined },
+    ]);
+  });
+
+  it("records a copy, so a later change to the current initiative cannot restate it", () => {
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      nonParticipatingParticipantIds: new Set(["gamma"]),
+      phase: "phase1",
+      state: withInitiative(atInitiative("phase1"), "phase1", { alpha: 3, beta: 6 }),
+    }).state;
+    const restated = combatRoundStateSchema.parse({
+      ...committed,
+      participants: committed.participants.map((entry) =>
+        entry.participantId === "alpha"
+          ? {
+              ...entry,
+              initiatives: {
+                phase1: {
+                  baseInitiative: 0,
+                  modifierAdjustment: 0,
+                  rolls: [6],
+                  rollTotal: 20,
+                  total: 20,
+                },
+              },
+            }
+          : entry,
+      ),
+    });
+
+    expect(
+      restated.committedInitiativeOrders.at(-1)?.entries.map((entry) => entry.participantId),
+    ).toEqual(["beta", "alpha", "gamma"]);
+    expect(
+      restated.committedInitiativeOrders
+        .at(-1)
+        ?.entries.find((entry) => entry.participantId === "alpha")?.initiativeResult?.total,
+    ).toBe(3);
+  });
+
+  it("appends on the phase-2 commit instead of replacing the phase-1 record", () => {
+    const afterPhase1 = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      nonParticipatingParticipantIds: new Set(["gamma"]),
+      phase: "phase1",
+      state: withInitiative(atInitiative("phase1"), "phase1", { alpha: 3, beta: 6 }),
+    }).state;
+    const atPhase2 = advanceToStep(afterPhase1, "initiative_phase_2");
+    const afterPhase2 = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase2",
+      state: withInitiative(atPhase2, "phase2", { alpha: 5, beta: 1, gamma: 4 }),
+    }).state;
+
+    expect(
+      afterPhase2.committedInitiativeOrders.map((record) => [
+        record.phase,
+        record.entries.map((entry) => entry.participantId),
+      ]),
+    ).toEqual([
+      ["phase1", ["beta", "alpha", "gamma"]],
+      ["phase2", ["alpha", "gamma", "beta"]],
+    ]);
+  });
+
+  it("drops the record of an initiative commit that is taken back", () => {
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      nonParticipatingParticipantIds: new Set(["gamma"]),
+      phase: "phase1",
+      state: withInitiative(atInitiative("phase1"), "phase1", { alpha: 3, beta: 6 }),
+    });
+    const undone = undoLatestCombatRoundCommand({ state: committed.state });
+
+    expect(undone?.commands.some((command) => command.id === committed.command.id)).toBe(false);
+    expect(undone?.committedInitiativeOrders).toEqual([]);
+  });
+
+  it("defaults to no records when a stored round state predates them", () => {
+    const stored = JSON.parse(
+      JSON.stringify(initializeCombatRoundState({ encounter: encounter({ participants }) })),
+    ) as Record<string, unknown>;
+    delete stored.committedInitiativeOrders;
+
+    expect(Object.hasOwn(stored, "committedInitiativeOrders")).toBe(false);
+    expect(() => combatRoundStateSchema.parse(stored)).not.toThrow();
+    expect(combatRoundStateSchema.parse(stored).committedInitiativeOrders).toEqual([]);
+  });
+});
