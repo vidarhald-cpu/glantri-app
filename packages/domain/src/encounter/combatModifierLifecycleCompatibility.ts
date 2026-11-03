@@ -1,7 +1,8 @@
 import type { ScenarioCombatModifierEntry } from "../campaign/scenario";
-import type {
-  CombatAttackPhaseDefensivePenalty,
-  CombatAttackPhasePenaltyCommitment,
+import {
+  isAttackPhaseDefensivePenaltySourceRule,
+  type CombatAttackPhaseDefensivePenalty,
+  type CombatAttackPhasePenaltyCommitment,
 } from "./combatAttackPhasePenalty";
 import type { CombatEffect, CombatEffectEvent } from "./combatEffects";
 import {
@@ -323,10 +324,7 @@ function familyForBucketRow(
 ): CanonicalCombatModifierSourceFamily {
   if (entry.sourceType === "feint" || entry.sourceRule?.startsWith("feint:")) return "feint";
   if (entry.sourceOpportunityId) return "attack_opportunity";
-  if (
-    entry.sourceActionId === "offensive_parry" ||
-    entry.sourceRule?.includes("offensive-parry")
-  ) {
+  if (entry.sourceActionId === "offensive_parry" || entry.sourceRule?.includes("offensive-parry")) {
     return "offensive_parry";
   }
   if (entry.sourceActionId === "parry") return "declaration";
@@ -442,11 +440,18 @@ export function adaptModifierBucketRowToCanonicalLifecycle(input: {
     : input.entry.generated && input.entry.sourceRoundNumber
       ? "active"
       : "pending_review";
+  // The attack-phase defensive penalty applies for a whole phase, so its attack opportunity is
+  // provenance only and is deliberately absent from `applicability`. It stays on the row and in
+  // `sourceReferences.opportunityId` below, which the `attack_opportunity` family requires. See
+  // `isAttackPhaseDefensivePenaltySourceRule` for why the narrowing could never be satisfied.
+  const opportunityIsProvenanceOnly = isAttackPhaseDefensivePenaltySourceRule(
+    input.entry.sourceRule,
+  );
   const effect = canonicalCombatModifierEffectSchema.parse({
     applicability: {
       combatWide: input.entry.combatWide ?? false,
       encounterId: input.entry.sourceEncounterId ?? input.context.encounterId,
-      opportunityId: input.entry.sourceOpportunityId,
+      opportunityId: opportunityIsProvenanceOnly ? undefined : input.entry.sourceOpportunityId,
       phase: input.entry.sourcePhase,
       processId: input.entry.sourceProcessId,
       rollPurposes: [],
@@ -544,10 +549,7 @@ export function transitionCanonicalModifierBucketRow(input: {
   return {
     ...input.entry,
     canonicalLifecycle: transitioned.effect,
-    canonicalTransitions: [
-      ...(input.entry.canonicalTransitions ?? []),
-      transitioned.transition,
-    ],
+    canonicalTransitions: [...(input.entry.canonicalTransitions ?? []), transitioned.transition],
     value: input.nextValue ?? input.entry.value,
   };
 }

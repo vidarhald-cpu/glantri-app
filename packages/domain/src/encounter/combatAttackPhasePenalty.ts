@@ -4,6 +4,29 @@ import type { CombatResultConsequence } from "./combatResultPresentation";
 
 const idSchema = z.string().min(1);
 
+/** Source-rule prefix of every generated bucket row that carries this penalty. */
+export const ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE = "attack-phase-defensive-penalty";
+
+/**
+ * True for the generated DB/Parry row that carries the attack-phase defensive penalty.
+ *
+ * The rule is per phase: a character who attacks in a phase defends at -4% for that phase. The
+ * attack opportunity that created the row is its **provenance**, not a restriction on when it
+ * applies, and must never narrow the row's applicability. A defence is always resolved against an
+ * incoming attack, so the evaluation context names the *attacker's* opportunity; the row names its
+ * owner's own. The two can never be equal, which excluded this penalty from every defence
+ * resolution (#884).
+ *
+ * Nothing is lost by dropping the dimension. A declared attack opportunity is identified by
+ * `round:<n>:participant:<id>:<phase>:<slot>` and `slot` is derived from `phase`
+ * (`buildCombatRoundAttackOpportunityId`/`buildCombatRoundDeclaredAttackOpportunities`), so there
+ * is exactly one per participant per phase per round and the opportunity id carries no information
+ * beyond the round, participant and phase dimensions the row already states.
+ */
+export function isAttackPhaseDefensivePenaltySourceRule(sourceRule?: string): boolean {
+  return sourceRule?.startsWith(ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE) === true;
+}
+
 export const combatAttackPhasePenaltyCommitmentSchema = z.enum([
   "provisional",
   "uncommitted",

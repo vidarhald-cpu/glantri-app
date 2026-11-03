@@ -11,13 +11,14 @@ import {
   type CombatDistance,
 } from "./combatDistance";
 import type { MovementIntent } from "./combatMovementIntent";
-import type { CombatAttackPhaseDefensivePenalty } from "./combatAttackPhasePenalty";
+import {
+  ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE,
+  type CombatAttackPhaseDefensivePenalty,
+} from "./combatAttackPhasePenalty";
 import {
   attachCanonicalLifecycleToModifierBucketRow,
   type CanonicalCombatModifierCompatibilityContext,
 } from "./combatModifierLifecycleCompatibility";
-
-export const ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE = "attack-phase-defensive-penalty";
 
 export const ATTACK_PARRY_DB_PARRY_MODIFIER_ID = "generated:attack-parry:phase1:db-parry";
 export const ATTACK_PARRY_DB_PARRY_SOURCE_RULE = "attack-parry-db-parry-phase1";
@@ -926,9 +927,7 @@ export function applyCombatActionGeneratedModifiers(input: {
         ...generatedAttackPhaseDefensivePenaltyModifiers.map((entry) =>
           withSourceProvenance("situation_db", entry),
         ),
-        ...generatedDbParryModifiers.map((entry) =>
-          withSourceProvenance("situation_db", entry),
-        ),
+        ...generatedDbParryModifiers.map((entry) => withSourceProvenance("situation_db", entry)),
       ],
       situationInitiative: [
         ...situationInitiativeWithoutGeneratedActionModifiers,
