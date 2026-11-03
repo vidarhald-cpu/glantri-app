@@ -16,7 +16,8 @@
  *
  * Beside every recorded order it also prints the order the old code would have derived from
  * current state, so a measurement that stopped distinguishing the two would show as two identical
- * columns rather than as a pass.
+ * columns rather than as a pass. Its row, and the rows of the stack and rendered instruments that
+ * cover what it cannot, are in docs/process/qa-instruments.md.
  *
  * It imports the domain and the GM panel selector by source path rather than by package name,
  * because the repository root has no workspace link; `pnpm build` verifies the emitted packages
