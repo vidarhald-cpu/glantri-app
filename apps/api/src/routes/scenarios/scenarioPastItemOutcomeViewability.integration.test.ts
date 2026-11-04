@@ -677,23 +677,30 @@ if (!hasTaskApplicationDatabase) {
       });
 
       /**
-       * The second reaching condition, and where it is reachable from.
+       * The second reaching condition — **and, since #947, it has no reaching path at all.**
        *
-       * While an Encounter is **active**, `encounterRepository`'s own presence check already
-       * requires every roster row to carry a `scenarioParticipantId` that is distinct and resolves
-       * to an active participant of that Scenario (`encounterRepository.ts:124-183`), so the
-       * roster route refuses a re-pointed row outright — asserted below, because an unreachable
-       * shape must not be reported as a repaired one. That check does not run for a non-active
-       * Encounter, a paused Encounter rejects any further change, and the Activity projection
-       * reads every Encounter that is not archived. So the shape is reached in one write through
-       * the GM's own `PUT /encounters/:encounterId`, which carries the roster and the status
-       * together.
+       * This case used to establish that the re-pointed row was reachable: while an Encounter is
+       * active `encounterRepository`'s presence check refused it with a 409, so the shape was
+       * reached in one write through the GM's own `PUT /encounters/:encounterId`, which carries
+       * the roster and the status together, and the gate's refusal was then measured in the
+       * paused state.
        *
-       * Nothing about the actor changes here: they stay on the roster and stay hidden from the
-       * recipient throughout, which is why restoring a recorded actor's row is no defence against
-       * this direction.
+       * #947 closed that path. The shadow row's `scenarioParticipantId` is the owner row's own
+       * `id`, so the two rows claim one identity, and `encounterSessionSchema` now refuses the
+       * roster at **both** origins — the roster `PATCH` and the whole-session `PUT` — before
+       * either the presence check or the status change is considered. The fixture and the
+       * reaching condition are kept and the assertion is at the boundary, because the shape can
+       * no longer be written and an unreachable shape must not be reported as a repaired one.
+       *
+       * **This removes the only route-level exercise of the gate's refuse branch for this
+       * reaching condition.** It is not a decision to retire that branch: its four domain cases
+       * under "a row that is not the actor's never answers for the actor's recorded id" still
+       * pass, and the cycle-2 case below still reaches the gate through the route, because a row
+       * `id` equal to another participant's **character** id is not a Scenario-participant
+       * identity form and #947's conditions therefore do not reach it. Whether the branch should
+       * be simplified is recorded on #947 and is not decided here.
        */
-      it("refuses when another row's Scenario mapping is re-pointed at the actor's recorded id", async () => {
+      it("refuses the roster the re-pointed-mapping condition needed, at both of its origins", async () => {
         const current = await seed();
         await resolveItemPass(current);
         await completeRound(current);
@@ -705,69 +712,52 @@ if (!hasTaskApplicationDatabase) {
           participantType: "ad-hoc",
           scenarioParticipantId: "encounter-participant-owner",
         };
-
-        // The roster route's own refusal while the Encounter is active.
         const active = await encounterRevision(current.encounterId);
-        const refused = await app.inject({
+        const participants = [...active.participants, shadowRow];
+
+        const refusedByTheRosterRoute = await app.inject({
           headers: { cookie: current.cookies.gm, origin },
           method: "PATCH",
           payload: {
             expectedRevision: active.updatedAt,
             participantMembershipMode: "explicit",
-            participants: [...active.participants, shadowRow],
+            participants,
           },
           url: `/encounters/${current.encounterId}/participants`,
         });
-        expect(refused.statusCode).toBe(409);
-        expect(refused.json<{ error: string }>().error).toContain("active participants");
-
-        const before = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
-        expect(before.itemRows).toEqual([]);
-        expect(before.raw).not.toContain(RESULT_TEXT);
-
-        // One write: the re-pointed row joins the roster and the Encounter pauses, so the active
-        // presence check does not run and the paused-immutability guard has nothing to reject yet.
-        const written = await app.inject({
+        const refusedByTheSessionRoute = await app.inject({
           headers: { cookie: current.cookies.gm, origin },
           method: "PUT",
           payload: {
             expectedRevision: active.updatedAt,
-            session: {
-              ...active,
-              participants: [...active.participants, shadowRow],
-              roleplayState: {
-                ...active.roleplayState!,
-                visibility: {
-                  ...active.roleplayState!.visibility,
-                  "encounter-participant-recipient": {
-                    "encounter-participant-bystander": true,
-                    "encounter-participant-owner": false,
-                    "encounter-participant-shadow": true,
-                  },
-                },
-              },
-              status: "paused",
-            },
+            session: { ...active, participants, status: "paused" },
           },
           url: `/encounters/${current.encounterId}`,
         });
-        expect(written.statusCode, written.body).toBe(200);
-        const after = await encounterRevision(current.encounterId);
-        expect(after.status).toBe("paused");
-        expect(
-          after.participants.map((participant) => participant.scenarioParticipantId),
-        ).toContain("encounter-participant-owner");
 
-        const repointed = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
-        expect({
-          afterTheRowIsRepointed: repointed.itemRows.map((row) => row.summary),
-          whileTheActorIsPresentAndHidden: before.itemRows.map((row) => row.summary),
-        }).toEqual({ afterTheRowIsRepointed: [], whileTheActorIsPresentAndHidden: [] });
-        expect(repointed.raw).not.toContain(RESULT_TEXT);
+        expect(refusedByTheRosterRoute.statusCode).toBe(400);
+        expect(refusedByTheRosterRoute.json<{ error: string }>().error).toContain(
+          "claim the identity",
+        );
+        expect(refusedByTheSessionRoute.statusCode).toBe(400);
+        expect(refusedByTheSessionRoute.json<{ error: string }>().error).toContain(
+          "claim the identity",
+        );
+
+        // Neither the roster nor the status moved, and the recipient's reading is unchanged.
+        const unchanged = await encounterRevision(current.encounterId);
+        expect(unchanged.status).toBe("active");
+        expect(
+          unchanged.participants.map((participant) => participant.scenarioParticipantId),
+        ).not.toContain("encounter-participant-owner");
+
+        const recipient = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+        expect(recipient.itemRows).toEqual([]);
+        expect(recipient.raw).not.toContain(RESULT_TEXT);
 
         // The projection is live in this exact state: the owner, who controls the actor and is in
         // the recorded audience, still reads the row. So the recipient's empty reading is a denial
-        // and not an artefact of the paused status.
+        // and not an artefact of the request having been refused.
         const ownerReading = await itemOutcomeRows(current.cookies.owner, current.scenario.id);
         expect(ownerReading.itemRows.map((row) => row.summary)).toEqual([RESULT_TEXT]);
       });
