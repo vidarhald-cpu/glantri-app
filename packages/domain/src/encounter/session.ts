@@ -357,6 +357,17 @@ export const encounterSessionSchema = z.object({
   kind: encounterKindSchema.default("combat"),
   participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
   participants: z.array(encounterParticipantSchema).default([]),
+  /**
+   * The roster the Encounter will run with from the next round, when the GM has changed it while
+   * a round was already under way. Combatants enter and leave only between rounds, so the change
+   * waits here and replaces `participants` at the round boundary.
+   *
+   * It is a holding field, not a record of anything: it is the whole next roster rather than a
+   * list of additions and removals, it carries no round number, no order and no history, and it
+   * is read at exactly one point — the round-end commit. Nothing in play depends on it, and no
+   * combat rule refers to it. Absent means the in-force roster is the only roster.
+   */
+  pendingParticipants: z.array(encounterParticipantSchema).optional(),
   playerOutcome: z.string().optional(),
   roleplayState: roleplayStateSchema.optional(),
   scenarioId: idSchema.optional(),
@@ -488,6 +499,55 @@ function encounterParticipantMatchesScenarioParticipant(input: {
       input.encounterParticipant.characterId === input.scenarioParticipant.characterId,
     )
   );
+}
+
+/**
+ * Whether a GM roster change has to wait for the round boundary instead of taking effect now.
+ *
+ * Combatants enter and leave only between rounds: after the GM commits round end and before the
+ * first action of the next round. The round-end commit empties the command list, so a round that
+ * has recorded no command of its own is still inside that window and a change made then applies
+ * immediately. Anything after the first recorded command of a round waits.
+ *
+ * Only an Encounter that can still reach a round boundary holds anything. A completed or archived
+ * Encounter keeps the round state of its last round, and a change held there would never apply.
+ */
+export function encounterRosterChangeWaitsForRoundBoundary(encounter: {
+  combatRoundState?: CombatRoundState;
+  status: EncounterStatus;
+}): boolean {
+  const state = encounter.combatRoundState;
+
+  if (!state || !isEncounterMutable(encounter.status)) {
+    return false;
+  }
+
+  return state.commands.some((command) => command.roundNumber === state.roundNumber);
+}
+
+/**
+ * The Encounter roster fields to persist when the round-end commit crosses into the next round.
+ *
+ * This is the one point that reads the waiting roster. It replaces the roster in force and stops
+ * existing; it is never consulted again and leaves no trace of itself. With nothing waiting the
+ * Encounter is returned unchanged, so an ordinary round-end commit writes exactly what it wrote
+ * before.
+ */
+export function withEncounterRosterForNextRound<
+  T extends {
+    participants: EncounterParticipant[];
+    pendingParticipants?: EncounterParticipant[];
+  },
+>(encounter: T): T {
+  if (!encounter.pendingParticipants) {
+    return encounter;
+  }
+
+  return {
+    ...encounter,
+    participants: encounter.pendingParticipants,
+    pendingParticipants: undefined,
+  };
 }
 
 export function resolveEncounterParticipantMembership(input: {

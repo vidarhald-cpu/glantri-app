@@ -116,8 +116,11 @@ import {
   combatStepAutomationCommandLinkSchema,
   combatNpcDeclarationProposalProvenanceSchema,
   encounterParticipantMembershipModeSchema,
+  encounterParticipantSchema,
+  encounterRosterChangeWaitsForRoundBoundary,
   encounterSessionSchema,
   encounterStatusSchema,
+  withEncounterRosterForNextRound,
   glantriCharacteristicKeySchema,
   ensureDistanceEdgesForParticipantPairs,
   ensureCombatRoundEndReviewPrepared,
@@ -8670,20 +8673,48 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       if (!expectedRevision) {
         throw new Error("Refresh the Encounter before changing participants.");
       }
-      const encounterSession = encounterSessionSchema.parse({
-        ...existingEncounter,
-        participantMembershipMode,
-        participants: body.participants,
-      });
+      // Combatants enter and leave only between rounds, so a change made part-way through a round
+      // is held and replaces the roster at the round boundary. This is the only gate: the decision
+      // belongs where the change originates, not in whatever surface offered the control.
+      const waitsForRoundBoundary = encounterRosterChangeWaitsForRoundBoundary(existingEncounter);
+      if (waitsForRoundBoundary) {
+        // The held roster is refused now if it could never take effect, rather than failing the
+        // round-end commit later. These are the structural conditions an active Encounter roster
+        // must satisfy; the database-level conditions it also satisfies are rechecked when the
+        // roster is actually written, and can still have changed by then.
+        const heldScenarioParticipantIds = body.participants.map(
+          (participant) => encounterParticipantSchema.parse(participant).scenarioParticipantId,
+        );
+        if (heldScenarioParticipantIds.some((participantId) => !participantId)) {
+          throw new Error("Every Encounter participant must belong to the Scenario.");
+        }
+        if (
+          heldScenarioParticipantIds.length === 0 ||
+          new Set(heldScenarioParticipantIds).size !== heldScenarioParticipantIds.length
+        ) {
+          throw new Error("Choose one or more distinct Scenario participants.");
+        }
+      }
+      const encounterSession = encounterSessionSchema.parse(
+        waitsForRoundBoundary
+          ? // Only the held roster is written. The roster in force, and the membership mode that
+            // governs it, are untouched until the boundary applies the change.
+            { ...existingEncounter, pendingParticipants: body.participants }
+          : { ...existingEncounter, participantMembershipMode, participants: body.participants },
+      );
       const encounter = await encounterService.updateEncounter({
         campaignId: access.campaignId,
         encounterId,
         expectedRevision,
-        objectiveEvent: {
-          actorUserId: user.id,
-          eventType: "encounter_participants_updated",
-          summary: `Updated encounter ${existingEncounter.title} participants.`,
-        },
+        // A held change is present-tense intent, not an event: the roster has not changed, so
+        // nothing is recorded as though it had. The queue gets no history of its own.
+        objectiveEvent: waitsForRoundBoundary
+          ? undefined
+          : {
+              actorUserId: user.id,
+              eventType: "encounter_participants_updated",
+              summary: `Updated encounter ${existingEncounter.title} participants.`,
+            },
         scenarioId: existingEncounter.scenarioId,
         session: encounterSession,
       });
@@ -8695,6 +8726,78 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update encounter participants.",
+      });
+    }
+  });
+
+  /**
+   * Withdraw a roster change the GM made part-way through a round, before the boundary applies it.
+   *
+   * The scope is exactly one field. Nothing in play has changed since the change was made, so
+   * nothing is undone and nothing is recorded: the intent simply stops existing.
+   */
+  app.post("/encounters/:encounterId/participants/withdraw-pending", async (request, reply) => {
+    const user = await requireAdminUser(request, reply);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      const encounterId = parseId(request.params, "encounterId", "Encounter id");
+      const existingEncounter = await encounterService.getEncounterById(encounterId);
+
+      if (!existingEncounter?.scenarioId) {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const access = await resolveScenarioWorkspaceAccess(
+        {
+          campaignService,
+          scenarioService,
+        },
+        {
+          scenarioId: existingEncounter.scenarioId,
+          userId: user.id,
+          userRoles: user.roles,
+        },
+      );
+
+      if (!access || access.mode !== "gm") {
+        return reply.code(404).send({
+          error: "Encounter not found.",
+        });
+      }
+
+      const body = parseBodyObject(request.body, "Encounter participants payload");
+      const expectedRevision = parseOptionalString(body, "expectedRevision");
+      if (!expectedRevision) {
+        throw new Error("Refresh the Encounter before changing participants.");
+      }
+
+      const encounter = await encounterService.updateEncounter({
+        campaignId: access.campaignId,
+        encounterId,
+        expectedRevision,
+        scenarioId: existingEncounter.scenarioId,
+        session: encounterSessionSchema.parse({
+          ...existingEncounter,
+          pendingParticipants: undefined,
+        }),
+      });
+
+      return { encounter };
+    } catch (error) {
+      if (error instanceof EncounterWriteError) {
+        return reply.code(409).send({ error: error.message });
+      }
+      return reply.code(400).send({
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unable to withdraw the held encounter participants.",
       });
     }
   });
@@ -14342,6 +14445,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 targetBoundary: task.transition.targetBoundary,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
+              // The round-end commit is the boundary, and a roster change the GM held during the
+              // round takes effect here. `nextState` was produced from the roster that was in play,
+              // so the completed round is recorded as it was played and only the next round sees
+              // the new roster, which it derives from the Encounter on its next read.
+              const boundaryEncounter =
+                nextState.roundNumber > state.roundNumber
+                  ? withEncounterRosterForNextRound(workingEncounter!)
+                  : workingEncounter!;
               if (nextState.roundNumber > state.roundNumber) {
                 const participantMutations = workingParticipants.flatMap((participant) => {
                   const currentContext = participant.state.combat.combatContext;
@@ -14373,7 +14484,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     participants: participantMutations,
                     scenarioId,
                     session: {
-                      ...workingEncounter!,
+                      ...boundaryEncounter,
                       combatRoundState: nextState,
                       currentRound: nextState.roundNumber,
                       updatedAt: submittedAt,
@@ -14395,7 +14506,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 encounterId,
                 scenarioId,
                 session: {
-                  ...workingEncounter!,
+                  ...boundaryEncounter,
                   combatRoundState: nextState,
                   currentRound: nextState.roundNumber,
                   updatedAt: submittedAt,
@@ -15742,6 +15853,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         targetBoundary: body.targetBoundary,
         visibility: encounter.roleplayState?.visibility,
       });
+      // The round-end commit is the boundary, and a roster change the GM held during the round
+      // takes effect here. `nextRoundState` was produced from the roster that was in play, so the
+      // completed round is recorded as it was played and only the next round sees the new roster,
+      // which it derives from the Encounter on its next read.
+      const boundaryEncounter =
+        nextRoundState.roundNumber > roundState.roundNumber
+          ? withEncounterRosterForNextRound(encounter)
+          : encounter;
       const participantMutations =
         nextRoundState.roundNumber > roundState.roundNumber
           ? scenarioParticipants.flatMap((participant) => {
@@ -15774,7 +15893,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               participants: participantMutations,
               scenarioId,
               session: {
-                ...encounter,
+                ...boundaryEncounter,
                 combatRoundState: nextRoundState,
                 currentRound: nextRoundState.roundNumber,
                 updatedAt: submittedAt,
@@ -15787,7 +15906,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 encounterId,
                 scenarioId,
                 session: {
-                  ...encounter,
+                  ...boundaryEncounter,
                   combatRoundState: nextRoundState,
                   currentRound: nextRoundState.roundNumber,
                   updatedAt: submittedAt,
