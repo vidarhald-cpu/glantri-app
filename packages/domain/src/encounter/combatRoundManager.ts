@@ -19402,92 +19402,18 @@ function resetCombatRoundParticipantToRoundStart(
   };
 }
 
+// A completed round is recorded history and is returned exactly as the round boundary persisted it.
+// Product Owner ruling of 2026-11-04 (#915 comment 20281): "The past is always recorded history,
+// and not something we calculate or make calculations on." The live-roster sanitisation that
+// `initializeCombatRoundState` applies below belongs to the mutable present; applying it here
+// erased a departed combatant from the round they actually played (#925).
 function normalizeCompletedCombatRounds(input: {
   activeRoundNumber: number;
-  participantIds: Set<string>;
   rounds?: CompletedCombatRound[];
 }): CompletedCombatRound[] {
   return (input.rounds ?? [])
     .filter((round) => round.roundNumber < input.activeRoundNumber)
-    .map((round) => {
-      const participants = round.participants.filter((participant) =>
-        input.participantIds.has(participant.participantId),
-      );
-      const commands = round.commands.filter(
-        (command) =>
-          command.roundNumber === round.roundNumber &&
-          input.participantIds.has(command.participantId) &&
-          (!command.beforeCursor.participantId ||
-            input.participantIds.has(command.beforeCursor.participantId)) &&
-          (!command.afterCursor.participantId ||
-            input.participantIds.has(command.afterCursor.participantId)),
-      );
-      const phaseResolutionResults = round.phaseResolutionResults.filter(
-        (result) =>
-          result.roundNumber === round.roundNumber &&
-          input.participantIds.has(result.attackerParticipantId) &&
-          input.participantIds.has(result.defenderParticipantId),
-      );
-      const phaseResolutionStatuses = Object.fromEntries(
-        Object.entries(round.phaseResolutionStatuses).filter(([participantId]) =>
-          input.participantIds.has(participantId),
-        ),
-      );
-      const stepSnapshots = round.stepSnapshots.filter(
-        (snapshot) =>
-          snapshot.roundNumber === round.roundNumber &&
-          input.participantIds.has(snapshot.participantId),
-      );
-      const currentCursor =
-        round.currentCursor &&
-        round.currentCursor.roundNumber === round.roundNumber &&
-        (!round.currentCursor.participantId ||
-          input.participantIds.has(round.currentCursor.participantId))
-          ? round.currentCursor
-          : undefined;
-      const selectedParticipantId =
-        round.selectedParticipantId && input.participantIds.has(round.selectedParticipantId)
-          ? round.selectedParticipantId
-          : participants[0]?.participantId;
-      const activeParticipantId =
-        round.activeParticipantId && input.participantIds.has(round.activeParticipantId)
-          ? round.activeParticipantId
-          : undefined;
-      const phaseResolutionCursor =
-        round.phaseResolutionCursor &&
-        input.participantIds.has(round.phaseResolutionCursor.participantId)
-          ? round.phaseResolutionCursor
-          : undefined;
-      const roundEndReview = round.roundEndReview
-        ? combatRoundEndReviewSchema.parse({
-            ...round.roundEndReview,
-            participantReviews: Object.fromEntries(
-              Object.entries(round.roundEndReview.participantReviews).filter(([participantId]) =>
-                input.participantIds.has(participantId),
-              ),
-            ),
-          })
-        : undefined;
-
-      return completedCombatRoundSchema.parse({
-        ...round,
-        activeParticipantId,
-        commands,
-        currentCursor,
-        distanceState: filterCombatDistanceStateForParticipantIds({
-          participants,
-          participantIds: input.participantIds,
-          state: round.distanceState,
-        }),
-        phaseResolutionCursor,
-        phaseResolutionResults,
-        phaseResolutionStatuses,
-        participants,
-        roundEndReview,
-        selectedParticipantId,
-        stepSnapshots,
-      });
-    })
+    .map((round) => completedCombatRoundSchema.parse(round))
     .sort((left, right) => left.roundNumber - right.roundNumber);
 }
 
@@ -19773,7 +19699,6 @@ export function initializeCombatRoundState(input: {
   const roundNumber = existing?.roundNumber ?? input.encounter.currentRound;
   const completedRounds = normalizeCompletedCombatRounds({
     activeRoundNumber: roundNumber,
-    participantIds,
     rounds: existing?.rounds,
   });
   const distanceState = ensureDistanceEdgesForParticipantPairs({
