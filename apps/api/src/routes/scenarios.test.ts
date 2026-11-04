@@ -26247,10 +26247,14 @@ describe("scenarios route contract", () => {
         success: false,
       });
       // And the summary a GM actually reads says what happened rather than "failed to parry".
-      const latestEvent = getLatestCombatEventSummary(afterReview.combatRoundState, [
-        { label: "The Gladiator", participantId: "encounter-participant-1" },
-        { label: "City guard", participantId: "encounter-participant-2" },
-      ]);
+      const latestEvent = getLatestCombatEventSummary({
+        participants: [
+          { label: "The Gladiator", participantId: "encounter-participant-1" },
+          { label: "City guard", participantId: "encounter-participant-2" },
+        ],
+        state: afterReview.combatRoundState,
+        viewer: { kind: "gm" },
+      });
       expect(latestEvent).toMatchObject({
         shortTitle: "No Parry available",
         summaryText:
@@ -36965,6 +36969,7 @@ describe("#517 privacy hardening Tier 3", () => {
     const active = buildRequestedCombatMutationResponse({
       activeResponseRequested: true,
       payload: { encounter: player.encounter },
+      viewer: { kind: "gm" },
     }) as { activeCombatState: CombatRoundState };
     expect(activeCombatMutationResponseSchema.parse(active)).toBeDefined();
     expect(active.activeCombatState.participants[0]?.attackResults.phase1?.weaponDmb).toBe(4);

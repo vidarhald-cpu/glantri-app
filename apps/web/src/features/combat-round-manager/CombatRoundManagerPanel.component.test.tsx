@@ -1476,7 +1476,10 @@ describe("CombatRoundManagerPanel defense review", () => {
     const committedState = combatRoundStateSchema.parse(committedEncounter.combatRoundState);
     const latest = committedState.defenseSnapshots.at(-1)!;
     mocks.commitDefenseReview.mockResolvedValue({
-      commandEnvelope: buildCombatRoundCommandEnvelope({ state: committedState }),
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: committedState,
+        viewer: { kind: "gm" },
+      }),
       defenseSnapshot: latest,
       encounter: committedEncounter,
     });
@@ -1696,7 +1699,10 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
       updatedAt: "2026-07-23T10:00:02.000Z",
     });
     mocks.runStepWorkflow.mockResolvedValue({
-      commandEnvelope: buildCombatRoundCommandEnvelope({ state: firstRoll.state }),
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: firstRoll.state,
+        viewer: { kind: "gm" },
+      }),
       encounter: updatedEncounter,
       participants,
       workflow: {
@@ -1855,7 +1861,7 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     ];
     const state = combatRoundStateSchema.parse(encounter.combatRoundState);
     mocks.runStepWorkflow.mockResolvedValue({
-      commandEnvelope: buildCombatRoundCommandEnvelope({ state }),
+      commandEnvelope: buildCombatRoundCommandEnvelope({ state, viewer: { kind: "gm" } }),
       encounter,
       participants: [],
       workflow: {
@@ -2656,6 +2662,7 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
     mocks.rollAttack.mockResolvedValue({
       commandEnvelope: buildCombatRoundCommandEnvelope({
         state: attackReadyState,
+        viewer: { kind: "gm" },
       }),
       encounter,
       participant: participants[0],
@@ -2958,6 +2965,7 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     mocks.rollObservation.mockResolvedValue({
       commandEnvelope: buildCombatRoundCommandEnvelope({
         state: combatRoundStateSchema.parse(afterObservation.combatRoundState),
+        viewer: { kind: "gm" },
       }),
       encounter: afterObservation,
     });

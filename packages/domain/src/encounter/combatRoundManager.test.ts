@@ -754,7 +754,9 @@ describe("canonical GM bulk step completion", () => {
     expect(result.state.commands).toHaveLength(before.commands.length + 1);
     expect(result.command.type).toBe("complete_remaining_step");
     expect(result.command.facts.resolutionType).toBe("accepted_unchanged");
-    expect(buildCombatRoundCommandEnvelope({ state: result.state }).latestEvent).toMatchObject({
+    expect(
+      buildCombatRoundCommandEnvelope({ state: result.state, viewer: { kind: "gm" } }).latestEvent,
+    ).toMatchObject({
       shortTitle: "Remaining modifier review completed",
       summaryText: expect.stringContaining("GM completed remaining modifier review."),
     });
@@ -854,7 +856,9 @@ describe("canonical GM bulk step completion", () => {
       total: 0,
     });
     expect(result.state.participants[1]?.initiatives.phase1).toBeUndefined();
-    expect(buildCombatRoundCommandEnvelope({ state: result.state }).currentTask).toMatchObject({
+    expect(
+      buildCombatRoundCommandEnvelope({ state: result.state, viewer: { kind: "gm" } }).currentTask,
+    ).toMatchObject({
       participantId: "scyrian",
       step: "initiative_phase_1",
     });
@@ -3098,7 +3102,9 @@ describe("combat round manager", () => {
       modifierValue: -2,
       type: "general_modifier",
     });
-    expect(getLatestCombatEventSummary(rolled.state)?.summaryText).toBe(
+    expect(
+      getLatestCombatEventSummary({ state: rolled.state, viewer: { kind: "gm" } })?.summaryText,
+    ).toBe(
       "Round 1, DE: The Gladiator Combat Experience 19 + roll 8 = 27 vs 36. Result: Active. General -2 for 2 rounds.",
     );
   });
@@ -5341,7 +5347,10 @@ describe("combat round manager", () => {
       step: "A1",
       type: "roll_combat_experience",
     });
-    expect(getLatestCombatEventSummary(rolledGladiator.state)?.summaryText).toBe(
+    expect(
+      getLatestCombatEventSummary({ state: rolledGladiator.state, viewer: { kind: "gm" } })
+        ?.summaryText,
+    ).toBe(
       "Round 3, A1: The Gladiator Combat Experience 26 vs 26. Result: Attack continues, no roll required. No modifier.",
     );
   });
@@ -15536,12 +15545,12 @@ describe("combat round manager", () => {
       type: "distance_control_result",
     });
     expect(rolled.state.events.map((event) => event.sequence)).toEqual([0, 1, 2]);
-    expect(getLatestCombatEventSummary(rolled.state)?.summaryText).toBe(
-      "Round 3, SU: City guard rolled distance control 16 for The Gladiator ↔ City guard.",
-    );
-    expect(getLatestCombatEventSummary(rolled.state)?.details).toBe(
-      "Proposed distance 3 next round.",
-    );
+    expect(
+      getLatestCombatEventSummary({ state: rolled.state, viewer: { kind: "gm" } })?.summaryText,
+    ).toBe("Round 3, SU: City guard rolled distance control 16 for The Gladiator ↔ City guard.");
+    expect(
+      getLatestCombatEventSummary({ state: rolled.state, viewer: { kind: "gm" } })?.details,
+    ).toBe("Proposed distance 3 next round.");
 
     const unrolled = clearCombatRoundStep({ state: rolled.state, step: "round_summary" });
 
@@ -15594,7 +15603,9 @@ describe("combat round manager", () => {
       },
       status: "committed",
     });
-    expect(getLatestCombatEventSummary(committed.state)?.summaryText).toBe(
+    expect(
+      getLatestCombatEventSummary({ state: committed.state, viewer: { kind: "gm" } })?.summaryText,
+    ).toBe(
       "Round 3, SU: Distance control applied for The Gladiator ↔ City guard: distance 3 next round.",
     );
 
@@ -17563,7 +17574,10 @@ describe("combat round manager", () => {
         createdByUserId: "gm-1",
       },
     });
-    const latestEvent = getLatestCombatEventSummary(nextRoundState);
+    const latestEvent = getLatestCombatEventSummary({
+      state: nextRoundState,
+      viewer: { kind: "gm" },
+    });
 
     expect(latestEvent).toMatchObject({
       roundNumber: roundSummaryState.roundNumber + 1,
@@ -17619,7 +17633,7 @@ describe("combat round manager", () => {
         },
       ],
     });
-    const latestEvent = getLatestCombatEventSummary(state);
+    const latestEvent = getLatestCombatEventSummary({ state: state, viewer: { kind: "gm" } });
 
     expect(latestEvent?.summaryText).toBe(
       "Round 3, Phase 1: The Gladiator hit City guard for 8 damage to right arm. Critical A pending, critical roll 1 to right arm.",
@@ -20410,6 +20424,7 @@ describe("combat round manager", () => {
         phase: "phase1",
       },
       state: afterA1,
+      viewer: { kind: "gm" },
     });
     const afterDefenseReview = commitTestDefenseReview({
       attackResult,
@@ -20849,6 +20864,7 @@ describe("combat round manager", () => {
         phase: "phase2",
       },
       state: afterI2Commit.state,
+      viewer: { kind: "gm" },
     });
     const reloadedAfterI2 = initializeCombatRoundState({
       encounter: encounter({

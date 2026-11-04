@@ -19427,92 +19427,18 @@ function resetCombatRoundParticipantToRoundStart(
   };
 }
 
+// A completed round is recorded history and is returned exactly as the round boundary persisted it.
+// Product Owner ruling of 2026-11-04 (#915 comment 20281): "The past is always recorded history,
+// and not something we calculate or make calculations on." The live-roster sanitisation that
+// `initializeCombatRoundState` applies below belongs to the mutable present; applying it here
+// erased a departed combatant from the round they actually played (#925).
 function normalizeCompletedCombatRounds(input: {
   activeRoundNumber: number;
-  participantIds: Set<string>;
   rounds?: CompletedCombatRound[];
 }): CompletedCombatRound[] {
   return (input.rounds ?? [])
     .filter((round) => round.roundNumber < input.activeRoundNumber)
-    .map((round) => {
-      const participants = round.participants.filter((participant) =>
-        input.participantIds.has(participant.participantId),
-      );
-      const commands = round.commands.filter(
-        (command) =>
-          command.roundNumber === round.roundNumber &&
-          input.participantIds.has(command.participantId) &&
-          (!command.beforeCursor.participantId ||
-            input.participantIds.has(command.beforeCursor.participantId)) &&
-          (!command.afterCursor.participantId ||
-            input.participantIds.has(command.afterCursor.participantId)),
-      );
-      const phaseResolutionResults = round.phaseResolutionResults.filter(
-        (result) =>
-          result.roundNumber === round.roundNumber &&
-          input.participantIds.has(result.attackerParticipantId) &&
-          input.participantIds.has(result.defenderParticipantId),
-      );
-      const phaseResolutionStatuses = Object.fromEntries(
-        Object.entries(round.phaseResolutionStatuses).filter(([participantId]) =>
-          input.participantIds.has(participantId),
-        ),
-      );
-      const stepSnapshots = round.stepSnapshots.filter(
-        (snapshot) =>
-          snapshot.roundNumber === round.roundNumber &&
-          input.participantIds.has(snapshot.participantId),
-      );
-      const currentCursor =
-        round.currentCursor &&
-        round.currentCursor.roundNumber === round.roundNumber &&
-        (!round.currentCursor.participantId ||
-          input.participantIds.has(round.currentCursor.participantId))
-          ? round.currentCursor
-          : undefined;
-      const selectedParticipantId =
-        round.selectedParticipantId && input.participantIds.has(round.selectedParticipantId)
-          ? round.selectedParticipantId
-          : participants[0]?.participantId;
-      const activeParticipantId =
-        round.activeParticipantId && input.participantIds.has(round.activeParticipantId)
-          ? round.activeParticipantId
-          : undefined;
-      const phaseResolutionCursor =
-        round.phaseResolutionCursor &&
-        input.participantIds.has(round.phaseResolutionCursor.participantId)
-          ? round.phaseResolutionCursor
-          : undefined;
-      const roundEndReview = round.roundEndReview
-        ? combatRoundEndReviewSchema.parse({
-            ...round.roundEndReview,
-            participantReviews: Object.fromEntries(
-              Object.entries(round.roundEndReview.participantReviews).filter(([participantId]) =>
-                input.participantIds.has(participantId),
-              ),
-            ),
-          })
-        : undefined;
-
-      return completedCombatRoundSchema.parse({
-        ...round,
-        activeParticipantId,
-        commands,
-        currentCursor,
-        distanceState: filterCombatDistanceStateForParticipantIds({
-          participants,
-          participantIds: input.participantIds,
-          state: round.distanceState,
-        }),
-        phaseResolutionCursor,
-        phaseResolutionResults,
-        phaseResolutionStatuses,
-        participants,
-        roundEndReview,
-        selectedParticipantId,
-        stepSnapshots,
-      });
-    })
+    .map((round) => completedCombatRoundSchema.parse(round))
     .sort((left, right) => left.roundNumber - right.roundNumber);
 }
 
@@ -19798,7 +19724,6 @@ export function initializeCombatRoundState(input: {
   const roundNumber = existing?.roundNumber ?? input.encounter.currentRound;
   const completedRounds = normalizeCompletedCombatRounds({
     activeRoundNumber: roundNumber,
-    participantIds,
     rounds: existing?.rounds,
   });
   const distanceState = ensureDistanceEdgesForParticipantPairs({
@@ -29316,6 +29241,48 @@ type CombatRoundLatestEventParticipantLabel = {
   participantId: string;
 };
 
+/**
+ * #925. Who the command envelope is being built for.
+ *
+ * `buildCombatRoundCommandEnvelope` previously took no viewer, so `latestEvent` could apply no
+ * entitlement gate for anybody: it built its label map from **every** timeline state's participants
+ * and walked commands backwards across rounds, so once a completed round was returned as the
+ * boundary recorded it (the whole point of #925), a departed combatant's recorded label reached a
+ * player through `commandEnvelope.latestEvent.summaryText`. Independent QA drove that at both heads
+ * (issue #925, comment 20613, finding B1).
+ *
+ * The parameter is **required**, at every call site, because the two routes QA read literally were
+ * only two of twenty-six: gating those two would have left the mechanism live for the next caller.
+ * A caller that cannot resolve a viewer passes a player viewer entitled to nobody rather than
+ * omitting the question.
+ */
+export type CombatRoundCommandEnvelopeViewer =
+  | { kind: "gm" }
+  | {
+      controlledParticipantIds: ReadonlySet<string>;
+      kind: "player";
+      visibleParticipantIds: ReadonlySet<string>;
+    };
+
+/**
+ * The established phrase for a subject a viewer may not be told the name of. `projectSubjectForViewer`
+ * in `combatLogProjection.ts` uses the same words, so a redacted latest event reads like a redacted
+ * Combat Log entry rather than inventing a second vocabulary.
+ */
+const REDACTED_COMBAT_ROUND_LATEST_EVENT_LABEL = "another combatant";
+
+function isCombatRoundLatestEventIdentityEntitled(input: {
+  participantId: string;
+  viewer: CombatRoundCommandEnvelopeViewer;
+}): boolean {
+  if (input.viewer.kind === "gm") return true;
+
+  return (
+    input.viewer.controlledParticipantIds.has(input.participantId) ||
+    input.viewer.visibleParticipantIds.has(input.participantId)
+  );
+}
+
 function getCombatRoundLatestEventFactRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -29421,13 +29388,32 @@ function getCombatRoundLatestEventCriticalProposalDetails(damageResult?: CombatR
   };
 }
 
+/**
+ * The one place a participant's identity becomes words in a latest-event summary. Every one of the
+ * summariser's twenty-two `summaryText` templates interpolates its identities through here, so this
+ * is where entitlement is decided (#925 B1).
+ *
+ * Note the fallback this replaces for a non-entitled participant: the old `?? input.participantId`
+ * printed the **raw participant id** when no label was known, so merely withholding the label from
+ * the map would have substituted one identifier for another.
+ */
 function getCombatRoundLatestEventLabel(input: {
   labelByParticipantId: Map<string, string>;
   participantId?: string;
+  viewer: CombatRoundCommandEnvelopeViewer;
 }): string {
-  return input.participantId
-    ? (input.labelByParticipantId.get(input.participantId) ?? input.participantId)
-    : "Unknown participant";
+  if (!input.participantId) return "Unknown participant";
+
+  if (
+    !isCombatRoundLatestEventIdentityEntitled({
+      participantId: input.participantId,
+      viewer: input.viewer,
+    })
+  ) {
+    return REDACTED_COMBAT_ROUND_LATEST_EVENT_LABEL;
+  }
+
+  return input.labelByParticipantId.get(input.participantId) ?? input.participantId;
 }
 
 function findCombatRoundLatestEventResolution(input: {
@@ -29470,12 +29456,14 @@ function getCombatRoundLatestEventForCommand(input: {
   command: CombatRoundCommand;
   labelByParticipantId: Map<string, string>;
   state: CombatRoundState;
+  viewer: CombatRoundCommandEnvelopeViewer;
 }): CombatRoundLatestEventSummary | undefined {
-  const { command, labelByParticipantId, state } = input;
+  const { command, labelByParticipantId, state, viewer } = input;
   const facts = command.facts;
   const actorLabel = getCombatRoundLatestEventLabel({
     labelByParticipantId,
     participantId: command.participantId,
+    viewer,
   });
   const phaseLabel = getCombatRoundLatestEventPhaseLabel(command.phase);
 
@@ -29679,10 +29667,12 @@ function getCombatRoundLatestEventForCommand(input: {
     const participantALabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: participantAId,
+      viewer,
     });
     const participantBLabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: participantBId,
+      viewer,
     });
     const finalTotal = getCombatRoundLatestEventFactNumber(facts, "rolledParticipantFinalTotal");
     const proposedDistance = getCombatRoundLatestEventFactNumber(facts, "proposedDistance");
@@ -29708,10 +29698,12 @@ function getCombatRoundLatestEventForCommand(input: {
     const participantALabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: participantAId,
+      viewer,
     });
     const participantBLabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: participantBId,
+      viewer,
     });
     const appliedDistance = getCombatRoundLatestEventFactNumber(facts, "appliedDistance");
 
@@ -29763,10 +29755,12 @@ function getCombatRoundLatestEventForCommand(input: {
     const attackerLabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: getCombatRoundLatestEventFactString(facts, "attackerParticipantId"),
+      viewer,
     });
     const defenderLabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: getCombatRoundLatestEventFactString(facts, "defenderParticipantId"),
+      viewer,
     });
     const totalDamage = getCombatRoundLatestEventFactNumber(facts, "totalDamage") ?? 0;
     const location = getCombatRoundLatestEventFactString(facts, "effectiveHitLocation");
@@ -29850,6 +29844,7 @@ function getCombatRoundLatestEventForCommand(input: {
       participantId:
         getCombatRoundLatestEventFactString(facts, "defenderParticipantId") ??
         command.participantId,
+      viewer,
     });
     const location = getCombatRoundLatestEventFactString(facts, "selectedHitLocation");
     const criticalGrade = getCombatRoundLatestEventFactString(facts, "criticalGrade");
@@ -29892,10 +29887,12 @@ function getCombatRoundLatestEventForCommand(input: {
       participantId:
         getCombatRoundLatestEventFactString(facts, "defenderParticipantId") ??
         command.participantId,
+      viewer,
     });
     const attackerLabel = getCombatRoundLatestEventLabel({
       labelByParticipantId,
       participantId: getCombatRoundLatestEventFactString(facts, "attackerParticipantId"),
+      viewer,
     });
     const success = getCombatRoundLatestEventFactBoolean(facts, "success");
     // Forgejo #676. A defender who had no eligible Parry source did not fail to parry — there was
@@ -29933,6 +29930,7 @@ function getCombatRoundLatestEventForCommand(input: {
       const defenderLabel = getCombatRoundLatestEventLabel({
         labelByParticipantId,
         participantId: pending.defenderParticipantId,
+        viewer,
       });
       return {
         commandId: command.id,
@@ -29953,6 +29951,7 @@ function getCombatRoundLatestEventForCommand(input: {
       participantId:
         attackResult?.defenderParticipantId ??
         getCombatRoundLatestEventFactString(facts, "defenderParticipantId"),
+      viewer,
     });
     const hit = attackResult?.hit ?? getCombatRoundLatestEventFactBoolean(facts, "hit");
     const grazing = attackResult?.grazing ?? getCombatRoundLatestEventFactBoolean(facts, "grazing");
@@ -29998,20 +29997,116 @@ function getCombatRoundLatestEventForCommand(input: {
   return undefined;
 }
 
-export function getLatestCombatEventSummary(
-  state: CombatRoundState,
-  participants: readonly CombatRoundLatestEventParticipantLabel[] = [],
-): CombatRoundLatestEventSummary | undefined {
-  const normalized = combatRoundStateSchema.parse(state);
-  const timelineStates = getCombatRoundTimelineRoundStates(normalized);
-  const labelByParticipantId = new Map<string, string>();
+/**
+ * Every participant id a state's timeline refers to, whether or not that participant is still on a
+ * roster. Used to decide which ids a non-entitled viewer must never be handed, so a departed
+ * combatant — who appears in no live roster at all — is included.
+ *
+ * Collected from every structure a latest-event summary can take an identity out of, not only the
+ * round's participant rows: the commands and their cursors, which `commandId` is built from, and the
+ * snapshots, phase-resolution records and attack results, which `resultId` is built from. A source
+ * left out here would not leak a *name* — `getCombatRoundLatestEventLabel` decides that
+ * independently — but could leave an id inside a structured result id unexamined by the belt below.
+ */
+function getCombatRoundTimelineParticipantIds(
+  timelineStates: readonly CombatRoundState[],
+): Set<string> {
+  const participantIds = new Set<string>();
+  const add = (participantId?: string) => {
+    if (participantId) participantIds.add(participantId);
+  };
 
-  for (const participant of participants) {
+  for (const timelineState of timelineStates) {
+    for (const participant of timelineState.participants) {
+      add(participant.participantId);
+      for (const result of Object.values(participant.attackResultsByOpportunity ?? {})) {
+        add(result.attackerParticipantId);
+        add(result.defenderParticipantId);
+      }
+      for (const result of Object.values(participant.attackResults)) {
+        add(result?.attackerParticipantId);
+        add(result?.defenderParticipantId);
+      }
+    }
+    for (const command of timelineState.commands) {
+      add(command.participantId);
+      add(command.beforeCursor.participantId);
+      add(command.afterCursor.participantId);
+    }
+    for (const snapshot of timelineState.stepSnapshots) {
+      add(snapshot.participantId);
+    }
+    for (const result of timelineState.phaseResolutionResults) {
+      add(result.attackerParticipantId);
+      add(result.defenderParticipantId);
+    }
+    for (const participantId of Object.keys(timelineState.phaseResolutionStatuses)) {
+      add(participantId);
+    }
+    add(timelineState.activeParticipantId);
+    add(timelineState.selectedParticipantId);
+    add(timelineState.phaseResolutionCursor?.participantId);
+    add(timelineState.currentCursor?.participantId);
+  }
+
+  return participantIds;
+}
+
+/**
+ * The fail-closed belt behind the label gate, applied to the produced summary rather than to the
+ * branch that produced it (#925 B1).
+ *
+ * A summary carries identities the label gate does not see. `commandId` is
+ * `buildCombatRoundCommandId`'s output, which **embeds the actor's participant id verbatim**
+ * (`combat-command:<round>:<n>:<type>:<participantId>:<createdAt>`), and `resultId` from
+ * `getCombatRoundAttackResultId` embeds the attacker's and defender's. Some branches also read an
+ * identity out of `state` rather than out of the command — `roll_attack` takes
+ * `attackResult.defenderParticipantId` from the round's own results — so no structural rule over the
+ * command alone could bound what a future branch interpolates.
+ *
+ * So the whole summary is dropped, and the walk continues, when any id the viewer is not entitled to
+ * appears anywhere in it. Dropping rather than rewriting is deliberate: string surgery on a
+ * structured id is the kind of repair that looks right and is not.
+ */
+function combatRoundLatestEventSummaryMentionsUnentitledId(input: {
+  summary: CombatRoundLatestEventSummary;
+  unentitledParticipantIds: ReadonlySet<string>;
+}): boolean {
+  if (input.unentitledParticipantIds.size === 0) return false;
+  const serialized = JSON.stringify(input.summary);
+
+  for (const participantId of input.unentitledParticipantIds) {
+    if (serialized.includes(participantId)) return true;
+  }
+
+  return false;
+}
+
+export function getLatestCombatEventSummary(input: {
+  participants?: readonly CombatRoundLatestEventParticipantLabel[];
+  state: CombatRoundState;
+  viewer: CombatRoundCommandEnvelopeViewer;
+}): CombatRoundLatestEventSummary | undefined {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const timelineStates = getCombatRoundTimelineRoundStates(normalized);
+  const viewer = input.viewer;
+  const labelByParticipantId = new Map<string, string>();
+  const unentitledParticipantIds = new Set(
+    [...getCombatRoundTimelineParticipantIds(timelineStates)].filter(
+      (participantId) => !isCombatRoundLatestEventIdentityEntitled({ participantId, viewer }),
+    ),
+  );
+
+  // The label map admits only participants this viewer is entitled to be told about, so a
+  // non-entitled label is never in the map to be found.
+  for (const participant of input.participants ?? []) {
+    if (unentitledParticipantIds.has(participant.participantId)) continue;
     labelByParticipantId.set(participant.participantId, participant.label);
   }
 
   for (const timelineState of timelineStates) {
     for (const participant of timelineState.participants) {
+      if (unentitledParticipantIds.has(participant.participantId)) continue;
       labelByParticipantId.set(participant.participantId, participant.label);
     }
   }
@@ -30029,9 +30124,13 @@ export function getLatestCombatEventSummary(
         command,
         labelByParticipantId,
         state: timelineState,
+        viewer,
       });
 
-      if (summary) {
+      if (
+        summary &&
+        !combatRoundLatestEventSummaryMentionsUnentitledId({ summary, unentitledParticipantIds })
+      ) {
         return summary;
       }
     }
@@ -30043,6 +30142,7 @@ export function getLatestCombatEventSummary(
 export function buildCombatRoundCommandEnvelope(input: {
   latestResult?: CombatRoundCommandEnvelopeResult;
   state: CombatRoundState;
+  viewer: CombatRoundCommandEnvelopeViewer;
   warnings?: string[];
 }): CombatRoundCommandEnvelope {
   const normalized = combatRoundStateSchema.parse(input.state);
@@ -30059,7 +30159,7 @@ export function buildCombatRoundCommandEnvelope(input: {
           step: getCombatRoundStepForCursorStep(currentCursor.step),
         }
       : undefined,
-    latestEvent: getLatestCombatEventSummary(normalized),
+    latestEvent: getLatestCombatEventSummary({ state: normalized, viewer: input.viewer }),
     latestResult: input.latestResult,
     warnings: input.warnings ?? [],
   };

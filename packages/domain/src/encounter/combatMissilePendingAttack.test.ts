@@ -484,10 +484,14 @@ describe("pending missile defense boundary", () => {
     });
     expect(next.events.at(-1)).toMatchObject({ status: "proposed", type: "attack" });
     expect(
-      getLatestCombatEventSummary(next, [
-        { label: "Archer", participantId: "archer" },
-        { label: "Target", participantId: "target" },
-      ]),
+      getLatestCombatEventSummary({
+        participants: [
+          { label: "Archer", participantId: "archer" },
+          { label: "Target", participantId: "target" },
+        ],
+        state: next,
+        viewer: { kind: "gm" },
+      }),
     ).toMatchObject({
       // The pending attack carries its mode's workbook import provenance (Weapon2 row 17); the
       // summary every viewer receives does not (#517, ruling E2).
