@@ -220,7 +220,6 @@ import {
   recordCombatPerformanceStage,
   settleCombatPerformanceInteraction,
 } from "@/lib/performance/combatPerformance";
-import { ApiRequestError } from "@/lib/api/apiClient";
 import { loadScenarioParticipants } from "@/lib/api/scenarioClient";
 import {
   loadCharacterEquipmentState,
@@ -303,6 +302,10 @@ import {
   resolveScenarioCombatEquipmentState,
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
+import {
+  getCombatRefusalSentence,
+  readCombatRefusalPayload,
+} from "@/lib/campaigns/combatRefusalPresentation";
 import {
   buildEncounterDbParryModifierCalculation,
   buildEncounterInitiativeModifierCalculation,
@@ -4359,18 +4362,7 @@ function getCombatRoundManagerStateFromCommandEnvelope(input: {
 }
 
 function getCombatMutationConflictCode(error: unknown): string | undefined {
-  if (
-    !(error instanceof ApiRequestError) ||
-    error.status !== 409 ||
-    !error.payload ||
-    typeof error.payload !== "object" ||
-    !("code" in error.payload) ||
-    typeof error.payload.code !== "string"
-  ) {
-    return undefined;
-  }
-
-  return error.payload.code;
+  return readCombatRefusalPayload(error)?.code;
 }
 
 /**
@@ -4383,8 +4375,21 @@ function getCombatMutationConflictCode(error: unknown): string | undefined {
  * those cases produces an endless loop, which is the #690 defect — so those two say what is
  * actually missing and what would change it instead. They are kept as separate sentences on
  * purpose: flattening them into one would make at least one of them untrue.
+ *
+ * #922 repair cycle 1, finding 3. The two sentences this function restates are the server's own
+ * words, kept in step by hand, and every refusal the server learned to describe after them fell
+ * through to the refresh-and-retry fallback — which is where the cause-aware defence refusal
+ * `defense_context_unavailable` landed, and where `attacker_modifier_out_of_range` was matched by
+ * the `code.includes("modifier")` branch and told to refresh. So for every refusal reloading
+ * cannot repair, the server's sentence is shown: it names the cause the server established, which
+ * no restatement here can distinguish. The hand-written sentences remain as the fallback for a
+ * refusal of that kind that arrives without one.
  */
-function getCombatMutationRefreshMessage(code: string): string {
+function getCombatMutationRefreshMessage(code: string, serverMessage?: string): string {
+  const serverSentence = getCombatRefusalSentence({ code, serverMessage });
+  if (serverSentence) {
+    return serverSentence;
+  }
   if (code === "attack_defender_defense_unavailable") {
     return "This opponent has no defensive skill, so an attack against them cannot be resolved. Nothing was rolled. Give the opponent a defensive skill such as Dodge, then attack again.";
   }
@@ -4744,8 +4749,8 @@ export default function CombatRoundManagerPanel({
     error: unknown,
     options: { suppressDeterministicAdvance?: boolean } = {},
   ): Promise<boolean> {
-    const code = getCombatMutationConflictCode(error);
-    if (!code) {
+    const refusal = readCombatRefusalPayload(error);
+    if (!refusal) {
       return false;
     }
 
@@ -4777,7 +4782,7 @@ export default function CombatRoundManagerPanel({
       onEncounterUpdated?.(refreshedEncounter);
       focusRoundTable({ scrollToCurrent: true, state: next.state });
     }
-    setSaveError(getCombatMutationRefreshMessage(code));
+    setSaveError(getCombatMutationRefreshMessage(refusal.code, refusal.serverMessage));
     return true;
   }
 

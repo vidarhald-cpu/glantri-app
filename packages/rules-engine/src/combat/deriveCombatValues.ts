@@ -69,10 +69,20 @@ function getAttackRawModifiers(allocationInputs: CombatAllocationState): Workboo
   return attackModifier === 0 ? [] : [{ label: "OB/Skill", value: attackModifier }];
 }
 
+/**
+ * The derived value with the raw modifiers applied, or `null` when the rule has no reading of
+ * them (#922).
+ *
+ * `?? baseValue` used to stand here, which displayed the **unadjusted** base as an ordinary figure
+ * whenever the lookup had no answer — a committed modifier silently dropped from a number a GM
+ * reads off the screen. The settled rule removes the cause a base below zero used to be, but a
+ * fail-open fallback must not survive on being hard to reach, so a no-answer now returns nothing
+ * and the callers show the no-value dash they already show for a missing input.
+ */
 function applyRawModifiersToDerivedValue(
   baseValue: number,
   rawModifiers: WorkbookRawModifier[],
-): number {
+): number | null {
   if (rawModifiers.length === 0) {
     return baseValue;
   }
@@ -81,7 +91,7 @@ function applyRawModifiersToDerivedValue(
     calculateWorkbookPercentageAdjustmentTrace({
       baseValue,
       rawModifiers,
-    })?.finalValue ?? baseValue
+    })?.finalValue ?? null
   );
 }
 
@@ -336,7 +346,7 @@ export function getDerivedObValue(input: {
   if (skillXp == null) {
     return input.mode.ob == null
       ? "—"
-      : applyRawModifiersToDerivedValue(input.mode.ob, attackRawModifiers);
+      : (applyRawModifiersToDerivedValue(input.mode.ob, attackRawModifiers) ?? "—");
   }
 
   const baseOb = calculateBaseOB({
@@ -345,7 +355,7 @@ export function getDerivedObValue(input: {
     situationalModifier: 0,
   });
 
-  return applyRawModifiersToDerivedValue(baseOb, attackRawModifiers);
+  return applyRawModifiersToDerivedValue(baseOb, attackRawModifiers) ?? "—";
 }
 
 export function getDerivedDmbValue(input: {

@@ -665,3 +665,41 @@ describe("Parry source eligibility", () => {
     ).not.toBe("—");
   });
 });
+
+describe("#922 raw modifiers on a derived value below zero", () => {
+  const derive = (attackModifier: number, weaponOb: number) =>
+    getDerivedObValue({
+      allocationInputs: {
+        ...defaultCombatAllocationState,
+        situationalModifiers: {
+          ...defaultCombatAllocationState.situationalModifiers,
+          attack: attackModifier,
+        },
+      },
+      armorTemplate: null,
+      // No skill XP, so the workbook melee and projectile paths do not answer and the raw
+      // modifiers are applied to the weapon's own OB — the call site this covers.
+      characterInputs: makeCharacterInputs(),
+      mode: { attackType: "melee", competencyRef: "one_handed_edged", ob: weaponOb } as never,
+      template: { handlingClass: "one_handed", initiative: 1 } as never,
+    });
+
+  it("applies them at one point per step rather than dropping them", () => {
+    // Product Owner ruling on #922, comment 20793. On a base below zero this call site used to
+    // receive a no-answer and display the **unadjusted** base as an ordinary figure.
+    expect(derive(-4, -3)).toBe(-7);
+    expect(derive(-4, -3)).not.toBe(-3);
+    // At zero and in-grid are unchanged, so the rule is not new at the boundary.
+    expect(derive(-4, 0)).toBe(-4);
+    expect(derive(-4, 9)).toBe(5);
+  });
+
+  it("shows no value rather than a wrong one when the rule has no reading", () => {
+    // What remains after the ruling is a non-integer figure. The dash is this function's own
+    // existing no-value answer, which is what a missing input already shows.
+    expect(derive(-4.5, 9)).toBe("—");
+    expect(derive(-4.5, -3)).toBe("—");
+    // And no modifier at all is still the base itself, not a dash.
+    expect(derive(0, -3)).toBe(-3);
+  });
+});

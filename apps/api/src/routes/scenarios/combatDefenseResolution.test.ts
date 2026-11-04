@@ -918,4 +918,24 @@ describe("#694 GM-facing wording for a defense that cannot be resolved", () => {
     expect(message).toContain("Nothing was recorded.");
     expect(message.toLowerCase()).not.toContain("refresh combat");
   });
+
+  /**
+   * #922. `workbook_adjustment` used to mean "the committed modifier total ran off the end of an
+   * authored table", which is no longer a refusal at all. What it can still mean is a defence value
+   * the open-ended rule has no reading of — a base defence below zero — and no change to the
+   * defender's skills or equipment repairs that, so the sentence asks for neither.
+   */
+  it("does not blame skills or equipment for a defence value the rule cannot read", () => {
+    const message = getCombatDefenseRefusalMessage(["workbook_adjustment"]);
+
+    expect(message).toContain("no reading for");
+    expect(message).toContain("Nothing was recorded.");
+    expect(message.toLowerCase()).not.toContain("refresh");
+    expect(message).not.toContain("no defensive skill");
+    expect(message).not.toContain("defensive skill such as Dodge");
+    // The cause wins over the equipment fallback even when another fact is reported beside it.
+    expect(getCombatDefenseRefusalMessage(["equipment_state", "workbook_adjustment"])).toBe(
+      message,
+    );
+  });
 });

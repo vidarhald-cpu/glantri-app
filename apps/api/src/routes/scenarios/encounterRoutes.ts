@@ -302,6 +302,8 @@ import {
   playerFacingCombatFeintProposalSchema,
   playerFacingCombatMissileReadinessSchema,
   playerFacingCombatRoundEndReviewSchema,
+  playerFacingCombatMissileIncomingAttackSchema,
+  playerFacingCombatRoundAttackRollResultSchema,
   playerFacingCombatRoundStateSchema,
   playerFacingCombatSkillContestCalculationSchema,
   playerFacingContinuedContactMaintenanceContestSchema,
@@ -309,7 +311,8 @@ import {
   playerFacingEncounterParticipantSchema,
   playerFacingOffensiveParryContestSchema,
   playerFacingRoleplayStateSchema,
-  withoutAttackResultWorkbookImportProvenance,
+  type CombatMissileIncomingAttack,
+  type CombatRoundAttackRollResult,
   type CombatRoundCommandType,
   type PlayerFacingCombatRoundCommand,
   type PlayerFacingCombatRoundParticipant,
@@ -372,6 +375,7 @@ import {
   getC1FiveKeyCanonicalReview,
   buildCombatStateCharacterInputs,
   calculateWorkbookPercentageAdjustmentTrace,
+  type WorkbookPercentageAdjustmentTrace,
   deriveParryPrimaryActionModifier,
   isCombatFeintResistanceSkill,
   recordRoleplayGmSkillRoll,
@@ -499,6 +503,12 @@ function buildObservationRollBasis(input: {
     ],
   });
   if (!trace) {
+    // #922. Fail closed, and the caller turns this into an automation stop rather than a roll. Two
+    // things about it are disclosed rather than changed here, because both are outside this
+    // change's scope: the message still says "outside the canonical workbook table", which after
+    // the open-ended lookup is no longer the condition it describes; and this basis carries
+    // `percentageAdjustment` without `extrapolated`, so an extrapolated observation figure is
+    // recorded unflagged. A visible flag on this surface is #940 and a Product Owner decision.
     throw new RangeError("Observation modifiers are outside the canonical workbook table.");
   }
   return {
@@ -1720,6 +1730,31 @@ const ATTACK_DEFENDER_DEFENSE_UNAVAILABLE_MESSAGE =
 
 const ATTACK_OFFENSE_UNAVAILABLE_MESSAGE =
   "The attacker has no weapon or combat skill this attack can use, so it cannot be resolved. Nothing was rolled. Check the attacker's weapon and combat skill before attacking again.";
+
+/**
+ * Which of one attack's committed figures used a percentage adjustment the open-ended rule
+ * resolved past the edge of the authored workbook grid (#922).
+ *
+ * Read from the adjustment traces the attack was actually composed from, not recomputed here:
+ * the figure and the statement about the figure come from the same resolution, so they cannot
+ * disagree. A defence taken from a legacy presentation snapshot rather than a live calculation
+ * carries no trace and is therefore not flagged — there is no adjustment of ours to report.
+ */
+function collectExtrapolatedWorkbookAdjustments(input: {
+  attackerTraces: ReadonlyArray<WorkbookPercentageAdjustmentTrace | null | undefined>;
+  defenderTraces: ReadonlyArray<WorkbookPercentageAdjustmentTrace | null | undefined>;
+}): Array<"attacker_ob" | "defender_db"> {
+  const flagged: Array<"attacker_ob" | "defender_db"> = [];
+
+  if (input.attackerTraces.some((trace) => trace?.extrapolated === true)) {
+    flagged.push("attacker_ob");
+  }
+  if (input.defenderTraces.some((trace) => trace?.extrapolated === true)) {
+    flagged.push("defender_db");
+  }
+
+  return flagged;
+}
 
 const MODIFIER_REVIEW_BUCKETS = [
   ["general", "general"],
@@ -4206,6 +4241,7 @@ function buildAcceptedCombatDefenseCalculationFact(input: {
       value: row.value,
     })),
     flatDbAdjustment: input.calculation.flatDbAdjustment,
+    noToHitPercentageTrace: input.calculation.percentage.noToHitTrace,
     participantId: input.calculation.participantId,
     percentageAdjustment: input.calculation.percentage.fullAdjustment,
     percentageTrace: input.calculation.percentage.fullTrace,
@@ -5444,7 +5480,10 @@ function recordCanonicalServerCombatInitiative(input: {
   submittedBy: "gm" | "player";
   submittedAt: string;
   userId: string;
-}): { initiative: ReturnType<typeof buildCombatRoundInitiativeResult>; state: CombatRoundState } {
+}): {
+  initiative: ReturnType<typeof buildCombatRoundInitiativeResult>;
+  state: CombatRoundState;
+} | null {
   const initiativeProjection = buildLiveCombatModifierContributionProjection({
     combatContext: input.scenarioParticipant.state.combat.combatContext,
     combatEffects: input.scenarioParticipant.state.combatEffects,
@@ -5473,9 +5512,18 @@ function recordCanonicalServerCombatInitiative(input: {
     baseValue: input.initiativeBase,
     rawModifiers: [{ label: "Initiative", value: rawModifier }],
   });
+  if (trace === null) {
+    // #922. `?? input.initiativeBase` silently dropped the whole committed initiative modifier on
+    // a no-answer and rolled anyway, recording the roll as ordinary — the same fail-open shape as
+    // the missile defence commit, on a different figure. The settled rule removes the cause a
+    // negative base used to be, but unreachable is not a safety property, so this returns no
+    // result and the two callers refuse with the refusal each already has.
+    return null;
+  }
+
   const initiative = buildCombatRoundInitiativeResult({
     baseInitiative: input.initiativeBase,
-    modifierAdjustment: (trace?.finalValue ?? input.initiativeBase) - input.initiativeBase,
+    modifierAdjustment: trace.finalValue - input.initiativeBase,
     roll: rollOpenEndedD6(),
   });
   return {
@@ -6513,14 +6561,29 @@ export function buildPlayerSafeCombatRoundCommandForUser(
 }
 
 /**
- * The player's own attack, as the roll-attack response returns it to them: without the attack-result
- * fields that carry workbook import provenance (`weaponModeSourceMetadata`, `weaponDmbRoll`), which
- * are not player-facing (#517, ruling E2). The GM's response keeps them.
+ * The player's own attack, as the roll-attack response returns it to them.
+ *
+ * #922 repair cycle 1, finding 2. This was a **denylist**: the response stripped the two
+ * attack-result fields that carry workbook import provenance (#517, ruling E2) and passed every
+ * other field through. A denylist fails open for each field added after it, and that is what
+ * happened — `extrapolatedWorkbookAdjustments`, which #922 declared GM-only, reached the attacking
+ * player at `200` on this route, on the legacy contract directly and on the compact `active-v1`
+ * contract inside `mutationPresentation`, which is a passthrough record of whatever this payload
+ * put there. It is the second denylist-shaped projection to leak on this programme.
+ *
+ * Both of this response's own attack shapes now go through the player-facing schema that **names**
+ * their fields, the same allow-list treatment the sibling `command` key already had. So a field
+ * added to either stored schema is absent from player output until someone names it, and the
+ * compact contract inherits that because its `mutationPresentation` is built from this payload.
+ *
+ * The GM's response keeps the stored value, which is where the ruling says the flag belongs.
  */
-function playerOwnAttackWithoutWorkbookImportProvenance<Attack extends object>(
-  attack: Attack | undefined,
-) {
-  return attack && withoutAttackResultWorkbookImportProvenance(attack);
+function playerOwnAttackResult(attack: CombatRoundAttackRollResult | undefined) {
+  return attack && buildPlayerFacing(playerFacingCombatRoundAttackRollResultSchema, attack);
+}
+
+function playerOwnPendingMissileAttack(attack: CombatMissileIncomingAttack | undefined) {
+  return attack && buildPlayerFacing(playerFacingCombatMissileIncomingAttackSchema, attack);
 }
 
 const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
@@ -12153,6 +12216,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedAt,
         userId: user.id,
       });
+      if (!rolled) {
+        // #922. The rule has no reading of this participant's initiative with its committed
+        // modifiers, so nothing is rolled and nothing is recorded, rather than rolling with the
+        // modifier quietly dropped. The cause is named instead of being reported as missing
+        // context, because refreshing combat cannot repair it.
+        return reply.code(409).send({
+          code: "initiative_modifier_out_of_range",
+          error:
+            "This participant's initiative works out to a value this calculation has no reading for, so it cannot be rolled. Nothing was rolled. Report it with the participant's initiative figures.",
+        });
+      }
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
@@ -15706,6 +15780,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 submittedBy: "gm",
                 userId: user.id,
               });
+              if (!rolled) {
+                // #922. Same no-answer, same refusal shape as this block already uses for an
+                // incomplete initiative context above: the automation stops rather than recording
+                // a roll whose committed modifier was quietly dropped.
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: "roll_not_eligible" as const,
+                };
+              }
               const nextState = attachCombatStepAutomationCommandLink({
                 commandId,
                 countsTowardProcessed,
@@ -17462,6 +17546,44 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       if (!canonicalWeaponFacts.isMissileAttack && defenderDb === undefined) {
+        // #922. This branch reported one cause — the defender has no defensive skill — for every
+        // condition that reached it, including a percentage adjustment that had merely run off the
+        // end of an authored table. That cause is gone: the lookup is open-ended. The conditions
+        // that remain are genuinely different facts, and a GM told to give the opponent Dodge when
+        // the opponent's scenario equipment is what is missing hunts a problem on the wrong
+        // character. So the cause decides what is said, the same way #694 split the missile
+        // defence refusal, and the one condition the old sentence does describe keeps it.
+        //
+        // The cause is read from the composition that actually failed, not from the canonical
+        // defence's completeness, because the two disagree: a committed total drives
+        // `canonicalDefense.effectiveDb` below zero while the canonical defence stays `complete`
+        // and the defender holds Dodge, which is how an earlier split sent the original false
+        // sentence. `null` here distinguishes "the rule has no reading of this defence value" from
+        // `undefined`, which only means no composition was attempted.
+        //
+        // A defence below zero is no longer such a value. The Product Owner's ruling on #922
+        // (comment 20793) settles that the rule answers it at one point per raw step, so this
+        // branch no longer fires for the cause #922 was filed about and those attacks resolve —
+        // driven in `scenarios.test.ts`, `#922 resolves a negative canonical defence and keeps the
+        // committed Break Off penalty in it`. What remains here is a figure that is not a whole
+        // number of steps, and the refusal is kept for it rather than deleted because unreachable
+        // is not a safety property.
+        if (breakOffDefenderTrace === null) {
+          return reply.code(409).send({
+            code: "defense_context_unavailable",
+            error: getCombatDefenseRefusalMessage(["workbook_adjustment"]),
+          });
+        }
+        const missingDefenseFacts =
+          canonicalDefense && canonicalDefense.completeness !== "complete"
+            ? canonicalDefense.missingFacts
+            : undefined;
+        if (missingDefenseFacts && !missingDefenseFacts.includes("character_inputs")) {
+          return reply.code(409).send({
+            code: "defense_context_unavailable",
+            error: getCombatDefenseRefusalMessage(missingDefenseFacts),
+          });
+        }
         return reply.code(409).send({
           code: "attack_defender_defense_unavailable",
           error: ATTACK_DEFENDER_DEFENSE_UNAVAILABLE_MESSAGE,
@@ -17546,9 +17668,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         })),
       });
       if (!opponentSpecificObTrace) {
+        // #922. "Outside the canonical calculation table" stopped being a refusal condition when
+        // the lookup became open-ended: a total past the table's last authored step now resolves
+        // by the rule the table illustrates. This guard survives for the inputs that rule has no
+        // reading of — an attack OB below zero, or a non-integer one — and says that instead.
         return reply.code(409).send({
           code: "attacker_modifier_out_of_range",
-          error: "Attack modifiers are outside the canonical calculation table.",
+          error:
+            "This attack's OB works out to a value this calculation has no reading for, so it cannot be resolved. Nothing was rolled. Report it with the attacker's OB figures.",
         });
       }
       const roll = rollOpenEndedCombatToHitD20();
@@ -17659,6 +17786,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             declarationId: canonicalOpportunityIdentity.declarationId,
             defenderDb: defenderDb!,
             defenderParticipantId: defenderEncounterParticipant.id,
+            extrapolatedWorkbookAdjustments: collectExtrapolatedWorkbookAdjustments({
+              attackerTraces: [opponentSpecificObTrace],
+              // Both defence traces, because both produce a committed figure: the full one is the
+              // recorded DB and the no-to-hit one is half of the recorded DM. The two totals
+              // differ by the encumbrance to-hit contribution, so one can cross the grid's edge
+              // while the other is still inside it.
+              defenderTraces: [
+                canonicalDefense?.completeness === "complete"
+                  ? canonicalDefense.percentage.fullTrace
+                  : undefined,
+                canonicalDefense?.completeness === "complete"
+                  ? canonicalDefense.percentage.noToHitTrace
+                  : undefined,
+                breakOffDefenderTrace,
+              ],
+            }),
             ob: opponentSpecificObTrace.finalValue,
             openEndedD10s: roll.openEndedD10s,
             phase: body.phase,
@@ -17841,14 +17984,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
 
       return {
-        attackResult:
-          access.mode === "gm"
-            ? attackResult
-            : playerOwnAttackWithoutWorkbookImportProvenance(attackResult),
+        attackResult: access.mode === "gm" ? attackResult : playerOwnAttackResult(attackResult),
         pendingMissileAttack:
           access.mode === "gm"
             ? pendingMissileAttack
-            : playerOwnAttackWithoutWorkbookImportProvenance(pendingMissileAttack),
+            : playerOwnPendingMissileAttack(pendingMissileAttack),
         command:
           access.mode === "gm" || !attackCommand
             ? attackCommand
@@ -18060,6 +18200,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   ],
                 })
               : undefined;
+          // #922. `breakOffTrace` is `null` only when the rule has no reading of this composition,
+          // and `undefined` when no composition was attempted — no ordinary Dodge, or no Break Off
+          // DB/Parry row to apply. `?? awareBaseDb` cannot tell those apart, so on a no-answer it
+          // used to resolve the shot against the **unadjusted** base: a committed four-point
+          // penalty applied on a positive base (7 → 3) was discarded on a negative one, the
+          // response was 200, the attack was recorded as a hit, and nothing said an adjustment had
+          // been dropped. Independent QA drove that and classified it a regression against `dev`,
+          // which refused the same rows (verdict comment 20745, finding 1).
+          //
+          // The settled rule removes the cause — a defence below zero now answers — but a
+          // fail-open fallback must not survive on being hard to reach, so the no-answer refuses
+          // here exactly as the melee origin does, with the same code and the same sentence. After
+          // this guard `?? awareBaseDb` applies only to `undefined`, which is the honest case.
+          if (breakOffTrace === null) {
+            return reply.code(409).send({
+              code: "defense_context_unavailable",
+              error: getCombatDefenseRefusalMessage(["workbook_adjustment"]),
+            });
+          }
           const defenderDb = breakOffTrace?.finalValue ?? awareBaseDb;
           const attackerRoundParticipant = roundState.participants.find(
             (participant) => participant.participantId === body.attackerParticipantId,
@@ -18080,6 +18239,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             declarationId: pendingMissileAttack.declarationId,
             defenderDb,
             defenderParticipantId: body.defenderParticipantId,
+            // #922. The missile shot's OB was resolved and recorded when the shot was fired, so
+            // the only adjustment this commit composes is the defence one — and only when an
+            // ordinary Dodge was available, because otherwise the recorded DB is zero and the
+            // live defence adjustment is not the figure this attack used.
+            extrapolatedWorkbookAdjustments: collectExtrapolatedWorkbookAdjustments({
+              attackerTraces: [],
+              defenderTraces: snapshot.ordinaryDodgeAvailable
+                ? [
+                    canonicalDefense.percentage.fullTrace,
+                    canonicalDefense.percentage.noToHitTrace,
+                    breakOffTrace,
+                  ]
+                : [],
+            }),
             ob: pendingMissileAttack.ob,
             openEndedD10s: pendingMissileAttack.openEndedD10s,
             phase: body.phase,

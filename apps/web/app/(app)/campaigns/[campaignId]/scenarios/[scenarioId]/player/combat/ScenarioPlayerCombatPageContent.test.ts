@@ -564,6 +564,27 @@ describe("ScenarioPlayerCombatPageContent", () => {
     );
   });
 
+  /**
+   * #922 repair cycle 1, finding 3 — this page had a branch for the two refusals #690 split out
+   * and none for the ones the server learned to describe afterwards, so a cause-aware refusal
+   * landed in the generic `combatActionError` instead of the slot kept for a failure the player
+   * cannot retry out of.
+   *
+   * This surface has no component harness, so the wiring is pinned here and the decision itself —
+   * which codes a reload cannot repair, and that the server's sentence is the one shown — is
+   * tested for real in `src/lib/campaigns/combatRefusalPresentation.test.ts`, the module both this
+   * page and the GM panel read it from.
+   */
+  it("routes every refusal a reload cannot repair into the Current Action slot", () => {
+    const source = readSource();
+
+    expect(source).toContain("readCombatRefusalPayload(caughtError)");
+    expect(source).toContain("getCombatRefusalSentence(refusal)");
+    expect(source).toContain("setAttackContextFailure(getCombatRefusalSentence(refusal))");
+    // The generic slot stays the fallback for everything else, and only for everything else.
+    expect(source).toContain('"Unable to roll combat attack."');
+  });
+
   it("shows player-owned damage-chain facts only to involved attackers and defenders", () => {
     const source = readSource();
 

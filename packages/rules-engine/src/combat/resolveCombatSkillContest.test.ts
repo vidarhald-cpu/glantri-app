@@ -217,4 +217,34 @@ describe("resolveCombatSkillContest", () => {
       totalPercentageAdjustment: attackLinked.totalPercentageAdjustment,
     });
   });
+
+  it("#922 resolves a skill contest whose base skill is below zero", () => {
+    // Product Owner ruling on #922, comment 20793. This call site throws a `RangeError` on a
+    // no-answer, so a base below zero used to make the whole contest unresolvable. The base is
+    // driven below zero by `baseSkillAdjustment`, and every figure asserted is the preview's own.
+    const preview = resolveCombatSkillContestPreview({
+      baseSkillAdjustment: -25,
+      contestType: "movement_feint",
+      governingStat: { id: "dex", label: "Dexterity", value: 16 },
+      participantId: "participant-1",
+      percentageContributions: [
+        {
+          category: "general_fatigue",
+          id: "combat-experience",
+          label: "Combat Experience",
+          unit: "percentage",
+          value: -4,
+        },
+      ],
+      role: "movement_feint_initiator",
+      skill: { id: "dodge", label: "Dodge", totalXp: 6 },
+    });
+
+    expect(preview.baseSkill).toBeLessThan(0);
+    expect(preview.baseSkill).toBe(-3);
+    expect(preview.totalPercentageAdjustment).toBe(-4);
+    // One point per step below zero, not a tenth of a negative base.
+    expect(preview.derivedIntegerAdjustment).toBe(-4);
+    expect(preview.preDieTotal).toBe(-7);
+  });
 });

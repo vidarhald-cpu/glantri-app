@@ -39,6 +39,14 @@ export function defaultCombatAttackAwareness(attacker: ScenarioParticipant): boo
  * suggesting an action that would not work.
  */
 export function getCombatDefenseRefusalMessage(missingFacts: readonly string[]): string {
+  if (missingFacts.includes("workbook_adjustment")) {
+    // #922. The percentage adjustment used to be unavailable whenever a defender's committed
+    // modifier total ran past the last authored row, which is no longer a refusal: that lookup is
+    // open-ended. What can still be unavailable is a defence value the rule has no reading of at
+    // all — a base defence below zero — and nothing the GM does to the defender's skills or
+    // equipment changes it, so this sentence does not ask for either.
+    return "This opponent's defence works out to a value this calculation has no reading for, so the attack cannot be resolved. Nothing was recorded. This is not something the opponent's skills or equipment can repair; report it with the opponent's defence figures.";
+  }
   if (missingFacts.includes("character_build")) {
     return "This opponent has no characteristics or skills recorded, so its defense cannot be worked out. Nothing was recorded. Give the opponent its characteristics and skills, then resolve this attack again.";
   }
