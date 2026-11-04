@@ -4,6 +4,7 @@ import {
   buildReactiveAttackPhase2InitiativeModifierEntry,
   getCombatDeclarationAttackPhases,
   getCombatDistanceParticipantAliases,
+  getCombatRoundCommittedModifierReviewPhases,
   getDistanceEdgeBetweenParticipantAliases,
   getSingleAttackDeclaredDistanceForPenalty,
   getWeaponPreferredDistances,
@@ -331,6 +332,21 @@ export function projectCombatActionGeneratedModifiers(input: {
             })
           : undefined))
       : undefined;
+  // Option B of #901 is derived here as well as on the server, because this projection is the
+  // fifth caller of the generation pass and the only one the client runs: it is the GM panel's
+  // modifier set and the player page's, and the panel submits it verbatim as the modifier-review
+  // body whenever there are no local edits. Without the gate the pass drops the GM's reviewed row
+  // and rebuilds it at the generator's value, so the panel's own next review commit writes the
+  // engine's figure back over the GM's accepted one (#915 QA finding 1). The gate needs nothing a
+  // caller does not already supply — `roundState` and `encounterParticipant` are the helper's
+  // whole input — so a reviewed phase is kept in both surfaces and in what they submit.
+  const committedModifierReviewPhases =
+    input.roundState && input.encounterParticipant
+      ? getCombatRoundCommittedModifierReviewPhases({
+          participantId: input.encounterParticipant.id,
+          state: input.roundState,
+        })
+      : undefined;
   const projectedContext = applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
     attackPhaseDefensivePenalties:
@@ -349,6 +365,7 @@ export function projectCombatActionGeneratedModifiers(input: {
         roundNumber: input.roundState?.roundNumber ?? 1,
       }),
     combatContext: input.combatContext,
+    committedModifierReviewPhases,
     distanceModifiers,
     initiativeModifiers:
       input.roundState && roundParticipantId
