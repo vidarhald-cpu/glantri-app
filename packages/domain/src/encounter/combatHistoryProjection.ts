@@ -648,6 +648,42 @@ function isVisible(input: { participantId: string; viewer: CombatHistoryViewer }
   return input.viewer.kind === "gm" || input.viewer.visibleParticipantIds.has(input.participantId);
 }
 
+/**
+ * #925. A completed round's labels come from the round record, not from the live roster.
+ *
+ * The live roster supplies the label for everyone still in the encounter. For anyone who has since
+ * left it, the label is taken from the round record's own `label` — written by the round boundary
+ * when the round was archived, and required non-empty by `combatRoundParticipantStateSchema`. This
+ * is the direction the Product Owner's ruling of 2026-11-04 requires ("the past is always recorded
+ * history, and not something we calculate or make calculations on", #915 comment 20281), and it is
+ * already what `buildCombatLogProjection` does: the Combat Log builds its per-round label map from
+ * `roundState.participants[].label`. This projection was the outlier.
+ *
+ * Without it, a departed participant has no label, and an identity with no label is *silently
+ * dropped* — `projectSnapshot` returns undefined and `projectEventIdentities` skips the ref — so
+ * restoring their archived rows would make their history project unnamed rather than named.
+ *
+ * **It grants no visibility.** Admission is decided separately by `isVisible`, from the viewer's
+ * live visible set, both here and again at every use downstream. For a player viewer a departed
+ * participant is not in that set, so the recorded addition is empty by construction; this only ever
+ * supplies a name for a row the viewer is already entitled to see.
+ */
+function withRecordedCombatHistoryParticipants(input: {
+  liveParticipants: readonly CombatHistoryParticipantInput[];
+  recordedParticipants: readonly CombatRoundParticipantState[];
+  viewer: CombatHistoryViewer;
+}): readonly CombatHistoryParticipantInput[] {
+  const known = new Set(input.liveParticipants.map((participant) => participant.participantId));
+  const recorded = input.recordedParticipants.flatMap((participant) => {
+    if (known.has(participant.participantId)) return [];
+    if (!isVisible({ participantId: participant.participantId, viewer: input.viewer })) return [];
+    known.add(participant.participantId);
+    return [{ displayName: participant.label, participantId: participant.participantId }];
+  });
+
+  return recorded.length === 0 ? input.liveParticipants : [...input.liveParticipants, ...recorded];
+}
+
 function isControlled(input: { participantId?: string; viewer: CombatHistoryViewer }): boolean {
   return Boolean(
     input.participantId &&
@@ -1403,8 +1439,24 @@ export function projectCombatHistory(input: {
   const labels = new Map(
     visibleParticipants.map((participant) => [participant.participantId, participant.displayName]),
   );
-  const archivedRounds = state.rounds.map((round: CompletedCombatRound) =>
-    projectRound({
+  const archivedRounds = state.rounds.map((round: CompletedCombatRound) => {
+    // #925. The round record names who played it; the live roster names who is still here.
+    const roundParticipants = withRecordedCombatHistoryParticipants({
+      liveParticipants: visibleParticipants,
+      recordedParticipants: round.participants,
+      viewer: input.viewer,
+    });
+    const roundLabels =
+      roundParticipants === visibleParticipants
+        ? labels
+        : new Map(
+            roundParticipants.map((participant) => [
+              participant.participantId,
+              participant.displayName,
+            ]),
+          );
+
+    return projectRound({
       events: getCombatRoundEventsWithDerivedResultCoverage({
         commands: round.commands,
         encounterId: round.encounterId ?? state.encounterId ?? "combat-history",
@@ -1417,15 +1469,15 @@ export function projectCombatHistory(input: {
       }),
       // An archived round is past; its initiative totals are final (#862 F1).
       historical: true,
-      labels,
+      labels: roundLabels,
       observationRelationships: round.observationRelationships,
-      participants: visibleParticipants,
+      participants: roundParticipants,
       roundParticipants: round.participants,
       roundNumber: round.roundNumber,
       snapshots: round.stepSnapshots,
       viewer: input.viewer,
-    }),
-  );
+    });
+  });
 
   return {
     activeRound: projectRound({

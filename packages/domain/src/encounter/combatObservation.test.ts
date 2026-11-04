@@ -617,7 +617,9 @@ describe("Observe Opponent", () => {
         targetBoundary: "declaration",
       },
     });
-    expect(buildCombatRoundCommandEnvelope({ state: rolled.state }).currentTask).toMatchObject({
+    expect(
+      buildCombatRoundCommandEnvelope({ state: rolled.state, viewer: { kind: "gm" } }).currentTask,
+    ).toMatchObject({
       cursorStep: "SU",
       participantId: undefined,
       roundNumber: ready.roundNumber,

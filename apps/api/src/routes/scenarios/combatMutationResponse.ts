@@ -3,6 +3,7 @@ import {
   buildActiveCombatMutationResponse,
   type ActiveCombatDeterministicAdvanceDescriptor,
   type CombatRoundCommandEnvelope,
+  type CombatRoundCommandEnvelopeViewer,
   type EncounterSession,
   type ScenarioParticipant,
 } from "@glantri/domain";
@@ -41,6 +42,14 @@ export function prefersActiveCombatMutationResponse(
 export function buildRequestedCombatMutationResponse(input: {
   activeResponseRequested: boolean;
   payload: unknown;
+  /**
+   * #925. The viewer the compact response is for. Required, because when the route's payload
+   * carries no `commandEnvelope` this adapter builds one and the compact schema requires it.
+   * The `preSerialization` hook that is this adapter's only production caller runs after the
+   * handler that resolved the viewer, so it passes
+   * `UNATTRIBUTED_COMBAT_ROUND_COMMAND_ENVELOPE_VIEWER` — entitled to nobody.
+   */
+  viewer: CombatRoundCommandEnvelopeViewer;
 }): unknown {
   if (!input.activeResponseRequested || !isLegacyCombatMutationPayload(input.payload)) {
     return input.payload;
@@ -63,6 +72,7 @@ export function buildRequestedCombatMutationResponse(input: {
     mutationPresentation:
       Object.keys(mutationPresentation).length > 0 ? mutationPresentation : undefined,
     updatedParticipants,
+    viewer: input.viewer,
   });
 
   return activeCombatMutationResponseSchema.parse(compact);
