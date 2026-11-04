@@ -288,6 +288,25 @@ function getRoundedLinkedStatAverage(
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+/**
+ * #922 repair cycle 1, finding 4 — the second in-repo caller the open-ended lookup activated, and
+ * **the flag is not carried through it.** Stating precisely why, because the alternative is a
+ * silent extrapolation in a displayed figure:
+ *
+ * This is a module-private derivation of one displayed cell. Its value goes straight into
+ * `buildLoadoutCombatStatsTable`, which renders it; there is no trace, no recorded resolution and
+ * no consumer between the two that could receive a flag. The initiative caller in
+ * `liveCombatModifiers.ts` has a calculation object to carry one; this has nothing but the number
+ * and the row it is printed in. So carrying the flag here means adding a visible element to the
+ * loadout combat stats — which surfaces show the flag, and how, is #940 and a Product Owner
+ * decision naming surfaces and widths, and this lane builds no UI.
+ *
+ * What is true of the behaviour, for whoever takes #940: past the grid's last authored row this
+ * returned `null` before #922 and the cell showed nothing; it now returns an extrapolated figure
+ * with no mark on it. `basePerception` is `round((int + pow + lck) / 3) + perceptionAdjustedXp` and
+ * the modifier is the worn armour's, so the base axis is reachable here with an ordinary high
+ * Perception and the modifier axis with heavy armour.
+ */
 function getWorkbookArmorAdjustedPerception(input: {
   adjustedStats: Record<string, number>;
   armorPerceptionModifier: number | null | undefined;

@@ -1,6 +1,21 @@
 import { getWorkbookCharacterSheetGm } from "../stats/characteristicGms";
 
-const WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE: Record<number, Record<number, number>> = {
+/**
+ * The authored illustration of the percentage-adjustment rule: 50 base rows (0 through 49), each
+ * spelling out 15 raw modifier steps.
+ *
+ * Source: `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Prosent`, `A4:P57` — row 4 is the raw
+ * step header 1..15, column A is the base, and rows 5 to 57 are bases 0 to 49. The sheet ends
+ * there on both axes, so this grid's bound is the illustration's bound and not a transcription
+ * cut-off. It is transcribed source data and is never extended here; it is exported only so the
+ * conformance test can read every authored cell (#922).
+ *
+ * One authored row per line, over the 100-column print width: the grid is transcribed source data
+ * and a row read as a row is how it is checked against the workbook, so it is left exactly as
+ * transcribed rather than reflowed into one line per cell.
+ */
+// prettier-ignore
+export const WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE: Record<number, Record<number, number>> = {
   0: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0 },
   1: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15 },
   2: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15 },
@@ -193,14 +208,43 @@ export interface WorkbookRawModifier {
   value: number;
 }
 
+/**
+ * An edge of the authored grid a percentage adjustment was resolved outside (#922).
+ *
+ * `base` and `modifier` are the two edges past the grid's last authored row and column.
+ * `base_below_zero` is the third edge, below the grid rather than past it: the grid's first
+ * authored row is base 0, so a base below zero has no authored row at all and every figure the
+ * rule produces there is an extrapolation. Product Owner ruling on #922 (comment 20793) settles
+ * what the rule says there; the standing ruling on the same issue (comment 20326) requires every
+ * extrapolation to be flagged for review, and that applies to this edge as it does to the others.
+ */
+export type WorkbookPercentageAdjustmentAxis = "base" | "base_below_zero" | "modifier";
+
 export interface WorkbookPercentageAdjustmentTrace {
   baseValue: number;
+  /**
+   * Whether `percentageAdjustment` was resolved by the open-ended rule past the edge of the
+   * authored grid rather than read from an authored cell (#922). An extrapolated figure is a
+   * resolved figure, not a guess, and it is flagged so the decision can be reviewed.
+   */
+  extrapolated: boolean;
+  /** Which grid axes this adjustment ran past; empty whenever `extrapolated` is false. */
+  extrapolatedAxes: WorkbookPercentageAdjustmentAxis[];
   finalValue: number;
   percentageAdjustment: number;
   rawModifierTotal: number;
   rawModifiers: WorkbookRawModifier[];
 }
 
+/** One percentage adjustment, with the provenance of the figure beside it (#922). */
+export interface WorkbookPercentageAdjustmentResolution {
+  extrapolated: boolean;
+  extrapolatedAxes: WorkbookPercentageAdjustmentAxis[];
+  value: number;
+}
+
+/** One authored row per line, as transcribed; see `WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE`. */
+// prettier-ignore
 export const WORKBOOK_MOVEMENT_PERCENT_TABLE: Record<number, Record<number, number>> = {
   0: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0, 12: 0, 13: 0, 14: 0, 15: 0 },
   1: { 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9, 10: 10, 11: 11, 12: 12, 13: 13, 14: 14, 15: 15 },
@@ -285,31 +329,167 @@ export function getWorkbookStatGm(value: number | null | undefined): number | nu
   return getWorkbookCharacterSheetGm(value);
 }
 
-export function lookupWorkbookPercentageAdjustment(
+/** The last base row and the last raw modifier step the authored grid spells out. */
+const WORKBOOK_PERCENTAGE_ADJUSTMENT_AUTHORED_MAX_BASE = 49;
+const WORKBOOK_PERCENTAGE_ADJUSTMENT_AUTHORED_MAX_STEP = 15;
+/**
+ * The step at which the authored grid stops scaling with the base. Up to this step every authored
+ * row is the base scaled by ten percent per raw step; from it on, every authored row adds exactly
+ * one point per further step, in all 50 rows.
+ */
+const WORKBOOK_PERCENTAGE_ADJUSTMENT_PROPORTIONAL_STEP_LIMIT = 7;
+
+/**
+ * Ten percent of the base per raw step, rounded half up, with a floor of one point per raw step.
+ *
+ * Integer arithmetic on purpose: `floor((2n + 10) / 20)` is round-half-up of `n / 10` without a
+ * fractional intermediate, so no rounding mode is left to the floating-point unit.
+ */
+function workbookProportionalPercentageAdjustment(rawOb: number, step: number): number {
+  return Math.max(step, Math.floor((step * rawOb * 2 + 10) / 20));
+}
+
+/**
+ * The open-ended rule the authored grid illustrates (#922, Product Owner ruling on that issue:
+ * "lookup tables are typically meant to be illustrations of open ended rules, we should make them
+ * open ended, but probably also flag these for review").
+ *
+ * - up to step 7, the base scaled by ten percent per raw step, rounded half up, never less than
+ *   one point per raw step;
+ * - from step 8 on, the step-7 figure plus one point per further step.
+ *
+ * This is the source sheet's own arithmetic, not a curve fitted to its output. In
+ * `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Prosent`, the cells for bases 11 to 49 are
+ * formulas: `B16:H57` is `=ROUND(B$4*$A16/10,0)` — the step header times the base over ten, with
+ * Excel's half-away-from-zero rounding — and `I16:P57` is `=$H16+I$4-7`, the step-7 figure plus one
+ * per further step. The one-point floor is the sheet's own treatment of the low bases: rows 5 to 15
+ * (bases 0 to 10) are literal values, not formulas, and bases 1 to 10 are authored as one point per
+ * raw step, which the formula alone would not produce.
+ *
+ * `workbookCombatMath.test.ts` spells the rule out a second time, independently of this module, and
+ * compares it against all 750 authored cells. It reproduces 735. The 15 it does not are the whole
+ * base-0 row, which this lookup already overrode by hand before #922 with exactly what the rule
+ * predicts, so the rule reproduces every figure this function returned before #922.
+ */
+function workbookOpenEndedPercentageAdjustment(rawOb: number, absoluteModifier: number): number {
+  if (absoluteModifier <= WORKBOOK_PERCENTAGE_ADJUSTMENT_PROPORTIONAL_STEP_LIMIT) {
+    return workbookProportionalPercentageAdjustment(rawOb, absoluteModifier);
+  }
+
+  return (
+    workbookProportionalPercentageAdjustment(
+      rawOb,
+      WORKBOOK_PERCENTAGE_ADJUSTMENT_PROPORTIONAL_STEP_LIMIT,
+    ) +
+    (absoluteModifier - WORKBOOK_PERCENTAGE_ADJUSTMENT_PROPORTIONAL_STEP_LIMIT)
+  );
+}
+
+/**
+ * One percentage adjustment and the provenance of the figure (#922).
+ *
+ * Inside the authored grid the authored cell is the answer, because the grid is the illustration
+ * and nothing here second-guesses it. Outside it the open-ended rule answers, and the result says
+ * so: before #922 this returned `null` past the last authored row, a defender carrying enough
+ * committed damage could not be attacked at all, and the refusal blamed the defender for lacking a
+ * defensive skill it had.
+ *
+ * A base of zero or below answers one point per raw step. Product Owner ruling on #922, comment
+ * 20793, recorded verbatim there: *"One point per step is a better way to word it, and that's what
+ * I meant"*, agreeing that *"for results below zero, we use the 1 per tenth rule"* means each point
+ * of raw modifier moves the value by one point. So a defence is allowed to go below zero and is not
+ * floored, and the proportional calculation — ten percent of the base per step — does not apply
+ * there, because applied to a negative base it would move the magnitude the wrong way.
+ *
+ * That is one continuous rule with the authored grid's own treatment of the low bases: `Prosent`
+ * authors bases 1 to 10 as a flat one point per raw step, so the rule this function applies below
+ * zero is the rule the grid already stops scaling into. The base-0 row is the same figure for the
+ * same reason, which is why one branch now covers a base of zero or below rather than two branches
+ * that happened to agree. The two differ only in the flag: base 0 has an authored row, so it is not
+ * an extrapolation on the base edge, while a base below zero has none and is flagged
+ * `base_below_zero`.
+ *
+ * `null` survives for an input the rule has no reading of: a non-integer base or step, or a
+ * negative step. A negative step cannot be reached through
+ * `calculateWorkbookPercentageAdjustmentTrace`, which passes `Math.abs` of the raw total, so it is
+ * a programming error rather than a game state; it is still refused rather than coerced.
+ */
+export function resolveWorkbookPercentageAdjustment(
   rawOb: number,
   absoluteModifier: number,
-): number | null {
+): WorkbookPercentageAdjustmentResolution | null {
   if (absoluteModifier === 0) {
-    return 0;
+    return { extrapolated: false, extrapolatedAxes: [], value: 0 };
   }
 
   if (!Number.isInteger(rawOb) || !Number.isInteger(absoluteModifier)) {
     return null;
   }
 
-  if (rawOb < 0 || absoluteModifier < 0) {
+  if (absoluteModifier < 0) {
     return null;
   }
 
-  if (rawOb === 0) {
-    // The hardcoded workbook table row for 0 imported as all zeroes, but the
-    // surrounding low-base rows encode a minimum one-point effect per raw step.
-    // Treat base 0 as the same low-base minimum rule so combat values can move
-    // away from zero under live modifiers.
-    return absoluteModifier;
+  const pastModifierEdge = absoluteModifier > WORKBOOK_PERCENTAGE_ADJUSTMENT_AUTHORED_MAX_STEP;
+
+  if (rawOb <= 0) {
+    // One point per raw step, for a base of zero and for every base below it, as one rule.
+    //
+    // Below zero this is the Product Owner's ruling on #922 (comment 20793). At zero the behaviour
+    // is unchanged and pre-dates #922: the authored row for base 0 is all zeroes, while the
+    // surrounding low-base rows encode one point per raw step, and this lookup has always applied
+    // the low-base rule at zero so a combat value can move away from zero under live modifiers.
+    // The ruling makes those two the same rule rather than two branches with the same arithmetic.
+    //
+    // `Prosent!B5:P5` is authored as literal zeroes in the source workbook, so the zero row is a
+    // deliberate deviation from the source rather than a repair of a bad transcription. Whether
+    // the zero row should keep deviating is Product Owner question 15 on #934 and is open; this
+    // change neither settles it nor changes what the zero row returns.
+    const belowZeroAxes: WorkbookPercentageAdjustmentAxis[] = [];
+    if (rawOb < 0) {
+      // The grid's first authored row is base 0, so a base below zero is outside it on a third
+      // edge and the figure is an extrapolation under the standing ruling (comment 20326). Base 0
+      // has an authored row and is not flagged on this edge, whatever the open question decides
+      // about the figure it returns.
+      belowZeroAxes.push("base_below_zero");
+    }
+    if (pastModifierEdge) {
+      belowZeroAxes.push("modifier");
+    }
+
+    return {
+      extrapolated: belowZeroAxes.length > 0,
+      extrapolatedAxes: belowZeroAxes,
+      value: absoluteModifier,
+    };
   }
 
-  return WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[rawOb]?.[absoluteModifier] ?? null;
+  const authored = WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[rawOb]?.[absoluteModifier];
+
+  if (authored !== undefined) {
+    return { extrapolated: false, extrapolatedAxes: [], value: authored };
+  }
+
+  const extrapolatedAxes: WorkbookPercentageAdjustmentAxis[] = [];
+  if (rawOb > WORKBOOK_PERCENTAGE_ADJUSTMENT_AUTHORED_MAX_BASE) {
+    extrapolatedAxes.push("base");
+  }
+  if (pastModifierEdge) {
+    extrapolatedAxes.push("modifier");
+  }
+
+  return {
+    extrapolated: true,
+    extrapolatedAxes,
+    value: workbookOpenEndedPercentageAdjustment(rawOb, absoluteModifier),
+  };
+}
+
+export function lookupWorkbookPercentageAdjustment(
+  rawOb: number,
+  absoluteModifier: number,
+): number | null {
+  return resolveWorkbookPercentageAdjustment(rawOb, absoluteModifier)?.value ?? null;
 }
 
 export function calculateWorkbookPercentageAdjustmentTrace(input: {
@@ -317,17 +497,21 @@ export function calculateWorkbookPercentageAdjustmentTrace(input: {
   rawModifiers: WorkbookRawModifier[];
 }): WorkbookPercentageAdjustmentTrace | null {
   const rawModifierTotal = input.rawModifiers.reduce((sum, modifier) => sum + modifier.value, 0);
-  const percentageAdjustment = lookupWorkbookPercentageAdjustment(
+  const adjustment = resolveWorkbookPercentageAdjustment(
     input.baseValue,
     Math.abs(rawModifierTotal),
   );
 
-  if (percentageAdjustment == null) {
+  if (adjustment == null) {
     return null;
   }
 
+  const percentageAdjustment = adjustment.value;
+
   return {
     baseValue: input.baseValue,
+    extrapolated: adjustment.extrapolated,
+    extrapolatedAxes: adjustment.extrapolatedAxes,
     finalValue:
       rawModifierTotal >= 0
         ? input.baseValue + percentageAdjustment
@@ -468,9 +652,7 @@ export function calculateWorkbookMeleeDmb(
 
   return {
     finalDmb:
-      rawDmb +
-      (referenceOb - workbookOb.finalOb) -
-      (WORKBOOK_REFERENCE_WEAPON_OB - input.weaponOb),
+      rawDmb + (referenceOb - workbookOb.finalOb) - (WORKBOOK_REFERENCE_WEAPON_OB - input.weaponOb),
     rawDmb,
     referenceOb,
     workbookOb,
@@ -580,7 +762,7 @@ export function calculateWorkbookCarryCapacity(input: {
   size: number;
   strength: number;
 }): number {
-  return Math.round(input.strength + input.size + (0.5 * input.constitution));
+  return Math.round(input.strength + input.size + 0.5 * input.constitution);
 }
 
 export function calculateWorkbookEncumbranceLevel(
@@ -592,21 +774,7 @@ export function calculateWorkbookEncumbranceLevel(
 
   const encumbrancePercent = Math.round((input.totalEncumbrance * 100) / input.carryCapacity);
   const encumbranceThresholds = [
-    20,
-    40,
-    60,
-    90,
-    120,
-    150,
-    170,
-    190,
-    210,
-    230,
-    250,
-    260,
-    270,
-    280,
-    290,
+    20, 40, 60, 90, 120, 150, 170, 190, 210, 230, 250, 260, 270, 280, 290,
   ];
 
   return {
@@ -620,10 +788,8 @@ export function calculateWorkbookEncumbranceLevel(
   };
 }
 
-export function calculateWorkbookMovementModifier(
-  input: WorkbookMovementModifierInput,
-): number {
-  return Math.round((input.encumbranceLevel / 2) + (input.shieldMovementModifier ?? 0));
+export function calculateWorkbookMovementModifier(input: WorkbookMovementModifierInput): number {
+  return Math.round(input.encumbranceLevel / 2 + (input.shieldMovementModifier ?? 0));
 }
 
 export function calculateWorkbookBaseMove(input: {
@@ -651,13 +817,8 @@ export function lookupWorkbookMovementAdjustment(
   return WORKBOOK_MOVEMENT_PERCENT_TABLE[baseMove]?.[movementModifier] ?? null;
 }
 
-export function calculateWorkbookMovement(
-  input: WorkbookMovementInput,
-): number | null {
-  const adjustment = lookupWorkbookMovementAdjustment(
-    input.baseMove,
-    input.movementModifier,
-  );
+export function calculateWorkbookMovement(input: WorkbookMovementInput): number | null {
+  const adjustment = lookupWorkbookMovementAdjustment(input.baseMove, input.movementModifier);
 
   if (adjustment == null) {
     return null;

@@ -236,6 +236,10 @@ import {
 import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
 import { projectPlayerCombatAttackContextAvailability } from "@/lib/campaigns/playerCombatAttackContext";
 import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModifierRequest";
+import {
+  getCombatRefusalSentence,
+  readCombatRefusalPayload,
+} from "@/lib/campaigns/combatRefusalPresentation";
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
 import {
   createPlayerCombatHistoryRequestCoordinator,
@@ -3766,16 +3770,18 @@ export default function ScenarioPlayerCombatPageContent({
       acceptEncounterSession(encounter);
       setCombatActionError(undefined);
     } catch (caughtError) {
-      const code =
-        caughtError instanceof ApiRequestError &&
-        caughtError.payload &&
-        typeof caughtError.payload === "object" &&
-        "code" in caughtError.payload
-          ? (caughtError.payload as { code?: unknown }).code
-          : undefined;
-      // #690: neither of these refusals is repaired by reloading or re-opening anything, so the
-      // player is told what is actually missing. The two causes stay apart because the honest
-      // answer differs — one is the opponent's defence, the other this character's own attack.
+      const refusal = readCombatRefusalPayload(caughtError);
+      const code = refusal?.code;
+      // #690: none of these refusals is repaired by reloading or re-opening anything, so the
+      // player is told what is actually missing, in the slot kept for a failure the player cannot
+      // retry out of. The two causes below stay apart because the honest answer differs — one is
+      // the opponent's defence, the other this character's own attack.
+      //
+      // #922 repair cycle 1, finding 3. The refusals the server learned to describe after #690
+      // carried no branch here, so they fell to the generic `combatActionError`. Every refusal
+      // reloading cannot repair now reaches the same slot with the server's own sentence, which is
+      // the only place the cause is known: a defence the rule has no reading of and a defender
+      // with no Dodge are different facts behind one code.
       if (code === "attack_defender_defense_unavailable") {
         setCombatActionError(undefined);
         setAttackContextFailure(
@@ -3786,6 +3792,9 @@ export default function ScenarioPlayerCombatPageContent({
         setAttackContextFailure(
           "This attack needs a weapon or combat skill that is missing, so it cannot be resolved. Nothing was rolled. Ask the GM to check your weapon and combat skill.",
         );
+      } else if (refusal && getCombatRefusalSentence(refusal)) {
+        setCombatActionError(undefined);
+        setAttackContextFailure(getCombatRefusalSentence(refusal));
       } else {
         setCombatActionError(
           caughtError instanceof Error ? caughtError.message : "Unable to roll combat attack.",

@@ -1276,6 +1276,25 @@ export const combatRoundAttackRollResultSchema = z
     defenderParticipantId: idSchema,
     defenderDb: z.number().int(),
     defenderParryModifier: z.number().int().default(0),
+    /**
+     * Which of this attack's committed figures used a workbook percentage adjustment resolved past
+     * the edge of the authored grid (#922). Empty whenever every adjustment came from an authored
+     * cell, which is the ordinary case.
+     *
+     * The flag belongs here, with the committed result, because the pre-commit draft has no
+     * display contract and because this is the record a GM reads an attack back from. The
+     * reviewable figures themselves — base, raw total, adjustment, and which axis was crossed —
+     * are recorded with the accepted defence calculation's percentage trace on the same
+     * `roll_attack` command, where `extrapolated` is a required statement on every adjustment.
+     *
+     * Optional, with no default, and deliberately so: the field is not player-facing, the
+     * player-facing attack result does not name it, and a `.default([])` would put an empty array
+     * back on a player's result the moment the stripped value was re-parsed through this schema —
+     * which is a key outside the player-facing types, and the #507/#517 privacy gates measure
+     * exactly that. Absent therefore means no extrapolated adjustment, and the explicit statement
+     * lives on the recorded trace.
+     */
+    extrapolatedWorkbookAdjustments: z.array(z.enum(["attacker_ob", "defender_db"])).optional(),
     grazing: z.boolean(),
     hit: z.boolean(),
     kind: z.literal("attackRoll"),
@@ -6909,6 +6928,8 @@ export function buildCombatRoundAttackRollResult(input: {
   declarationId?: string;
   defenderDb: number;
   defenderParticipantId: string;
+  /** #922: the committed figures in this attack whose percentage adjustment was extrapolated. */
+  extrapolatedWorkbookAdjustments?: Array<"attacker_ob" | "defender_db">;
   ob: number;
   openEndedD10s?: number[];
   phase: CombatRoundPhase;
@@ -6968,6 +6989,10 @@ export function buildCombatRoundAttackRollResult(input: {
     defenderDb: input.defenderDb,
     defenderParryModifier: toHit.parryModifier,
     defenderParticipantId: input.defenderParticipantId,
+    extrapolatedWorkbookAdjustments:
+      input.extrapolatedWorkbookAdjustments && input.extrapolatedWorkbookAdjustments.length > 0
+        ? input.extrapolatedWorkbookAdjustments
+        : undefined,
     grazing: toHit.grazing,
     hit: toHit.hit,
     kind: "attackRoll",

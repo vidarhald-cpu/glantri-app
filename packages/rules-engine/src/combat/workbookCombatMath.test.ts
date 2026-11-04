@@ -20,6 +20,8 @@ import {
   lookupWorkbookToHitModifier,
   lookupWorkbookMovementAdjustment,
   lookupWorkbookSkillInitiativeModifier,
+  resolveWorkbookPercentageAdjustment,
+  WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE,
 } from "./workbookCombatMath";
 
 describe("workbookCombatMath", () => {
@@ -84,43 +86,40 @@ describe("workbookCombatMath", () => {
     const cases = [
       {
         name: "Long sword",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon1!A10:O10, Calculations!R19/W19/Z19 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon1!A10:O10, Calculations!R19/W19/Z19 formulas",
         weaponOb: 2,
         weaponDmb: 5,
         expected: {
           finalDmb: 9,
           finalOb: 14,
           rawDmb: 8,
-          rawOb: 12
-        }
+          rawOb: 12,
+        },
       },
       {
         name: "Hand axe",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon1!A20:O20, Calculations!R19/W19/Z19 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon1!A20:O20, Calculations!R19/W19/Z19 formulas",
         weaponOb: 1,
         weaponDmb: 6,
         expected: {
           finalDmb: 10,
           finalOb: 13,
           rawDmb: 9,
-          rawOb: 12
-        }
+          rawOb: 12,
+        },
       },
       {
         name: "2-h Spear",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon1!A30:O30, Calculations!R19/W19/Z19 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon1!A30:O30, Calculations!R19/W19/Z19 formulas",
         weaponOb: 3,
         weaponDmb: 6,
         expected: {
           finalDmb: 9,
           finalOb: 16,
           rawDmb: 9,
-          rawOb: 12
-        }
-      }
+          rawOb: 12,
+        },
+      },
     ];
 
     for (const testCase of cases) {
@@ -129,23 +128,23 @@ describe("workbookCombatMath", () => {
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
         strengthGm: 3,
-        weaponOb: testCase.weaponOb
+        weaponOb: testCase.weaponOb,
       });
       const dmb = calculateWorkbookMeleeDmb({
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
         strengthGm: 3,
         weaponDmb: testCase.weaponDmb,
-        weaponOb: testCase.weaponOb
+        weaponOb: testCase.weaponOb,
       });
 
       expect.soft(ob, testCase.source).toMatchObject({
         finalOb: testCase.expected.finalOb,
-        rawOb: testCase.expected.rawOb
+        rawOb: testCase.expected.rawOb,
       });
       expect.soft(dmb, testCase.source).toMatchObject({
         finalDmb: testCase.expected.finalDmb,
-        rawDmb: testCase.expected.rawDmb
+        rawDmb: testCase.expected.rawDmb,
       });
     }
   });
@@ -162,22 +161,22 @@ describe("workbookCombatMath", () => {
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
         strengthGm: 3,
-        weaponOb: 3
-      })
+        weaponOb: 3,
+      }),
     ).toMatchObject({
       finalOb: 16,
-      rawOb: 12
+      rawOb: 12,
     });
     expect(
       calculateWorkbookMeleeOb({
         dexterityGm: 3,
         skillXp: directSkillXpOnly,
         strengthGm: 3,
-        weaponOb: 3
-      })
+        weaponOb: 3,
+      }),
     ).not.toMatchObject({
       finalOb: 16,
-      rawOb: 12
+      rawOb: 12,
     });
   });
 
@@ -201,28 +200,26 @@ describe("workbookCombatMath", () => {
     const cases = [
       {
         name: "T. Spear",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon2!A10:J10, Calculations!R27/W27/Z27 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon2!A10:J10, Calculations!R27/W27/Z27 formulas",
         weaponDmb: 6,
         weaponOb: 2,
         expected: {
           finalDmb: 9,
           finalOb: 13,
-          rawOb: 11
-        }
+          rawOb: 11,
+        },
       },
       {
         name: "T. Th. dagger",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon2!A4:J4, Calculations!R29/W29/Z29 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon2!A4:J4, Calculations!R29/W29/Z29 formulas",
         weaponDmb: 0,
         weaponOb: 3,
         expected: {
           finalDmb: 3,
           finalOb: 14,
-          rawOb: 11
-        }
-      }
+          rawOb: 11,
+        },
+      },
     ];
 
     for (const testCase of cases) {
@@ -231,13 +228,13 @@ describe("workbookCombatMath", () => {
         armorActivityModifier: 0,
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
-        weaponOb: testCase.weaponOb
+        weaponOb: testCase.weaponOb,
       });
       const numericThrownDmb = 3 + testCase.weaponDmb;
 
       expect.soft(ob, testCase.source).toMatchObject({
         finalOb: testCase.expected.finalOb,
-        rawOb: testCase.expected.rawOb
+        rawOb: testCase.expected.rawOb,
       });
       expect.soft(numericThrownDmb, testCase.source).toBe(testCase.expected.finalDmb);
     }
@@ -255,22 +252,22 @@ describe("workbookCombatMath", () => {
         armorActivityModifier: 0,
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
-        weaponOb: 2
-      })
+        weaponOb: 2,
+      }),
     ).toMatchObject({
       finalOb: 13,
-      rawOb: 11
+      rawOb: 11,
     });
     expect(
       calculateWorkbookProjectileOb({
         armorActivityModifier: 0,
         dexterityGm: 3,
         skillXp: directSkillXpOnly,
-        weaponOb: 2
-      })
+        weaponOb: 2,
+      }),
     ).not.toMatchObject({
       finalOb: 13,
-      rawOb: 11
+      rawOb: 11,
     });
   });
 
@@ -300,6 +297,8 @@ describe("workbookCombatMath", () => {
       }),
     ).toEqual({
       baseValue: 10,
+      extrapolated: false,
+      extrapolatedAxes: [],
       finalValue: 14,
       percentageAdjustment: 4,
       rawModifierTotal: 4,
@@ -451,6 +450,8 @@ describe("workbookCombatMath", () => {
       }),
     ).toEqual({
       baseValue: 20,
+      extrapolated: false,
+      extrapolatedAxes: [],
       finalValue: 10,
       percentageAdjustment: 10,
       rawModifierTotal: -5,
@@ -477,13 +478,15 @@ describe("workbookCombatMath", () => {
     ];
 
     for (const testCase of cases) {
-      expect.soft(
-        calculateWorkbookPercentageAdjustmentTrace({
-          baseValue: testCase.baseValue,
-          rawModifiers: [{ label: "test modifier", value: testCase.rawModifier }],
-        })?.finalValue,
-        `base ${testCase.baseValue}, raw ${testCase.rawModifier}`,
-      ).toBe(testCase.expectedFinal);
+      expect
+        .soft(
+          calculateWorkbookPercentageAdjustmentTrace({
+            baseValue: testCase.baseValue,
+            rawModifiers: [{ label: "test modifier", value: testCase.rawModifier }],
+          })?.finalValue,
+          `base ${testCase.baseValue}, raw ${testCase.rawModifier}`,
+        )
+        .toBe(testCase.expectedFinal);
     }
   });
 
@@ -797,5 +800,539 @@ describe("workbookCombatMath", () => {
       { label: "live DB", value: -1 },
       { label: "to-hit", value: 0 },
     ]);
+  });
+});
+
+/**
+ * Forgejo #922. The authored grid is an illustration of an open-ended rule, so the lookup resolves
+ * past its edges and says when it did.
+ *
+ * The rule is written out a second time in this file, by hand, and is **not** imported from the
+ * module under test. That is the whole point of the conformance test below: inside the authored
+ * grid `lookupWorkbookPercentageAdjustment` returns the authored cell, so comparing it against this
+ * independent restatement compares the rule against the authored data, cell by cell, rather than
+ * comparing the production rule with itself. Outside the grid both sides are rules, and the
+ * comparison pins the production continuation to the one derived here.
+ *
+ * The rule restated here is also the source sheet's own arithmetic:
+ * `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Prosent`, carries `=ROUND(B$4*$A16/10,0)` in
+ * `B16:H57` and `=$H16+I$4-7` in `I16:P57`, with bases 0 to 10 authored as literal values that
+ * supply the one-point-per-step floor.
+ *
+ * Mutating either side fails these tests, which is what makes them a guard rather than a label:
+ * change the rounding here (or there) to half-even and the 750-cell conformance test fails on base
+ * 13 step 5 among others; change the continuation past step 7 and it fails across every row.
+ */
+describe("#922 the percentage-adjustment lookup is open-ended and flags every extrapolation", () => {
+  const AUTHORED_MAX_BASE = 49;
+  const AUTHORED_MAX_STEP = 15;
+  const PROPORTIONAL_STEP_LIMIT = 7;
+
+  /** Ten percent of the base per raw step, half up, floored at one point per step; +1 past step 7. */
+  function derivedRule(base: number, step: number): number {
+    const proportional = (steps: number): number =>
+      Math.max(steps, Math.floor((steps * base * 2 + 10) / 20));
+
+    return step <= PROPORTIONAL_STEP_LIMIT
+      ? proportional(step)
+      : proportional(PROPORTIONAL_STEP_LIMIT) + (step - PROPORTIONAL_STEP_LIMIT);
+  }
+
+  const authoredBases = Object.keys(WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE)
+    .map((key) => Number(key))
+    .sort((left, right) => left - right);
+
+  it("reads the authored grid as 50 base rows of 15 steps, 750 cells", () => {
+    expect(authoredBases).toEqual(Array.from({ length: 50 }, (_unused, index) => index));
+    for (const base of authoredBases) {
+      expect(
+        Object.keys(WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]!).map((key) => Number(key)),
+        `base ${base}`,
+      ).toEqual(Array.from({ length: AUTHORED_MAX_STEP }, (_unused, index) => index + 1));
+    }
+    expect(
+      authoredBases.reduce(
+        (total, base) => total + Object.keys(WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]!).length,
+        0,
+      ),
+    ).toBe(750);
+  });
+
+  it("reproduces every authored cell the lookup trusts, and only the overridden row differs", () => {
+    const disagreements: Array<{ authored: number; base: number; rule: number; step: number }> = [];
+
+    for (const base of authoredBases) {
+      for (let step = 1; step <= AUTHORED_MAX_STEP; step += 1) {
+        const authored = WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]![step]!;
+        const rule = derivedRule(base, step);
+
+        // What the lookup actually returns inside the grid, which is the authored cell for every
+        // base the file treats as trustworthy and the documented override for base 0.
+        expect(lookupWorkbookPercentageAdjustment(base, step), `lookup ${base}/${step}`).toBe(
+          base === 0 ? step : authored,
+        );
+
+        if (authored !== rule) {
+          disagreements.push({ authored, base, rule, step });
+        } else {
+          expect(rule, `rule ${base}/${step}`).toBe(authored);
+        }
+      }
+    }
+
+    // The 15 cells the rule does not reproduce are the whole base-0 row, which `Prosent!B5:P5`
+    // authors as literal zeroes and which this lookup overrode by hand long before #922 — a
+    // deliberate deviation from the source, not a bad transcription, and an open Product Owner
+    // question. The rule predicts that override exactly, so there is no authored cell the lookup
+    // trusts that it fails to reproduce.
+    expect(disagreements.map(({ base, step }) => `${base}/${step}`)).toEqual(
+      Array.from({ length: AUTHORED_MAX_STEP }, (_unused, index) => `0/${index + 1}`),
+    );
+    for (const disagreement of disagreements) {
+      expect(disagreement.authored).toBe(0);
+      expect(disagreement.rule).toBe(disagreement.step);
+      expect(lookupWorkbookPercentageAdjustment(0, disagreement.step)).toBe(disagreement.rule);
+    }
+  });
+
+  it("marks no figure read from an authored cell as extrapolated", () => {
+    for (const base of authoredBases) {
+      for (let step = 1; step <= AUTHORED_MAX_STEP; step += 1) {
+        expect(resolveWorkbookPercentageAdjustment(base, step), `${base}/${step}`).toEqual({
+          extrapolated: false,
+          extrapolatedAxes: [],
+          value: base === 0 ? step : WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]![step]!,
+        });
+      }
+    }
+  });
+
+  it("resolves past the modifier edge instead of returning nothing, and flags the axis", () => {
+    expect(resolveWorkbookPercentageAdjustment(9, AUTHORED_MAX_STEP)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[9]![AUTHORED_MAX_STEP]!,
+    });
+
+    for (const step of [16, 20, 31, 64]) {
+      expect(resolveWorkbookPercentageAdjustment(9, step), `step ${step}`).toEqual({
+        extrapolated: true,
+        extrapolatedAxes: ["modifier"],
+        value: derivedRule(9, step),
+      });
+    }
+
+    // The measured #922 case: base DB 9 against a committed raw total of 20.
+    expect(lookupWorkbookPercentageAdjustment(9, 20)).toBe(derivedRule(9, 20));
+    expect(lookupWorkbookPercentageAdjustment(9, 20)).not.toBeNull();
+  });
+
+  it("resolves past the base edge, and names both axes when a figure runs past both", () => {
+    for (const base of [50, 51, 60, 97, 240]) {
+      expect(resolveWorkbookPercentageAdjustment(base, 7), `base ${base}`).toEqual({
+        extrapolated: true,
+        extrapolatedAxes: ["base"],
+        value: derivedRule(base, 7),
+      });
+    }
+
+    expect(resolveWorkbookPercentageAdjustment(60, 20)).toEqual({
+      extrapolated: true,
+      extrapolatedAxes: ["base", "modifier"],
+      value: derivedRule(60, 20),
+    });
+  });
+
+  it("flags base 0 past the modifier edge, where the authored row is overridden by hand", () => {
+    expect(resolveWorkbookPercentageAdjustment(0, AUTHORED_MAX_STEP)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: AUTHORED_MAX_STEP,
+    });
+    expect(resolveWorkbookPercentageAdjustment(0, 100)).toEqual({
+      extrapolated: true,
+      extrapolatedAxes: ["modifier"],
+      value: 100,
+    });
+  });
+
+  /**
+   * #922 — the settled rule for a base of zero or below, and its flag.
+   *
+   * Product Owner ruling, comment 20793: *"At a base of zero or below, each point of raw modifier
+   * moves the value by one point"*, and the worked figure the ruling itself gives is a defence of
+   * −11 with a further four-step penalty resolving to −15. Confirming the wording in the same
+   * comment: *"One point per step is a better way to word it, and that's what I meant"*.
+   *
+   * Every figure asserted below is the lookup's own output or the trace's own output. None is
+   * computed here from a base and a modifier, because three acceptance figures on this programme
+   * were wrong from exactly that mistake.
+   */
+  it("resolves a base below zero at one point per step, and flags the edge below the grid", () => {
+    for (const step of [1, 4, 7, 8, 15]) {
+      expect(resolveWorkbookPercentageAdjustment(-1, step), `-1/${step}`).toEqual({
+        extrapolated: true,
+        extrapolatedAxes: ["base_below_zero"],
+        value: step,
+      });
+      expect(resolveWorkbookPercentageAdjustment(-11, step), `-11/${step}`).toEqual({
+        extrapolated: true,
+        extrapolatedAxes: ["base_below_zero"],
+        value: step,
+      });
+    }
+
+    // Both edges at once: below the grid on the base and past its last authored step.
+    expect(resolveWorkbookPercentageAdjustment(-11, 20)).toEqual({
+      extrapolated: true,
+      extrapolatedAxes: ["base_below_zero", "modifier"],
+      value: 20,
+    });
+
+    // The proportional calculation does not apply below zero. Ten percent of −11 over four steps
+    // is a negative adjustment, so the magnitude would move the wrong way — the reason the
+    // question existed. The adjustment is a positive number of points at every below-zero base.
+    expect(lookupWorkbookPercentageAdjustment(-11, 4)).toBe(4);
+    expect(lookupWorkbookPercentageAdjustment(-11, 4)).toBeGreaterThan(0);
+    expect(lookupWorkbookPercentageAdjustment(-40, 7)).toBe(7);
+    expect(lookupWorkbookPercentageAdjustment(-40, 7)).toBeGreaterThan(0);
+
+    // The ruling's own worked figure, read off the trace rather than computed here: a defence of
+    // −11 with a further four-step penalty is −15, and the defence is not floored at zero.
+    const trace = calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: -11,
+      rawModifiers: [{ label: "Break Off result · DB/Parry", value: -4 }],
+    });
+
+    expect(trace).not.toBeNull();
+    expect(trace?.rawModifierTotal).toBe(-4);
+    expect(trace?.percentageAdjustment).toBe(lookupWorkbookPercentageAdjustment(-11, 4));
+    expect(trace?.finalValue).toBe(-15);
+    expect(trace?.extrapolated).toBe(true);
+    expect(trace?.extrapolatedAxes).toEqual(["base_below_zero"]);
+  });
+
+  it("expresses one continuous rule across zero, differing only in the flag", () => {
+    // The authored grid abandons proportional scaling for bases 1 to 10 and authors a flat one
+    // point per raw step; base 0 has been overridden to the same figure since before #922; and the
+    // ruling extends the same figure below zero. So the figure is continuous across zero and the
+    // only difference at the boundary is whether an authored row exists for the base.
+    for (const step of [1, 7, 15]) {
+      const belowZero = resolveWorkbookPercentageAdjustment(-1, step)!;
+      const atZero = resolveWorkbookPercentageAdjustment(0, step)!;
+      const lowBase = resolveWorkbookPercentageAdjustment(1, step)!;
+
+      expect(belowZero.value, `step ${step}`).toBe(step);
+      expect(atZero.value).toBe(belowZero.value);
+      expect(lowBase.value).toBe(belowZero.value);
+
+      // The flag is where they differ: bases 0 and 1 have authored rows, a base below zero has
+      // none. Whether the zero row should keep deviating from its authored zeroes is Product Owner
+      // question 15 and is open; this asserts the current behaviour, not a preference.
+      expect(belowZero.extrapolatedAxes).toEqual(["base_below_zero"]);
+      expect(atZero.extrapolatedAxes).toEqual([]);
+      expect(lowBase.extrapolatedAxes).toEqual([]);
+    }
+  });
+
+  it("still refuses an input the rule has no reading of, and that refusal is not the grid's edge", () => {
+    // A base below zero is no longer one of those inputs — see the ruling above. What remains is a
+    // figure that is not a whole number of base or of steps, and a negative step, which cannot
+    // arrive through `calculateWorkbookPercentageAdjustmentTrace` because that passes `Math.abs`
+    // of the raw total and so is a programming error rather than a game state.
+    expect(resolveWorkbookPercentageAdjustment(9.5, 4)).toBeNull();
+    expect(resolveWorkbookPercentageAdjustment(-9.5, 4)).toBeNull();
+    expect(lookupWorkbookPercentageAdjustment(-9.5, 4)).toBeNull();
+    expect(resolveWorkbookPercentageAdjustment(9, 4.5)).toBeNull();
+    expect(resolveWorkbookPercentageAdjustment(9, -4)).toBeNull();
+    expect(
+      calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: -11,
+        rawModifiers: [{ label: "fractional", value: -4.5 }],
+      }),
+    ).toBeNull();
+    // Zero raw modifiers is no adjustment at all, at any base, including one off the grid and one
+    // below it.
+    expect(resolveWorkbookPercentageAdjustment(400, 0)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: 0,
+    });
+    expect(resolveWorkbookPercentageAdjustment(-11, 0)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: 0,
+    });
+  });
+
+  it("negative control — the old negative-base refusal, a missing flag, and the proportional rule below zero all fail", () => {
+    // The four mutations the below-zero rule is guarded against. Each assertion below is the one
+    // that fails under the mutation named beside it.
+    //
+    // Mutation A: restore `if (rawOb < 0) return null`, the refusal this change replaces. Every
+    // below-zero resolution would be `null` again, and the eleven call sites would see a no-answer
+    // for this cause once more.
+    expect(resolveWorkbookPercentageAdjustment(-11, 4)).not.toBeNull();
+    expect(lookupWorkbookPercentageAdjustment(-1, 1)).not.toBeNull();
+
+    // Mutation B: resolve below zero and report `extrapolated: false`, or report it with no axis.
+    // That is the shape ruling 20326 names as worse than the refusal — a quiet unverified figure.
+    expect(resolveWorkbookPercentageAdjustment(-11, 4)!.extrapolated).toBe(true);
+    expect(resolveWorkbookPercentageAdjustment(-11, 4)!.extrapolatedAxes).toEqual([
+      "base_below_zero",
+    ]);
+    expect(resolveWorkbookPercentageAdjustment(-11, 4)!.extrapolatedAxes).not.toEqual([]);
+    expect(resolveWorkbookPercentageAdjustment(-11, 4)!.extrapolatedAxes).not.toEqual(["base"]);
+
+    // Mutation C: apply the proportional calculation below zero — ten percent of the base per
+    // step. At a base of −11 and four steps that reads −4 rather than 4, so the magnitude moves
+    // the wrong way and the defence would improve under a penalty.
+    expect(lookupWorkbookPercentageAdjustment(-11, 4)).toBe(4);
+    expect(lookupWorkbookPercentageAdjustment(-11, 4)).toBeGreaterThan(0);
+    const penalised = calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: -11,
+      rawModifiers: [{ label: "Break Off result · DB/Parry", value: -4 }],
+    })!;
+    expect(penalised.finalValue).toBeLessThan(penalised.baseValue);
+
+    // Mutation D: floor the defence at zero. Then a penalty against a base of −11 would resolve to
+    // 0 or to −11, not to the ruling's −15.
+    expect(penalised.finalValue).toBe(-15);
+    expect(penalised.finalValue).not.toBe(0);
+    expect(penalised.finalValue).not.toBe(penalised.baseValue);
+  });
+
+  it("negative control — a silent clamp at the modifier edge is not this rule", () => {
+    // The mutation this guards against: returning the step-15 cell for every larger step. Each
+    // assertion below fails under that mutation, and the first one fails under any clamp at all.
+    const atEdge = lookupWorkbookPercentageAdjustment(9, AUTHORED_MAX_STEP)!;
+    for (const step of [16, 17, 25]) {
+      expect(lookupWorkbookPercentageAdjustment(9, step), `step ${step}`).toBe(
+        atEdge + (step - AUTHORED_MAX_STEP),
+      );
+      expect(lookupWorkbookPercentageAdjustment(9, step)).not.toBe(atEdge);
+    }
+
+    // The same clamp on the base axis: base 50 and above are not base 49.
+    expect(lookupWorkbookPercentageAdjustment(60, 7)).not.toBe(
+      lookupWorkbookPercentageAdjustment(AUTHORED_MAX_BASE, 7),
+    );
+    expect(lookupWorkbookPercentageAdjustment(60, 7)).toBe(42);
+  });
+
+  it("negative control — a continuation that is not the derived rule is rejected", () => {
+    // Mutation A: resume the proportional part past step 15 instead of adding one per step.
+    // At base 49 that would read 49 * 20 / 10 = 98 rather than 47.
+    expect(lookupWorkbookPercentageAdjustment(49, 20)).toBe(47);
+    expect(lookupWorkbookPercentageAdjustment(49, 20)).not.toBe(98);
+
+    // Mutation B: two points per step past the edge. At base 9 step 25 that reads 35, not 25.
+    expect(lookupWorkbookPercentageAdjustment(9, 25)).toBe(25);
+    expect(lookupWorkbookPercentageAdjustment(9, 25)).not.toBe(35);
+
+    // Mutation C: the base axis continued by the last authored row's step instead of the rule.
+    // Base 97 at step 3 is 29 under the rule; a per-step continuation from base 49 would read 15.
+    expect(lookupWorkbookPercentageAdjustment(97, 3)).toBe(29);
+
+    // Mutation D: round half even, or truncate, instead of half up. Base 55 step 1 is 6, not 5.
+    expect(lookupWorkbookPercentageAdjustment(55, 1)).toBe(6);
+    expect(lookupWorkbookPercentageAdjustment(50, 7)).toBe(35);
+
+    // Mutation E: drop the one-point-per-step floor. A base of 1 still moves by its raw steps.
+    expect(lookupWorkbookPercentageAdjustment(1, 7)).toBe(7);
+    expect(lookupWorkbookPercentageAdjustment(300, 7)).toBe(210);
+  });
+
+  it("negative control — an extrapolated figure that carries no flag fails", () => {
+    // The mutation this guards against: resolving past the grid and reporting `extrapolated:
+    // false`, which would turn a loud wrong refusal into a quiet unverified figure.
+    const pastEdge = resolveWorkbookPercentageAdjustment(9, 20)!;
+    expect(pastEdge.extrapolated).toBe(true);
+    expect(pastEdge.extrapolatedAxes).not.toEqual([]);
+
+    const trace = calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: 9,
+      rawModifiers: [
+        { label: "committed damage", value: -12 },
+        { label: "committed damage", value: -8 },
+      ],
+    });
+
+    expect(trace).not.toBeNull();
+    expect(trace?.rawModifierTotal).toBe(-20);
+    expect(trace?.extrapolated).toBe(true);
+    expect(trace?.extrapolatedAxes).toEqual(["modifier"]);
+    expect(trace?.percentageAdjustment).toBe(lookupWorkbookPercentageAdjustment(9, 20));
+    expect(trace?.finalValue).toBe(9 - trace!.percentageAdjustment);
+
+    const inGrid = calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: 9,
+      rawModifiers: [{ label: "committed damage", value: -4 }],
+    });
+
+    expect(inGrid?.rawModifierTotal).toBe(-4);
+    expect(inGrid?.extrapolated).toBe(false);
+    expect(inGrid?.extrapolatedAxes).toEqual([]);
+  });
+
+  it("keeps the defence pair resolvable past the edge and carries the flag on its trace", () => {
+    const baseDb = calculateWorkbookBaseDb({ dexterityGm: 1, dodgeSkillXp: 8 });
+    const pair = calculateWorkbookDefensePair({
+      baseDb,
+      equipmentModifier: 0,
+      rawModifiers: [{ label: "committed damage", value: -20 }],
+      toHitModifier: 0,
+    });
+
+    expect(pair).not.toBeNull();
+    expect(pair?.fullModifier).toBe(-20);
+    expect(pair?.fullTrace.extrapolated).toBe(true);
+    expect(pair?.fullAdjustment).toBe(lookupWorkbookPercentageAdjustment(baseDb, 20));
+    expect(pair?.db).toBe(baseDb - pair!.fullAdjustment);
+  });
+
+  /**
+   * #922 repair cycle 1 — the continuation's coverage, made explicit and able to fail.
+   *
+   * The 750-cell conformance test above **cannot** fail for the rule it is named for: inside the
+   * grid the lookup returns the authored cell and the production rule is never consulted, so
+   * mutating the production rule leaves it green. Independent QA measured exactly that. Until this
+   * test the whole continuation — every figure the open-ended rule produces, which is the entire
+   * point of #922 — rested on eight hardcoded controls.
+   *
+   * So the extrapolated region is swept here, where both sides are rules and the comparison is
+   * against this file's own restatement. The swept pairs are counted and the count asserted, so
+   * narrowing the range is itself a failure rather than a quietly smaller test.
+   *
+   * **The mutations this guards against**, each of which leaves the 750-cell test green: rounding
+   * the production rule half-even or truncating it; continuing the base axis or the step axis by
+   * anything other than the sheet's own arithmetic; dropping the one-point floor; and resolving
+   * past either edge without saying which axis was crossed.
+   */
+  it("sweeps the whole extrapolated region against the restated rule, and counts what it swept", () => {
+    const SWEPT_MIN_BASE = -40;
+    const SWEPT_MAX_BASE = 120;
+    const SWEPT_MAX_STEP = 40;
+    const disagreements: string[] = [];
+    const flagDisagreements: string[] = [];
+    let sweptPairs = 0;
+    let baseOnly = 0;
+    let modifierOnly = 0;
+    let bothAxes = 0;
+    let belowZeroOnly = 0;
+    let belowZeroAndModifier = 0;
+
+    for (let base = SWEPT_MIN_BASE; base <= SWEPT_MAX_BASE; base += 1) {
+      for (let step = 1; step <= SWEPT_MAX_STEP; step += 1) {
+        const belowGrid = base < 0;
+        const pastBase = base > AUTHORED_MAX_BASE;
+        const pastStep = step > AUTHORED_MAX_STEP;
+        if (!belowGrid && !pastBase && !pastStep) {
+          // In-grid: the authored cell answers, and the 750-cell test above covers it.
+          continue;
+        }
+
+        sweptPairs += 1;
+        const resolution = resolveWorkbookPercentageAdjustment(base, step);
+        // The restated rule needs no below-zero clause: its own one-point-per-step floor already
+        // produces `step` for every base at or below zero, on both sides of step 7, which is the
+        // settled rule. That the restatement and the ruling agree without being made to is the
+        // continuity this comparison records.
+        if (resolution?.value !== derivedRule(base, step)) {
+          disagreements.push(`${base}/${step}: ${resolution?.value} vs ${derivedRule(base, step)}`);
+        }
+
+        const expectedAxes = [
+          ...(belowGrid ? ["base_below_zero"] : []),
+          ...(pastBase ? ["base"] : []),
+          ...(pastStep ? ["modifier"] : []),
+        ];
+        if (
+          resolution?.extrapolated !== true ||
+          resolution.extrapolatedAxes.join(",") !== expectedAxes.join(",")
+        ) {
+          flagDisagreements.push(
+            `${base}/${step}: ${String(resolution?.extrapolated)} ${resolution?.extrapolatedAxes.join(",")}`,
+          );
+        }
+
+        if (belowGrid && pastStep) belowZeroAndModifier += 1;
+        else if (belowGrid) belowZeroOnly += 1;
+        else if (pastBase && pastStep) bothAxes += 1;
+        else if (pastBase) baseOnly += 1;
+        else modifierOnly += 1;
+      }
+    }
+
+    // Every swept figure is the restated rule's, and every one of them says it was extrapolated
+    // and on which edge.
+    expect(disagreements).toEqual([]);
+    expect(flagDisagreements).toEqual([]);
+
+    // The coverage itself, asserted rather than described, so narrowing either bound fails on the
+    // literal rather than quietly shrinking the test. 161 bases (−40 to 120) x 40 steps is 6440
+    // pairs; the 50 x 15 authored grid accounts for 750 of them, leaving 5690 outside it.
+    expect(sweptPairs).toBe(161 * SWEPT_MAX_STEP - 50 * AUTHORED_MAX_STEP);
+    expect(sweptPairs).toBe(5690);
+    expect({ baseOnly, belowZeroAndModifier, belowZeroOnly, bothAxes, modifierOnly }).toEqual({
+      // bases 50..120 at steps 1..15
+      baseOnly: 71 * AUTHORED_MAX_STEP,
+      // bases −40..−1 at steps 16..40
+      belowZeroAndModifier: 40 * (SWEPT_MAX_STEP - AUTHORED_MAX_STEP),
+      // bases −40..−1 at steps 1..15
+      belowZeroOnly: 40 * AUTHORED_MAX_STEP,
+      // bases 50..120 at steps 16..40
+      bothAxes: 71 * (SWEPT_MAX_STEP - AUTHORED_MAX_STEP),
+      // bases 0..49 at steps 16..40
+      modifierOnly: 50 * (SWEPT_MAX_STEP - AUTHORED_MAX_STEP),
+    });
+    expect(belowZeroOnly + belowZeroAndModifier).toBe(1600);
+
+    // And the sweep is capable of reporting a disagreement, on each region it covers: the same
+    // comparison applied to a deliberately wrong rule finds one wherever that rule changes the
+    // figure. A sweep that measures nothing and exits green is a recorded failure mode here, so
+    // each self-check asserts it found disagreements rather than assuming it could.
+    const truncatingRule = (base: number, step: number) => {
+      const proportional = (steps: number) => Math.max(steps, Math.trunc((steps * base) / 10));
+      return step <= PROPORTIONAL_STEP_LIMIT
+        ? proportional(step)
+        : proportional(PROPORTIONAL_STEP_LIMIT) + (step - PROPORTIONAL_STEP_LIMIT);
+    };
+    const truncationMisses: string[] = [];
+    for (let base = AUTHORED_MAX_BASE + 1; base <= SWEPT_MAX_BASE; base += 1) {
+      for (let step = 1; step <= SWEPT_MAX_STEP; step += 1) {
+        if (resolveWorkbookPercentageAdjustment(base, step)?.value !== truncatingRule(base, step)) {
+          truncationMisses.push(`${base}/${step}`);
+        }
+      }
+    }
+    expect(truncationMisses.length).toBeGreaterThan(0);
+
+    // The below-zero region's own self-check, against the two wrong rules that region invites:
+    // the proportional calculation applied below zero, and a defence floored at zero.
+    const proportionalBelowZero = (base: number, step: number) =>
+      step <= PROPORTIONAL_STEP_LIMIT
+        ? Math.floor((step * base * 2 + 10) / 20)
+        : Math.floor((PROPORTIONAL_STEP_LIMIT * base * 2 + 10) / 20) +
+          (step - PROPORTIONAL_STEP_LIMIT);
+    const proportionalMisses: string[] = [];
+    const flooredMisses: string[] = [];
+    for (let base = SWEPT_MIN_BASE; base <= -1; base += 1) {
+      for (let step = 1; step <= SWEPT_MAX_STEP; step += 1) {
+        const value = resolveWorkbookPercentageAdjustment(base, step)?.value;
+        if (value !== proportionalBelowZero(base, step)) {
+          proportionalMisses.push(`${base}/${step}`);
+        }
+        const floored = calculateWorkbookPercentageAdjustmentTrace({
+          baseValue: base,
+          rawModifiers: [{ label: "penalty", value: -step }],
+        })?.finalValue;
+        if (floored !== 0) {
+          flooredMisses.push(`${base}/${step}`);
+        }
+      }
+    }
+    expect(proportionalMisses.length).toBeGreaterThan(0);
+    expect(flooredMisses.length).toBe(1600);
   });
 });

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { playerFacingCombatContextSchema } from "../campaign/playerFacingScenarioParticipant";
 import {
+  combatMissileIncomingAttackSchema,
   combatRoundAttackOpportunitySchema,
   combatRoundAttackResultsSchema,
   combatRoundAttackRollResultSchema,
@@ -85,7 +86,9 @@ import {
  *   value itself stays in `weaponDmb`, which that schema requires to equal the roll's total.
  *
  * The player-facing attack result names neither. Player output that carries an attack result's
- * fields outside that schema removes both with `withoutAttackResultWorkbookImportProvenance`.
+ * fields in an open record no schema enumerates removes both with
+ * `withoutAttackResultWorkbookImportProvenance`; output that has a player-facing schema is built
+ * from it instead (#922 repair cycle 1 — see that helper).
  */
 export const ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS = [
   "weaponDmbRoll",
@@ -95,7 +98,15 @@ export const ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS = [
 /**
  * An attack result, or an event fact bucket copied from one, without
  * `ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`: for player output that is not parsed through
- * the player-facing attack result — the combat history's event facts and the roll-attack response.
+ * the player-facing attack result — **the combat history's open event fact buckets**, which are
+ * privacy Tier 4's (#528) and the one remaining caller.
+ *
+ * The roll-attack response used this too until #922 repair cycle 1, and that is why it stopped:
+ * removing named fields leaves every other field of the stored shape in player output, including
+ * every field added later. One such field reached the attacking player on both of that route's
+ * response contracts. The route's own attack shapes now go through the player-facing schemas that
+ * name their fields. This helper survives only where the output is an open record no schema
+ * enumerates yet, and it is not the thing to reach for on a shape that has one.
  */
 export function withoutAttackResultWorkbookImportProvenance<Attack extends object>(
   attack: Attack,
@@ -159,6 +170,60 @@ export const playerFacingCombatRoundAttackRollResultSchema = playerFacingObject(
 );
 export type PlayerFacingCombatRoundAttackRollResult = z.infer<
   typeof playerFacingCombatRoundAttackRollResultSchema
+>;
+
+/**
+ * A fired missile shot awaiting its defence, as the player who fired it receives it on the
+ * roll-attack response (#922 repair cycle 1, finding 2).
+ *
+ * The roll-attack response used to project both its own attack shapes through
+ * `withoutAttackResultWorkbookImportProvenance`, a two-field denylist. A denylist fails open for
+ * every field added after it: the one field #922 added to the attack result reached the attacking
+ * player on that route, and `rolledByUserId` — which the player-facing round state has never
+ * carried on an attack result — reached them here. Both shapes now name their fields instead, so a
+ * field added to either stored schema later is absent from player output until someone names it.
+ *
+ * `weaponModeSourceMetadata` and `rolledByUserId` are the two the stored shape has and this does
+ * not: the import record is not player-facing gameplay data (control-plane ruling E2, #517), and
+ * the roller's account identity is not player-facing anywhere in these types.
+ */
+export const playerFacingCombatMissileIncomingAttackSchema = playerFacingObject(
+  "PlayerFacingCombatMissileIncomingAttack",
+  combatMissileIncomingAttackSchema,
+  {
+    actionId: LEAF,
+    attackIndex: LEAF,
+    attackModeId: LEAF,
+    attackOpportunityId: LEAF,
+    attackSlot: LEAF,
+    attackerParticipantId: LEAF,
+    declarationId: LEAF,
+    defenderParticipantId: LEAF,
+    id: LEAF,
+    kind: LEAF,
+    ob: LEAF,
+    openEndedD10s: LEAF,
+    phase: LEAF,
+    rollD20: LEAF,
+    rollTotal: LEAF,
+    rolledAt: LEAF,
+    status: LEAF,
+    weaponArmorClass: LEAF,
+    weaponCriticalCode: LEAF,
+    weaponDamageClass: LEAF,
+    weaponDmbFormula: playerFacingCombatRoundWeaponDmbFormulaSchema.nullable().optional(),
+    weaponDmbRaw: LEAF,
+    weaponInstanceId: LEAF,
+    weaponModeInitiative: LEAF,
+    weaponModeRange: LEAF,
+    weaponName: LEAF,
+    weaponSourceId: LEAF,
+    weaponSourceSlot: LEAF,
+    weaponTemplateId: LEAF,
+  },
+);
+export type PlayerFacingCombatMissileIncomingAttack = z.infer<
+  typeof playerFacingCombatMissileIncomingAttackSchema
 >;
 
 /** A Combat Experience result as a player receives it: everything but the roller's account. */

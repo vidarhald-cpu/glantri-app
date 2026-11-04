@@ -8498,6 +8498,59 @@ describe("combat round manager", () => {
     });
   });
 
+  /**
+   * #922. The flag the builder carries through onto the committed result. An attack whose
+   * adjustments all came from authored cells carries no flag at all, which keeps the field off a
+   * player's attack result where a default would have reinstated it.
+   */
+  it("carries the extrapolated-adjustment flag onto the committed attack result", () => {
+    const flagged = buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackerParticipantId: "gladiator",
+      defenderDb: -11,
+      defenderParticipantId: "guard",
+      extrapolatedWorkbookAdjustments: ["defender_db"],
+      ob: 9,
+      phase: "phase1",
+      rollD20: 18,
+      rollTotal: 18,
+      rolledAt: "2026-01-01T00:03:00.000Z",
+      weaponName: "Broad sword",
+    });
+
+    expect(flagged.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
+    expect(
+      buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackerParticipantId: "gladiator",
+        defenderDb: 11,
+        defenderParticipantId: "guard",
+        ob: 9,
+        phase: "phase1",
+        rollD20: 18,
+        rollTotal: 18,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Broad sword",
+      }).extrapolatedWorkbookAdjustments,
+    ).toBeUndefined();
+    expect(
+      buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackerParticipantId: "gladiator",
+        defenderDb: 11,
+        defenderParticipantId: "guard",
+        extrapolatedWorkbookAdjustments: [],
+        ob: 9,
+        phase: "phase1",
+        rollD20: 18,
+        rollTotal: 18,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Broad sword",
+      }).extrapolatedWorkbookAdjustments,
+    ).toBeUndefined();
+    expect(JSON.parse(JSON.stringify(flagged))).toHaveProperty("extrapolatedWorkbookAdjustments");
+  });
+
   it("uses open-ended roll totals for P1 attack lookup totals", () => {
     expect(
       buildCombatRoundAttackRollResult({
