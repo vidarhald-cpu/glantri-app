@@ -10,6 +10,7 @@ import {
   type CombatEffectEvent,
   type CombatEffectsState,
 } from "./combatEffects";
+import { canonicalCombatModifierEffectSchema } from "./combatModifierLifecycle";
 import {
   isCombatModifierContributionActive,
   normalizeScenarioCombatModifierEntry,
@@ -345,6 +346,40 @@ export function projectPersistentCombatEffectModifiers(
   };
 }
 
+/**
+ * The canonical identity of a modifier bucket row: the combat effect it represents.
+ *
+ * A row's own `id` is not that identity. A GM modifier committed in the review is persisted both
+ * as the source-owning bucket row the GM edits and as the `combatEffects` effect that owns its
+ * duration, and this projection then builds a third, disposable `import:character_effect:...` row
+ * from that effect. All three carry the same canonical effect id, which is the key the
+ * modifier-review consumers already use (`modifierReviewEffectId` in
+ * `combatModifierReviewProjection`).
+ */
+function canonicalModifierRowEffectId(entry: ScenarioCombatModifierEntry): string {
+  return (
+    canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle).data?.id ??
+    entry.sourceEffectId ??
+    entry.id
+  );
+}
+
+/**
+ * Keeps exactly one bucket row per combat effect (#899).
+ *
+ * Disposable imported rows are refreshed from `combatEffects` as before. Where a retained
+ * source-owning row represents the *same* effect, the imported projection is not added beside it —
+ * it is folded into it. Before this, a GM modifier committed in the review stood in the bucket
+ * twice under two different row ids, so every consumer that keyed on the row id counted it twice:
+ * the panel's bucket summary, the server's defence resolution, and `getMergedCombatModifierTotals`
+ * all read double, while the review's own row list — which keys on the effect id — correctly showed
+ * one row. The two row ids also made the review's current-versus-draft diff order-dependent, so a
+ * GM's edit could be discarded and removing the listed row could leave the effect behind.
+ *
+ * The fold keeps the retained row's identity, provenance, label, and editability, and takes the
+ * effect-owned lifecycle facts from the projection, so the source effect remains the single owner
+ * of value, duration, and expiry.
+ */
 function replaceImportedEntries(
   existing: readonly ScenarioCombatModifierEntry[],
   projected: readonly ScenarioCombatModifierEntry[],
@@ -354,7 +389,37 @@ function replaceImportedEntries(
   // collection. Preserve those rows until the authoritative collection is available; an
   // explicitly supplied collection (including an empty one) is the source-of-truth refresh.
   if (!sourceEffectsProvided) return [...existing];
-  return [...existing.filter((entry) => !isPersistentCombatModifierEntry(entry)), ...projected];
+  const retained = existing.filter((entry) => !isPersistentCombatModifierEntry(entry));
+  const projectedBySourceEffectId = new Map(
+    projected.flatMap((entry) =>
+      entry.sourceEffectId ? [[entry.sourceEffectId, entry] as const] : [],
+    ),
+  );
+  const foldedSourceEffectIds = new Set<string>();
+
+  const merged = retained.map((entry) => {
+    const source = projectedBySourceEffectId.get(canonicalModifierRowEffectId(entry));
+    if (!source?.sourceEffectId) return entry;
+    foldedSourceEffectIds.add(source.sourceEffectId);
+    return {
+      ...entry,
+      application: source.application ?? entry.application,
+      canonicalLifecycle: source.canonicalLifecycle,
+      canonicalTransitions: source.canonicalTransitions,
+      durationRounds: source.durationRounds,
+      excludedRollPurposes: source.excludedRollPurposes,
+      expiresAtRound: source.expiresAtRound,
+      sourceDuration: source.sourceDuration,
+      value: source.value,
+    };
+  });
+
+  return [
+    ...merged,
+    ...projected.filter(
+      (entry) => !(entry.sourceEffectId && foldedSourceEffectIds.has(entry.sourceEffectId)),
+    ),
+  ];
 }
 
 export function mergePersistentCombatEffectModifiers(input: {

@@ -4,6 +4,10 @@ import {
   advanceCombatRoundStep,
   backOutCombatRoundPhaseAttack,
   buildCanonicalCombatModifierReviewFromDraft,
+  buildLiveCombatModifierContributionProjection,
+  combatEffectsStateSchema,
+  refreshScenarioParticipantPersistentCombatModifiers,
+  resolveCombatModifierContributions,
   combatRoundCommandSchema,
   scenarioParticipantCombatContextSchema,
   scenarioParticipantStateSchema,
@@ -35867,3 +35871,207 @@ function workbookNamedStringPaths(value: unknown, path = "", found: string[] = [
 function withoutKey<Value extends object>(value: Value, key: string) {
   return Object.fromEntries(Object.entries(value).filter(([entryKey]) => entryKey !== key));
 }
+
+describe("#899 a GM modifier committed in the review is applied once", () => {
+  const committedRow = {
+    durationRounds: 2,
+    id: "modifier-899-db-parry",
+    notes: "GM cover",
+    scope: "until",
+    value: -7,
+  };
+
+  function reviewEncounter(declaredContext: unknown) {
+    return {
+      combatRoundState: {
+        currentStep: "review_action_modifiers",
+        participants: [
+          {
+            declaration: {
+              actionId: "parry",
+              combatContext: declaredContext,
+              roundNumber: 1,
+              submittedAt: "2026-07-30T07:59:00.000Z",
+              submittedBy: "player",
+            },
+            initiatives: {},
+            label: "The Gladiator",
+            participantId: "encounter-participant-1",
+            stepStatuses: {
+              initiative_phase_1: "pending",
+              initiative_phase_2: "pending",
+              phase_1_actions: "pending",
+              phase_2_actions: "pending",
+              review_action_modifiers: "pending",
+              review_phase_2_actions: "pending",
+              review_phase_2_damage: "pending",
+              review_phase_2_modifiers: "pending",
+              round_summary: "pending",
+              select_actions: "locked",
+            },
+          },
+        ],
+        roundNumber: 1,
+      },
+    };
+  }
+
+  /** Commits one M1 modifier review through the production declaration route. */
+  async function commitModifierReview(input: {
+    declaredContext?: unknown;
+    participantState?: Record<string, unknown>;
+    situationDb: unknown[];
+  }) {
+    vi.clearAllMocks();
+    setupCombatDeclarationRoute({
+      encounter: reviewEncounter(
+        input.declaredContext ?? { modifierBuckets: emptyModifierBuckets() },
+      ),
+      participant: input.participantState ? { state: input.participantState } : undefined,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        actionId: "parry",
+        additionalActionNotes: "Review accepted by the GM.",
+        combatContext: {
+          modifierBuckets: {
+            general: [],
+            situationDb: input.situationDb,
+            situationInitiative: [],
+            situationObSkill: [],
+          },
+        },
+        expectedParticipantRevision: "2026-07-30T08:00:00.000Z",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+    await app.close();
+    expect(response.statusCode, response.body).toBe(200);
+    const saved = mocks.encounterService.commitCombatModifierReview.mock.calls[0]?.[0] as {
+      session: {
+        combatRoundState: {
+          commands: Array<{ facts?: { modifierReview?: { changes?: Array<{ kind: string }> } } }>;
+        };
+      };
+      state: Record<string, unknown>;
+    };
+    return {
+      changes: saved.session.combatRoundState.commands.at(-1)?.facts?.modifierReview?.changes ?? [],
+      // The persisted participant state's effect collection, read back through its own schema.
+      effects: combatEffectsStateSchema.parse(
+        scenarioParticipantStateSchema.parse(saved.state).combatEffects,
+      ).effects,
+      state: saved.state,
+    };
+  }
+
+  function readDbParry(state: Record<string, unknown>) {
+    const refreshed = refreshScenarioParticipantPersistentCombatModifiers({
+      currentRound: 1,
+      state: scenarioParticipantStateSchema.parse(state),
+    });
+    const contributions = buildLiveCombatModifierContributionProjection({
+      combatContext: refreshed.combat.combatContext,
+      combatEffects: refreshed.combatEffects,
+      currentRound: 1,
+      encounterId: "encounter-1",
+      ownerParticipantId: "participant-1",
+    }).contributions.filter((contribution) => contribution.bucket === "db_parry");
+
+    return {
+      contributions,
+      // The server's defender DB/Parry resolution reads exactly these contributions.
+      resolved: resolveCombatModifierContributions({
+        bucket: "db_parry",
+        context: { ownerParticipantId: "participant-1", roundNumber: 1 },
+        contributions,
+      }),
+      rows: refreshed.combat.combatContext.modifierBuckets.situationDb,
+    };
+  }
+
+  it("lists one row and resolves it once after the commit", async () => {
+    const committed = await commitModifierReview({ situationDb: [committedRow] });
+
+    expect(committed.changes.map((change: Record<string, unknown>) => change.kind)).toEqual([
+      "added",
+    ]);
+    const read = readDbParry(committed.state);
+    expect(read.rows).toHaveLength(1);
+    expect(read.rows[0]).toMatchObject({ id: "modifier-899-db-parry", value: -7 });
+    expect(read.contributions).toHaveLength(1);
+    expect(read.resolved.total).toBe(-7);
+    expect(read.resolved.rows.map((row) => row.value)).toEqual([-7]);
+    // The mirrored lifecycle effect that owns the row's duration is still written.
+    expect(committed.effects).toHaveLength(1);
+    expect(committed.effects[0]).toMatchObject({
+      combatModifierBucket: "db_parry",
+      duration: "2 rounds",
+      id: "modifier-899-db-parry",
+      modifierValue: -7,
+      status: "active",
+    });
+  });
+
+  it("removes both stored copies when the GM removes the listed row", async () => {
+    const committed = await commitModifierReview({ situationDb: [committedRow] });
+    const listedContext = refreshScenarioParticipantPersistentCombatModifiers({
+      currentRound: 1,
+      state: scenarioParticipantStateSchema.parse(committed.state),
+    }).combat.combatContext;
+    expect(listedContext.modifierBuckets.situationDb).toHaveLength(1);
+
+    const removed = await commitModifierReview({
+      declaredContext: JSON.parse(JSON.stringify(listedContext)),
+      participantState: committed.state,
+      situationDb: [],
+    });
+
+    expect(removed.changes.map((change: Record<string, unknown>) => change.kind)).toEqual([
+      "removed",
+    ]);
+    const read = readDbParry(removed.state);
+    expect(read.rows).toEqual([]);
+    expect(read.contributions).toEqual([]);
+    expect(read.resolved.total).toBe(0);
+    // No orphan: the mirrored effect is retired rather than left active for the merge to re-import.
+    expect(removed.effects[0]).toMatchObject({
+      id: "modifier-899-db-parry",
+      status: "resolved",
+    });
+    expect(removed.effects[0]?.canonicalLifecycle?.lifecycle.state).toBe("removed");
+  });
+
+  it("edits the single row and its owning effect together", async () => {
+    const committed = await commitModifierReview({ situationDb: [committedRow] });
+    const listedContext = refreshScenarioParticipantPersistentCombatModifiers({
+      currentRound: 1,
+      state: scenarioParticipantStateSchema.parse(committed.state),
+    }).combat.combatContext;
+
+    const edited = await commitModifierReview({
+      declaredContext: JSON.parse(JSON.stringify(listedContext)),
+      participantState: committed.state,
+      situationDb: listedContext.modifierBuckets.situationDb.map((row) => ({
+        ...JSON.parse(JSON.stringify(row)),
+        canonicalLifecycle: {
+          ...JSON.parse(JSON.stringify(row.canonicalLifecycle)),
+          payload: { ...JSON.parse(JSON.stringify(row.canonicalLifecycle)).payload, value: -3 },
+        },
+        value: -3,
+      })),
+    });
+
+    expect(edited.changes.map((change: Record<string, unknown>) => change.kind)).toEqual([
+      "edited",
+    ]);
+    const read = readDbParry(edited.state);
+    expect(read.rows).toHaveLength(1);
+    expect(read.resolved.total).toBe(-3);
+    expect(edited.effects[0]).toMatchObject({ modifierValue: -3 });
+  });
+});
