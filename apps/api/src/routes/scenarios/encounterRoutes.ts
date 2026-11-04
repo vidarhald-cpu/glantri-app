@@ -316,12 +316,14 @@ import {
   type PlayerFacingCombatRoundState,
   type PlayerFacingEncounterSession,
   type PlayerFacingScenarioParticipant,
+  UNATTRIBUTED_COMBAT_ROUND_COMMAND_ENVELOPE_VIEWER,
 } from "@glantri/domain";
 import {
   ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER,
   buildRequestedCombatMutationResponse,
   prefersActiveCombatMutationResponse,
 } from "./combatMutationResponse";
+import { resolveCombatRoundCommandEnvelopeViewer } from "./combatRoundCommandEnvelopeViewer";
 import type {
   CombatAttackModifierValidationProjection,
   CombatAttackPhaseDefensivePenalty,
@@ -7543,7 +7545,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           });
           return {
             command: cancelled.command,
-            commandEnvelope: buildCombatRoundCommandEnvelope({ state: cancelled.state }),
+            commandEnvelope: buildCombatRoundCommandEnvelope({
+              state: cancelled.state,
+              viewer: resolveCombatRoundCommandEnvelopeViewer({
+                encounter,
+                mode: access.mode,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
             encounter: savedAfterCancel,
           };
         }
@@ -7726,7 +7736,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   userId: user.id,
                 }),
               }),
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: applied.state }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: applied.state,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: gmAuthorizedOperation
             ? savedEncounter
             : buildPlayerFacingEncounterForUser({
@@ -7773,6 +7791,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           request.headers[ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER],
         ),
         payload,
+        /*
+         * #925. This hook runs after the handler that knew who was asking, so it has no viewer to
+         * declare. The handlers that build an envelope put it in the payload and this adapter
+         * passes it through untouched; the viewer below is only reached by the fallback for a
+         * payload that carries none, and it is entitled to nobody.
+         *
+         * Consequence, recorded rather than absorbed: on that fallback the synthesised
+         * `latestEvent` is now withheld for **every** viewer, the GM included. Nothing is newly
+         * disclosed — the fallback builds its envelope from the active state with the archived
+         * rounds already stripped, so it never carried the #925 finding — and no surface reads the
+         * field. The honest fix is for those handlers to build their own envelope, which is a
+         * change across roughly forty-seven of them. Letting a serialization hook assert a GM
+         * viewer is the shape this repair exists to remove, so it is not done here.
+         */
+        viewer: UNATTRIBUTED_COMBAT_ROUND_COMMAND_ENVELOPE_VIEWER,
       }),
     );
     try {
@@ -9281,7 +9314,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
 
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: nextRoundState,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: saved.encounter,
           participant: saved.participant,
         };
@@ -11853,7 +11894,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
         return {
           blocker: completed.blocker,
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: completed.state }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: completed.state,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           completedParticipantIds: completed.completedParticipantIds,
           encounter: saved.encounter,
           participants: saved.participants,
@@ -11937,7 +11986,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
         });
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: nextRoundState,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: savedEncounter,
         };
       } catch (error) {
@@ -12816,7 +12873,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     userId: user.id,
                   }),
                 }),
-            commandEnvelope: buildCombatRoundCommandEnvelope({ state: stateToSave }),
+            commandEnvelope: buildCombatRoundCommandEnvelope({
+              state: stateToSave,
+              viewer: resolveCombatRoundCommandEnvelopeViewer({
+                encounter,
+                mode: access.mode,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
             encounter: gmAuthorizedOperation
               ? saved.encounter
               : buildPlayerFacingEncounterForUser({
@@ -12857,7 +12922,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   userId: user.id,
                 }),
               }),
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: stateToSave }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: stateToSave,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: gmAuthorizedOperation
             ? savedEncounter
             : buildPlayerFacingEncounterForUser({
@@ -13034,7 +13107,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 userId: user.id,
               }),
             }),
-        commandEnvelope: buildCombatRoundCommandEnvelope({ state: rolled.state }),
+        commandEnvelope: buildCombatRoundCommandEnvelope({
+          state: rolled.state,
+          viewer: resolveCombatRoundCommandEnvelopeViewer({
+            encounter,
+            mode: access.mode,
+            scenarioParticipants,
+            userId: user.id,
+          }),
+        }),
         encounter: responseEncounter,
       };
     } catch (error) {
@@ -13418,7 +13499,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             updatedAt: submittedAt,
           },
         });
-        const commandEnvelope = buildCombatRoundCommandEnvelope({ state: rolled.state });
+        const commandEnvelope = buildCombatRoundCommandEnvelope({
+          state: rolled.state,
+          viewer: resolveCombatRoundCommandEnvelopeViewer({
+            encounter,
+            mode: access.mode,
+            scenarioParticipants,
+            userId: user.id,
+          }),
+        });
 
         return { commandEnvelope, encounter: savedEncounter };
       } catch (error) {
@@ -13523,7 +13612,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         if (gmAuthorizedOperation) {
           return {
-            commandEnvelope: buildCombatRoundCommandEnvelope({ state: committed.state }),
+            commandEnvelope: buildCombatRoundCommandEnvelope({
+              state: committed.state,
+              viewer: resolveCombatRoundCommandEnvelopeViewer({
+                encounter,
+                mode: access.mode,
+                scenarioParticipants,
+                userId: user.id,
+              }),
+            }),
             encounter: savedEncounter,
           };
         }
@@ -13641,7 +13738,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: { ...scenarioParticipant.state, combatEffects: committed.combatEffects },
         });
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: committed.state }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: committed.state,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: saved.encounter,
           participant: saved.participant,
         };
@@ -14239,6 +14344,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   encounter: workingEncounter,
                   scenarioParticipants: participants,
                 }),
+                viewer: resolveCombatRoundCommandEnvelopeViewer({
+                  encounter: workingEncounter,
+                  mode: access.mode,
+                  scenarioParticipants: participants,
+                  userId: user.id,
+                }),
               }),
               encounter: workingEncounter,
               executedTaskIds: [],
@@ -14585,7 +14696,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
 
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: result.final.state }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: result.final.state,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter: workingEncounter,
+              mode: access.mode,
+              scenarioParticipants: workingParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: workingEncounter,
           executedTaskIds: result.executedTaskIds,
           participants: workingParticipants,
@@ -14762,7 +14881,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               ? "safety_limit_reached"
               : "task_changed";
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: initial.state }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: initial.state,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter: workingEncounter,
+              mode: access.mode,
+              scenarioParticipants: workingParticipants,
+              userId: user.id,
+            }),
+          }),
           declarationProposal,
           encounter: workingEncounter,
           participants: workingParticipants,
@@ -15833,7 +15960,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             })?.proposal
           : undefined;
       return {
-        commandEnvelope: buildCombatRoundCommandEnvelope({ state: finalProjection.state }),
+        commandEnvelope: buildCombatRoundCommandEnvelope({
+          state: finalProjection.state,
+          viewer: resolveCombatRoundCommandEnvelopeViewer({
+            encounter: workingEncounter,
+            mode: access.mode,
+            scenarioParticipants: workingParticipants,
+            userId: user.id,
+          }),
+        }),
         declarationProposal,
         encounter: workingEncounter,
         participants: workingParticipants,
@@ -15981,6 +16116,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             };
       const commandEnvelope = buildCombatRoundCommandEnvelope({
         state: nextRoundState,
+        viewer: resolveCombatRoundCommandEnvelopeViewer({
+          encounter,
+          mode: access.mode,
+          scenarioParticipants,
+          userId: user.id,
+        }),
       });
       return {
         commandEnvelope,
@@ -16127,7 +16268,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           updatedAt: submittedAt,
         },
       });
-      const commandEnvelope = buildCombatRoundCommandEnvelope({ state: reviewedState });
+      const commandEnvelope = buildCombatRoundCommandEnvelope({
+        state: reviewedState,
+        viewer: resolveCombatRoundCommandEnvelopeViewer({
+          encounter,
+          mode: access.mode,
+          scenarioParticipants,
+          userId: user.id,
+        }),
+      });
 
       return { commandEnvelope, encounter: savedEncounter };
     } catch (error) {
@@ -16316,7 +16465,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           combatEffects: committed.combatEffects,
         },
       });
-      const commandEnvelope = buildCombatRoundCommandEnvelope({ state: committed.state });
+      const commandEnvelope = buildCombatRoundCommandEnvelope({
+        state: committed.state,
+        viewer: resolveCombatRoundCommandEnvelopeViewer({
+          encounter,
+          mode: access.mode,
+          scenarioParticipants,
+          userId: user.id,
+        }),
+      });
 
       return { commandEnvelope, encounter: saved.encounter };
     } catch (error) {
@@ -16435,7 +16592,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
         return {
           command: recorded.command,
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: nextRoundState,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: saved.encounter,
           participant: saved.participant,
         };
@@ -16604,6 +16769,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             phase,
           },
           state: committed.state,
+          viewer: resolveCombatRoundCommandEnvelopeViewer({
+            encounter,
+            mode: access.mode,
+            scenarioParticipants,
+            userId: user.id,
+          }),
         });
 
         return {
@@ -16802,7 +16973,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
         });
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextState }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: nextState,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter:
             access.mode === "gm"
               ? saved
@@ -16879,7 +17058,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           },
         });
         return {
-          commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextState }),
+          commandEnvelope: buildCombatRoundCommandEnvelope({
+            state: nextState,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
+          }),
           encounter: saved,
         };
       } catch (error) {
@@ -17630,6 +17817,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               }
             : undefined,
         state: nextRoundState,
+        viewer: resolveCombatRoundCommandEnvelopeViewer({
+          encounter,
+          mode: access.mode,
+          scenarioParticipants,
+          userId: user.id,
+        }),
       });
       const refreshedAttackerParticipant =
         canonicalWeaponFacts.isMissileAttack && scenarioParticipant.characterId
@@ -17987,6 +18180,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 }
               : undefined,
             state: nextRoundState,
+            viewer: resolveCombatRoundCommandEnvelopeViewer({
+              encounter,
+              mode: access.mode,
+              scenarioParticipants,
+              userId: user.id,
+            }),
           }),
           defenseSnapshot: committedSnapshot,
           encounter: savedEncounter,
@@ -18374,6 +18573,12 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           phase: attackResult.phase,
         },
         state: nextRoundState,
+        viewer: resolveCombatRoundCommandEnvelopeViewer({
+          encounter,
+          mode: access.mode,
+          scenarioParticipants,
+          userId: user.id,
+        }),
       });
 
       return {
@@ -19221,7 +19426,15 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       return {
-        commandEnvelope: buildCombatRoundCommandEnvelope({ state: nextRoundState }),
+        commandEnvelope: buildCombatRoundCommandEnvelope({
+          state: nextRoundState,
+          viewer: resolveCombatRoundCommandEnvelopeViewer({
+            encounter,
+            mode: access.mode,
+            scenarioParticipants,
+            userId: user.id,
+          }),
+        }),
         encounter:
           access.mode === "gm"
             ? savedEncounter

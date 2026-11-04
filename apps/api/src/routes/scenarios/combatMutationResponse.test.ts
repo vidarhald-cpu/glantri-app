@@ -49,6 +49,7 @@ describe("combat mutation response negotiation", () => {
       buildRequestedCombatMutationResponse({
         activeResponseRequested: false,
         payload,
+        viewer: { kind: "gm" },
       }),
     ).toBe(payload);
   });
@@ -61,6 +62,7 @@ describe("combat mutation response negotiation", () => {
         encounter: encounter(),
         initiative: { total: 7 },
       },
+      viewer: { kind: "gm" },
     }) as Record<string, unknown>;
     const serialized = JSON.stringify(response);
 

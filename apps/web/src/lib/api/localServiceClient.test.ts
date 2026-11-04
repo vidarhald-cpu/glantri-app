@@ -810,6 +810,7 @@ describe("localServiceClient wire contract", () => {
       mutationPresentation: {
         initiative: { rolls: [6, 2], total: 8 },
       },
+      viewer: { kind: "gm" },
     });
     const fetchMock = stubFetch(response);
     const client = await loadClient();
@@ -876,6 +877,7 @@ describe("localServiceClient wire contract", () => {
           },
           completedParticipantIds: ["aria"],
         },
+        viewer: { kind: "gm" },
       }),
     );
     const client = await loadClient();
@@ -939,6 +941,7 @@ describe("localServiceClient wire contract", () => {
         difficulty: 26,
         windowOpen: true,
       },
+      viewer: { kind: "gm" },
     });
     const fetchMock = stubFetch(response);
     const client = await loadClient();
@@ -991,6 +994,7 @@ describe("localServiceClient wire contract", () => {
         ...currentEncounter,
         updatedAt: "2026-07-26T10:01:00.000Z",
       },
+      viewer: { kind: "gm" },
     });
     const fetchMock = stubFetch(response);
     const client = await loadClient();

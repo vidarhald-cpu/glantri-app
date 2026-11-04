@@ -10,8 +10,20 @@ import {
   combatRoundStepSchema,
   type ActiveCombatRoundState,
   type CombatRoundCommandEnvelope,
+  type CombatRoundCommandEnvelopeViewer,
 } from "./combatRoundManager";
 import type { EncounterSession } from "./session";
+
+/**
+ * #925. For a construction site that genuinely has no viewer to resolve — a serialization hook runs
+ * after the handler that knew who was asking. Entitled to nobody, so it can disclose nothing; it is
+ * a named constant rather than an omitted parameter so the absence is visible at the call site.
+ */
+export const UNATTRIBUTED_COMBAT_ROUND_COMMAND_ENVELOPE_VIEWER: CombatRoundCommandEnvelopeViewer = {
+  controlledParticipantIds: new Set<string>(),
+  kind: "player",
+  visibleParticipantIds: new Set<string>(),
+};
 
 const idSchema = z.string().min(1);
 const MAX_COMBAT_MUTATION_PRESENTATION_BYTES = 64 * 1024;
@@ -159,12 +171,19 @@ export function buildActiveCombatMutationResponse(input: {
   mutationPresentation?: Record<string, unknown>;
   storageMode?: "legacy" | "split_v1";
   updatedParticipants?: ScenarioParticipant[];
+  /**
+   * #925. Required even though most callers supply a ready `commandEnvelope`, because the fallback
+   * below builds one and the compact response schema requires it. A caller with no viewer to
+   * declare passes `UNATTRIBUTED_COMBAT_ROUND_COMMAND_ENVELOPE_VIEWER`.
+   */
+  viewer: CombatRoundCommandEnvelopeViewer;
 }): ActiveCombatMutationResponse {
   const activeCombatState = activeStateFromEncounter(input.encounter);
   const commandEnvelope =
     input.commandEnvelope ??
     buildCombatRoundCommandEnvelope({
       state: { ...activeCombatState, rounds: [] },
+      viewer: input.viewer,
     });
 
   return activeCombatMutationResponseSchema.parse({
