@@ -370,6 +370,7 @@ import {
   getC1FiveKeyCanonicalReview,
   buildCombatStateCharacterInputs,
   calculateWorkbookPercentageAdjustmentTrace,
+  type WorkbookPercentageAdjustmentTrace,
   deriveParryPrimaryActionModifier,
   isCombatFeintResistanceSkill,
   recordRoleplayGmSkillRoll,
@@ -1718,6 +1719,31 @@ const ATTACK_DEFENDER_DEFENSE_UNAVAILABLE_MESSAGE =
 
 const ATTACK_OFFENSE_UNAVAILABLE_MESSAGE =
   "The attacker has no weapon or combat skill this attack can use, so it cannot be resolved. Nothing was rolled. Check the attacker's weapon and combat skill before attacking again.";
+
+/**
+ * Which of one attack's committed figures used a percentage adjustment the open-ended rule
+ * resolved past the edge of the authored workbook grid (#922).
+ *
+ * Read from the adjustment traces the attack was actually composed from, not recomputed here:
+ * the figure and the statement about the figure come from the same resolution, so they cannot
+ * disagree. A defence taken from a legacy presentation snapshot rather than a live calculation
+ * carries no trace and is therefore not flagged — there is no adjustment of ours to report.
+ */
+function collectExtrapolatedWorkbookAdjustments(input: {
+  attackerTraces: ReadonlyArray<WorkbookPercentageAdjustmentTrace | null | undefined>;
+  defenderTraces: ReadonlyArray<WorkbookPercentageAdjustmentTrace | null | undefined>;
+}): Array<"attacker_ob" | "defender_db"> {
+  const flagged: Array<"attacker_ob" | "defender_db"> = [];
+
+  if (input.attackerTraces.some((trace) => trace?.extrapolated === true)) {
+    flagged.push("attacker_ob");
+  }
+  if (input.defenderTraces.some((trace) => trace?.extrapolated === true)) {
+    flagged.push("defender_db");
+  }
+
+  return flagged;
+}
 
 const MODIFIER_REVIEW_BUCKETS = [
   ["general", "general"],
@@ -4204,6 +4230,7 @@ function buildAcceptedCombatDefenseCalculationFact(input: {
       value: row.value,
     })),
     flatDbAdjustment: input.calculation.flatDbAdjustment,
+    noToHitPercentageTrace: input.calculation.percentage.noToHitTrace,
     participantId: input.calculation.participantId,
     percentageAdjustment: input.calculation.percentage.fullAdjustment,
     percentageTrace: input.calculation.percentage.fullTrace,
@@ -17275,6 +17302,23 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         });
       }
       if (!canonicalWeaponFacts.isMissileAttack && defenderDb === undefined) {
+        // #922. This branch reported one cause — the defender has no defensive skill — for every
+        // condition that reached it, including a percentage adjustment that had merely run off the
+        // end of an authored table. That cause is gone: the lookup is open-ended. The conditions
+        // that remain are genuinely different facts, and a GM told to give the opponent Dodge when
+        // the opponent's scenario equipment is what is missing hunts a problem on the wrong
+        // character. So the cause decides what is said, the same way #694 split the missile
+        // defence refusal, and the one condition the old sentence does describe keeps it.
+        const missingDefenseFacts =
+          canonicalDefense && canonicalDefense.completeness !== "complete"
+            ? canonicalDefense.missingFacts
+            : undefined;
+        if (missingDefenseFacts && !missingDefenseFacts.includes("character_inputs")) {
+          return reply.code(409).send({
+            code: "defense_context_unavailable",
+            error: getCombatDefenseRefusalMessage(missingDefenseFacts),
+          });
+        }
         return reply.code(409).send({
           code: "attack_defender_defense_unavailable",
           error: ATTACK_DEFENDER_DEFENSE_UNAVAILABLE_MESSAGE,
@@ -17359,9 +17403,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         })),
       });
       if (!opponentSpecificObTrace) {
+        // #922. "Outside the canonical calculation table" stopped being a refusal condition when
+        // the lookup became open-ended: a total past the table's last authored step now resolves
+        // by the rule the table illustrates. This guard survives for the inputs that rule has no
+        // reading of — an attack OB below zero, or a non-integer one — and says that instead.
         return reply.code(409).send({
           code: "attacker_modifier_out_of_range",
-          error: "Attack modifiers are outside the canonical calculation table.",
+          error:
+            "This attack's OB works out to a value this calculation has no reading for, so it cannot be resolved. Nothing was rolled. Report it with the attacker's OB figures.",
         });
       }
       const roll = rollOpenEndedCombatToHitD20();
@@ -17472,6 +17521,22 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             declarationId: canonicalOpportunityIdentity.declarationId,
             defenderDb: defenderDb!,
             defenderParticipantId: defenderEncounterParticipant.id,
+            extrapolatedWorkbookAdjustments: collectExtrapolatedWorkbookAdjustments({
+              attackerTraces: [opponentSpecificObTrace],
+              // Both defence traces, because both produce a committed figure: the full one is the
+              // recorded DB and the no-to-hit one is half of the recorded DM. The two totals
+              // differ by the encumbrance to-hit contribution, so one can cross the grid's edge
+              // while the other is still inside it.
+              defenderTraces: [
+                canonicalDefense?.completeness === "complete"
+                  ? canonicalDefense.percentage.fullTrace
+                  : undefined,
+                canonicalDefense?.completeness === "complete"
+                  ? canonicalDefense.percentage.noToHitTrace
+                  : undefined,
+                breakOffDefenderTrace,
+              ],
+            }),
             ob: opponentSpecificObTrace.finalValue,
             openEndedD10s: roll.openEndedD10s,
             phase: body.phase,
@@ -17887,6 +17952,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             declarationId: pendingMissileAttack.declarationId,
             defenderDb,
             defenderParticipantId: body.defenderParticipantId,
+            // #922. The missile shot's OB was resolved and recorded when the shot was fired, so
+            // the only adjustment this commit composes is the defence one — and only when an
+            // ordinary Dodge was available, because otherwise the recorded DB is zero and the
+            // live defence adjustment is not the figure this attack used.
+            extrapolatedWorkbookAdjustments: collectExtrapolatedWorkbookAdjustments({
+              attackerTraces: [],
+              defenderTraces: snapshot.ordinaryDodgeAvailable
+                ? [
+                    canonicalDefense.percentage.fullTrace,
+                    canonicalDefense.percentage.noToHitTrace,
+                    breakOffTrace,
+                  ]
+                : [],
+            }),
             ob: pendingMissileAttack.ob,
             openEndedD10s: pendingMissileAttack.openEndedD10s,
             phase: body.phase,

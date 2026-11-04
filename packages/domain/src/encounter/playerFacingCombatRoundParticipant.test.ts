@@ -214,6 +214,9 @@ function attackRollResult(input: { opportunityId: string; phase: "phase1" | "pha
     defenderDb: 20,
     defenderParryModifier: 2,
     defenderParticipantId: "hero",
+    // #922. Populated on purpose: the player-facing attack result must strip it, and a fixture
+    // that left it empty would make that omission untestable.
+    extrapolatedWorkbookAdjustments: ["defender_db"],
     grazing: false,
     hit: true,
     kind: "attackRoll",
@@ -519,6 +522,40 @@ describe("#507 player-facing round-state participant: additive construction", ()
     expect(JSON.stringify(participant)).not.toMatch(/SECRET_(RAW_ROW_CELL|WORKBOOK|DMB_SHEET)/);
   });
 
+  /**
+   * #922. The extrapolated-adjustment flag is review provenance recorded for the GM, who is the
+   * one the Product Owner's ruling says has to know an extrapolated figure was used. It is not a
+   * value a player receives, so the player-facing attack result does not name it. The stored
+   * fixture populates it, so this is an omission that can fail: name the field in the player-facing
+   * schema and the assertions below break.
+   */
+  it("omits the extrapolated-adjustment flag from player output although it is populated", () => {
+    const stored = storedRoundParticipant();
+    for (const result of [
+      stored.attackResults.phase1,
+      stored.attackResultsByOpportunity?.["opportunity-1"],
+    ]) {
+      expect(result?.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
+    }
+
+    const participant = buildPlayerFacingCombatRoundParticipant({ participant: stored });
+
+    expect(Object.keys(playerFacingCombatRoundAttackRollResultSchema.unwrap().shape)).not.toContain(
+      "extrapolatedWorkbookAdjustments",
+    );
+    for (const result of [
+      participant.attackResults.phase1,
+      participant.attackResultsByOpportunity?.["opportunity-1"],
+    ]) {
+      expect(result).not.toHaveProperty("extrapolatedWorkbookAdjustments");
+      // The figures the flag is about are unchanged for the player, and what remains is still a
+      // value the stored schema accepts.
+      expect(result?.defenderDb).toBe(20);
+      expect(() => combatRoundAttackRollResultSchema.parse(result)).not.toThrow();
+    }
+    expect(JSON.stringify(participant)).not.toContain("extrapolated");
+  });
+
   it("removes exactly the attack result's import-provenance fields from player output outside the schema", () => {
     const stored = attackRollResult({ opportunityId: "opportunity-1", phase: "phase1" });
     const { weaponDmbRoll: _dmbRoll, weaponModeSourceMetadata: _modeSource, ...rest } = stored;
@@ -567,10 +604,16 @@ describe("#507 player-facing round-state participant: additive construction", ()
     expect(participant.combatExperience).toEqual(
       withoutIdentity(stored.combatExperience!, "rolledByUserId"),
     );
+    // #922: `extrapolatedWorkbookAdjustments` is review provenance for the GM, not a value a
+    // player receives, so the player-facing attack result does not name it and the projection
+    // strips it. The omission is asserted directly below this test.
     const withoutRollerAndProvenance = (result: Record<string, unknown>) =>
       withoutIdentity(
-        withoutIdentity(withoutIdentity(result, "rolledByUserId"), "weaponModeSourceMetadata"),
-        "weaponDmbRoll",
+        withoutIdentity(
+          withoutIdentity(withoutIdentity(result, "rolledByUserId"), "weaponModeSourceMetadata"),
+          "weaponDmbRoll",
+        ),
+        "extrapolatedWorkbookAdjustments",
       );
     expect(participant.attackResults.phase1).toEqual(
       withoutRollerAndProvenance(stored.attackResults.phase1!),

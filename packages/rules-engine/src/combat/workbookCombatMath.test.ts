@@ -20,6 +20,8 @@ import {
   lookupWorkbookToHitModifier,
   lookupWorkbookMovementAdjustment,
   lookupWorkbookSkillInitiativeModifier,
+  resolveWorkbookPercentageAdjustment,
+  WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE,
 } from "./workbookCombatMath";
 
 describe("workbookCombatMath", () => {
@@ -84,43 +86,40 @@ describe("workbookCombatMath", () => {
     const cases = [
       {
         name: "Long sword",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon1!A10:O10, Calculations!R19/W19/Z19 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon1!A10:O10, Calculations!R19/W19/Z19 formulas",
         weaponOb: 2,
         weaponDmb: 5,
         expected: {
           finalDmb: 9,
           finalOb: 14,
           rawDmb: 8,
-          rawOb: 12
-        }
+          rawOb: 12,
+        },
       },
       {
         name: "Hand axe",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon1!A20:O20, Calculations!R19/W19/Z19 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon1!A20:O20, Calculations!R19/W19/Z19 formulas",
         weaponOb: 1,
         weaponDmb: 6,
         expected: {
           finalDmb: 10,
           finalOb: 13,
           rawDmb: 9,
-          rawOb: 12
-        }
+          rawOb: 12,
+        },
       },
       {
         name: "2-h Spear",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon1!A30:O30, Calculations!R19/W19/Z19 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon1!A30:O30, Calculations!R19/W19/Z19 formulas",
         weaponOb: 3,
         weaponDmb: 6,
         expected: {
           finalDmb: 9,
           finalOb: 16,
           rawDmb: 9,
-          rawOb: 12
-        }
-      }
+          rawOb: 12,
+        },
+      },
     ];
 
     for (const testCase of cases) {
@@ -129,23 +128,23 @@ describe("workbookCombatMath", () => {
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
         strengthGm: 3,
-        weaponOb: testCase.weaponOb
+        weaponOb: testCase.weaponOb,
       });
       const dmb = calculateWorkbookMeleeDmb({
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
         strengthGm: 3,
         weaponDmb: testCase.weaponDmb,
-        weaponOb: testCase.weaponOb
+        weaponOb: testCase.weaponOb,
       });
 
       expect.soft(ob, testCase.source).toMatchObject({
         finalOb: testCase.expected.finalOb,
-        rawOb: testCase.expected.rawOb
+        rawOb: testCase.expected.rawOb,
       });
       expect.soft(dmb, testCase.source).toMatchObject({
         finalDmb: testCase.expected.finalDmb,
-        rawDmb: testCase.expected.rawDmb
+        rawDmb: testCase.expected.rawDmb,
       });
     }
   });
@@ -162,22 +161,22 @@ describe("workbookCombatMath", () => {
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
         strengthGm: 3,
-        weaponOb: 3
-      })
+        weaponOb: 3,
+      }),
     ).toMatchObject({
       finalOb: 16,
-      rawOb: 12
+      rawOb: 12,
     });
     expect(
       calculateWorkbookMeleeOb({
         dexterityGm: 3,
         skillXp: directSkillXpOnly,
         strengthGm: 3,
-        weaponOb: 3
-      })
+        weaponOb: 3,
+      }),
     ).not.toMatchObject({
       finalOb: 16,
-      rawOb: 12
+      rawOb: 12,
     });
   });
 
@@ -201,28 +200,26 @@ describe("workbookCombatMath", () => {
     const cases = [
       {
         name: "T. Spear",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon2!A10:J10, Calculations!R27/W27/Z27 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon2!A10:J10, Calculations!R27/W27/Z27 formulas",
         weaponDmb: 6,
         weaponOb: 2,
         expected: {
           finalDmb: 9,
           finalOb: 13,
-          rawOb: 11
-        }
+          rawOb: 11,
+        },
       },
       {
         name: "T. Th. dagger",
-        source:
-          "Themistogenes 1.07.xlsx -> Weapon2!A4:J4, Calculations!R29/W29/Z29 formulas",
+        source: "Themistogenes 1.07.xlsx -> Weapon2!A4:J4, Calculations!R29/W29/Z29 formulas",
         weaponDmb: 0,
         weaponOb: 3,
         expected: {
           finalDmb: 3,
           finalOb: 14,
-          rawOb: 11
-        }
-      }
+          rawOb: 11,
+        },
+      },
     ];
 
     for (const testCase of cases) {
@@ -231,13 +228,13 @@ describe("workbookCombatMath", () => {
         armorActivityModifier: 0,
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
-        weaponOb: testCase.weaponOb
+        weaponOb: testCase.weaponOb,
       });
       const numericThrownDmb = 3 + testCase.weaponDmb;
 
       expect.soft(ob, testCase.source).toMatchObject({
         finalOb: testCase.expected.finalOb,
-        rawOb: testCase.expected.rawOb
+        rawOb: testCase.expected.rawOb,
       });
       expect.soft(numericThrownDmb, testCase.source).toBe(testCase.expected.finalDmb);
     }
@@ -255,22 +252,22 @@ describe("workbookCombatMath", () => {
         armorActivityModifier: 0,
         dexterityGm: 3,
         skillXp: effectiveSkillNumber,
-        weaponOb: 2
-      })
+        weaponOb: 2,
+      }),
     ).toMatchObject({
       finalOb: 13,
-      rawOb: 11
+      rawOb: 11,
     });
     expect(
       calculateWorkbookProjectileOb({
         armorActivityModifier: 0,
         dexterityGm: 3,
         skillXp: directSkillXpOnly,
-        weaponOb: 2
-      })
+        weaponOb: 2,
+      }),
     ).not.toMatchObject({
       finalOb: 13,
-      rawOb: 11
+      rawOb: 11,
     });
   });
 
@@ -300,6 +297,8 @@ describe("workbookCombatMath", () => {
       }),
     ).toEqual({
       baseValue: 10,
+      extrapolated: false,
+      extrapolatedAxes: [],
       finalValue: 14,
       percentageAdjustment: 4,
       rawModifierTotal: 4,
@@ -451,6 +450,8 @@ describe("workbookCombatMath", () => {
       }),
     ).toEqual({
       baseValue: 20,
+      extrapolated: false,
+      extrapolatedAxes: [],
       finalValue: 10,
       percentageAdjustment: 10,
       rawModifierTotal: -5,
@@ -477,13 +478,15 @@ describe("workbookCombatMath", () => {
     ];
 
     for (const testCase of cases) {
-      expect.soft(
-        calculateWorkbookPercentageAdjustmentTrace({
-          baseValue: testCase.baseValue,
-          rawModifiers: [{ label: "test modifier", value: testCase.rawModifier }],
-        })?.finalValue,
-        `base ${testCase.baseValue}, raw ${testCase.rawModifier}`,
-      ).toBe(testCase.expectedFinal);
+      expect
+        .soft(
+          calculateWorkbookPercentageAdjustmentTrace({
+            baseValue: testCase.baseValue,
+            rawModifiers: [{ label: "test modifier", value: testCase.rawModifier }],
+          })?.finalValue,
+          `base ${testCase.baseValue}, raw ${testCase.rawModifier}`,
+        )
+        .toBe(testCase.expectedFinal);
     }
   });
 
@@ -797,5 +800,258 @@ describe("workbookCombatMath", () => {
       { label: "live DB", value: -1 },
       { label: "to-hit", value: 0 },
     ]);
+  });
+});
+
+/**
+ * Forgejo #922. The authored grid is an illustration of an open-ended rule, so the lookup resolves
+ * past its edges and says when it did.
+ *
+ * The rule is written out a second time in this file, by hand, and is **not** imported from the
+ * module under test. That is the whole point of the conformance test below: inside the authored
+ * grid `lookupWorkbookPercentageAdjustment` returns the authored cell, so comparing it against this
+ * independent restatement compares the rule against the authored data, cell by cell, rather than
+ * comparing the production rule with itself. Outside the grid both sides are rules, and the
+ * comparison pins the production continuation to the one derived here.
+ *
+ * Mutating either side fails these tests, which is what makes them a guard rather than a label:
+ * change the rounding here (or there) to half-even and the 750-cell conformance test fails on base
+ * 13 step 5 among others; change the continuation past step 7 and it fails across every row.
+ */
+describe("#922 the percentage-adjustment lookup is open-ended and flags every extrapolation", () => {
+  const AUTHORED_MAX_BASE = 49;
+  const AUTHORED_MAX_STEP = 15;
+  const PROPORTIONAL_STEP_LIMIT = 7;
+
+  /** Ten percent of the base per raw step, half up, floored at one point per step; +1 past step 7. */
+  function derivedRule(base: number, step: number): number {
+    const proportional = (steps: number): number =>
+      Math.max(steps, Math.floor((steps * base * 2 + 10) / 20));
+
+    return step <= PROPORTIONAL_STEP_LIMIT
+      ? proportional(step)
+      : proportional(PROPORTIONAL_STEP_LIMIT) + (step - PROPORTIONAL_STEP_LIMIT);
+  }
+
+  const authoredBases = Object.keys(WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE)
+    .map((key) => Number(key))
+    .sort((left, right) => left - right);
+
+  it("reads the authored grid as 50 base rows of 15 steps, 750 cells", () => {
+    expect(authoredBases).toEqual(Array.from({ length: 50 }, (_unused, index) => index));
+    for (const base of authoredBases) {
+      expect(
+        Object.keys(WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]!).map((key) => Number(key)),
+        `base ${base}`,
+      ).toEqual(Array.from({ length: AUTHORED_MAX_STEP }, (_unused, index) => index + 1));
+    }
+    expect(
+      authoredBases.reduce(
+        (total, base) => total + Object.keys(WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]!).length,
+        0,
+      ),
+    ).toBe(750);
+  });
+
+  it("reproduces every authored cell the lookup trusts, and only the bad-import row differs", () => {
+    const disagreements: Array<{ authored: number; base: number; rule: number; step: number }> = [];
+
+    for (const base of authoredBases) {
+      for (let step = 1; step <= AUTHORED_MAX_STEP; step += 1) {
+        const authored = WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]![step]!;
+        const rule = derivedRule(base, step);
+
+        // What the lookup actually returns inside the grid, which is the authored cell for every
+        // base the file treats as trustworthy and the documented override for base 0.
+        expect(lookupWorkbookPercentageAdjustment(base, step), `lookup ${base}/${step}`).toBe(
+          base === 0 ? step : authored,
+        );
+
+        if (authored !== rule) {
+          disagreements.push({ authored, base, rule, step });
+        } else {
+          expect(rule, `rule ${base}/${step}`).toBe(authored);
+        }
+      }
+    }
+
+    // The 15 cells the rule does not reproduce are the whole base-0 row: the bad import the file's
+    // own comment names, which the lookup already overrode by hand before #922. The rule predicts
+    // that override exactly, so there is no authored cell the lookup trusts that it fails to
+    // reproduce.
+    expect(disagreements.map(({ base, step }) => `${base}/${step}`)).toEqual(
+      Array.from({ length: AUTHORED_MAX_STEP }, (_unused, index) => `0/${index + 1}`),
+    );
+    for (const disagreement of disagreements) {
+      expect(disagreement.authored).toBe(0);
+      expect(disagreement.rule).toBe(disagreement.step);
+      expect(lookupWorkbookPercentageAdjustment(0, disagreement.step)).toBe(disagreement.rule);
+    }
+  });
+
+  it("marks no figure read from an authored cell as extrapolated", () => {
+    for (const base of authoredBases) {
+      for (let step = 1; step <= AUTHORED_MAX_STEP; step += 1) {
+        expect(resolveWorkbookPercentageAdjustment(base, step), `${base}/${step}`).toEqual({
+          extrapolated: false,
+          extrapolatedAxes: [],
+          value: base === 0 ? step : WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[base]![step]!,
+        });
+      }
+    }
+  });
+
+  it("resolves past the modifier edge instead of returning nothing, and flags the axis", () => {
+    expect(resolveWorkbookPercentageAdjustment(9, AUTHORED_MAX_STEP)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: WORKBOOK_PERCENTAGE_ADJUSTMENT_TABLE[9]![AUTHORED_MAX_STEP]!,
+    });
+
+    for (const step of [16, 20, 31, 64]) {
+      expect(resolveWorkbookPercentageAdjustment(9, step), `step ${step}`).toEqual({
+        extrapolated: true,
+        extrapolatedAxes: ["modifier"],
+        value: derivedRule(9, step),
+      });
+    }
+
+    // The measured #922 case: base DB 9 against a committed raw total of 20.
+    expect(lookupWorkbookPercentageAdjustment(9, 20)).toBe(derivedRule(9, 20));
+    expect(lookupWorkbookPercentageAdjustment(9, 20)).not.toBeNull();
+  });
+
+  it("resolves past the base edge, and names both axes when a figure runs past both", () => {
+    for (const base of [50, 51, 60, 97, 240]) {
+      expect(resolveWorkbookPercentageAdjustment(base, 7), `base ${base}`).toEqual({
+        extrapolated: true,
+        extrapolatedAxes: ["base"],
+        value: derivedRule(base, 7),
+      });
+    }
+
+    expect(resolveWorkbookPercentageAdjustment(60, 20)).toEqual({
+      extrapolated: true,
+      extrapolatedAxes: ["base", "modifier"],
+      value: derivedRule(60, 20),
+    });
+  });
+
+  it("flags base 0 past the modifier edge, where the authored row is the bad import", () => {
+    expect(resolveWorkbookPercentageAdjustment(0, AUTHORED_MAX_STEP)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: AUTHORED_MAX_STEP,
+    });
+    expect(resolveWorkbookPercentageAdjustment(0, 100)).toEqual({
+      extrapolated: true,
+      extrapolatedAxes: ["modifier"],
+      value: 100,
+    });
+  });
+
+  it("still refuses an input the rule has no reading of, and that refusal is not the grid's edge", () => {
+    // A negative base is a third edge, below the grid rather than past it. #922 does not invent a
+    // reading for it, so the lookup keeps saying it has none.
+    expect(resolveWorkbookPercentageAdjustment(-1, 4)).toBeNull();
+    expect(lookupWorkbookPercentageAdjustment(-1, 4)).toBeNull();
+    expect(resolveWorkbookPercentageAdjustment(9.5, 4)).toBeNull();
+    expect(resolveWorkbookPercentageAdjustment(9, 4.5)).toBeNull();
+    expect(resolveWorkbookPercentageAdjustment(9, -4)).toBeNull();
+    // Zero raw modifiers is no adjustment at all, at any base, including one off the grid.
+    expect(resolveWorkbookPercentageAdjustment(400, 0)).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      value: 0,
+    });
+  });
+
+  it("negative control — a silent clamp at the modifier edge is not this rule", () => {
+    // The mutation this guards against: returning the step-15 cell for every larger step. Each
+    // assertion below fails under that mutation, and the first one fails under any clamp at all.
+    const atEdge = lookupWorkbookPercentageAdjustment(9, AUTHORED_MAX_STEP)!;
+    for (const step of [16, 17, 25]) {
+      expect(lookupWorkbookPercentageAdjustment(9, step), `step ${step}`).toBe(
+        atEdge + (step - AUTHORED_MAX_STEP),
+      );
+      expect(lookupWorkbookPercentageAdjustment(9, step)).not.toBe(atEdge);
+    }
+
+    // The same clamp on the base axis: base 50 and above are not base 49.
+    expect(lookupWorkbookPercentageAdjustment(60, 7)).not.toBe(
+      lookupWorkbookPercentageAdjustment(AUTHORED_MAX_BASE, 7),
+    );
+    expect(lookupWorkbookPercentageAdjustment(60, 7)).toBe(42);
+  });
+
+  it("negative control — a continuation that is not the derived rule is rejected", () => {
+    // Mutation A: resume the proportional part past step 15 instead of adding one per step.
+    // At base 49 that would read 49 * 20 / 10 = 98 rather than 47.
+    expect(lookupWorkbookPercentageAdjustment(49, 20)).toBe(47);
+    expect(lookupWorkbookPercentageAdjustment(49, 20)).not.toBe(98);
+
+    // Mutation B: two points per step past the edge. At base 9 step 25 that reads 35, not 25.
+    expect(lookupWorkbookPercentageAdjustment(9, 25)).toBe(25);
+    expect(lookupWorkbookPercentageAdjustment(9, 25)).not.toBe(35);
+
+    // Mutation C: the base axis continued by the last authored row's step instead of the rule.
+    // Base 97 at step 3 is 29 under the rule; a per-step continuation from base 49 would read 15.
+    expect(lookupWorkbookPercentageAdjustment(97, 3)).toBe(29);
+
+    // Mutation D: round half even, or truncate, instead of half up. Base 55 step 1 is 6, not 5.
+    expect(lookupWorkbookPercentageAdjustment(55, 1)).toBe(6);
+    expect(lookupWorkbookPercentageAdjustment(50, 7)).toBe(35);
+
+    // Mutation E: drop the one-point-per-step floor. A base of 1 still moves by its raw steps.
+    expect(lookupWorkbookPercentageAdjustment(1, 7)).toBe(7);
+    expect(lookupWorkbookPercentageAdjustment(300, 7)).toBe(210);
+  });
+
+  it("negative control — an extrapolated figure that carries no flag fails", () => {
+    // The mutation this guards against: resolving past the grid and reporting `extrapolated:
+    // false`, which would turn a loud wrong refusal into a quiet unverified figure.
+    const pastEdge = resolveWorkbookPercentageAdjustment(9, 20)!;
+    expect(pastEdge.extrapolated).toBe(true);
+    expect(pastEdge.extrapolatedAxes).not.toEqual([]);
+
+    const trace = calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: 9,
+      rawModifiers: [
+        { label: "committed damage", value: -12 },
+        { label: "committed damage", value: -8 },
+      ],
+    });
+
+    expect(trace).not.toBeNull();
+    expect(trace?.rawModifierTotal).toBe(-20);
+    expect(trace?.extrapolated).toBe(true);
+    expect(trace?.extrapolatedAxes).toEqual(["modifier"]);
+    expect(trace?.percentageAdjustment).toBe(lookupWorkbookPercentageAdjustment(9, 20));
+    expect(trace?.finalValue).toBe(9 - trace!.percentageAdjustment);
+
+    const inGrid = calculateWorkbookPercentageAdjustmentTrace({
+      baseValue: 9,
+      rawModifiers: [{ label: "committed damage", value: -4 }],
+    });
+
+    expect(inGrid?.rawModifierTotal).toBe(-4);
+    expect(inGrid?.extrapolated).toBe(false);
+    expect(inGrid?.extrapolatedAxes).toEqual([]);
+  });
+
+  it("keeps the defence pair resolvable past the edge and carries the flag on its trace", () => {
+    const baseDb = calculateWorkbookBaseDb({ dexterityGm: 1, dodgeSkillXp: 8 });
+    const pair = calculateWorkbookDefensePair({
+      baseDb,
+      equipmentModifier: 0,
+      rawModifiers: [{ label: "committed damage", value: -20 }],
+      toHitModifier: 0,
+    });
+
+    expect(pair).not.toBeNull();
+    expect(pair?.fullModifier).toBe(-20);
+    expect(pair?.fullTrace.extrapolated).toBe(true);
+    expect(pair?.fullAdjustment).toBe(lookupWorkbookPercentageAdjustment(baseDb, 20));
+    expect(pair?.db).toBe(baseDb - pair!.fullAdjustment);
   });
 });

@@ -102,6 +102,7 @@ import {
   shieldTemplates,
   weaponTemplates,
 } from "@glantri/content/equipment";
+import { lookupWorkbookPercentageAdjustment } from "@glantri/rules-engine";
 
 const mocks = vi.hoisted(() => {
   class CampaignCharacterAlreadyRosteredError extends Error {
@@ -23182,6 +23183,315 @@ describe("scenarios route contract", () => {
     expect(attackResult?.defenderDb).toBe(defenderCalculation?.["effectiveDb"]);
     expect(JSON.stringify(attackResponse.json())).not.toContain("defenderCalculation");
     expect(JSON.stringify(attackResponse.json())).not.toContain("sourceSnapshotId");
+  });
+
+  /**
+   * Forgejo #922, driven through the production route.
+   *
+   * The reported defect: a defender carrying a committed DB/Parry total of -20 against a base DB of
+   * 9 could not be attacked at all. `lookupWorkbookPercentageAdjustment` returned `null` past the
+   * last authored modifier step, `resolveCombatDefenseCalculation` reported that as
+   * `missingFacts: ["workbook_adjustment"]`, and the route refused with
+   * `attack_defender_defense_unavailable` and a sentence saying the defender had no defensive
+   * skill. It had Dodge.
+   *
+   * What the committed row's provenance is does not matter to the defect and is not asserted: the
+   * lookup is handed one summed raw total, and the fixture's own generated DB/Parry row carries it.
+   * What is asserted is that total, and the lookup's own output for it — never a hand-computed
+   * effective DB, which is how three acceptance figures on this programme have already been wrong.
+   */
+  function makeDefenderDbParryTotalFixture(
+    rawTotal: number,
+    options: { withLegacyDefenseSnapshot?: boolean } = {},
+  ) {
+    const fixture = makePostAdjustDistanceAttackFixture();
+    const roundState = combatRoundStateSchema.parse({
+      ...fixture.encounter.combatRoundState,
+      // The reported defect needs the defender to have no legacy presentation snapshot to fall
+      // back on, which is the ordinary case for the first attack on a defender in a round. With
+      // one present the base commit took a different wrong turn, recorded separately below.
+      stepSnapshots: options.withLegacyDefenseSnapshot
+        ? fixture.encounter.combatRoundState.stepSnapshots
+        : fixture.encounter.combatRoundState.stepSnapshots.filter(
+            (snapshot) =>
+              !(snapshot.participantId === "encounter-participant-2" && snapshot.defenseSummary),
+          ),
+    });
+
+    return {
+      encounter: { ...fixture.encounter, combatRoundState: roundState },
+      participants: [
+        fixture.participants[0],
+        {
+          ...fixture.participants[1],
+          characterId: "character-2",
+          snapshot: {
+            ...fixture.participants[1]?.snapshot,
+            build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
+            displayName: "Scyrian cavalry guy",
+            equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+            sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+          },
+          state: {
+            ...makeCombatScenarioParticipant().state,
+            combat: {
+              combatContext: {
+                modifierBuckets: {
+                  ...emptyModifierBuckets(),
+                  situationDb: [
+                    {
+                      ...adjustRangePhase1DbParryModifierEntry,
+                      expiresAtRound: 1,
+                      sourceEncounterId: "encounter-1",
+                      sourceRoundNumber: 1,
+                      value: rawTotal,
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+  }
+
+  async function driveAttackAgainstDbParryTotal(
+    rawTotal: number,
+    options: { withLegacyDefenseSnapshot?: boolean } = {},
+  ) {
+    const fixture = makeDefenderDbParryTotalFixture(rawTotal, options);
+    setupCombatDeclarationRoute({
+      encounter: fixture.encounter,
+      participants: fixture.participants,
+      user: mocks.playerUser,
+    });
+    const app = await buildScenarioTestApp();
+    const historyResponse = await app.inject({
+      method: "GET",
+      url: "/encounters/encounter-1/combat-history",
+    });
+    const validation = historyResponse.json().history.currentAttackModifierValidation;
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const attackResponse = await app.inject({
+      method: "POST",
+      payload: {
+        attackerModifierFingerprint: validation.attackerModifierFingerprint,
+        defenderScenarioParticipantId: "participant-2",
+        expectedRevision: validation.expectedRevision,
+        modifierValidationTaskId: validation.taskId,
+        ob: 8,
+        obSkillRaw: validation.obSkillRaw,
+        phase: "phase1",
+        scenarioParticipantId: "participant-1",
+      },
+      url: "/encounters/encounter-1/combat-round/roll-attack",
+    });
+    randomSpy.mockRestore();
+    await app.close();
+
+    const updatedState = mocks.encounterService.updateEncounter.mock.calls.at(-1)?.[0]?.session
+      .combatRoundState as CombatRoundState | undefined;
+    const command = updatedState?.commands.at(-1);
+    const defenderCalculation = command?.facts.defenderCalculation as
+      | Record<string, unknown>
+      | undefined;
+    const percentageTrace = defenderCalculation?.["percentageTrace"] as
+      | Record<string, unknown>
+      | undefined;
+
+    return {
+      attackResponse,
+      attackResult: updatedState
+        ? getCombatRoundOutgoingAttackResultForParticipantPhase({
+            participantId: "encounter-participant-1",
+            phase: "phase1",
+            state: updatedState,
+          })
+        : undefined,
+      defenderCalculation,
+      percentageTrace,
+      status: attackResponse.statusCode,
+    };
+  }
+
+  it("#922 resolves an attack on a defender whose committed total ran past the authored grid", async () => {
+    const driven = await driveAttackAgainstDbParryTotal(-20);
+
+    // The reported refusal, and the sentence that blamed the wrong character, are both gone.
+    expect(driven.status, JSON.stringify(driven.attackResponse.json())).toBe(200);
+    expect(JSON.stringify(driven.attackResponse.json())).not.toContain(
+      "attack_defender_defense_unavailable",
+    );
+    expect(JSON.stringify(driven.attackResponse.json())).not.toContain("has no defensive skill");
+
+    // The raw contributions the server composed, and the total it handed the lookup. Asserted as
+    // the server reports them rather than assumed: the defence total is the committed row plus the
+    // defender's equipment and encumbrance to-hit contributions, so a -20 row is a -19 total here.
+    expect(driven.percentageTrace?.["rawModifiers"]).toEqual([
+      { label: "equipment", value: 0 },
+      { label: "adjust range", value: -20 },
+      { label: "to-hit", value: 1 },
+    ]);
+    expect(driven.percentageTrace?.["rawModifierTotal"]).toBe(-19);
+    const baseValue = driven.percentageTrace?.["baseValue"] as number;
+    const rawTotal = Math.abs(driven.percentageTrace?.["rawModifierTotal"] as number);
+    expect(rawTotal).toBeGreaterThan(15);
+    expect(driven.percentageTrace?.["percentageAdjustment"]).toBe(
+      lookupWorkbookPercentageAdjustment(baseValue, rawTotal),
+    );
+    expect(driven.percentageTrace?.["finalValue"]).toBe(
+      baseValue - lookupWorkbookPercentageAdjustment(baseValue, rawTotal)!,
+    );
+
+    // The flag travels with the recorded resolution, and with the committed attack result.
+    expect(driven.percentageTrace?.["extrapolated"]).toBe(true);
+    expect(driven.percentageTrace?.["extrapolatedAxes"]).toEqual(["modifier"]);
+    expect(driven.attackResult?.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
+    expect(driven.defenderCalculation?.["completeness"]).toBe("complete");
+    expect(driven.attackResult?.defenderDb).toBe(driven.defenderCalculation?.["effectiveDb"]);
+  });
+
+  it("#922 bisects the boundary: every total resolves, and the flag turns on at the grid's edge", async () => {
+    const drivenByTotal = new Map<
+      number,
+      Awaited<ReturnType<typeof driveAttackAgainstDbParryTotal>>
+    >();
+    for (let row = 2; row <= 26; row += 1) {
+      drivenByTotal.set(row, await driveAttackAgainstDbParryTotal(-row));
+    }
+
+    // The finding lane sampled -4 and -20 and reported the table's stated bound rather than a
+    // threshold. Bisected here by driving one raw point at a time, which puts the boundary one
+    // point earlier than the issue's reading of it and explains why.
+    //
+    // A defence is composed from two adjustments: the full one, whose total includes the
+    // encumbrance to-hit contribution of +1 and which becomes the recorded DB, and the no-to-hit
+    // one, which is half of the recorded DM. So a committed row of -N reaches the full lookup as
+    // -(N - 1) and the no-to-hit lookup as -N, and the no-to-hit total crosses the grid's last
+    // authored step first. Measured at the base commit with this fixture: rows -2 to -15 resolve,
+    // and **-16 is the first row refused** with `attack_defender_defense_unavailable` and the
+    // sentence about a missing defensive skill, although its full total is still an authored 15.
+    // Every row from -16 to -26 refuses the same way. After the repair none refuses.
+    expect([...drivenByTotal].filter(([, driven]) => driven.status !== 200)).toEqual([]);
+    for (const [row, driven] of drivenByTotal) {
+      const total = Math.abs(driven.percentageTrace?.["rawModifierTotal"] as number);
+      const noToHitTrace = driven.defenderCalculation?.["noToHitPercentageTrace"] as
+        | Record<string, unknown>
+        | undefined;
+      expect(driven.percentageTrace?.["rawModifierTotal"], `row ${row}`).toBe(-(row - 1));
+      expect(noToHitTrace?.["rawModifierTotal"], `row ${row}`).toBe(-row);
+      expect(driven.percentageTrace?.["percentageAdjustment"], `row ${row}`).toBe(
+        lookupWorkbookPercentageAdjustment(driven.percentageTrace?.["baseValue"] as number, total),
+      );
+      expect(driven.percentageTrace?.["extrapolated"], `row ${row}`).toBe(total > 15);
+      expect(noToHitTrace?.["extrapolated"], `row ${row}`).toBe(row > 15);
+      // The flag on the committed result covers both adjustments, so it turns on at the first row
+      // either of them crosses the edge — the same row the base commit refused.
+      expect(driven.attackResult?.extrapolatedWorkbookAdjustments, `row ${row}`).toEqual(
+        row > 15 ? ["defender_db"] : undefined,
+      );
+    }
+    expect(
+      [...drivenByTotal]
+        .filter(([, driven]) => driven.percentageTrace?.["extrapolated"] === true)
+        .map(([row]) => row),
+    ).toEqual([17, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
+    expect(
+      [...drivenByTotal]
+        .filter(
+          ([, driven]) => (driven.attackResult?.extrapolatedWorkbookAdjustments ?? []).length > 0,
+        )
+        .map(([row]) => row),
+    ).toEqual([16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
+  });
+
+  /**
+   * The same null, taking a quieter wrong turn. Where the defender does hold a legacy presentation
+   * snapshot for this round and phase, the base commit did not refuse: it fell back to the
+   * snapshot's DB of 11, recorded the calculation as `legacy_combat_round_step_snapshot` with no
+   * adjustment trace at all, and resolved the attack as though the committed damage modifiers did
+   * not exist. Measured at the base commit: rows -2 to -15 resolve canonically, and -16 onwards
+   * resolve on DB 11 with the committed total ignored. After the repair the canonical calculation
+   * completes for every row, so the fallback is not reached and the modifiers apply.
+   */
+  /**
+   * What the refusal says once the out-of-range cause is gone. The code
+   * `attack_defender_defense_unavailable` and the sentence about a missing defensive skill are kept
+   * — three consumers read that code, including a committed component test — but they are now
+   * reached only by the one condition they describe. A defender whose scenario equipment aggregate
+   * is the missing fact gets the cause that is actually missing, under the code #694 already used
+   * for exactly that on the missile defence path.
+   */
+  it("#922 names the real missing fact in the refusal that survives", async () => {
+    const drive = async (defenderSnapshot: Record<string, unknown>) => {
+      const fixture = makeDefenderDbParryTotalFixture(-20);
+      setupCombatDeclarationRoute({
+        encounter: fixture.encounter,
+        participants: [
+          fixture.participants[0],
+          { ...fixture.participants[1], snapshot: defenderSnapshot },
+        ],
+        user: mocks.playerUser,
+      });
+      const app = await buildScenarioTestApp();
+      const historyResponse = await app.inject({
+        method: "GET",
+        url: "/encounters/encounter-1/combat-history",
+      });
+      const validation = historyResponse.json().history.currentAttackModifierValidation;
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          attackerModifierFingerprint: validation.attackerModifierFingerprint,
+          defenderScenarioParticipantId: "participant-2",
+          expectedRevision: validation.expectedRevision,
+          modifierValidationTaskId: validation.taskId,
+          ob: 8,
+          obSkillRaw: validation.obSkillRaw,
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      await app.close();
+      return response;
+    };
+
+    // A defender carrying characteristics and equipment but no Dodge: the sentence is true, and the
+    // code the web consumers read is unchanged.
+    const noDodge = await drive({
+      build: makeCombatExperienceCharacterBuild({ id: "character-2", name: "No-dodge guard" }),
+      displayName: "No-dodge guard",
+      equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+      sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+    });
+
+    expect(noDodge.statusCode).toBe(409);
+    expect(noDodge.json()).toEqual({
+      code: "attack_defender_defense_unavailable",
+      error:
+        "This opponent has no defensive skill, so an attack against them cannot be resolved. Nothing was rolled. Give the opponent a defensive skill such as Dodge, then attack again.",
+    });
+
+    // The other causes this branch used to flatten into that sentence now report themselves under
+    // `defense_context_unavailable`. They are not drivable through this fixture helper, which
+    // back-fills a canonical build and equipment aggregate for any participant missing either, so
+    // the sentences they produce are covered where they are produced:
+    // `combatDefenseResolution.test.ts` around `getCombatDefenseRefusalMessage`.
+  });
+
+  it("#922 stops falling back to a legacy snapshot DB that ignores the committed total", async () => {
+    const driven = await driveAttackAgainstDbParryTotal(-20, { withLegacyDefenseSnapshot: true });
+
+    expect(driven.status, JSON.stringify(driven.attackResponse.json())).toBe(200);
+    expect(driven.defenderCalculation?.["authority"]).toBe("canonical_scenario_state");
+    expect(driven.defenderCalculation?.["completeness"]).toBe("complete");
+    expect(driven.percentageTrace?.["rawModifierTotal"]).toBe(-19);
+    expect(driven.percentageTrace?.["extrapolated"]).toBe(true);
+    expect(driven.attackResult?.defenderDb).not.toBe(11);
+    expect(driven.attackResult?.defenderDb).toBe(driven.percentageTrace?.["finalValue"]);
+    expect(driven.attackResult?.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
   });
 
   it("uses the same private defender calculation for GM and player attack authority", async () => {
