@@ -36078,6 +36078,863 @@ describe("#899 a GM modifier committed in the review is applied once", () => {
   });
 });
 
+/**
+ * Forgejo #920 — a GM roster change made during a round waits for the round boundary.
+ *
+ * Combatants enter and leave only between rounds: after the GM commits round end and before the
+ * first action of the next round. The holding field is `pendingParticipants` on the Encounter, and
+ * the round-end commit is the only thing that reads it.
+ *
+ * Every test here drives production routes. The control in each direction matters as much as the
+ * positive case: `holds` must not become `always holds`, and `applies at the boundary` must not
+ * become `rewrites the roster at every boundary`.
+ */
+describe("#920 a GM roster change made during a round waits for the round boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.campaignService.listCampaignsByUserAccess.mockResolvedValue([{ id: "campaign-1" }]);
+  });
+
+  /** Round N at Summary/update with both combatants in play and one round-end review outstanding. */
+  function makeMidRoundFixture() {
+    const fixture = makeDistanceControlReviewFixture();
+    const readyState = commitDistanceControlFixture({
+      proposalId: fixture.proposalId,
+      state: rollDistanceControlFixtureBothSides({
+        encounter: fixture.encounter,
+        proposalId: fixture.proposalId,
+      }),
+    });
+    const state = commitCombatRoundEndParticipantReview({
+      command: { createdAt: "2026-01-01T00:13:00.000Z", createdByUserId: "gm-1" },
+      encounterId: fixture.encounter.id,
+      participantId: "encounter-participant-1",
+      scenarioId: fixture.encounter.scenarioId,
+      scenarioParticipantId: "participant-1",
+      state: readyState,
+    }).state;
+    const thirdScenarioParticipant = makeCombatScenarioParticipant({
+      controlledByUserId: "third-player",
+      id: "participant-3",
+      snapshot: { displayName: "North archer" },
+    });
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: state,
+        currentRound: state.roundNumber,
+      },
+      participants: [...fixture.participants, thirdScenarioParticipant],
+      user: mocks.adminUser,
+    });
+
+    return { fixture, lifecycle, state };
+  }
+
+  function rosterIds(encounter: {
+    participants: Array<{ id: string }>;
+    pendingParticipants?: Array<{ id: string }>;
+  }) {
+    return {
+      held: encounter.pendingParticipants?.map((participant) => participant.id),
+      inForce: encounter.participants.map((participant) => participant.id),
+    };
+  }
+
+  function encounterParticipantRow(input: { id: string; label: string; order: number }) {
+    return {
+      ...makeCombatEncounter().participants[0],
+      id: input.id,
+      label: input.label,
+      order: input.order,
+      scenarioParticipantId: input.id.replace("encounter-participant-", "participant-"),
+    };
+  }
+
+  it("holds a mid-round removal, and the combatant still appears and still acts for the round", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    // The precondition for holding: this round has already recorded commands of its own.
+    expect(state.commands.some((command) => command.roundNumber === state.roundNumber)).toBe(true);
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    expect(rosterIds(held.json().encounter)).toEqual({
+      held: ["encounter-participant-1"],
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+
+    // Still in the round, so still in play: the GM reads the Encounter and the combatant is there.
+    const read = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    expect(read.statusCode).toBe(200);
+    expect(
+      (read.json().encounter.combatRoundState as CombatRoundState).participants.map(
+        (participant) => participant.participantId,
+      ),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+
+    // Still in the round, so still acts: their outstanding round-end review is accepted.
+    const acted = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: lifecycle.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    await app.close();
+
+    expect(acted.statusCode, JSON.stringify(acted.json())).toBe(200);
+    expect(acted.json()).toMatchObject({ participant: { id: "participant-2" } });
+    expect(
+      (acted.json().encounter.combatRoundState as CombatRoundState).roundEndReview
+        ?.participantReviews["encounter-participant-2"],
+    ).toMatchObject({ status: "complete" });
+    expect(rosterIds(lifecycle.encounter)).toEqual({
+      held: ["encounter-participant-1"],
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+  });
+
+  it("control — a roster change made before the round's first action takes effect at once", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const encounter = withResolvedCombatStartExperience(
+      makeCombatEncounter({ participants: encounterParticipants }),
+    ) as EncounterSession;
+    const openingState = initializeCombatRoundState({ encounter });
+    // The round-end commit empties the command list, so a round with no command of its own is
+    // still inside the between-rounds window.
+    expect(
+      openingState.commands.some((command) => command.roundNumber === openingState.roundNumber),
+    ).toBe(false);
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: { ...encounter, combatRoundState: openingState },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({ controlledByUserId: "other-player", id: "participant-2" }),
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [encounterParticipants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(rosterIds(response.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1"],
+    });
+  });
+
+  it("applies the held removal at the round boundary and records the round as it was played", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    const finalReview = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: lifecycle.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    expect(finalReview.statusCode, JSON.stringify(finalReview.json())).toBe(200);
+    const readyState = finalReview.json().encounter.combatRoundState as CombatRoundState;
+
+    const boundary = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildBoundaryTaskPayload(readyState, lifecycle.encounter.updatedAt, "declaration"),
+        expectedBoundary: "round_boundary",
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    expect(boundary.statusCode, JSON.stringify(boundary.json())).toBe(200);
+    const boundaryState = boundary.json().encounter.combatRoundState as CombatRoundState;
+    expect(boundaryState.roundNumber).toBe(state.roundNumber + 1);
+    expect(rosterIds(boundary.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1"],
+    });
+
+    // The record of the round that was played still carries both combatants. The held change was
+    // intent, and nothing wrote it into the round's history as though it had happened.
+    const completedRound = boundaryState.rounds.find(
+      (round) => round.roundNumber === state.roundNumber,
+    );
+    expect(completedRound?.participants.map((participant) => participant.participantId)).toEqual([
+      "encounter-participant-1",
+      "encounter-participant-2",
+    ]);
+    expect(
+      completedRound?.commands.some(
+        (command) => command.participantId === "encounter-participant-2",
+      ),
+    ).toBe(true);
+
+    // The next round derives its roster from the Encounter, so the removal is in force from here.
+    const read = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    await app.close();
+
+    expect(read.statusCode).toBe(200);
+    expect(
+      (read.json().encounter.combatRoundState as CombatRoundState).participants.map(
+        (participant) => participant.participantId,
+      ),
+    ).toEqual(["encounter-participant-1"]);
+  });
+
+  it("control — a round boundary with nothing held leaves the roster exactly as it was", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const finalReview = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: lifecycle.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    expect(finalReview.statusCode, JSON.stringify(finalReview.json())).toBe(200);
+    const readyState = finalReview.json().encounter.combatRoundState as CombatRoundState;
+
+    const boundary = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildBoundaryTaskPayload(readyState, lifecycle.encounter.updatedAt, "declaration"),
+        expectedBoundary: "round_boundary",
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    await app.close();
+
+    expect(boundary.statusCode, JSON.stringify(boundary.json())).toBe(200);
+    expect((boundary.json().encounter.combatRoundState as CombatRoundState).roundNumber).toBe(
+      state.roundNumber + 1,
+    );
+    expect(rosterIds(boundary.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+  });
+
+  it("holds a mid-round addition and applies it at the round boundary", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    const addedRow = encounterParticipantRow({
+      id: "encounter-participant-3",
+      label: "North archer",
+      order: 2,
+    });
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [...lifecycle.encounter.participants, addedRow],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    expect(rosterIds(held.json().encounter)).toEqual({
+      held: ["encounter-participant-1", "encounter-participant-2", "encounter-participant-3"],
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+
+    const midRound = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    expect(midRound.statusCode).toBe(200);
+    expect(
+      (midRound.json().encounter.combatRoundState as CombatRoundState).participants.map(
+        (participant) => participant.participantId,
+      ),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+
+    const finalReview = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: lifecycle.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    expect(finalReview.statusCode, JSON.stringify(finalReview.json())).toBe(200);
+    const readyState = finalReview.json().encounter.combatRoundState as CombatRoundState;
+
+    const boundary = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildBoundaryTaskPayload(readyState, lifecycle.encounter.updatedAt, "declaration"),
+        expectedBoundary: "round_boundary",
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    expect(boundary.statusCode, JSON.stringify(boundary.json())).toBe(200);
+    const boundaryState = boundary.json().encounter.combatRoundState as CombatRoundState;
+    expect(boundaryState.roundNumber).toBe(state.roundNumber + 1);
+    expect(rosterIds(boundary.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1", "encounter-participant-2", "encounter-participant-3"],
+    });
+    expect(
+      boundaryState.rounds
+        .find((round) => round.roundNumber === state.roundNumber)
+        ?.participants.map((participant) => participant.participantId),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+
+    const nextRound = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    await app.close();
+
+    expect(nextRound.statusCode).toBe(200);
+    expect(
+      (nextRound.json().encounter.combatRoundState as CombatRoundState).participants.map(
+        (participant) => participant.participantId,
+      ),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2", "encounter-participant-3"]);
+  });
+
+  it("withdraws a held change, and the boundary then leaves the roster alone", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    expect(held.json().encounter.pendingParticipants).toHaveLength(1);
+
+    const withdrawn = await app.inject({
+      method: "POST",
+      payload: { expectedRevision: lifecycle.encounter.updatedAt },
+      url: "/encounters/encounter-1/participants/withdraw-pending",
+    });
+    expect(withdrawn.statusCode, JSON.stringify(withdrawn.json())).toBe(200);
+    expect(rosterIds(withdrawn.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+
+    const finalReview = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: lifecycle.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    const readyState = finalReview.json().encounter.combatRoundState as CombatRoundState;
+    const boundary = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildBoundaryTaskPayload(readyState, lifecycle.encounter.updatedAt, "declaration"),
+        expectedBoundary: "round_boundary",
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    await app.close();
+
+    expect(boundary.statusCode, JSON.stringify(boundary.json())).toBe(200);
+    expect(rosterIds(boundary.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+  });
+
+  it("records nothing while the change is held, and no Scenario event claims it happened", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    await app.close();
+
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    // Present-tense intent, so no objective event is published: the roster has not changed.
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({ objectiveEvent: undefined }),
+    );
+    // The round's own record is untouched by the held change.
+    const heldState = held.json().encounter.combatRoundState as CombatRoundState;
+    expect(heldState.roundNumber).toBe(state.roundNumber);
+    expect(heldState.commands).toEqual(JSON.parse(JSON.stringify(state.commands)));
+    expect(heldState.events).toEqual(JSON.parse(JSON.stringify(state.events)));
+    expect(heldState.stepSnapshots).toEqual(JSON.parse(JSON.stringify(state.stepSnapshots)));
+    expect(heldState.participants.map((participant) => participant.participantId)).toEqual([
+      "encounter-participant-1",
+      "encounter-participant-2",
+    ]);
+    expect(JSON.stringify(heldState)).not.toContain("pendingParticipants");
+  });
+
+  it("keeps the held roster out of a player's response", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    expect(held.json().encounter.pendingParticipants).toHaveLength(1);
+
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.playerUser);
+    const playerRead = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    await app.close();
+
+    expect(playerRead.statusCode, JSON.stringify(playerRead.json())).toBe(200);
+    // A held change is the GM's intent. Telling a player someone is about to join or leave would
+    // disclose a GM decision that has not happened, so the player-facing type never names it.
+    expect(playerRead.json().encounter.pendingParticipants).toBeUndefined();
+    expect(JSON.stringify(playerRead.json())).not.toContain("pendingParticipants");
+  });
+
+  it("control — a completed Encounter holds nothing, because no boundary would apply it", async () => {
+    const { fixture, state } = makeMidRoundFixture();
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: {
+        ...fixture.encounter,
+        combatRoundState: state,
+        currentRound: state.roundNumber,
+        status: "completed",
+      },
+      participants: fixture.participants,
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(rosterIds(response.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1"],
+    });
+  });
+
+  it("refuses a held roster that could never take effect rather than wedging the boundary", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const empty = await app.inject({
+      method: "PATCH",
+      payload: { expectedRevision: lifecycle.encounter.updatedAt, participants: [] },
+      url: "/encounters/encounter-1/participants",
+    });
+    const duplicated = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [
+          lifecycle.encounter.participants[0],
+          { ...lifecycle.encounter.participants[0], id: "encounter-participant-1-copy" },
+        ],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    await app.close();
+
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().error).toContain("distinct Scenario participants");
+    expect(duplicated.statusCode).toBe(400);
+    expect(duplicated.json().error).toContain("distinct Scenario participants");
+    expect(lifecycle.encounter.pendingParticipants).toBeUndefined();
+  });
+
+  /**
+   * The second origin. `PUT /encounters/:encounterId` replaces the whole session, so the GM's
+   * roster travels through it as well, and the between-rounds rule is one rule rather than one
+   * rule per route. The decision has a different shape here only because the request is a whole
+   * session: a roster change is a session whose combatants are not the combatants in force, and a
+   * session carrying back the roster it loaded is an ordinary save.
+   */
+  it("holds a mid-round removal submitted through the whole-session PUT", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: {
+          ...lifecycle.encounter,
+          participants: [lifecycle.encounter.participants[0]],
+        },
+      },
+      url: "/encounters/encounter-1",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    expect(rosterIds(held.json().encounter)).toEqual({
+      held: ["encounter-participant-1"],
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+    // The roster has not changed, so nothing is recorded as though it had.
+    expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
+      expect.objectContaining({ objectiveEvent: undefined }),
+    );
+
+    // Still in the round, so still in play.
+    const read = await app.inject({ method: "GET", url: "/encounters/encounter-1" });
+    await app.close();
+
+    expect(read.statusCode).toBe(200);
+    expect(
+      (read.json().encounter.combatRoundState as CombatRoundState).participants.map(
+        (participant) => participant.participantId,
+      ),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+    expect((read.json().encounter.combatRoundState as CombatRoundState).roundNumber).toBe(
+      state.roundNumber,
+    );
+  });
+
+  it("applies a removal held through the whole-session PUT at the round boundary", async () => {
+    const { lifecycle, state } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const held = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: {
+          ...lifecycle.encounter,
+          participants: [lifecycle.encounter.participants[0]],
+        },
+      },
+      url: "/encounters/encounter-1",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+
+    const finalReview = await app.inject({
+      method: "POST",
+      payload: {
+        expectedParticipantRevision: lifecycle.participants[1]!.updatedAt,
+        scenarioParticipantId: "participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/commit-participant-review",
+    });
+    expect(finalReview.statusCode, JSON.stringify(finalReview.json())).toBe(200);
+    const readyState = finalReview.json().encounter.combatRoundState as CombatRoundState;
+
+    const boundary = await app.inject({
+      method: "POST",
+      payload: {
+        ...buildBoundaryTaskPayload(readyState, lifecycle.encounter.updatedAt, "declaration"),
+        expectedBoundary: "round_boundary",
+        stepSnapshots: [],
+        targetBoundary: "declaration",
+      },
+      url: "/encounters/encounter-1/combat-round/advance-current-step",
+    });
+    await app.close();
+
+    expect(boundary.statusCode, JSON.stringify(boundary.json())).toBe(200);
+    const boundaryState = boundary.json().encounter.combatRoundState as CombatRoundState;
+    expect(boundaryState.roundNumber).toBe(state.roundNumber + 1);
+    expect(rosterIds(boundary.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1"],
+    });
+    // The round that was played still carries both combatants.
+    expect(
+      boundaryState.rounds
+        .find((round) => round.roundNumber === state.roundNumber)
+        ?.participants.map((participant) => participant.participantId),
+    ).toEqual(["encounter-participant-1", "encounter-participant-2"]);
+  });
+
+  it("control — an ordinary mid-round session save through the PUT is written as before", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    // What every current caller of this route does: carry back the session it loaded with one
+    // unrelated field changed. Nobody enters and nobody leaves, so it is not a roster change and
+    // it must take effect at once — a gate that deferred this would break every ordinary save.
+    const saved = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: { ...lifecycle.encounter, description: "The bridge is slick with rain." },
+      },
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(saved.statusCode, JSON.stringify(saved.json())).toBe(200);
+    expect(saved.json().encounter.description).toBe("The bridge is slick with rain.");
+    expect(rosterIds(saved.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+  });
+
+  it("control — a mid-round save that only re-orders the roster is not a roster change", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const saved = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: {
+          ...lifecycle.encounter,
+          participants: [...lifecycle.encounter.participants].reverse(),
+        },
+      },
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(saved.statusCode, JSON.stringify(saved.json())).toBe(200);
+    expect(rosterIds(saved.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-2", "encounter-participant-1"],
+    });
+  });
+
+  it("control — a PUT roster change before the round's first action takes effect at once", async () => {
+    const encounterParticipants = makeTwoCombatEncounterParticipants();
+    const encounter = withResolvedCombatStartExperience(
+      makeCombatEncounter({ participants: encounterParticipants }),
+    ) as EncounterSession;
+    const openingState = initializeCombatRoundState({ encounter });
+    expect(
+      openingState.commands.some((command) => command.roundNumber === openingState.roundNumber),
+    ).toBe(false);
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: { ...encounter, combatRoundState: openingState },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({ controlledByUserId: "other-player", id: "participant-2" }),
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: { ...lifecycle.encounter, participants: [encounterParticipants[0]] },
+      },
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(rosterIds(response.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1"],
+    });
+  });
+
+  it("refuses a roster held through the PUT that could never take effect", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: { ...lifecycle.encounter, participants: [] },
+      },
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain("distinct Scenario participants");
+    expect(lifecycle.encounter.pendingParticipants).toBeUndefined();
+  });
+
+  /**
+   * The waiting roster is the GM's intent, placed through the route that owns it. The whole-session
+   * route neither invents one nor loses one, whatever its body carries.
+   */
+  it("neither forges nor drops a waiting roster through the whole-session PUT", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const forged = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: {
+          ...lifecycle.encounter,
+          pendingParticipants: [lifecycle.encounter.participants[0]],
+        },
+      },
+      url: "/encounters/encounter-1",
+    });
+    expect(forged.statusCode, JSON.stringify(forged.json())).toBe(200);
+    expect(rosterIds(forged.json().encounter)).toEqual({
+      held: undefined,
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+
+    const held = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    expect(held.statusCode, JSON.stringify(held.json())).toBe(200);
+    expect(held.json().encounter.pendingParticipants).toHaveLength(1);
+
+    // A stripped copy — the shape the previous review recorded as silently discarding the change.
+    const stripped = { ...lifecycle.encounter } as Record<string, unknown>;
+    delete stripped.pendingParticipants;
+    const saved = await app.inject({
+      method: "PUT",
+      payload: { expectedRevision: lifecycle.encounter.updatedAt, session: stripped },
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(saved.statusCode, JSON.stringify(saved.json())).toBe(200);
+    expect(rosterIds(saved.json().encounter)).toEqual({
+      held: ["encounter-participant-1"],
+      inForce: ["encounter-participant-1", "encounter-participant-2"],
+    });
+  });
+
+  /**
+   * The membership mode decides how the roster in force is chosen. Part-way through a round the
+   * roster in force cannot change, so a submitted mode governs nothing yet, and holding it would
+   * hand the round-end commit a mode an active Encounter is not allowed to carry. It is refused at
+   * both origins — accepted and then dropped is the one outcome that is not allowed.
+   */
+  it("refuses a mid-round membership mode change at the roster PATCH", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participantMembershipMode: "defaultAllActive",
+        participants: [lifecycle.encounter.participants[0]],
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain("Commit round end before changing how this Encounter");
+    expect(lifecycle.encounter.participantMembershipMode).toBeUndefined();
+    expect(lifecycle.encounter.pendingParticipants).toBeUndefined();
+    expect(lifecycle.encounter.participants.map((participant) => participant.id)).toEqual([
+      "encounter-participant-1",
+      "encounter-participant-2",
+    ]);
+  });
+
+  it("refuses a mid-round membership mode change at the whole-session PUT", async () => {
+    const { lifecycle } = makeMidRoundFixture();
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PUT",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        session: { ...lifecycle.encounter, participantMembershipMode: "defaultAllActive" },
+      },
+      url: "/encounters/encounter-1",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toContain("Commit round end before changing how this Encounter");
+    expect(lifecycle.encounter.participantMembershipMode).toBeUndefined();
+    expect(lifecycle.encounter.pendingParticipants).toBeUndefined();
+  });
+
+  it("control — a membership mode change outside the holding window still takes effect", async () => {
+    const encounter = withResolvedCombatStartExperience(
+      makeCombatEncounter({ participants: makeTwoCombatEncounterParticipants() }),
+    ) as EncounterSession;
+    const openingState = initializeCombatRoundState({ encounter });
+    const lifecycle = setupMutableCombatRouteState({
+      encounter: { ...encounter, combatRoundState: openingState },
+      participants: [
+        makeCombatScenarioParticipant({ id: "participant-1" }),
+        makeCombatScenarioParticipant({ controlledByUserId: "other-player", id: "participant-2" }),
+      ],
+      user: mocks.adminUser,
+    });
+    const app = await buildScenarioTestApp();
+
+    const response = await app.inject({
+      method: "PATCH",
+      payload: {
+        expectedRevision: lifecycle.encounter.updatedAt,
+        participantMembershipMode: "defaultAllActive",
+        participants: lifecycle.encounter.participants,
+      },
+      url: "/encounters/encounter-1/participants",
+    });
+    await app.close();
+
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    expect(response.json().encounter.participantMembershipMode).toBe("defaultAllActive");
+  });
+});
+
 describe("#915 a GM modifier review decision is accepted, and it sticks", () => {
   /**
    * One driven round through the production routes.
