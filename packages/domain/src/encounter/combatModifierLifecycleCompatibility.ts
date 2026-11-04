@@ -517,6 +517,39 @@ export function attachCanonicalLifecycleToModifierBucketRow(input: {
     : input.entry;
 }
 
+/**
+ * Restates a generated row's numeric value on the row **and** on its attached canonical payload.
+ *
+ * `normalizeScenarioCombatModifierEntry` resolves a row's value from
+ * `canonicalLifecycle.payload.value` whenever a projection is attached, and falls back to
+ * `entry.value` only when there is none. A producer that rewrites a row in place by spreading it
+ * therefore leaves the resolved number at the old figure while the row and its note read the new
+ * one. That is how the rule's two reductions of the attack-phase defensive penalty — Double Attack
+ * with the second attack cancelled, and simultaneous attack back-out — kept resolving at -4 over a
+ * row labelled -2% (#884).
+ *
+ * This is for the producers that restate a value in place and hold no accepted revision or
+ * sequence, so no lifecycle transition can be recorded. `transitionCanonicalModifierBucketRow` is
+ * the equivalent for a caller that has them and wants the transition recorded.
+ */
+export function restateCanonicalModifierBucketRowValue(input: {
+  entry: ScenarioCombatModifierEntry;
+  nextValue: number;
+}): ScenarioCombatModifierEntry {
+  if (!input.entry.canonicalLifecycle) {
+    return { ...input.entry, value: input.nextValue };
+  }
+  const effect = canonicalCombatModifierEffectSchema.parse(input.entry.canonicalLifecycle);
+  return {
+    ...input.entry,
+    canonicalLifecycle:
+      effect.payload.kind === "numeric"
+        ? { ...effect, payload: { ...effect.payload, value: input.nextValue } }
+        : effect,
+    value: input.nextValue,
+  };
+}
+
 /** Updates an attached producer projection without changing its stable effect identity. */
 export function transitionCanonicalModifierBucketRow(input: {
   acceptedRevision: string;

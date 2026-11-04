@@ -17,6 +17,7 @@ import {
 } from "./combatAttackPhasePenalty";
 import {
   attachCanonicalLifecycleToModifierBucketRow,
+  restateCanonicalModifierBucketRowValue,
   type CanonicalCombatModifierCompatibilityContext,
 } from "./combatModifierLifecycleCompatibility";
 
@@ -457,13 +458,17 @@ export function softenCombatActionGeneratedBackOutModifier(input: {
       return entry;
     }
 
-    const nextEntry = {
-      ...entry,
-      notes: `simultaneous attack backout: DB/Parry -2% in ${input.phase}`,
-      provisional: false,
-      sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:simultaneous_attack_backout`,
-      value: -2,
-    };
+    // The row carries an attached canonical projection, and resolution reads the value from that
+    // projection rather than from `entry.value`, so the reduction is restated on both (#884).
+    const nextEntry = restateCanonicalModifierBucketRowValue({
+      entry: {
+        ...entry,
+        notes: `simultaneous attack backout: DB/Parry -2% in ${input.phase}`,
+        provisional: false,
+        sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:simultaneous_attack_backout`,
+      },
+      nextValue: -2,
+    });
 
     softenedModifiers.push({
       bucketKey: "situationDb",
@@ -719,12 +724,16 @@ export function cancelDoubleAttackPhase2GeneratedModifiers(
         (entry.sourceActionId === "double_attack" &&
           entry.sourcePhase === "phase2" &&
           isAttackPhaseDefensivePenaltyModifier(entry))
-          ? {
-              ...entry,
-              notes: "double attack cancelled after Attack 1",
-              sourceRule: DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE,
-              value: -2,
-            }
+          ? // Resolution reads an attached canonical projection in preference to `entry.value`, so
+            // the reduction is restated on both (#884).
+            restateCanonicalModifierBucketRowValue({
+              entry: {
+                ...entry,
+                notes: "double attack cancelled after Attack 1",
+                sourceRule: DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE,
+              },
+              nextValue: -2,
+            })
           : entry,
       ),
       situationObSkill: combatContext.modifierBuckets.situationObSkill.filter(
