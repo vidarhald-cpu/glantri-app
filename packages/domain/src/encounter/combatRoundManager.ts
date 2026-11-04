@@ -24547,6 +24547,49 @@ export function progressCombatRoundMissileReadiness(input: {
   });
 }
 
+/**
+ * The phases of the current round in which this participant's GM modifier review is committed.
+ *
+ * Option B of #901, ruled on comment 20229: once the GM has committed the review for a phase, the
+ * generated attack-phase rows of that phase are the GM's and generation does not run over them
+ * again. Generation belongs to declaration. The rejected option A would instead have recorded an
+ * override for the regeneration to read and honour.
+ *
+ * The signal is the review command itself, which `recordCombatRoundParticipantStepReview` writes
+ * below, and that choice is what gives the gate its bounds for free:
+ *
+ * - **Never more than the round.** `commands` is emptied at the round boundary
+ *   (`advanceCombatRoundStep`), and this filters on `roundNumber` as well, so a review committed in
+ *   round 7 cannot suppress round 8's generation. Each round declares afresh.
+ * - **Never less than the round.** Take-back of a mid-round review removes that command
+ *   (`clear-current-step`), so the gate re-opens for the phase at exactly the moment the stored
+ *   modifier state is restored from the command's own `modifierReviewUndo` record.
+ *
+ * This reads the command's **existence**, never its `facts`. It does not read `modifierReviewUndo`,
+ * which is recorded for take-back only and is not an input to any current value (#901 comment
+ * 20229), and it does not read `modifierReview` either.
+ */
+export function getCombatRoundCommittedModifierReviewPhases(input: {
+  participantId: string;
+  state: CombatRoundState;
+}): Array<"phase1" | "phase2"> {
+  const participant = input.state.participants.find((candidate) =>
+    getCombatRoundParticipantTargetAliases(candidate).includes(input.participantId),
+  );
+  const aliases = new Set(
+    participant ? getCombatRoundParticipantTargetAliases(participant) : [input.participantId],
+  );
+  const phases = new Set<"phase1" | "phase2">();
+  for (const command of input.state.commands) {
+    if (command.roundNumber !== input.state.roundNumber || !aliases.has(command.participantId)) {
+      continue;
+    }
+    if (command.type === "review_modifiers_phase1") phases.add("phase1");
+    if (command.type === "review_modifiers_phase2") phases.add("phase2");
+  }
+  return [...phases];
+}
+
 export function recordCombatRoundParticipantStepReview(input: {
   command?: {
     commandId?: string;

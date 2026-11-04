@@ -322,20 +322,18 @@ export function projectCanonicalCombatModifierReviewInput(
     const labelChanged =
       Boolean(draft.entry.notes?.trim()) && draft.entry.notes?.trim() !== effect.publicLabel;
     if (valueChanged || durationChanged || labelChanged) {
-      if (
-        ![
-          "manual",
-          "persistent_effect",
-          "combat_experience",
-          "damage",
-          "health",
-          "stunned",
-        ].includes(effect.sourceFamily)
-      ) {
-        throw new RangeError(
-          `${effect.publicLabel} is process-owned and cannot be edited as a manual modifier.`,
-        );
-      }
+      // No `sourceFamily` allow-list. The app tracks modifiers and the GM modifies them (#915
+      // comment 20281, ruling 2: "The present should always show what the situation is, and should
+      // at many points be available for the GM to change"), so a GM edit is accepted on every
+      // family, generated ones included. Until #898 this threw a `RangeError` for the ten families
+      // outside a six-entry allow-list — which covered every family a GM meets at an ordinary
+      // declaration review — and because the throw escaped while the decision list was still being
+      // built, one such row aborted the whole review commit and lost every unrelated edit with it.
+      //
+      // The structural refusals in `commitCanonicalCombatModifierReview` are unaffected and still
+      // reject the whole transaction: a changed payload kind, category or unit needs replacement
+      // rather than an edit, and a stale `expectedVersion` means the review is no longer current.
+      // Those are integrity failures of the submitted transaction, not GM decisions about a value.
       decisions.push({
         decisionId: `${input.commandId}:edit:${effectId}`,
         effectId,
