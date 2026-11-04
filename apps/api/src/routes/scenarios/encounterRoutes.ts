@@ -17367,19 +17367,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         // character. So the cause decides what is said, the same way #694 split the missile
         // defence refusal, and the one condition the old sentence does describe keeps it.
         //
-        // #922 repair cycle 1, finding 1. The cause is read from the composition that actually
-        // failed, not from the canonical defence's completeness. Making the lookup open-ended
-        // moved the wall rather than removing it: the adjustment can now exceed the base, so an
-        // ordinary committed total drives `canonicalDefense.effectiveDb` below zero, and a
-        // negative base is the one input `resolveWorkbookPercentageAdjustment` still refuses. The
-        // Break Off consequence composes a second adjustment on exactly that base, so
-        // `breakOffDefenderTrace` is `null` while the canonical defence is `complete` and the
-        // defender holds Dodge — which is how the first candidate's split missed it and sent the
-        // original false sentence. `null` here distinguishes "the rule has no reading of this
-        // defence value" from `undefined`, which only means no composition was attempted.
+        // The cause is read from the composition that actually failed, not from the canonical
+        // defence's completeness, because the two disagree: a committed total drives
+        // `canonicalDefense.effectiveDb` below zero while the canonical defence stays `complete`
+        // and the defender holds Dodge, which is how an earlier split sent the original false
+        // sentence. `null` here distinguishes "the rule has no reading of this defence value" from
+        // `undefined`, which only means no composition was attempted.
         //
-        // Still a refusal, deliberately: whether a negative defence should resolve is Product
-        // Owner question 14 on #934 and is not pre-empted here.
+        // A defence below zero is no longer such a value. The Product Owner's ruling on #922
+        // (comment 20793) settles that the rule answers it at one point per raw step, so this
+        // branch no longer fires for the cause #922 was filed about and those attacks resolve —
+        // driven in `scenarios.test.ts`, `#922 resolves a negative canonical defence and keeps the
+        // committed Break Off penalty in it`. What remains here is a figure that is not a whole
+        // number of steps, and the refusal is kept for it rather than deleted because unreachable
+        // is not a safety property.
         if (breakOffDefenderTrace === null) {
           return reply.code(409).send({
             code: "defense_context_unavailable",

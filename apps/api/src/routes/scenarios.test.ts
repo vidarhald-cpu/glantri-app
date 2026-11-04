@@ -23594,8 +23594,8 @@ describe("scenarios route contract", () => {
    *
    * **The mutations this guards against:** restoring the lookup's negative-base refusal, which
    * returns every negative row to a 409; recording a below-zero figure with no flag; and dropping
-   * the committed Break Off penalty on a negative base, which the `delta` column catches because
-   * the penalised figure would equal the unpenalised one.
+   * the committed Break Off penalty on a negative base, which the `penalisedDb` assertions catch
+   * because that figure would equal the unpenalised `effectiveDb`.
    */
   it("#922 resolves a negative canonical defence and keeps the committed Break Off penalty in it", async () => {
     const committedRows = [-2, -10, -11, -14, -20, -26];
