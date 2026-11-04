@@ -2,8 +2,13 @@ import { getWorkbookCharacterSheetGm } from "../stats/characteristicGms";
 
 /**
  * The authored illustration of the percentage-adjustment rule: 50 base rows (0 through 49), each
- * spelling out 15 raw modifier steps. It is hand-transcribed source data and is never extended
- * here; it is exported only so the conformance test can read every authored cell (#922).
+ * spelling out 15 raw modifier steps.
+ *
+ * Source: `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Prosent`, `A4:P57` — row 4 is the raw
+ * step header 1..15, column A is the base, and rows 5 to 57 are bases 0 to 49. The sheet ends
+ * there on both axes, so this grid's bound is the illustration's bound and not a transcription
+ * cut-off. It is transcribed source data and is never extended here; it is exported only so the
+ * conformance test can read every authored cell (#922).
  *
  * One authored row per line, over the 100-column print width: the grid is transcribed source data
  * and a row read as a row is how it is checked against the workbook, so it is left exactly as
@@ -340,17 +345,22 @@ function workbookProportionalPercentageAdjustment(rawOb: number, step: number): 
  * "lookup tables are typically meant to be illustrations of open ended rules, we should make them
  * open ended, but probably also flag these for review").
  *
- * Derived from the grid and verified against all 750 authored cells by
- * `workbookCombatMath.test.ts`, which spells the rule out a second time and compares it against
- * every cell the table authors:
- *
  * - up to step 7, the base scaled by ten percent per raw step, rounded half up, never less than
  *   one point per raw step;
  * - from step 8 on, the step-7 figure plus one point per further step.
  *
- * The 15 cells the rule does not reproduce are the whole base-0 row, which the file's own comment
- * already declares a bad import and which this lookup already overrode by hand; the rule predicts
- * exactly that override. So the rule reproduces every figure this function returned before #922.
+ * This is the source sheet's own arithmetic, not a curve fitted to its output. In
+ * `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Prosent`, the cells for bases 11 to 49 are
+ * formulas: `B16:H57` is `=ROUND(B$4*$A16/10,0)` — the step header times the base over ten, with
+ * Excel's half-away-from-zero rounding — and `I16:P57` is `=$H16+I$4-7`, the step-7 figure plus one
+ * per further step. The one-point floor is the sheet's own treatment of the low bases: rows 5 to 15
+ * (bases 0 to 10) are literal values, not formulas, and bases 1 to 10 are authored as one point per
+ * raw step, which the formula alone would not produce.
+ *
+ * `workbookCombatMath.test.ts` spells the rule out a second time, independently of this module, and
+ * compares it against all 750 authored cells. It reproduces 735. The 15 it does not are the whole
+ * base-0 row, which this lookup already overrode by hand before #922 with exactly what the rule
+ * predicts, so the rule reproduces every figure this function returned before #922.
  */
 function workbookOpenEndedPercentageAdjustment(rawOb: number, absoluteModifier: number): number {
   if (absoluteModifier <= WORKBOOK_PERCENTAGE_ADJUSTMENT_PROPORTIONAL_STEP_LIMIT) {
@@ -398,10 +408,14 @@ export function resolveWorkbookPercentageAdjustment(
   const pastModifierEdge = absoluteModifier > WORKBOOK_PERCENTAGE_ADJUSTMENT_AUTHORED_MAX_STEP;
 
   if (rawOb === 0) {
-    // The hardcoded workbook table row for 0 imported as all zeroes, but the
-    // surrounding low-base rows encode a minimum one-point effect per raw step.
-    // Treat base 0 as the same low-base minimum rule so combat values can move
-    // away from zero under live modifiers.
+    // The workbook table row for 0 is all zeroes, but the surrounding low-base rows encode a
+    // minimum one-point effect per raw step. Treat base 0 as the same low-base minimum rule so
+    // combat values can move away from zero under live modifiers.
+    //
+    // #922 correction to the previous wording here, which called the zero row an import defect:
+    // `Prosent!B5:P5` is authored as literal zeroes in the source workbook, so this override is a
+    // deliberate deviation from the source rather than a repair of a bad transcription. The
+    // behaviour is unchanged and pre-dates #922; only the claim about why is corrected.
     return {
       extrapolated: pastModifierEdge,
       extrapolatedAxes: pastModifierEdge ? ["modifier"] : [],

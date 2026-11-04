@@ -814,6 +814,11 @@ describe("workbookCombatMath", () => {
  * comparing the production rule with itself. Outside the grid both sides are rules, and the
  * comparison pins the production continuation to the one derived here.
  *
+ * The rule restated here is also the source sheet's own arithmetic:
+ * `data/raw/glantri/Themistogenes 1.07.xlsx`, sheet `Prosent`, carries `=ROUND(B$4*$A16/10,0)` in
+ * `B16:H57` and `=$H16+I$4-7` in `I16:P57`, with bases 0 to 10 authored as literal values that
+ * supply the one-point-per-step floor.
+ *
  * Mutating either side fails these tests, which is what makes them a guard rather than a label:
  * change the rounding here (or there) to half-even and the 750-cell conformance test fails on base
  * 13 step 5 among others; change the continuation past step 7 and it fails across every row.
