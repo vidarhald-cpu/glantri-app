@@ -6,6 +6,7 @@ import {
   renderCombatActivitySummary,
   type CombatActivityViewer,
 } from "../encounter/combatActivityProjection";
+import { getCombatDistanceParticipantAliases } from "../encounter/combatDistance";
 import { projectCombatGenericActionsForPlayer } from "../encounter/combatGenericAction";
 import { buildPlayerSafeCombatScopeForUser } from "../encounter/combatPlayerVisibility";
 import {
@@ -314,18 +315,62 @@ function projectCombatOutcomeSummary(input: {
  * whether this viewer may see the actor, and the empty-matrix default is still answered in the one
  * place that owns it. Identity resolves against the record; entitlement resolves against the live
  * store. Only the first of those was wrong.
+ *
+ * **The recorded owner identity must denote the recorded actor, or there is no decision to make.**
+ * Downstream, `projectCombatGenericActionsForPlayer` asks its two id sets about
+ * `action.ownerParticipantId`, and those sets are the *aliases* of live roster rows. The schema
+ * imposes no uniqueness or actor-consistency condition on roster ids, so a row that is not the
+ * actor's can carry that id — by `id`, by a re-pointed `scenarioParticipantId`, or by any other
+ * alias — and then answer the control and the visibility question about the actor out of its own
+ * live state. That reaches both directions: a GM hide of the actor is defeated when the occupant
+ * is visible to the viewer, and ownership of the action is asserted when the occupant is the
+ * viewer's own row. So every row that can answer for the recorded owner identity is resolved to
+ * the Scenario participant it describes, and
+ *
+ * - a row describing **somebody else** makes the identity contested. Nothing here can tell whose
+ *   live state the GM's decision for that id was meant to express, so the gate refuses, which is
+ *   what the condition this function replaced did and the fail-closed direction the surrounding
+ *   gate already takes everywhere else.
+ * - a row describing **nobody** — one carrying no resolvable mapping, which the membership
+ *   resolver already declines to map and counts as an unmapped membership — cannot answer a
+ *   question about the actor either, but it makes no competing claim. It is set aside for this one
+ *   read, so a row stripped of its mapping still does not make a past outcome unreadable.
+ *
+ * Both of those hold whether or not the actor is still on the roster: a stranger occupying the
+ * recorded identity defeats the GM's hide of a combatant who never left just as readily.
  */
 function withRecordedItemActionActorOnRoster(input: {
   action: { ownerParticipantId: string };
   actor: ScenarioParticipant;
   encounter: EncounterSession;
-}): EncounterSession {
-  const alreadyInForce = input.encounter.participants.some(
-    (participant) =>
-      participant.id === input.action.ownerParticipantId ||
-      participant.scenarioParticipantId === input.action.ownerParticipantId ||
-      participant.scenarioParticipantId === input.actor.id,
+  scenarioParticipants: ScenarioParticipant[];
+}): EncounterSession | undefined {
+  // Whether a row can answer for the recorded owner identity, over the same alias set the
+  // player-safe scope resolves ids through — not only `id`, which is one alias of five.
+  const answersForTheOwner = (participant: EncounterSession["participants"][number]) =>
+    getCombatDistanceParticipantAliases(participant).includes(input.action.ownerParticipantId);
+  const describedBy = (participant: EncounterSession["participants"][number]) =>
+    scenarioParticipantDescribedByRosterRow({
+      participant,
+      scenarioParticipants: input.scenarioParticipants,
+    });
+  const describesTheActor = (participant: EncounterSession["participants"][number]) =>
+    describedBy(participant)?.id === input.actor.id;
+  const answering = input.encounter.participants.filter((participant) =>
+    answersForTheOwner(participant),
   );
+  if (
+    answering.some((participant) => {
+      const described = describedBy(participant);
+      return described !== undefined && described.id !== input.actor.id;
+    })
+  ) {
+    return undefined;
+  }
+  const actorRows = answering.filter((participant) => describesTheActor(participant));
+  // Only the actor answers for their own recorded identity, so the live roster already decides
+  // this correctly and everything that depends on those rows is untouched.
+  if (actorRows.length === answering.length && actorRows.length > 0) return input.encounter;
   // A roster that names nobody and does not declare itself explicit is resolved from the Scenario
   // instead, so adding a row to it would not restore an actor — it would decide how the Encounter
   // chooses its participants. That decision is not this reader's, and the outcome was unreadable
@@ -333,12 +378,19 @@ function withRecordedItemActionActorOnRoster(input: {
   const wouldChooseTheMembershipSource =
     input.encounter.participants.length === 0 &&
     input.encounter.participantMembershipMode !== "explicit";
-  if (alreadyInForce || wouldChooseTheMembershipSource) return input.encounter;
+  if (wouldChooseTheMembershipSource) return input.encounter;
 
+  // Every unattributed row answering for the recorded identity is set aside, and the actor's own
+  // row is restored from the record if the roster no longer carries one. The result always names
+  // at least the actor, so the membership source cannot change here.
+  const retained = input.encounter.participants.filter(
+    (participant) => !answersForTheOwner(participant) || describesTheActor(participant),
+  );
+  if (actorRows.length > 0) return { ...input.encounter, participants: retained };
   return {
     ...input.encounter,
     participants: [
-      ...input.encounter.participants,
+      ...retained,
       encounterParticipantSchema.parse({
         ...(input.actor.characterId ? { characterId: input.actor.characterId } : {}),
         id: input.action.ownerParticipantId,
@@ -348,6 +400,28 @@ function withRecordedItemActionActorOnRoster(input: {
       }),
     ],
   };
+}
+
+/**
+ * The Scenario participant one Encounter roster row describes, by the same correspondence the
+ * player-safe visibility scope and the membership resolver use: a row's aliases against a
+ * participant's `id`, its `scenario-` prefixed form, and its `characterId`.
+ *
+ * Ambiguity answers nobody. A row matching two participants describes neither of them well enough
+ * to answer a privacy question, and the membership resolver already declines to map it.
+ */
+function scenarioParticipantDescribedByRosterRow(input: {
+  participant: EncounterSession["participants"][number];
+  scenarioParticipants: ScenarioParticipant[];
+}): ScenarioParticipant | undefined {
+  const aliases = getCombatDistanceParticipantAliases(input.participant);
+  const described = input.scenarioParticipants.filter(
+    (candidate) =>
+      aliases.includes(candidate.id) ||
+      aliases.includes(`scenario-${candidate.id}`) ||
+      Boolean(candidate.characterId && aliases.includes(candidate.characterId)),
+  );
+  return described.length === 1 ? described[0] : undefined;
 }
 
 function canViewCurrentItemOutcome(
@@ -370,7 +444,15 @@ function canViewCurrentItemOutcome(
     (participant) => participant.id === eventActorParticipantId(event),
   );
   if (!actor) return false;
-  const rosterForRecordedAction = withRecordedItemActionActorOnRoster({ action, actor, encounter });
+  const rosterForRecordedAction = withRecordedItemActionActorOnRoster({
+    action,
+    actor,
+    encounter,
+    scenarioParticipants: context.participants,
+  });
+  // A live row belonging to somebody else answers for the recorded actor's id, so no visibility
+  // decision about the actor can be taken from this roster.
+  if (!rosterForRecordedAction) return false;
   const scope = buildPlayerSafeCombatScopeForUser({
     // Terminal history uses the existing read-only relationship interpretation;
     // active-control resolution deliberately rejects an archived Encounter.

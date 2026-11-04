@@ -390,6 +390,54 @@ if (!hasTaskApplicationDatabase) {
       return advanced;
     }
 
+    /**
+     * The GM's own roster route, in the between-rounds window, with whatever roster the GM submits.
+     * `encounterParticipantSchema` imposes no uniqueness or actor-consistency condition on the row
+     * ids and this route writes `participants` wholesale, which is what makes the #930 repair-cycle
+     * cases below reachable at all.
+     */
+    async function patchRoster(
+      current: Awaited<ReturnType<typeof seed>>,
+      participants: Record<string, unknown>[],
+    ) {
+      const before = await encounterRevision(current.encounterId);
+      const response = await app.inject({
+        headers: { cookie: current.cookies.gm, origin },
+        method: "PATCH",
+        payload: {
+          expectedRevision: before.updatedAt,
+          participantMembershipMode: "explicit",
+          participants,
+        },
+        url: `/encounters/${current.encounterId}/participants`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const after = await encounterRevision(current.encounterId);
+      expect(after.pendingParticipants).toBeUndefined();
+      return after;
+    }
+
+    /** The GM's per-viewer hide matrix — the live store that is the entitlement decision. */
+    async function writeVisibility(
+      current: Awaited<ReturnType<typeof seed>>,
+      visibility: Record<string, Record<string, boolean>>,
+    ) {
+      const before = await encounterRevision(current.encounterId);
+      await current.encounterService.updateCombatEncounter({
+        campaignId: current.campaign.id,
+        encounterId: current.encounterId,
+        expectedRevision: before.updatedAt,
+        scenarioId: current.scenario.id,
+        session: {
+          ...before,
+          roleplayState: {
+            ...before.roleplayState!,
+            visibility: { ...before.roleplayState!.visibility, ...visibility },
+          },
+        },
+      });
+    }
+
     /** The GM's own roster route, in the between-rounds window. */
     async function removeOwnerFromRoster(current: Awaited<ReturnType<typeof seed>>) {
       const before = await encounterRevision(current.encounterId);
@@ -549,6 +597,168 @@ if (!hasTaskApplicationDatabase) {
       const hiddenAfter = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
       expect(hiddenAfter.itemRows).toEqual([]);
       expect(hiddenAfter.raw).not.toContain(RESULT_TEXT);
+    });
+
+    /**
+     * #930 repair cycle 1. Resolving the actor's identity from the record is only half of the
+     * separation. `projectCombatGenericActionsForPlayer` then asks whether the recorded
+     * `ownerParticipantId` is in this viewer's controlled and visible id sets, and those sets are
+     * the *aliases* of live roster rows — so a row that is not the actor's can hold that id and
+     * answer the question about the actor out of its own live state.
+     *
+     * Both cases drive the GM's own roster route, keep the GM's hide of the actor in force
+     * throughout, and read the recipient's raw 200 body. The recipient's participation, control
+     * and visibility rows are never touched.
+     */
+    describe("a row that is not the actor's never answers for the actor's recorded id", () => {
+      /** Hide the acting combatant from the recipient, and never lift it. */
+      async function hideOwnerFromRecipient(current: Awaited<ReturnType<typeof seed>>) {
+        await writeVisibility(current, {
+          "encounter-participant-recipient": {
+            "encounter-participant-bystander": true,
+            "encounter-participant-owner": false,
+          },
+        });
+      }
+
+      it("refuses when a different combatant's row takes over the actor's recorded id", async () => {
+        const current = await seed();
+        await resolveItemPass(current);
+        await completeRound(current);
+        await hideOwnerFromRecipient(current);
+
+        const before = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+        expect(before.itemRows).toEqual([]);
+        expect(before.raw).not.toContain(RESULT_TEXT);
+
+        // The actor leaves and the bystander's row takes over the id the record uses for the
+        // actor. The GM then shows that row to the recipient, which is the ordinary thing to do
+        // for a combatant the recipient is meant to see.
+        const roster = await encounterRevision(current.encounterId);
+        const bystanderRow = roster.participants.find(
+          (participant) => participant.id === "encounter-participant-bystander",
+        )!;
+        const after = await patchRoster(current, [
+          roster.participants.find(
+            (participant) => participant.id === "encounter-participant-recipient",
+          )!,
+          { ...bystanderRow, id: "encounter-participant-owner" },
+        ]);
+        expect(after.participants.map((participant) => participant.id)).toEqual([
+          "encounter-participant-recipient",
+          "encounter-participant-owner",
+        ]);
+        await writeVisibility(current, {
+          "encounter-participant-recipient": { "encounter-participant-owner": true },
+        });
+
+        const reused = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+        expect({
+          afterTheIdIsReused: reused.itemRows.map((row) => row.summary),
+          whileTheActorIsPresentAndHidden: before.itemRows.map((row) => row.summary),
+        }).toEqual({ afterTheIdIsReused: [], whileTheActorIsPresentAndHidden: [] });
+        expect(reused.raw).not.toContain(RESULT_TEXT);
+
+        // The GM record is whole throughout.
+        const gm = await itemOutcomeRows(current.cookies.gm, current.scenario.id);
+        expect(gm.itemRows.map((row) => row.summary)).toEqual([RESULT_TEXT]);
+      });
+
+      /**
+       * The second reaching condition, and where it is reachable from.
+       *
+       * While an Encounter is **active**, `encounterRepository`'s own presence check already
+       * requires every roster row to carry a `scenarioParticipantId` that is distinct and resolves
+       * to an active participant of that Scenario (`encounterRepository.ts:124-183`), so the
+       * roster route refuses a re-pointed row outright — asserted below, because an unreachable
+       * shape must not be reported as a repaired one. That check does not run for a non-active
+       * Encounter, a paused Encounter rejects any further change, and the Activity projection
+       * reads every Encounter that is not archived. So the shape is reached in one write through
+       * the GM's own `PUT /encounters/:encounterId`, which carries the roster and the status
+       * together.
+       *
+       * Nothing about the actor changes here: they stay on the roster and stay hidden from the
+       * recipient throughout, which is why restoring a recorded actor's row is no defence against
+       * this direction.
+       */
+      it("refuses when another row's Scenario mapping is re-pointed at the actor's recorded id", async () => {
+        const current = await seed();
+        await resolveItemPass(current);
+        await completeRound(current);
+        await hideOwnerFromRecipient(current);
+
+        const shadowRow = {
+          id: "encounter-participant-shadow",
+          label: "Shadow",
+          participantType: "ad-hoc",
+          scenarioParticipantId: "encounter-participant-owner",
+        };
+
+        // The roster route's own refusal while the Encounter is active.
+        const active = await encounterRevision(current.encounterId);
+        const refused = await app.inject({
+          headers: { cookie: current.cookies.gm, origin },
+          method: "PATCH",
+          payload: {
+            expectedRevision: active.updatedAt,
+            participantMembershipMode: "explicit",
+            participants: [...active.participants, shadowRow],
+          },
+          url: `/encounters/${current.encounterId}/participants`,
+        });
+        expect(refused.statusCode).toBe(409);
+        expect(refused.json<{ error: string }>().error).toContain("active participants");
+
+        const before = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+        expect(before.itemRows).toEqual([]);
+        expect(before.raw).not.toContain(RESULT_TEXT);
+
+        // One write: the re-pointed row joins the roster and the Encounter pauses, so the active
+        // presence check does not run and the paused-immutability guard has nothing to reject yet.
+        const written = await app.inject({
+          headers: { cookie: current.cookies.gm, origin },
+          method: "PUT",
+          payload: {
+            expectedRevision: active.updatedAt,
+            session: {
+              ...active,
+              participants: [...active.participants, shadowRow],
+              roleplayState: {
+                ...active.roleplayState!,
+                visibility: {
+                  ...active.roleplayState!.visibility,
+                  "encounter-participant-recipient": {
+                    "encounter-participant-bystander": true,
+                    "encounter-participant-owner": false,
+                    "encounter-participant-shadow": true,
+                  },
+                },
+              },
+              status: "paused",
+            },
+          },
+          url: `/encounters/${current.encounterId}`,
+        });
+        expect(written.statusCode, written.body).toBe(200);
+        const after = await encounterRevision(current.encounterId);
+        expect(after.status).toBe("paused");
+        expect(
+          after.participants.map((participant) => participant.scenarioParticipantId),
+        ).toContain("encounter-participant-owner");
+
+        const repointed = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+        expect({
+          afterTheRowIsRepointed: repointed.itemRows.map((row) => row.summary),
+          whileTheActorIsPresentAndHidden: before.itemRows.map((row) => row.summary),
+        }).toEqual({ afterTheRowIsRepointed: [], whileTheActorIsPresentAndHidden: [] });
+        expect(repointed.raw).not.toContain(RESULT_TEXT);
+
+        // The projection is live in this exact state: the owner, who controls the actor and is in
+        // the recorded audience, still reads the row. So the recipient's empty reading is a denial
+        // and not an artefact of the paused status.
+        const ownerReading = await itemOutcomeRows(current.cookies.owner, current.scenario.id);
+        expect(ownerReading.itemRows.map((row) => row.summary)).toEqual([RESULT_TEXT]);
+      });
     });
   });
 }

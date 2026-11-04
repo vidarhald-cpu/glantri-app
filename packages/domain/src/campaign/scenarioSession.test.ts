@@ -525,6 +525,153 @@ describe("Scenario session privacy projection", () => {
 
       expect({ after, before }).toEqual({ after: [], before: [] });
     });
+
+    /**
+     * Forgejo #930 repair cycle 1. Taking the actor's identity from the record is only half of the
+     * separation. The question `projectCombatGenericActionsForPlayer` then asks is whether
+     * `action.ownerParticipantId` is in the viewer's controlled and visible id sets, and those sets
+     * are the *aliases* of live roster rows. `encounterParticipantSchema` imposes no uniqueness or
+     * actor-consistency condition and the roster route writes `participants` wholesale, so a row
+     * that is not the actor's can hold that id and answer for the actor out of its own live state.
+     *
+     * Each case removes the actor, leaves the viewer's own participation, control and visibility
+     * row untouched, and gives the recorded id to somebody else. The GM's hide of the actor is
+     * never lifted in any of them. The driven route-level pair is in
+     * `apps/api/src/routes/scenarios/scenarioPastItemOutcomeViewability.integration.test.ts`.
+     */
+    describe("a row that is not the actor's never answers for the actor's recorded id", () => {
+      /** A roster row in the shape the fixture's own rows take. */
+      function rosterRow(input: { id: string; label: string; scenarioParticipantId: string }) {
+        return {
+          declaration: {
+            actionType: "none" as const,
+            defenseFocus: "none" as const,
+            defensePosture: "none" as const,
+            targetLocation: "any" as const,
+          },
+          facing: "north" as const,
+          id: input.id,
+          initiative: 0,
+          label: input.label,
+          order: 2,
+          orientation: "neutral" as const,
+          participantType: "scenario" as const,
+          position: { x: 0, y: 0, zone: "center" as const },
+          scenarioParticipantId: input.scenarioParticipantId,
+        };
+      }
+
+      /** The GM hides the actor from the viewer, and that is never undone. */
+      function hideTheActorFromTheViewer(current: ReturnType<typeof itemHistoryFixture>): void {
+        current.currentEncounter.roleplayState!.visibility["encounter-participant-a"]![
+          "encounter-participant-b"
+        ] = false;
+      }
+
+      it("refuses when a different participant's row takes over the actor's recorded id", () => {
+        const current = itemHistoryFixture();
+        current.participants.push(participant("participant-c", "user-c", "Player C"));
+        hideTheActorFromTheViewer(current);
+        const before = view(current).history.map((entry) => entry.id);
+
+        // The actor leaves and Player C's row takes the id over. The GM then shows Player C to
+        // the viewer, which is the ordinary thing to do for a new combatant — and that entry is
+        // now keyed on the id the record uses for the actor.
+        removeActorFromRoster(current);
+        current.currentEncounter.participants.push(
+          rosterRow({
+            id: "encounter-participant-b",
+            label: "Player C",
+            scenarioParticipantId: "participant-c",
+          }),
+        );
+        current.currentEncounter.roleplayState!.visibility["encounter-participant-a"]![
+          "encounter-participant-b"
+        ] = true;
+        const after = view(current).history.map((entry) => entry.id);
+
+        expect({ after, before }).toEqual({ after: [], before: [] });
+        // The GM audit record is whole throughout.
+        expect(view(current, "user-a").history).toEqual([]);
+      });
+
+      it("refuses when another row's Scenario mapping is re-pointed at the actor's recorded id", () => {
+        const current = itemHistoryFixture();
+        hideTheActorFromTheViewer(current);
+        const before = view(current).history.map((entry) => entry.id);
+
+        // The second reaching condition: the occupant keeps its own row id and the row's
+        // `scenarioParticipantId` is re-pointed at the actor's recorded Encounter-participant id,
+        // so it answers for the actor while describing nobody the Scenario has.
+        removeActorFromRoster(current);
+        current.currentEncounter.participants.push(
+          rosterRow({
+            id: "encounter-participant-shadow",
+            label: "Shadow",
+            scenarioParticipantId: "encounter-participant-b",
+          }),
+        );
+        current.currentEncounter.roleplayState!.visibility["encounter-participant-a"]![
+          "encounter-participant-shadow"
+        ] = true;
+        const after = view(current).history.map((entry) => entry.id);
+
+        expect({ after, before }).toEqual({ after: [], before: [] });
+      });
+
+      it("refuses while the actor is still present and hidden and a re-pointed row answers", () => {
+        const current = itemHistoryFixture();
+        hideTheActorFromTheViewer(current);
+        const before = view(current).history.map((entry) => entry.id);
+
+        // The sharpest form: nothing about the actor changes at all. They stay on the roster and
+        // stay hidden, and a second occupant's re-pointed row answers for their recorded identity.
+        // Restoring the actor's row is no defence here, because the actor already has one.
+        current.currentEncounter.participants.push(
+          rosterRow({
+            id: "encounter-participant-shadow",
+            label: "Shadow",
+            scenarioParticipantId: "encounter-participant-b",
+          }),
+        );
+        current.currentEncounter.roleplayState!.visibility["encounter-participant-a"]![
+          "encounter-participant-shadow"
+        ] = true;
+        const after = view(current).history.map((entry) => entry.id);
+
+        expect({ after, before }).toEqual({ after: [], before: [] });
+      });
+
+      it("refuses when the viewer's own row takes over the actor's recorded id", () => {
+        const current = itemHistoryFixture();
+        current.participants.push(participant("participant-c", "user-c", "Player C"));
+        const before = view(current).history.map((entry) => entry.id);
+
+        // The same ambiguity through the *control* set rather than the visibility set: the
+        // viewer's own row holds the recorded id, so ownership of the action would be asserted
+        // and the visibility question never reached. The GM denies the viewer sight of everybody
+        // else, so this is the only route left open.
+        removeActorFromRoster(current);
+        current.currentEncounter.participants = [
+          rosterRow({
+            id: "encounter-participant-b",
+            label: "Player A",
+            scenarioParticipantId: "participant-a",
+          }),
+          rosterRow({
+            id: "encounter-participant-c",
+            label: "Player C",
+            scenarioParticipantId: "participant-c",
+          }),
+        ];
+        current.currentEncounter.roleplayState!.visibility = {
+          "encounter-participant-b": { "encounter-participant-c": false },
+        };
+        const after = view(current).history.map((entry) => entry.id);
+
+        expect({ after, before }).toEqual({ after: [], before: ["item-outcome"] });
+      });
+    });
   });
 
   it("keeps owned and closed Item history, archived control rules, and other chronology unchanged", () => {
