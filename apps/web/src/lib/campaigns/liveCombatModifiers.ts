@@ -20,7 +20,7 @@ import {
 } from "@glantri/domain";
 import {
   calculateWorkbookPercentageAdjustmentTrace,
-  lookupWorkbookPercentageAdjustment,
+  resolveWorkbookPercentageAdjustment,
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 
@@ -155,6 +155,12 @@ export interface EncounterDbParryModifierCalculation {
 
 export interface EncounterInitiativeModifierCalculation {
   baseInitiative: number;
+  /**
+   * Whether the percentage adjustment this figure used was resolved past the edge of the authored
+   * workbook grid (#922). Carried for review; no surface displays it yet — that is #940.
+   */
+  extrapolated: boolean;
+  extrapolatedAxes: readonly ("base" | "modifier")[];
   modifiedInitiative: number;
   modifierAdjustment: number;
   rawModifierTotal: number;
@@ -497,24 +503,68 @@ export function getCombatModifierRowsVisibleAtStep(
   return entries.filter((entry) => !entry.sourcePhase);
 }
 
-export function applyLiveRawModifierToCombatValue(input: {
+/**
+ * One live percentage adjustment and whether the open-ended rule resolved it past the edge of the
+ * authored workbook grid (#922 repair cycle 1, finding 4).
+ *
+ * `#922` opened `lookupWorkbookPercentageAdjustment` for every caller, which activated this one:
+ * where it used to return the base unchanged past the grid's last authored row, it now returns an
+ * extrapolated figure. Measured delta, base `a14c5c73` against the first #922 candidate:
+ * `{baseValue: 9, rawModifier: -20}` returned 9 and now returns −11; `{9, -16}` returned 9 and now
+ * returns −7; `{60, -3}` returned 60 and now returns 42; `{9, -15}` is 6 at both heads. So a
+ * displayed combat figure changed value at exactly the inputs #922 is about, and the Product
+ * Owner's ruling says every extrapolation is flagged for review.
+ *
+ * The flag is carried as data, here and on `EncounterInitiativeModifierCalculation`. **It has no
+ * screen yet, deliberately:** which GM-visible surfaces show it, and how, is #940 and a Product
+ * Owner decision naming surfaces and widths, so nothing here renders it.
+ *
+ * `extrapolated` is `false` when the rule has no reading of the input at all — a base below zero,
+ * or a non-integer one. That is not an understatement: no adjustment is applied in that case and
+ * the base is returned unchanged, so there is no extrapolated figure to flag. The absent
+ * adjustment itself is reported by `resolved`.
+ */
+export interface LiveRawModifierAdjustment {
+  extrapolated: boolean;
+  extrapolatedAxes: readonly ("base" | "modifier")[];
+  /** `false` when the rule has no reading of the input and `value` is the unadjusted base. */
+  resolved: boolean;
+  value: number;
+}
+
+export function resolveLiveRawModifierAdjustment(input: {
   baseValue: number;
   rawModifier: number;
-}): number {
+}): LiveRawModifierAdjustment {
   if (input.rawModifier === 0) {
-    return input.baseValue;
+    return { extrapolated: false, extrapolatedAxes: [], resolved: true, value: input.baseValue };
   }
 
-  const adjustment = lookupWorkbookPercentageAdjustment(
+  const adjustment = resolveWorkbookPercentageAdjustment(
     input.baseValue,
     Math.abs(input.rawModifier),
   );
 
   if (adjustment == null) {
-    return input.baseValue;
+    return { extrapolated: false, extrapolatedAxes: [], resolved: false, value: input.baseValue };
   }
 
-  return input.rawModifier > 0 ? input.baseValue + adjustment : input.baseValue - adjustment;
+  return {
+    extrapolated: adjustment.extrapolated,
+    extrapolatedAxes: adjustment.extrapolatedAxes,
+    resolved: true,
+    value:
+      input.rawModifier > 0
+        ? input.baseValue + adjustment.value
+        : input.baseValue - adjustment.value,
+  };
+}
+
+export function applyLiveRawModifierToCombatValue(input: {
+  baseValue: number;
+  rawModifier: number;
+}): number {
+  return resolveLiveRawModifierAdjustment(input).value;
 }
 
 export function buildEncounterInitiativeModifierCalculation(input: {
@@ -526,15 +576,17 @@ export function buildEncounterInitiativeModifierCalculation(input: {
     combatContext: input.combatContext,
     phase: input.phaseKey,
   });
-  const modifiedInitiative = applyLiveRawModifierToCombatValue({
+  const adjustment = resolveLiveRawModifierAdjustment({
     baseValue: input.baseInitiative,
     rawModifier: rawModifierTotal,
   });
 
   return {
     baseInitiative: input.baseInitiative,
-    modifiedInitiative,
-    modifierAdjustment: modifiedInitiative - input.baseInitiative,
+    extrapolated: adjustment.extrapolated,
+    extrapolatedAxes: adjustment.extrapolatedAxes,
+    modifiedInitiative: adjustment.value,
+    modifierAdjustment: adjustment.value - input.baseInitiative,
     rawModifierTotal,
   };
 }

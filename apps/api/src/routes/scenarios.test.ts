@@ -104,6 +104,8 @@ import {
 } from "@glantri/content/equipment";
 import { lookupWorkbookPercentageAdjustment } from "@glantri/rules-engine";
 
+import { ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION } from "./scenarios/combatMutationResponse";
+
 const mocks = vi.hoisted(() => {
   class CampaignCharacterAlreadyRosteredError extends Error {
     constructor() {
@@ -23202,11 +23204,45 @@ describe("scenarios route contract", () => {
    */
   function makeDefenderDbParryTotalFixture(
     rawTotal: number,
-    options: { withLegacyDefenseSnapshot?: boolean } = {},
+    options: {
+      breakOffDefenderDbParryModifier?: -4 | -3 | -2;
+      withLegacyDefenseSnapshot?: boolean;
+    } = {},
   ) {
     const fixture = makePostAdjustDistanceAttackFixture();
     const roundState = combatRoundStateSchema.parse({
       ...fixture.encounter.combatRoundState,
+      /**
+       * #922 repair cycle 1, finding 1. An ordinary committed `COMBAT_BREAK_OFF_RESULT_TABLE` row
+       * against a pair that stayed engaged: `escaped: false`, so the melee attack is not blocked,
+       * and a DB/Parry penalty the table authors with no GM input. The route composes a *second*
+       * percentage adjustment for it, on a base of the defender's already-adjusted canonical
+       * effective DB — which the committed `situationDb` total above can drive below zero.
+       */
+      breakOffProposals:
+        options.breakOffDefenderDbParryModifier === undefined
+          ? fixture.encounter.combatRoundState.breakOffProposals
+          : [
+              {
+                attackerParticipantId: "encounter-participant-1",
+                escapeeParticipantId: "encounter-participant-2",
+                id: "break-off-922",
+                pairKey: makeDistancePairKey("encounter-participant-1", "encounter-participant-2"),
+                result: {
+                  attackerObModifier: 0,
+                  defenderDbParryModifier: options.breakOffDefenderDbParryModifier,
+                  escaped: false,
+                  tableRowId:
+                    options.breakOffDefenderDbParryModifier === -4
+                      ? "defender_minus_21_or_less"
+                      : options.breakOffDefenderDbParryModifier === -3
+                        ? "defender_minus_16_to_minus_20"
+                        : "defender_minus_11_to_minus_15",
+                },
+                roundNumber: 1,
+                status: "committed",
+              },
+            ],
       // The reported defect needs the defender to have no legacy presentation snapshot to fall
       // back on, which is the ordinary case for the first attack on a defender in a round. With
       // one present the base commit took a different wrong turn, recorded separately below.
@@ -23258,13 +23294,18 @@ describe("scenarios route contract", () => {
 
   async function driveAttackAgainstDbParryTotal(
     rawTotal: number,
-    options: { withLegacyDefenseSnapshot?: boolean } = {},
+    options: {
+      breakOffDefenderDbParryModifier?: -4 | -3 | -2;
+      combatResponseVersion?: string;
+      user?: typeof mocks.playerUser | typeof mocks.adminUser;
+      withLegacyDefenseSnapshot?: boolean;
+    } = {},
   ) {
     const fixture = makeDefenderDbParryTotalFixture(rawTotal, options);
     setupCombatDeclarationRoute({
       encounter: fixture.encounter,
       participants: fixture.participants,
-      user: mocks.playerUser,
+      user: options.user ?? mocks.playerUser,
     });
     const app = await buildScenarioTestApp();
     const historyResponse = await app.inject({
@@ -23274,6 +23315,9 @@ describe("scenarios route contract", () => {
     const validation = historyResponse.json().history.currentAttackModifierValidation;
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
     const attackResponse = await app.inject({
+      headers: options.combatResponseVersion
+        ? { "x-glantri-combat-response": options.combatResponseVersion }
+        : undefined,
       method: "POST",
       payload: {
         attackerModifierFingerprint: validation.attackerModifierFingerprint,
@@ -23492,6 +23536,195 @@ describe("scenarios route contract", () => {
     expect(driven.attackResult?.defenderDb).not.toBe(11);
     expect(driven.attackResult?.defenderDb).toBe(driven.percentageTrace?.["finalValue"]);
     expect(driven.attackResult?.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
+  });
+
+  /**
+   * #922 repair cycle 1, finding 1 — the refusal this issue was filed about, re-keyed.
+   *
+   * Making the lookup open-ended did not remove the wall; it **moved** it. The adjustment can now
+   * exceed the base, so a canonical effective DB can be negative — and a negative base is the one
+   * input `resolveWorkbookPercentageAdjustment` still refuses, by design and unchanged. An
+   * ordinary committed Break Off result row composes a second adjustment on exactly that base, so
+   * the refusal is live on the melee path at this head.
+   *
+   * The first candidate keyed the cause split on the canonical defence being *incomplete*. Here it
+   * is `complete` and the defender holds Dodge, so the split did not fire and the original false
+   * sentence came back. The cause is now read from the composition that actually failed, so the
+   * sentence written for it is the sentence sent.
+   *
+   * **Still a refusal, on purpose.** Whether a negative defence should resolve rather than refuse
+   * is Product Owner question 14 on #934 and is not pre-empted here; refusing with an honest cause
+   * is correct under either answer.
+   *
+   * **The mutation this guards against:** keying the branch back on `canonicalDefense.completeness`
+   * — every negative-base row below then returns `attack_defender_defense_unavailable` and the
+   * sentence about a defensive skill the defender demonstrably has, which is what this head did.
+   */
+  it("#922 refuses a negative canonical defence by its real cause, not a missing defensive skill", async () => {
+    const WORKBOOK_ADJUSTMENT_REFUSAL =
+      "This opponent's defence works out to a value this calculation has no reading for, so the attack cannot be resolved. Nothing was recorded. This is not something the opponent's skills or equipment can repair; report it with the opponent's defence figures.";
+    const committedRows = [-2, -10, -11, -14, -20, -26];
+    const measured: Array<{
+      code: unknown;
+      committedRow: number;
+      effectiveDb: unknown;
+      error: unknown;
+      status: number;
+    }> = [];
+
+    for (const committedRow of committedRows) {
+      // A refusal performs no `updateEncounter`, so the defender's canonical effective DB is read
+      // from the paired run of the same committed row with no Break Off penalty, which resolves.
+      const withoutBreakOff = await driveAttackAgainstDbParryTotal(committedRow);
+      const withBreakOff = await driveAttackAgainstDbParryTotal(committedRow, {
+        breakOffDefenderDbParryModifier: -4,
+      });
+      const body = withBreakOff.attackResponse.json() as Record<string, unknown>;
+
+      expect(withoutBreakOff.status, `row ${committedRow} without Break Off`).toBe(200);
+      expect(withoutBreakOff.defenderCalculation?.["completeness"]).toBe("complete");
+      measured.push({
+        code: body["code"],
+        committedRow,
+        effectiveDb: withoutBreakOff.defenderCalculation?.["effectiveDb"],
+        error: body["error"],
+        status: withBreakOff.status,
+      });
+    }
+
+    // Five rows whose canonical effective DB is negative, and the one control row that is not.
+    expect(measured).toEqual([
+      { code: undefined, committedRow: -2, effectiveDb: 7, error: undefined, status: 200 },
+      {
+        code: "defense_context_unavailable",
+        committedRow: -10,
+        effectiveDb: -1,
+        error: WORKBOOK_ADJUSTMENT_REFUSAL,
+        status: 409,
+      },
+      {
+        code: "defense_context_unavailable",
+        committedRow: -11,
+        effectiveDb: -2,
+        error: WORKBOOK_ADJUSTMENT_REFUSAL,
+        status: 409,
+      },
+      {
+        code: "defense_context_unavailable",
+        committedRow: -14,
+        effectiveDb: -5,
+        error: WORKBOOK_ADJUSTMENT_REFUSAL,
+        status: 409,
+      },
+      {
+        code: "defense_context_unavailable",
+        committedRow: -20,
+        effectiveDb: -11,
+        error: WORKBOOK_ADJUSTMENT_REFUSAL,
+        status: 409,
+      },
+      {
+        code: "defense_context_unavailable",
+        committedRow: -26,
+        effectiveDb: -17,
+        error: WORKBOOK_ADJUSTMENT_REFUSAL,
+        status: 409,
+      },
+    ]);
+    // The false sentence and its code reach none of the negative-base rows.
+    for (const row of measured.filter((entry) => entry.status === 409)) {
+      expect(row.code, `row ${row.committedRow}`).not.toBe("attack_defender_defense_unavailable");
+      expect(String(row.error), `row ${row.committedRow}`).not.toContain("no defensive skill");
+      expect(String(row.error), `row ${row.committedRow}`).not.toContain("such as Dodge");
+    }
+  });
+
+  /**
+   * #922 repair cycle 1, finding 2 — the flag is GM-only on the **raw response body**, per
+   * top-level key, on both response contracts, at an actual player `200`.
+   *
+   * The first candidate asserted the field's absence from `playerFacingCombatRoundAttackRollResult`
+   * and the absence of the old 409 from the route body. Neither reads the key that leaked: the
+   * roll-attack response projected the player's own attack result through a **denylist** of two
+   * named fields, which the new field was never added to, and the compact `active-v1` contract
+   * carries that same value inside `mutationPresentation`, a passthrough record.
+   *
+   * This reads every top-level key of the raw body instead, and asserts the key set itself, so a
+   * key added to this response later cannot carry the field past this test unnoticed. The GM runs
+   * in the same test and does receive it, so the instrument discriminates in both directions.
+   *
+   * **The mutation this guards against:** projecting the player's attack result through anything
+   * that does not name its fields — the two-field denylist this replaces makes
+   * `attackResult.extrapolatedWorkbookAdjustments` (legacy) and
+   * `mutationPresentation.attackResult.extrapolatedWorkbookAdjustments` (`active-v1`) present
+   * again, and the per-key tables below fail on exactly those keys.
+   */
+  it("#922 keeps the extrapolated-adjustment flag out of every player key on both response contracts", async () => {
+    const readKeys = (body: unknown) => {
+      const payload = body as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.keys(payload)
+          .sort()
+          .map((key) => [
+            key,
+            JSON.stringify(payload[key] ?? null).includes("extrapolatedWorkbookAdjustments"),
+          ]),
+      );
+    };
+
+    const playerLegacy = await driveAttackAgainstDbParryTotal(-20);
+    const playerCompact = await driveAttackAgainstDbParryTotal(-20, {
+      combatResponseVersion: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
+    });
+    const gmLegacy = await driveAttackAgainstDbParryTotal(-20, { user: mocks.adminUser });
+    const gmCompact = await driveAttackAgainstDbParryTotal(-20, {
+      combatResponseVersion: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
+      user: mocks.adminUser,
+    });
+
+    for (const driven of [playerLegacy, playerCompact, gmLegacy, gmCompact]) {
+      expect(driven.status, JSON.stringify(driven.attackResponse.json())).toBe(200);
+    }
+    // The run is the flagging one: the committed resolution says so.
+    expect(playerLegacy.attackResult?.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
+
+    expect(readKeys(playerLegacy.attackResponse.json())).toEqual({
+      attackResult: false,
+      command: false,
+      commandEnvelope: false,
+      encounter: false,
+    });
+    expect(readKeys(playerCompact.attackResponse.json())).toEqual({
+      activeCombatState: false,
+      commandEnvelope: false,
+      encounterId: false,
+      mutationPresentation: false,
+      nextTask: false,
+      revision: false,
+      version: false,
+    });
+    // Discrimination in the same run: the GM, who the ruling says has to know, receives it.
+    expect(readKeys(gmLegacy.attackResponse.json())).toMatchObject({ attackResult: true });
+    expect(readKeys(gmCompact.attackResponse.json())).toMatchObject({
+      mutationPresentation: true,
+    });
+
+    // And the player's own attack figures are unchanged by the projection.
+    const playerAttack = (playerLegacy.attackResponse.json() as Record<string, unknown>)[
+      "attackResult"
+    ] as Record<string, unknown>;
+    expect(playerAttack["defenderDb"]).toBe(playerLegacy.attackResult?.defenderDb);
+    expect(playerAttack["ob"]).toBe(playerLegacy.attackResult?.ob);
+    expect(playerAttack["rollTotal"]).toBe(playerLegacy.attackResult?.rollTotal);
+    // The account identity and the import provenance the player never receives stay out.
+    for (const field of [
+      "rolledByUserId",
+      "weaponDmbRoll",
+      "weaponModeSourceMetadata",
+      "extrapolatedWorkbookAdjustments",
+    ]) {
+      expect(playerAttack, field).not.toHaveProperty(field);
+    }
   });
 
   it("uses the same private defender calculation for GM and player attack authority", async () => {
@@ -33830,12 +34063,11 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
         },
       };
     },
-    identityPaths: {
-      // `attackResult` is the route's presentation of the viewer's own attack roll, not a
-      // participant or encounter sibling: outside Tier 2's scope, recorded for the handback.
-      active: ["mutationPresentation.attackResult.rolledByUserId"],
-      legacy: ["attackResult.rolledByUserId"],
-    },
+    // `attackResult` is the route's presentation of the viewer's own attack roll, not a
+    // participant or encounter sibling, so Tier 2 recorded `rolledByUserId` on it rather than
+    // removing it. #922 repair cycle 1, finding 2, removed it: the two shapes this response
+    // projects for the player now go through the player-facing schemas that name their fields,
+    // and those name no account identity. There is nothing left to record here.
     name: "POST /encounters/:encounterId/combat-round/roll-attack",
     playerKeys: ["attackResult", "command", "commandEnvelope", "encounter"],
     populated: {
@@ -33975,16 +34207,11 @@ describe("#507 privacy hardening Tier 2 — player responses against the player-
       };
     },
     gmKeys: ["command", "commandEnvelope", "encounter", "participant", "pendingMissileAttack"],
-    identityPaths: {
-      // `pendingMissileAttack` is the route's presentation of the viewer's own pending missile
-      // roll, a sibling outside Tier 2's scope like the melee `attackResult` (recorded for the
-      // handback). Plus the viewer's own participant's controller.
-      active: [
-        ...OWN_PARTICIPANT_CONTROLLER.active,
-        "mutationPresentation.pendingMissileAttack.rolledByUserId",
-      ],
-      legacy: [...OWN_PARTICIPANT_CONTROLLER.legacy, "pendingMissileAttack.rolledByUserId"],
-    },
+    // Only the viewer's own participant's controller. `pendingMissileAttack.rolledByUserId` was
+    // recorded here for the same reason as the melee `attackResult`'s, and #922 repair cycle 1,
+    // finding 2, removed it with the same change: this shape now goes through
+    // `playerFacingCombatMissileIncomingAttackSchema`, which names no account identity.
+    identityPaths: OWN_PARTICIPANT_CONTROLLER,
     name: "POST /encounters/:encounterId/combat-round/roll-attack (missile: the attacker's participant)",
     playerKeys: ["command", "commandEnvelope", "encounter", "participant", "pendingMissileAttack"],
     // The missile attack result is pending, so no attack result is stored yet.

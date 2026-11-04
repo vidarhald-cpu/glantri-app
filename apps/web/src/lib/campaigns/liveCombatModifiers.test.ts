@@ -14,6 +14,7 @@ import {
   buildTargetAwareEncounterLiveCombatModifierSummary,
   filterCombatModifierEntriesForPhase,
   resolveEncounterLiveCombatModifierContext,
+  resolveLiveRawModifierAdjustment,
   sumEncounterCombatEffectModifiers,
 } from "./liveCombatModifiers";
 
@@ -430,6 +431,143 @@ describe("live combat modifiers", () => {
         rawModifier: -1,
       }),
     ).toBe(13);
+  });
+
+  /**
+   * #922 repair cycle 1, finding 4 — this caller now produces extrapolated figures, and says so.
+   *
+   * Opening `lookupWorkbookPercentageAdjustment` for every caller activated this one. The measured
+   * delta, base `a14c5c73` against the open-ended lookup: `{9, -20}` returned the base 9 unchanged
+   * and now returns −11; `{9, -16}` returned 9 and now returns −7; `{60, -3}` returned 60 and now
+   * returns 42; `{9, -15}` is 6 at both heads. The Product Owner's ruling is that every
+   * extrapolation is flagged for review, so the fact travels with the figure.
+   *
+   * **The mutation this guards against:** going back to the value-only lookup here, which drops
+   * `extrapolated` from every row below and silently changes three displayed figures.
+   *
+   * No surface displays the flag yet, deliberately: that is #940 and a Product Owner decision.
+   */
+  it("#922 says which live figures the open-ended rule resolved past the authored grid", () => {
+    const measured = [
+      { baseValue: 9, rawModifier: -20 },
+      { baseValue: 9, rawModifier: -16 },
+      { baseValue: 60, rawModifier: -3 },
+      { baseValue: 9, rawModifier: -15 },
+      { baseValue: 60, rawModifier: -20 },
+      { baseValue: 9, rawModifier: 0 },
+    ].map((input) => ({ ...input, ...resolveLiveRawModifierAdjustment(input) }));
+
+    expect(measured).toEqual([
+      // Past the modifier edge: the figure #922 was reported on.
+      {
+        baseValue: 9,
+        extrapolated: true,
+        extrapolatedAxes: ["modifier"],
+        rawModifier: -20,
+        resolved: true,
+        value: -11,
+      },
+      {
+        baseValue: 9,
+        extrapolated: true,
+        extrapolatedAxes: ["modifier"],
+        rawModifier: -16,
+        resolved: true,
+        value: -7,
+      },
+      // Past the base edge, which this caller can reach with an ordinary high base.
+      {
+        baseValue: 60,
+        extrapolated: true,
+        extrapolatedAxes: ["base"],
+        rawModifier: -3,
+        resolved: true,
+        value: 42,
+      },
+      // Inside the grid: the authored cell, and no flag.
+      {
+        baseValue: 9,
+        extrapolated: false,
+        extrapolatedAxes: [],
+        rawModifier: -15,
+        resolved: true,
+        value: -6,
+      },
+      // Both axes at once.
+      {
+        baseValue: 60,
+        extrapolated: true,
+        extrapolatedAxes: ["base", "modifier"],
+        rawModifier: -20,
+        resolved: true,
+        value: 5,
+      },
+      // No modifier at all is no adjustment, and nothing to flag.
+      {
+        baseValue: 9,
+        extrapolated: false,
+        extrapolatedAxes: [],
+        rawModifier: 0,
+        resolved: true,
+        value: 9,
+      },
+    ]);
+
+    // Every value matches the lookup's own output, never a figure computed here.
+    for (const row of measured.filter((entry) => entry.rawModifier !== 0)) {
+      const adjustment = lookupWorkbookPercentageAdjustment(
+        row.baseValue,
+        Math.abs(row.rawModifier),
+      );
+      expect(adjustment, `${row.baseValue}/${row.rawModifier}`).not.toBeNull();
+      expect(row.value, `${row.baseValue}/${row.rawModifier}`).toBe(
+        row.rawModifier > 0 ? row.baseValue + adjustment! : row.baseValue - adjustment!,
+      );
+    }
+
+    // An input the rule has no reading of returns the base unchanged — which it did at the base
+    // commit too — and says the adjustment was not resolved rather than claiming it was in-grid.
+    expect(resolveLiveRawModifierAdjustment({ baseValue: -3, rawModifier: -4 })).toEqual({
+      extrapolated: false,
+      extrapolatedAxes: [],
+      resolved: false,
+      value: -3,
+    });
+    expect(applyLiveRawModifierToCombatValue({ baseValue: -3, rawModifier: -4 })).toBe(-3);
+  });
+
+  it("#922 carries the flag onto the initiative calculation a surface reads", () => {
+    const combatContext: ScenarioParticipantCombatContext = {
+      modifierBuckets: {
+        general: [],
+        situationDb: [],
+        situationInitiative: [{ id: "committed", scope: "until", value: -20 }],
+        situationObSkill: [],
+      },
+    };
+    const pastEdge = buildEncounterInitiativeModifierCalculation({
+      baseInitiative: 9,
+      combatContext,
+    });
+
+    expect(pastEdge.rawModifierTotal).toBe(-20);
+    expect(pastEdge.extrapolated).toBe(true);
+    expect(pastEdge.extrapolatedAxes).toEqual(["modifier"]);
+    expect(pastEdge.modifiedInitiative).toBe(9 - lookupWorkbookPercentageAdjustment(9, 20)!);
+
+    const inGrid = buildEncounterInitiativeModifierCalculation({
+      baseInitiative: 9,
+      combatContext: {
+        modifierBuckets: {
+          ...combatContext.modifierBuckets,
+          situationInitiative: [{ id: "committed", scope: "until", value: -15 }],
+        },
+      },
+    });
+
+    expect(inGrid.rawModifierTotal).toBe(-15);
+    expect(inGrid.extrapolated).toBe(false);
+    expect(inGrid.extrapolatedAxes).toEqual([]);
   });
 
   it("documents previous defense overlay versus summed raw modifier strategy", () => {

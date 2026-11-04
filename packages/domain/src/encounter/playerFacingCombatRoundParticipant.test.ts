@@ -15,6 +15,7 @@ import {
 } from "./combatModifierLifecycle";
 import { buildCanonicalCombatModifierReviewFromDraft } from "./combatModifierReviewProjection";
 import {
+  combatMissileIncomingAttackSchema,
   combatRoundAttackRollResultSchema,
   combatRoundParticipantStateSchema,
   combatRoundStateSchema,
@@ -25,6 +26,7 @@ import {
   ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS,
   buildPlayerFacingCombatRoundParticipant,
   withoutAttackResultWorkbookImportProvenance,
+  playerFacingCombatMissileIncomingAttackSchema,
   playerFacingCombatRoundAttackOpportunitySchema,
   playerFacingCombatRoundAttackRollResultSchema,
   playerFacingCombatRoundCombatExperienceResultSchema,
@@ -523,13 +525,61 @@ describe("#507 player-facing round-state participant: additive construction", ()
   });
 
   /**
-   * #922. The extrapolated-adjustment flag is review provenance recorded for the GM, who is the
-   * one the Product Owner's ruling says has to know an extrapolated figure was used. It is not a
-   * value a player receives, so the player-facing attack result does not name it. The stored
-   * fixture populates it, so this is an omission that can fail: name the field in the player-facing
-   * schema and the assertions below break.
+   * #922 repair cycle 1, finding 2 — replacing the field-level test this issue first shipped.
+   *
+   * That test asserted that `playerFacingCombatRoundAttackRollResultSchema` does not name
+   * `extrapolatedWorkbookAdjustments`, which was true and did not catch the leak: the roll-attack
+   * response projected the player's own attack result through a two-field **denylist** rather than
+   * this schema, so the field reached the attacking player at `200` on both response contracts
+   * while this assertion stayed green. The driven per-key proof of the response bodies is in
+   * `apps/api/src/routes/scenarios.test.ts`; what belongs here is the **shape**.
+   *
+   * So this states the difference between the stored attack shapes and their player-facing ones as
+   * a set, derived from the stored schemas rather than listed by hand. A field added to either
+   * stored schema later appears in that difference, and whoever added it has to decide here
+   * whether a player receives it — which is what a denylist never made anyone do.
    */
-  it("omits the extrapolated-adjustment flag from player output although it is populated", () => {
+  it("names the exact difference between the stored attack shapes and the player-facing ones", () => {
+    const storedKeys = (schema: { shape: Record<string, unknown> }) =>
+      Object.keys(schema.shape).sort();
+    const playerKeys = (schema: { unwrap(): { shape: Record<string, unknown> } }) =>
+      Object.keys(schema.unwrap().shape).sort();
+    const withheld = (
+      stored: { shape: Record<string, unknown> },
+      player: { unwrap(): { shape: Record<string, unknown> } },
+    ) => storedKeys(stored).filter((key) => !playerKeys(player).includes(key));
+
+    const attackResultBase = combatRoundAttackRollResultSchema.innerType().innerType();
+
+    // The attack result: the roller's account, the two workbook import-provenance fields, and the
+    // #922 review flag. Nothing else.
+    expect(withheld(attackResultBase, playerFacingCombatRoundAttackRollResultSchema)).toEqual([
+      "extrapolatedWorkbookAdjustments",
+      "rolledByUserId",
+      "weaponDmbRoll",
+      "weaponModeSourceMetadata",
+    ]);
+    // Every other stored field is named, so the player-facing schema is a decision about the whole
+    // stored shape rather than a subtraction from it.
+    expect(playerKeys(playerFacingCombatRoundAttackRollResultSchema)).toEqual(
+      storedKeys(attackResultBase).filter(
+        (key) =>
+          ![
+            "extrapolatedWorkbookAdjustments",
+            "rolledByUserId",
+            "weaponDmbRoll",
+            "weaponModeSourceMetadata",
+          ].includes(key),
+      ),
+    );
+
+    // The pending missile shot, which the same denylist projected and which therefore gave the
+    // player who fired it `rolledByUserId`.
+    expect(
+      withheld(combatMissileIncomingAttackSchema, playerFacingCombatMissileIncomingAttackSchema),
+    ).toEqual(["rolledByUserId", "weaponModeSourceMetadata"]);
+
+    // And the projection honours it on a populated stored value.
     const stored = storedRoundParticipant();
     for (const result of [
       stored.attackResults.phase1,
@@ -540,9 +590,6 @@ describe("#507 player-facing round-state participant: additive construction", ()
 
     const participant = buildPlayerFacingCombatRoundParticipant({ participant: stored });
 
-    expect(Object.keys(playerFacingCombatRoundAttackRollResultSchema.unwrap().shape)).not.toContain(
-      "extrapolatedWorkbookAdjustments",
-    );
     for (const result of [
       participant.attackResults.phase1,
       participant.attackResultsByOpportunity?.["opportunity-1"],

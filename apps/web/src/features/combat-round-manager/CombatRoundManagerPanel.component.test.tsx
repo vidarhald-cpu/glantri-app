@@ -2800,6 +2800,58 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
     expect(screen.queryByText(/review it before retrying/)).not.toBeInTheDocument();
     expect(screen.queryByText(/no longer current/)).not.toBeInTheDocument();
   });
+
+  /**
+   * #922 repair cycle 1, finding 3 — the honest refusal sentence has to reach the GM.
+   *
+   * `defense_context_unavailable` is the code the server sends when the cause of a refused defence
+   * is a fact that is actually missing, including a defence value below zero that the percentage
+   * rule has no reading of. The server writes the sentence, because only the server knows which
+   * cause it was. This panel discarded it: an unlisted coded `409` became "review it before
+   * retrying", the refresh-and-retry advice #690 established sends a solo GM round a loop for a
+   * refusal reloading cannot repair.
+   *
+   * **The mutation this guards against:** dropping `defense_context_unavailable` from
+   * `COMBAT_REFUSAL_CODES_RELOAD_CANNOT_REPAIR`, or passing only the code to
+   * `getCombatMutationRefreshMessage` again. The first assertion then fails on the missing
+   * sentence and the second fails because "review it before retrying" is back on screen.
+   */
+  it("shows the GM the server's own cause for a refused defence instead of asking for a refresh", async () => {
+    const encounter = buildAttackReadyEncounter();
+    const participants = [
+      scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    const serverSentence =
+      "This opponent's defence works out to a value this calculation has no reading for, so the attack cannot be resolved. Nothing was recorded. This is not something the opponent's skills or equipment can repair; report it with the opponent's defence figures.";
+    mocks.rollAttack.mockRejectedValue(
+      new (await import("@/lib/api/apiClient")).ApiRequestError(serverSentence, 409, {
+        code: "defense_context_unavailable",
+        error: serverSentence,
+      }),
+    );
+    mocks.loadEncounter.mockResolvedValue(encounter);
+    mocks.loadParticipants.mockResolvedValue(participants);
+
+    render(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={participants}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Current task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Roll attack" }));
+
+    await waitFor(() => expect(mocks.rollAttack).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(serverSentence)).toBeInTheDocument();
+    expect(screen.queryByText(/review it before retrying/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no longer current/)).not.toBeInTheDocument();
+    // And it does not fall back to the sentence that blames the defender's skills, which is what
+    // this refusal is no longer saying.
+    expect(screen.queryByText(/no defensive skill/)).not.toBeInTheDocument();
+  });
 });
 
 describe("CombatRoundManagerPanel post-mutation task adoption", () => {

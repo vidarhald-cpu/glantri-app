@@ -1059,4 +1059,102 @@ describe("#922 the percentage-adjustment lookup is open-ended and flags every ex
     expect(pair?.fullAdjustment).toBe(lookupWorkbookPercentageAdjustment(baseDb, 20));
     expect(pair?.db).toBe(baseDb - pair!.fullAdjustment);
   });
+
+  /**
+   * #922 repair cycle 1 — the continuation's coverage, made explicit and able to fail.
+   *
+   * The 750-cell conformance test above **cannot** fail for the rule it is named for: inside the
+   * grid the lookup returns the authored cell and the production rule is never consulted, so
+   * mutating the production rule leaves it green. Independent QA measured exactly that. Until this
+   * test the whole continuation — every figure the open-ended rule produces, which is the entire
+   * point of #922 — rested on eight hardcoded controls.
+   *
+   * So the extrapolated region is swept here, where both sides are rules and the comparison is
+   * against this file's own restatement. The swept pairs are counted and the count asserted, so
+   * narrowing the range is itself a failure rather than a quietly smaller test.
+   *
+   * **The mutations this guards against**, each of which leaves the 750-cell test green: rounding
+   * the production rule half-even or truncating it; continuing the base axis or the step axis by
+   * anything other than the sheet's own arithmetic; dropping the one-point floor; and resolving
+   * past either edge without saying which axis was crossed.
+   */
+  it("sweeps the whole extrapolated region against the restated rule, and counts what it swept", () => {
+    const SWEPT_MAX_BASE = 120;
+    const SWEPT_MAX_STEP = 40;
+    const disagreements: string[] = [];
+    const flagDisagreements: string[] = [];
+    let sweptPairs = 0;
+    let baseOnly = 0;
+    let modifierOnly = 0;
+    let bothAxes = 0;
+
+    for (let base = 0; base <= SWEPT_MAX_BASE; base += 1) {
+      for (let step = 1; step <= SWEPT_MAX_STEP; step += 1) {
+        const pastBase = base > AUTHORED_MAX_BASE;
+        const pastStep = step > AUTHORED_MAX_STEP;
+        if (!pastBase && !pastStep) {
+          // In-grid: the authored cell answers, and the 750-cell test above covers it.
+          continue;
+        }
+
+        sweptPairs += 1;
+        const resolution = resolveWorkbookPercentageAdjustment(base, step);
+        // Base 0 is the one row the lookup overrides by hand, and the restated rule predicts that
+        // override exactly — `derivedRule(0, step)` is `step` on both sides of step 7.
+        if (resolution?.value !== derivedRule(base, step)) {
+          disagreements.push(`${base}/${step}: ${resolution?.value} vs ${derivedRule(base, step)}`);
+        }
+
+        const expectedAxes = [...(pastBase ? ["base"] : []), ...(pastStep ? ["modifier"] : [])];
+        if (
+          resolution?.extrapolated !== true ||
+          resolution.extrapolatedAxes.join(",") !== expectedAxes.join(",")
+        ) {
+          flagDisagreements.push(
+            `${base}/${step}: ${String(resolution?.extrapolated)} ${resolution?.extrapolatedAxes.join(",")}`,
+          );
+        }
+
+        if (pastBase && pastStep) bothAxes += 1;
+        else if (pastBase) baseOnly += 1;
+        else modifierOnly += 1;
+      }
+    }
+
+    // Every swept figure is the restated rule's, and every one of them says it was extrapolated
+    // and on which axis.
+    expect(disagreements).toEqual([]);
+    expect(flagDisagreements).toEqual([]);
+
+    // The coverage itself, asserted rather than described. 121 bases x 40 steps is 4840 pairs; the
+    // 50 x 15 authored grid accounts for 750 of them, leaving 4090 outside it.
+    expect(sweptPairs).toBe(121 * SWEPT_MAX_STEP - 50 * AUTHORED_MAX_STEP);
+    expect(sweptPairs).toBe(4090);
+    expect({ bothAxes, baseOnly, modifierOnly }).toEqual({
+      // bases 50..120 at steps 1..15
+      baseOnly: 71 * AUTHORED_MAX_STEP,
+      // bases 50..120 at steps 16..40
+      bothAxes: 71 * (SWEPT_MAX_STEP - AUTHORED_MAX_STEP),
+      // bases 0..49 at steps 16..40
+      modifierOnly: 50 * (SWEPT_MAX_STEP - AUTHORED_MAX_STEP),
+    });
+
+    // And the sweep is capable of reporting a disagreement: the same comparison applied to a
+    // deliberately wrong rule finds one on every swept pair whose figure it changes.
+    const truncatingRule = (base: number, step: number) => {
+      const proportional = (steps: number) => Math.max(steps, Math.trunc((steps * base) / 10));
+      return step <= PROPORTIONAL_STEP_LIMIT
+        ? proportional(step)
+        : proportional(PROPORTIONAL_STEP_LIMIT) + (step - PROPORTIONAL_STEP_LIMIT);
+    };
+    const truncationMisses: string[] = [];
+    for (let base = AUTHORED_MAX_BASE + 1; base <= SWEPT_MAX_BASE; base += 1) {
+      for (let step = 1; step <= SWEPT_MAX_STEP; step += 1) {
+        if (resolveWorkbookPercentageAdjustment(base, step)?.value !== truncatingRule(base, step)) {
+          truncationMisses.push(`${base}/${step}`);
+        }
+      }
+    }
+    expect(truncationMisses.length).toBeGreaterThan(0);
+  });
 });

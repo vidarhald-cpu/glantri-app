@@ -302,6 +302,8 @@ import {
   playerFacingCombatFeintProposalSchema,
   playerFacingCombatMissileReadinessSchema,
   playerFacingCombatRoundEndReviewSchema,
+  playerFacingCombatMissileIncomingAttackSchema,
+  playerFacingCombatRoundAttackRollResultSchema,
   playerFacingCombatRoundStateSchema,
   playerFacingCombatSkillContestCalculationSchema,
   playerFacingContinuedContactMaintenanceContestSchema,
@@ -309,7 +311,8 @@ import {
   playerFacingEncounterParticipantSchema,
   playerFacingOffensiveParryContestSchema,
   playerFacingRoleplayStateSchema,
-  withoutAttackResultWorkbookImportProvenance,
+  type CombatMissileIncomingAttack,
+  type CombatRoundAttackRollResult,
   type CombatRoundCommandType,
   type PlayerFacingCombatRoundCommand,
   type PlayerFacingCombatRoundParticipant,
@@ -6538,14 +6541,29 @@ export function buildPlayerSafeCombatRoundCommandForUser(
 }
 
 /**
- * The player's own attack, as the roll-attack response returns it to them: without the attack-result
- * fields that carry workbook import provenance (`weaponModeSourceMetadata`, `weaponDmbRoll`), which
- * are not player-facing (#517, ruling E2). The GM's response keeps them.
+ * The player's own attack, as the roll-attack response returns it to them.
+ *
+ * #922 repair cycle 1, finding 2. This was a **denylist**: the response stripped the two
+ * attack-result fields that carry workbook import provenance (#517, ruling E2) and passed every
+ * other field through. A denylist fails open for each field added after it, and that is what
+ * happened — `extrapolatedWorkbookAdjustments`, which #922 declared GM-only, reached the attacking
+ * player at `200` on this route, on the legacy contract directly and on the compact `active-v1`
+ * contract inside `mutationPresentation`, which is a passthrough record of whatever this payload
+ * put there. It is the second denylist-shaped projection to leak on this programme.
+ *
+ * Both of this response's own attack shapes now go through the player-facing schema that **names**
+ * their fields, the same allow-list treatment the sibling `command` key already had. So a field
+ * added to either stored schema is absent from player output until someone names it, and the
+ * compact contract inherits that because its `mutationPresentation` is built from this payload.
+ *
+ * The GM's response keeps the stored value, which is where the ruling says the flag belongs.
  */
-function playerOwnAttackWithoutWorkbookImportProvenance<Attack extends object>(
-  attack: Attack | undefined,
-) {
-  return attack && withoutAttackResultWorkbookImportProvenance(attack);
+function playerOwnAttackResult(attack: CombatRoundAttackRollResult | undefined) {
+  return attack && buildPlayerFacing(playerFacingCombatRoundAttackRollResultSchema, attack);
+}
+
+function playerOwnPendingMissileAttack(attack: CombatMissileIncomingAttack | undefined) {
+  return attack && buildPlayerFacing(playerFacingCombatMissileIncomingAttackSchema, attack);
 }
 
 const PLAYER_SAFE_DISARM_ITEM_REVISION = "1970-01-01T00:00:00.000Z";
@@ -17309,6 +17327,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         // the opponent's scenario equipment is what is missing hunts a problem on the wrong
         // character. So the cause decides what is said, the same way #694 split the missile
         // defence refusal, and the one condition the old sentence does describe keeps it.
+        //
+        // #922 repair cycle 1, finding 1. The cause is read from the composition that actually
+        // failed, not from the canonical defence's completeness. Making the lookup open-ended
+        // moved the wall rather than removing it: the adjustment can now exceed the base, so an
+        // ordinary committed total drives `canonicalDefense.effectiveDb` below zero, and a
+        // negative base is the one input `resolveWorkbookPercentageAdjustment` still refuses. The
+        // Break Off consequence composes a second adjustment on exactly that base, so
+        // `breakOffDefenderTrace` is `null` while the canonical defence is `complete` and the
+        // defender holds Dodge — which is how the first candidate's split missed it and sent the
+        // original false sentence. `null` here distinguishes "the rule has no reading of this
+        // defence value" from `undefined`, which only means no composition was attempted.
+        //
+        // Still a refusal, deliberately: whether a negative defence should resolve is Product
+        // Owner question 14 on #934 and is not pre-empted here.
+        if (breakOffDefenderTrace === null) {
+          return reply.code(409).send({
+            code: "defense_context_unavailable",
+            error: getCombatDefenseRefusalMessage(["workbook_adjustment"]),
+          });
+        }
         const missingDefenseFacts =
           canonicalDefense && canonicalDefense.completeness !== "complete"
             ? canonicalDefense.missingFacts
@@ -17713,14 +17751,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
 
       return {
-        attackResult:
-          access.mode === "gm"
-            ? attackResult
-            : playerOwnAttackWithoutWorkbookImportProvenance(attackResult),
+        attackResult: access.mode === "gm" ? attackResult : playerOwnAttackResult(attackResult),
         pendingMissileAttack:
           access.mode === "gm"
             ? pendingMissileAttack
-            : playerOwnAttackWithoutWorkbookImportProvenance(pendingMissileAttack),
+            : playerOwnPendingMissileAttack(pendingMissileAttack),
         command:
           access.mode === "gm" || !attackCommand
             ? attackCommand
