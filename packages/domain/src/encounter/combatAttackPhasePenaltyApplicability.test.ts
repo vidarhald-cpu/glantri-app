@@ -6,6 +6,7 @@ import {
   buildCombatRoundDeclaredAttackOpportunities,
   canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
+  decideCombatRoundDoubleAttackPhase2,
   isAttackPhaseDefensivePenaltyModifier,
   resolveCanonicalCombatAttackModifierFacts,
   resolveCanonicalCombatParryModifierFacts,
@@ -330,6 +331,136 @@ describe("the attack-phase defensive penalty applies to its owner's own defence 
     expect(facts.defenderResolution.total).toBe(-4);
   });
 
+  /**
+   * The rule's two named exceptions reduce this penalty from -4 to -2
+   * (`CombatAttackPhasePenaltyException`), and both are applied by rewriting the generated row in
+   * place. Each rewrite spread the existing row, so the row's own `value` and note became -2 while
+   * the attached `canonicalLifecycle.payload.value` stayed at -4 — and
+   * `normalizeScenarioCombatModifierEntry` resolves a row's value from the canonical payload
+   * whenever one is attached. The reduction therefore never reached the defending number.
+   *
+   * The assertions below read the **resolved** value through the resolution path. `entry.value` was
+   * already -2 throughout the defect and cannot discriminate: the committed assertion in
+   * "keeps the one consumer that selects this row by its attack opportunity working" reads that
+   * field and passed over this defect.
+   */
+  it("resolves a backed-out simultaneous attack at the reduced -2", () => {
+    const { alpha, participants, state } = fixture();
+    const opportunityId = alpha.attackOpportunities[0]!.id;
+    // The production arguments and order of `submitCombatRoundPhaseInitiativeChoiceCommand`'s
+    // back-out branch (`combatRoundManager.ts`): the declared action id, the participant's current
+    // combat context, and the canonical opportunity. That function returns this softened context as
+    // its `combatContext`, which `POST /combat-round/back-out` persists onto
+    // `participant.state.combat.combatContext` — the context every defence is resolved against.
+    const softened = softenCombatActionGeneratedBackOutModifier({
+      actionId: "attack_parry",
+      combatContext: alpha.combatContext,
+      opportunityId,
+      phase: "phase1",
+    });
+    const row = generatedRow(softened.combatContext);
+    const canonical = canonicalCombatModifierEffectSchema.parse(row.canonicalLifecycle);
+    const facts = resolveCanonicalCombatAttackModifierFacts({
+      attackerCombatantId: "encounter-bravo",
+      attackerScenarioParticipant: participants.bravo,
+      defenderCombatantId: "encounter-alpha",
+      defenderScenarioParticipant: participantWithContext({
+        combatContext: softened.combatContext,
+        id: "scenario-alpha",
+      }),
+      encounterId: ENCOUNTER_ID,
+      phase: "phase1",
+      state,
+    });
+
+    expect(softened.softenedModifiers).toHaveLength(1);
+    // The resolved value first: it is the number the defence is calculated from.
+    expect(facts.defenderResolution.rows.map((entry) => entry.value)).toEqual([-2]);
+    expect(facts.defenderResolution.total).toBe(-2);
+    // Then the two projections of the same figure the GM and the engine read.
+    expect(row.value).toBe(-2);
+    expect(row.notes).toBe("simultaneous attack backout: DB/Parry -2% in phase1");
+    expect(canonical.payload.kind === "numeric" ? canonical.payload.value : undefined).toBe(-2);
+  });
+
+  it("resolves a cancelled Double Attack second attack at the reduced -2 in phase 2", () => {
+    const { delta, participants, state } = fixture();
+    const phase1Opportunity = delta.attackOpportunities.find(
+      (opportunity) => opportunity.phase === "phase1",
+    )!;
+    // `decideCombatRoundDoubleAttackPhase2` requires Attack 1 resolved and the phase-2 modifier
+    // review step, so the real command is driven rather than its parts composed by hand. The route
+    // (`POST /combat-round/decide-double-attack-phase2`) persists the resulting declaration's
+    // `combatContext` onto `participant.state.combat.combatContext`.
+    const reviewState = combatRoundStateSchema.parse({
+      ...state,
+      currentStep: "review_phase_2_modifiers",
+      participants: state.participants.map((entry) =>
+        entry.participantId === "encounter-delta"
+          ? {
+              ...entry,
+              attackResultsByOpportunity: {
+                [phase1Opportunity.id]: {
+                  ...buildCombatRoundAttackRollResult({
+                    actionId: "double_attack",
+                    attackerParticipantId: "encounter-delta",
+                    defenderDb: 10,
+                    defenderParticipantId: "encounter-alpha",
+                    ob: 10,
+                    phase: "phase1",
+                    rollD20: 11,
+                    rollTotal: 11,
+                    rolledAt: "2026-01-01T00:00:01.000Z",
+                    weaponName: "Longsword",
+                  }),
+                  attackOpportunityId: phase1Opportunity.id,
+                },
+              },
+              declaration: { ...entry.declaration, combatContext: delta.combatContext },
+            }
+          : entry,
+      ),
+    });
+    const decided = decideCombatRoundDoubleAttackPhase2({
+      command: { createdAt: "2026-01-01T00:00:02.000Z", createdByUserId: "gm" },
+      decision: "cancel",
+      participantId: "encounter-delta",
+      state: reviewState,
+    });
+    const cancelledContext = scenarioParticipantCombatContextSchema.parse(
+      decided.participants.find((entry) => entry.participantId === "encounter-delta")?.declaration
+        ?.combatContext ?? {},
+    );
+    const cancelledRow = cancelledContext.modifierBuckets.situationDb.find(
+      (entry) => entry.sourcePhase === "phase2" && entry.canonicalLifecycle !== undefined,
+    );
+    if (!cancelledRow) throw new Error("the cancel path produced no projected phase-2 row");
+    const canonical = canonicalCombatModifierEffectSchema.parse(cancelledRow.canonicalLifecycle);
+    const read = (phase: "phase1" | "phase2") =>
+      resolveCanonicalCombatAttackModifierFacts({
+        attackerCombatantId: "encounter-bravo",
+        attackerScenarioParticipant: participants.bravo,
+        defenderCombatantId: "encounter-delta",
+        defenderScenarioParticipant: participantWithContext({
+          combatContext: cancelledContext,
+          id: "scenario-delta",
+        }),
+        encounterId: ENCOUNTER_ID,
+        phase,
+        state: decided,
+      }).defenderResolution;
+
+    // The resolved value first: it is the number the phase-2 defence is calculated from.
+    expect(read("phase2").rows.map((row) => row.value)).toEqual([-2]);
+    expect(read("phase2").total).toBe(-2);
+    // Attack 1 happened, so its phase-1 penalty is a recorded fact and stays at the full -4.
+    expect(read("phase1").total).toBe(-4);
+    // Then the two projections of the same figure the GM and the engine read.
+    expect(cancelledRow.value).toBe(-2);
+    expect(cancelledRow.notes).toBe("double attack cancelled after Attack 1");
+    expect(canonical.payload.kind === "numeric" ? canonical.payload.value : undefined).toBe(-2);
+  });
+
   it("keeps the one consumer that selects this row by its attack opportunity working", () => {
     const { alpha } = fixture();
     const opportunityId = alpha.attackOpportunities[0]!.id;
@@ -346,6 +477,10 @@ describe("the attack-phase defensive penalty applies to its owner's own defence 
 
     // `softenCombatActionGeneratedBackOutModifier` reads the row's own `sourceOpportunityId`, not
     // its applicability, so narrowing the applicability leaves that selection intact.
+    //
+    // `entry.value` is the right field for *this* question — did the selection fire on this row —
+    // and the wrong field for whether the reduction reaches a defence. That is asserted on the
+    // resolved value in "resolves a backed-out simultaneous attack at the reduced -2".
     expect(softened.softenedModifiers).toHaveLength(1);
     expect(generatedRow(softened.combatContext).value).toBe(-2);
     expect(otherOpportunity.softenedModifiers).toEqual([]);
