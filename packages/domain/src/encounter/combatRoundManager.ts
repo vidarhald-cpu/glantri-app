@@ -3,6 +3,14 @@ import { canonicalJsonKey } from "../content/catalogueSnapshotIntegrity";
 import { z } from "zod";
 
 import { COMBAT_ROUND_STEPS, combatRoundStepSchema, type CombatRoundStep } from "./combatRoundStep";
+// #894: the canonical initiative-publication predicate and the canonical cursor-to-boundary
+// mapping, both of which are pure readings of `COMBAT_PROGRESSION_BOUNDARIES`. That module's
+// imports from this one are all `import type`, so this edge exists only in the type graph.
+import {
+  boundaryForCursorStep,
+  isCombatInitiativeCommitted,
+  type CombatProgressionBoundaryKind,
+} from "./combatProgressionProjection/types";
 import { combatDeclarationIntentSchema } from "./combatDeclarationIntent";
 import {
   combatDefenseSnapshotSchema,
@@ -932,8 +940,16 @@ export const combatRoundInitiativesSchema = z.object({
  * One participant's place in a committed initiative order, Forgejo issue #875.
  *
  * This is a record, not a view of current state. `initiativeResult` is a copy taken at the commit,
- * so a later re-roll, override or modifier cannot restate it, and `initiativePublished` records
- * whether that commit put the total in front of the table, which take-back restores (#876).
+ * so a later re-roll, override or modifier cannot restate it.
+ *
+ * `initiativePublished` records whether that commit put the total in front of the table, which
+ * take-back restores (#876). Forgejo issue #894 (Product Owner ruling of 2026-11-03, revised): it
+ * is the canonical predicate `isCombatInitiativeCommitted` evaluated against the workflow state
+ * the commit **produces**, and it is not "a roll exists" — a roll exists equally on both sides of
+ * the publication boundary, so a reader restoring table-visibility from that would restore the
+ * wrong state. See `buildCombatRoundCommittedInitiativeOrder`, the field's only writer, for the
+ * boundary each commit path produces.
+ *
  * A participant who has not rolled is recorded too, with no result and nothing published, so the
  * record carries the whole committed sequence rather than only its rolled part.
  */
@@ -9575,6 +9591,41 @@ function buildCombatRoundInitiativeCommitUndoFacts(input: {
 }
 
 /**
+ * Whether one entry of a committed initiative order is published by the commit that writes it,
+ * Forgejo issue #894 (Product Owner ruling of 2026-11-03, revised).
+ *
+ * This is the whole rule, and it is a reading of one existing canonical predicate rather than a
+ * second publication rule: `isCombatInitiativeCommitted`, evaluated against the progression
+ * boundary the commit **produces**, conjoined with the entry having a total for that commit to
+ * publish at all.
+ *
+ * It is exported because the ruling's first acceptance criterion — a rolled total before the
+ * publication boundary is not published — is an **evaluation**-level statement. Every reachable
+ * commit path advances past the initiative boundary (see
+ * `buildCombatRoundCommittedInitiativeOrder`), so no stored record can realise it, and a record
+ * fabricated to realise it would be a measurement of a position the game cannot occupy. Calling
+ * this with the pre-commit boundary the state genuinely stands on measures the rule instead.
+ */
+export function isCombatRoundCommittedInitiativeEntryPublished(input: {
+  /** The boundary produced by the commit, or the pre-commit boundary when measuring the rule. */
+  afterCommitBoundary: CombatProgressionBoundaryKind;
+  initiativeResult?: CombatRoundInitiativeResult;
+  phase: CombatRoundPhase;
+}): boolean {
+  return (
+    input.initiativeResult !== undefined &&
+    isCombatInitiativeCommitted({
+      boundary: input.afterCommitBoundary,
+      // The record is only ever written for the round that is live at the commit, never for an
+      // archived one, so the predicate's archived-rounds-are-published-in-full shortcut must not
+      // be taken here.
+      historical: false,
+      step: getCombatRoundPhaseInitiativeStepForPhase(input.phase),
+    })
+  );
+}
+
+/**
  * Records the order the GM is committing, Forgejo issue #875.
  *
  * The sequence is taken once, here, from `sortCombatRoundParticipantsByInitiative` — descending
@@ -9582,12 +9633,31 @@ function buildCombatRoundInitiativeCommitUndoFacts(input: {
  * who have not rolled last. From this point it is a record: the tracker renders it rather than
  * re-deriving an order, so nothing short of another commit can re-sort the rows.
  *
- * `initiativePublished` is the publication state this commit creates: committing puts the totals
- * of the committed phase in front of the table, so an entry with a recorded total is published and
- * an entry without one has nothing to publish. Which participants a given viewer may see remains a
- * current-state question answered by the per-viewer projection, not by this record.
+ * `initiativePublished` comes from `isCombatRoundCommittedInitiativeEntryPublished`, Forgejo issue
+ * #894, evaluated against `afterCommitBoundary` — the boundary the commit is about to store, never
+ * the pre-advance boundary of the `state` this function is handed. Evaluating the predicate against
+ * that handed state would store `false` for every entry, which is the exact inverse of the defect
+ * being replaced.
+ *
+ * **Which boundary each commit path produces.** Measured over the reachable paths, a phase-1 commit
+ * produces `phase1_resolution` and a phase-2 commit `phase2_resolution`, on every one of them:
+ * rolled totals; a `bulk_skipped` initiative written by `completeRemainingCombatRoundStep`; a phase
+ * with no executable action work, where `initializeCombatRoundPhaseResolutionCursor` falls through
+ * to `moveCombatRoundToPhaseCompletion`; and the Combat-Experience path, whose cursor comes from
+ * `getCombatRoundPhaseActionStepForPhase` and is therefore `A1` / `A2` as well. All of those are
+ * strictly past the initiative boundary, so **no reachable commit path stores `false` for a
+ * participant that has a total**, and the ruling's first criterion has no record-level realisation.
+ * The `i1` / `i2` fallback inside `afterCommitCursor` is a defensive branch for a state carrying no
+ * cursor at all; should a future path reach it, `false` becomes the correct stored value and the
+ * predicate reports it with no further change here.
+ *
+ * Which participants a given viewer may see stays a current-state question answered by the
+ * per-viewer projection against `roleplayState.visibility`, not by this record — which is itself
+ * `neverPlayerFacing` and reaches no player at all (#875, #895).
  */
 function buildCombatRoundCommittedInitiativeOrder(input: {
+  /** The progression boundary this commit produces, derived from the cursor it is about to store. */
+  afterCommitBoundary: CombatProgressionBoundaryKind;
   commandId: string;
   committedAt: string;
   phase: CombatRoundPhase;
@@ -9603,7 +9673,11 @@ function buildCombatRoundCommittedInitiativeOrder(input: {
       const initiativeResult = participant.initiatives[input.phase];
 
       return {
-        initiativePublished: initiativeResult !== undefined,
+        initiativePublished: isCombatRoundCommittedInitiativeEntryPublished({
+          afterCommitBoundary: input.afterCommitBoundary,
+          initiativeResult,
+          phase: input.phase,
+        }),
         initiativeResult,
         participantId: participant.participantId,
       };
@@ -9747,6 +9821,14 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     afterCursor: afterCommitCursor,
   });
   const selectedStep = getCombatRoundStepForCursorStep(afterCommitCursor.step);
+  // #894: the workflow state this command produces, derived in memory from the cursor the returned
+  // state is about to carry, through the same canonical mapping `buildCombatProgressionProjection`
+  // uses. Nothing is committed and read back: the state and the record that describes it are
+  // written in the one transition below.
+  const afterCommitBoundary = boundaryForCursorStep(
+    afterCommitCursor.step,
+    Boolean(afterCommitCursor.participantId),
+  );
 
   return {
     combatContextsByParticipantId: {},
@@ -9759,6 +9841,7 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
       committedInitiativeOrders: [
         ...stateAfterPhaseOpen.committedInitiativeOrders,
         buildCombatRoundCommittedInitiativeOrder({
+          afterCommitBoundary,
           commandId: committedCommand.id,
           committedAt: input.command.createdAt,
           phase: input.phase,
