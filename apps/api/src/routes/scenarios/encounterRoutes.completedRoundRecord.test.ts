@@ -1397,12 +1397,29 @@ describe("#925 a completed round is recorded history, not rebuilt from the live 
 
     expect(sites).toHaveLength(26);
     expect(sites.filter((site) => !site.hasViewer)).toEqual([]);
-    // Each one resolves the viewer from the route's own authorization rather than asserting a role.
+
+    /*
+     * And each one resolves the viewer from the route's own authorization rather than asserting a
+     * role: every resolver call passes `mode`, `encounter`, `scenarioParticipants` and `userId`, and
+     * `mode` is `access.mode` — the value that route's own gate produced. A route whose gate is
+     * later loosened therefore starts producing a player viewer by itself, instead of keeping a GM
+     * viewer that a comment once asserted was safe.
+     */
     const source = routeFileSource("encounterRoutes.ts");
+    const resolverCalls = [
+      ...source.matchAll(/viewer: resolveCombatRoundCommandEnvelopeViewer\(\{/g),
+    ].map((match) => objectLiteralKeys(source, match.index + match[0].length - 1).sort());
+    expect(resolverCalls).toHaveLength(26);
     expect(
-      [...source.matchAll(/viewer: resolveCombatRoundCommandEnvelopeViewer\(\{/g)].length,
-    ).toBe(26);
-    expect([...source.matchAll(/mode: access\.mode,/g)].length).toBe(26);
+      resolverCalls.filter(
+        (keys) => keys.join(",") !== "encounter,mode,scenarioParticipants,userId",
+      ),
+    ).toEqual([]);
+    for (const match of source.matchAll(
+      /viewer: resolveCombatRoundCommandEnvelopeViewer\(\{[^}]*?mode: ([^,\n]+),/g,
+    )) {
+      expect(match[1]).toBe("access.mode");
+    }
   });
 
   // ===== item 3 ==================================================================================
