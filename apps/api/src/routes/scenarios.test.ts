@@ -79,7 +79,9 @@ import {
   type CombatEffectsState,
   type EncounterSession,
   type ScenarioParticipant,
+  getCombatRoundPhaseAttackBackOutOpportunity,
   getDistanceBetween,
+  isAttackPhaseDefensivePenaltyModifier,
   makeDistancePairKey,
   setDistanceBetween,
   setCombatRoundCombatExperienceDifficulty,
@@ -36073,5 +36075,612 @@ describe("#899 a GM modifier committed in the review is applied once", () => {
     expect(read.rows).toHaveLength(1);
     expect(read.resolved.total).toBe(-3);
     expect(edited.effects[0]).toMatchObject({ modifierValue: -3 });
+  });
+});
+
+describe("#915 a GM modifier review decision is accepted, and it sticks", () => {
+  /**
+   * One driven round through the production routes.
+   *
+   * Three combatants, because the figure acceptance item 4 asks for is the **defender's own**
+   * attack-phase penalty inside a real `roll_attack`, and a defender only carries that row if it
+   * attacks in the same phase. The chain avoids any mutual attack, so no participant is both
+   * attacking and attacked and the engine opens no simultaneity choice — a back-out would itself
+   * reduce the penalty to -2 by rule, and the GM's figure in these tests is -1, which the penalty
+   * generator cannot produce: it is bounded -4..0 and both rule reductions produce -2.
+   *
+   * - `participant-1` attacks `participant-2` in phase 1, so it carries its own generated
+   *   attack-phase DB/Parry penalty. It is attacked by nobody, so it holds the first phase-1
+   *   action. Its review is the one the GM commits in the first two tests.
+   * - `participant-2` attacks `participant-3` in phase 1, so it carries its own penalty too. It is
+   *   the defender of `participant-1`'s attack, which makes it the subject of the `roll_attack`
+   *   reading, and the **control** in the first two tests: its own row is never reviewed there and
+   *   must stay the engine's.
+   * - `participant-3` declares a plain Parry: no attack, no generated penalty.
+   */
+  function startReviewWalk() {
+    const encounterParticipants = [
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-1",
+        label: "The Gladiator",
+        order: 0,
+        scenarioParticipantId: "participant-1",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-2",
+        label: "Scyrian cavalry guy",
+        order: 1,
+        scenarioParticipantId: "participant-2",
+      }),
+      makeEncounterCombatParticipant({
+        id: "encounter-participant-3",
+        label: "Hill bandit",
+        order: 2,
+        scenarioParticipantId: "participant-3",
+      }),
+    ];
+    const baseEncounter = makeCombatEncounterWithResolvedCombatExperience({
+      participants: encounterParticipants,
+    });
+    const baseRoundState =
+      baseEncounter.combatRoundState ?? initializeCombatRoundState({ encounter: baseEncounter });
+    let distanceState = baseRoundState.distanceState;
+    for (const [participantAId, participantBId] of [
+      ["encounter-participant-1", "encounter-participant-2"],
+      ["encounter-participant-1", "encounter-participant-3"],
+      ["encounter-participant-2", "encounter-participant-3"],
+    ] as const) {
+      distanceState = setDistanceBetween({
+        distance: 2,
+        participantAId,
+        participantBId,
+        source: "gm_set",
+        state: distanceState,
+      });
+    }
+    const combatRoundState = { ...baseRoundState, distanceState };
+    const fixture = setupMutableCombatRouteState({
+      encounter: {
+        ...baseEncounter,
+        combatRoundState,
+        currentRound: combatRoundState.roundNumber,
+      },
+      participants: [
+        [
+          "participant-1",
+          "character-1",
+          "The Gladiator",
+          "weapon-template-longsword",
+          "Long sword",
+        ],
+        [
+          "participant-2",
+          "character-2",
+          "Scyrian cavalry guy",
+          "weapon-template-broad-sword",
+          "Broad sword",
+        ],
+        [
+          "participant-3",
+          "character-3",
+          "Hill bandit",
+          "weapon-template-broad-sword",
+          "Broad sword",
+        ],
+      ].map(([id, characterId, label, templateId, weaponName]) =>
+        makeCombatScenarioParticipantWithWeapon({
+          characterId,
+          id,
+          snapshot: {
+            build: makeDodgeCharacterBuild(characterId!, label!),
+            displayName: label,
+            equipmentState: makeCanonicalWeaponDefenseEquipmentState({
+              characterId: characterId!,
+              templateId: templateId!,
+            }),
+            sourceUpdatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          weaponName,
+        }),
+      ),
+      user: mocks.adminUser,
+    });
+    // `setupMutableCombatRouteState` does not carry the modifier-review commit, which is the one
+    // service call this walk turns on. Route it through the same two mutable writers, so the
+    // reviewed participant state and round state are what the next request reads.
+    mocks.encounterService.commitCombatModifierReview.mockImplementation(
+      async (update: {
+        participant: { id: string };
+        scenarioId: string;
+        session: EncounterSession;
+        state: unknown;
+      }) => ({
+        encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
+        participant: await mocks.encounterService.updateScenarioParticipantState({
+          participantId: update.participant.id,
+          scenarioId: update.scenarioId,
+          state: update.state,
+        }),
+      }),
+    );
+    return fixture;
+  }
+
+  type ReviewWalkFixture = ReturnType<typeof startReviewWalk>;
+
+  const ROUND_PARTICIPANT_ID = {
+    "participant-1": "encounter-participant-1",
+    "participant-2": "encounter-participant-2",
+    "participant-3": "encounter-participant-3",
+  } as const;
+
+  type ReviewWalkParticipant = keyof typeof ROUND_PARTICIPANT_ID;
+
+  async function driveToPhase1ModifierReview() {
+    const fixture = startReviewWalk();
+    const app = await buildScenarioTestApp();
+    const roundState = () => fixture.encounter.combatRoundState as CombatRoundState;
+
+    const declarations = [
+      {
+        actionId: "attack_parry",
+        itemId: "item-weapon-template-longsword",
+        scenarioParticipantId: "participant-1",
+        targetId: "participant-2",
+        templateId: "weapon-template-longsword",
+      },
+      {
+        actionId: "attack_parry",
+        itemId: "item-weapon-template-broad-sword",
+        scenarioParticipantId: "participant-2",
+        // `participant-2` attacks and is attacked, so the engine opens its simultaneity choice and
+        // gives it the first phase-1 action. This GM initiative lead puts it more than three ahead
+        // of its attacker, which makes the threat `higher_initiative` and lets it continue without
+        // a Combat Experience roll. Backing out instead would reduce its own penalty to -2 by rule,
+        // which is why the GM's figure in these tests is -1.
+        situationInitiative: [
+          {
+            durationRounds: 1,
+            id: "gm-initiative-915",
+            notes: "GM initiative lead",
+            scope: "until",
+            value: 6,
+          },
+        ],
+        targetId: "participant-3",
+        templateId: "weapon-template-broad-sword",
+      },
+      {
+        actionId: "parry",
+        scenarioParticipantId: "participant-3",
+      },
+    ] as const;
+
+    for (const declaration of declarations) {
+      const response = await app.inject({
+        method: "POST",
+        payload: {
+          actionId: declaration.actionId,
+          combatContext: {
+            modifierBuckets: {
+              ...emptyModifierBuckets(),
+              situationInitiative:
+                "situationInitiative" in declaration ? declaration.situationInitiative : [],
+            },
+          },
+          movementId: "hold",
+          ...(declaration.actionId === "attack_parry"
+            ? {
+                phaseAttackSources: {
+                  phase1: makeWeaponAttackSourceRef({
+                    itemId: declaration.itemId,
+                    opportunitySlot: "attack_1",
+                    templateId: declaration.templateId,
+                  }),
+                },
+                phaseContexts: { phase1: testCombatPhaseContext(declaration.targetId) },
+              }
+            : { phaseAttackSources: {} }),
+          scenarioParticipantId: declaration.scenarioParticipantId,
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    }
+
+    for (
+      let guard = 0;
+      guard < 10 && roundState().currentStep !== "review_action_modifiers";
+      guard += 1
+    ) {
+      const current = roundState();
+      const next = advanceCombatRoundStep(current, {
+        command: {
+          createdAt: `2026-01-01T00:10:0${guard}.000Z`,
+          participantId:
+            current.currentCursor?.participantId ??
+            current.selectedParticipantId ??
+            "encounter-participant-1",
+        },
+        stepSnapshots: [],
+      });
+      const response = await app.inject({
+        method: "PUT",
+        payload: {
+          session: {
+            ...fixture.encounter,
+            combatRoundState: next,
+            currentRound: next.roundNumber,
+          },
+        },
+        url: "/encounters/encounter-1",
+      });
+      expect(response.statusCode).toBe(200);
+    }
+    expect(roundState().currentStep).toBe("review_action_modifiers");
+
+    return { app, fixture, roundState };
+  }
+
+  function participantCombatContext(fixture: ReviewWalkFixture, id: ReviewWalkParticipant) {
+    const participant = fixture.participants.find((candidate) => candidate.id === id);
+    if (!participant) throw new Error(`Missing participant ${id}.`);
+    return scenarioParticipantStateSchema.parse(participant.state).combat.combatContext!;
+  }
+
+  /** A participant's own generated attack-phase rows, read back from the persisted state. */
+  function penaltyRows(fixture: ReviewWalkFixture, id: ReviewWalkParticipant) {
+    return participantCombatContext(fixture, id).modifierBuckets.situationDb.filter((entry) =>
+      isAttackPhaseDefensivePenaltyModifier(entry),
+    );
+  }
+
+  /**
+   * Both projections of one row's figure. Resolution reads `canonicalLifecycle.payload.value` in
+   * preference to the row's own `value` whenever a projection is attached (#884), so a pass has to
+   * state both rather than whichever one happens to be right.
+   */
+  function penaltyFigure(fixture: ReviewWalkFixture, id: ReviewWalkParticipant) {
+    const rows = penaltyRows(fixture, id);
+    expect(rows).toHaveLength(1);
+    const entry = rows[0] as { canonicalLifecycle?: unknown; value?: number } | undefined;
+    return {
+      payload: (entry?.canonicalLifecycle as { payload?: { value?: number } } | undefined)?.payload
+        ?.value,
+      value: entry?.value,
+    };
+  }
+
+  /** Commits one phase-1 GM modifier review through the production declaration route. */
+  async function commitPhase1Review(input: {
+    app: Awaited<ReturnType<typeof buildScenarioTestApp>>;
+    fixture: ReviewWalkFixture;
+    reviewed?: ReviewWalkParticipant;
+    situationDb: unknown[];
+  }) {
+    const scenarioParticipantId = input.reviewed ?? "participant-1";
+    const declaration = (
+      input.fixture.encounter.combatRoundState as CombatRoundState
+    ).participants.find(
+      (participant) => participant.participantId === ROUND_PARTICIPANT_ID[scenarioParticipantId],
+    )?.declaration;
+    return input.app.inject({
+      method: "POST",
+      payload: {
+        actionId: declaration?.actionId,
+        combatContext: {
+          ...declaration?.combatContext,
+          modifierBuckets: {
+            ...declaration!.combatContext!.modifierBuckets,
+            situationDb: input.situationDb,
+          },
+        },
+        movementId: declaration?.movementId,
+        movementIntent: declaration?.movementIntent,
+        phaseAttackSources: {},
+        phaseContexts: declaration?.phaseContexts,
+        scenarioParticipantId,
+      },
+      url: "/encounters/encounter-1/combat-declaration",
+    });
+  }
+
+  /** Runs a production regeneration pass over every declaration in the round. */
+  async function runRegenerationPass(app: Awaited<ReturnType<typeof buildScenarioTestApp>>) {
+    const response = await app.inject({
+      method: "POST",
+      payload: {
+        distance: 3,
+        participantAId: "encounter-participant-1",
+        participantBId: "encounter-participant-2",
+      },
+      url: "/encounters/encounter-1/combat-round/pair-distance",
+    });
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+  }
+
+  it("accepts the GM's value on a generated family, keeps the other edits in the same review, and survives the regeneration pass", async () => {
+    const { app, fixture, roundState } = await driveToPhase1ModifierReview();
+    try {
+      const beforeRows = penaltyRows(fixture, "participant-1");
+      expect(beforeRows).toHaveLength(1);
+      expect(beforeRows[0]).toMatchObject({ sourcePhase: "phase1", value: -4 });
+
+      // One review carrying two edits: the generated row the server used to refuse with HTTP 400,
+      // and an unrelated manual row that the refusal used to take down with it.
+      const response = await commitPhase1Review({
+        app,
+        fixture,
+        situationDb: [
+          { ...beforeRows[0], value: -1 },
+          {
+            application: "percentage",
+            durationRounds: 2,
+            id: "gm-cover-915",
+            notes: "GM cover",
+            scope: "until",
+            value: -3,
+          },
+        ],
+      });
+
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      expect(penaltyFigure(fixture, "participant-1")).toEqual({ payload: -1, value: -1 });
+      // The unrelated edit in the same review is kept.
+      expect(
+        participantCombatContext(fixture, "participant-1").modifierBuckets.situationDb.find(
+          (entry) => entry.id === "gm-cover-915",
+        )?.value,
+      ).toBe(-3);
+      expect(
+        roundState().commands.filter((command) => command.type === "review_modifiers_phase1"),
+      ).toHaveLength(1);
+
+      // The regeneration pass used to drop this row and re-create it at its hardcoded -4.
+      await runRegenerationPass(app);
+      expect(penaltyFigure(fixture, "participant-1")).toEqual({ payload: -1, value: -1 });
+
+      // Control: the other attacker had no review committed, so its own generated row is still the
+      // engine's. The gate is per participant and per phase, never global.
+      expect(penaltyRows(fixture, "participant-2")[0]).toMatchObject({
+        sourcePhase: "phase1",
+        value: -4,
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("keeps a GM removal of a generated attack-phase row removed across the regeneration pass", async () => {
+    const { app, fixture } = await driveToPhase1ModifierReview();
+    try {
+      expect(penaltyRows(fixture, "participant-1")).toHaveLength(1);
+
+      const response = await commitPhase1Review({ app, fixture, situationDb: [] });
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      expect(penaltyRows(fixture, "participant-1")).toHaveLength(0);
+
+      await runRegenerationPass(app);
+      expect(penaltyRows(fixture, "participant-1")).toHaveLength(0);
+      expect(penaltyRows(fixture, "participant-2")[0]).toMatchObject({ value: -4 });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("returns a taken-back review to the recorded previous state and re-opens generation for the phase", async () => {
+    const { app, fixture, roundState } = await driveToPhase1ModifierReview();
+    try {
+      expect(penaltyFigure(fixture, "participant-1")).toEqual({ payload: -4, value: -4 });
+
+      const response = await commitPhase1Review({ app, fixture, situationDb: [] });
+      expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      expect(penaltyRows(fixture, "participant-1")).toHaveLength(0);
+
+      // Take-back drops the review command, and the command's own `modifierReviewUndo` record is
+      // what restores the modifier state. Because the option-B gate reads the presence of that
+      // command and nothing else, dropping it re-opens generation for the phase in the same act —
+      // so a mid-round review commit stays recoverable.
+      const takeBack = await app.inject({
+        method: "POST",
+        payload: {
+          participantId: "encounter-participant-1",
+          step: "review_action_modifiers",
+        },
+        url: "/encounters/encounter-1/combat-round/clear-current-step",
+      });
+      expect(takeBack.statusCode, JSON.stringify(takeBack.json())).toBe(200);
+      expect(
+        roundState().commands.filter((command) => command.type === "review_modifiers_phase1"),
+      ).toHaveLength(0);
+      expect(penaltyFigure(fixture, "participant-1")).toEqual({ payload: -4, value: -4 });
+
+      // Generation runs again, which is the point of the assertion. The regenerated row carries no
+      // canonical projection, because this regeneration pass supplies no `lifecycleContext` — a
+      // pre-existing property of the pass, unchanged here, and harmless for the figure because
+      // resolution falls back to `value` when no projection is attached.
+      await runRegenerationPass(app);
+      expect(penaltyFigure(fixture, "participant-1")).toEqual({ payload: undefined, value: -4 });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("carries the GM's reviewed penalty into the defence resolution of a real roll_attack", async () => {
+    const { app, fixture, roundState } = await driveToPhase1ModifierReview();
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    try {
+      // The GM works through the review boundary in its own order, so the attacker's review is
+      // committed unchanged before the defender's. The defender is the one whose row the GM edits,
+      // so the figure read back from the real `roll_attack` is the GM's decision about the
+      // defender's own penalty.
+      const attackerReview = await commitPhase1Review({
+        app,
+        fixture,
+        situationDb: participantCombatContext(fixture, "participant-1").modifierBuckets.situationDb,
+      });
+      expect(attackerReview.statusCode, JSON.stringify(attackerReview.json())).toBe(200);
+      const generatedRow = penaltyRows(fixture, "participant-2")[0];
+      expect(generatedRow).toMatchObject({ sourcePhase: "phase1", value: -4 });
+      const reviewResponse = await commitPhase1Review({
+        app,
+        fixture,
+        reviewed: "participant-2",
+        situationDb: [{ ...generatedRow, value: -1 }],
+      });
+      expect(reviewResponse.statusCode, JSON.stringify(reviewResponse.json())).toBe(200);
+      expect(penaltyFigure(fixture, "participant-2")).toEqual({ payload: -1, value: -1 });
+
+      // A regeneration pass runs between the review and the attack, so the figure this test reads
+      // out of the defence resolution is one that survived the pass rather than one that merely
+      // reached the store.
+      await runRegenerationPass(app);
+      expect(penaltyFigure(fixture, "participant-2")).toEqual({ payload: -1, value: -1 });
+
+      for (
+        let guard = 0;
+        guard < 10 && roundState().currentStep !== "initiative_phase_1";
+        guard += 1
+      ) {
+        const current = roundState();
+        const next = advanceCombatRoundStep(current, {
+          command: {
+            createdAt: `2026-01-01T00:20:0${guard}.000Z`,
+            participantId:
+              current.currentCursor?.participantId ??
+              current.selectedParticipantId ??
+              "encounter-participant-1",
+          },
+          stepSnapshots: [],
+        });
+        const response = await app.inject({
+          method: "PUT",
+          payload: {
+            session: {
+              ...fixture.encounter,
+              combatRoundState: next,
+              currentRound: next.roundNumber,
+            },
+          },
+          url: "/encounters/encounter-1",
+        });
+        expect(response.statusCode).toBe(200);
+      }
+      expect(roundState().currentStep).toBe("initiative_phase_1");
+
+      for (const scenarioParticipantId of [
+        "participant-1",
+        "participant-2",
+        "participant-3",
+      ] as const) {
+        const response = await app.inject({
+          method: "POST",
+          payload: { scenarioParticipantId },
+          url: "/encounters/encounter-1/combat-initiative",
+        });
+        expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+      }
+      const commitInitiative = await app.inject({
+        method: "POST",
+        payload: { phase: "phase1" },
+        url: "/encounters/encounter-1/combat-round/commit-phase-initiative-resolution",
+      });
+      expect(commitInitiative.statusCode, JSON.stringify(commitInitiative.json())).toBe(200);
+      expect(roundState().currentStep).toBe("phase_1_actions");
+      // The reviewed defender holds the first action, so its own simultaneity choice and its own
+      // attack are resolved before the attack that reads its defence.
+      expect(roundState().currentCursor).toMatchObject({
+        participantId: "encounter-participant-2",
+        step: "A1",
+      });
+      expect(
+        getCombatRoundPhaseAttackBackOutOpportunity({
+          participantId: "encounter-participant-2",
+          phase: "phase1",
+          state: roundState(),
+        }),
+      ).toMatchObject({ ceRequired: false, threats: [{ reason: "higher_initiative" }] });
+      const continueResponse = await app.inject({
+        method: "POST",
+        payload: { phase: "phase1", scenarioParticipantId: "participant-2" },
+        url: "/encounters/encounter-1/combat-round/continue-phase-attack",
+      });
+      expect(continueResponse.statusCode, JSON.stringify(continueResponse.json())).toBe(200);
+      const leadAttack = await app.inject({
+        method: "POST",
+        payload: {
+          defenderScenarioParticipantId: "participant-3",
+          ob: 0,
+          obSkillRaw: 0,
+          phase: "phase1",
+          scenarioParticipantId: "participant-2",
+          weaponName: "Broad sword",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      expect(leadAttack.statusCode, JSON.stringify(leadAttack.json())).toBe(200);
+      const leadAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
+        participantId: "encounter-participant-2",
+        phase: "phase1",
+        state: roundState(),
+      });
+      if (!leadAttackResult) throw new Error("The lead attack recorded no result.");
+      const afterDefenseReview = commitTestDefenseReview({
+        attackResult: leadAttackResult,
+        state: roundState(),
+      });
+      const defenseReviewPut = await app.inject({
+        method: "PUT",
+        payload: {
+          session: {
+            ...fixture.encounter,
+            combatRoundState: afterDefenseReview,
+            currentRound: afterDefenseReview.roundNumber,
+          },
+        },
+        url: "/encounters/encounter-1",
+      });
+      expect(defenseReviewPut.statusCode).toBe(200);
+
+      const attackResponse = await app.inject({
+        method: "POST",
+        payload: {
+          defenderScenarioParticipantId: "participant-2",
+          ob: 0,
+          obSkillRaw: 0,
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+          weaponName: "Long sword",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      expect(attackResponse.statusCode, JSON.stringify(attackResponse.json())).toBe(200);
+
+      const attackCommand = roundState()
+        .commands.filter(
+          (command) =>
+            command.type === "roll_attack" && command.participantId === "encounter-participant-1",
+        )
+        .at(-1);
+      expect(attackCommand).toBeDefined();
+      const defenderCalculation = attackCommand?.facts.defenderCalculation as {
+        dynamicContributions?: Array<{ id?: string; value: number }>;
+        dynamicRawPercentage?: number;
+        participantId?: string;
+      };
+      expect(defenderCalculation.participantId).toBe("participant-2");
+      // The durable claim is the raw modifier total the defence adjustment is looked up against.
+      // That lookup is a non-linear table, so no resolved DB pair may be derived from this figure
+      // by subtraction.
+      const penaltyContributions = (defenderCalculation.dynamicContributions ?? []).filter(
+        (contribution) => contribution.id?.startsWith("generated:attack-phase-penalty:") === true,
+      );
+      expect(penaltyContributions).toHaveLength(1);
+      expect(penaltyContributions[0]?.value).toBe(-1);
+      expect(defenderCalculation.dynamicRawPercentage).toBe(-1);
+    } finally {
+      randomSpy.mockRestore();
+      await app.close();
+    }
   });
 });

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCombatRoundAttackRollResult,
+  buildCombatRoundDeclaredAttackOpportunities,
   combatRoundStateSchema,
   encounterSessionSchema,
   initializeCombatRoundState,
+  isAttackPhaseDefensivePenaltyModifier,
   scenarioParticipantCombatContextSchema,
   setDistanceBetween,
   type CombatRoundPhaseContexts,
@@ -603,5 +605,161 @@ describe("projectCombatActionGeneratedModifiers", () => {
         value: -4,
       }),
     ]);
+  });
+
+  /**
+   * #901 option B on the client pass (#915 QA finding, verdict comment 20428).
+   *
+   * This projection is the fifth caller of `applyCombatActionGeneratedModifiers` and the only one
+   * the client runs. It is the GM panel's modifier set and the player page's, and the panel submits
+   * it verbatim as the modifier-review body whenever there are no local edits — so an ungated pass
+   * here does not merely display the engine's figure, it writes it back over the GM's accepted one
+   * on the panel's own next review commit. Driven through the production routes the loss was
+   * `[phase1 -1, phase2 -4]` becoming `[phase1 -4, phase2 -4]` with a 200 and no refusal.
+   *
+   * The two projections below are identical but for the committed review command, which is the
+   * gate's whole input, so the pair discriminates: remove the gate from the projection and the
+   * first expectation reads -4.
+   */
+  describe("the modifier-review generation gate on the client pass", () => {
+    const REVIEWED_PHASE_1_COMMAND = {
+      afterCursor: { roundNumber: 1, step: "M1" },
+      beforeCursor: { roundNumber: 1, step: "M1" },
+      createdAt: "2026-01-01T00:05:00.000Z",
+      facts: {},
+      id: "command:review-phase-1",
+      participantId: "scyrian",
+      roundNumber: 1,
+      type: "review_modifiers_phase1",
+    } as const;
+
+    function buildDoubleAttackRoundState(input: { reviewedPhase1: boolean }) {
+      const encounter = buildEncounter();
+      const baseRoundState = initializeCombatRoundState({ encounter });
+
+      return combatRoundStateSchema.parse({
+        ...baseRoundState,
+        commands: input.reviewedPhase1 ? [REVIEWED_PHASE_1_COMMAND] : [],
+        participants: baseRoundState.participants.map((participant) =>
+          participant.participantId === "scyrian"
+            ? {
+                ...participant,
+                declaration: {
+                  actionId: "double_attack",
+                  attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                    actionId: "double_attack",
+                    participantId: "scyrian",
+                    phaseContexts: {
+                      phase1: {
+                        modifierBuckets: emptyModifierBuckets(),
+                        targetParticipantId: "gladiator",
+                      },
+                      phase2: {
+                        modifierBuckets: emptyModifierBuckets(),
+                        targetParticipantId: "gladiator",
+                      },
+                    },
+                    roundNumber: baseRoundState.roundNumber,
+                  }),
+                  roundNumber: baseRoundState.roundNumber,
+                  submittedBy: "gm",
+                },
+              }
+            : participant,
+        ),
+      });
+    }
+
+    function penaltyFiguresByPhase(combatContext: ScenarioParticipantCombatContext) {
+      return Object.fromEntries(
+        combatContext.modifierBuckets.situationDb
+          .filter((entry) => isAttackPhaseDefensivePenaltyModifier(entry))
+          .map((entry) => [entry.sourcePhase, entry.value]),
+      );
+    }
+
+    /** The context the server holds after the GM commits -1 on the phase-1 row. */
+    function storedContextAfterPhase1Review() {
+      const declared = projectCombatActionGeneratedModifiers({
+        actionId: "double_attack",
+        combatContext: scenarioParticipantCombatContextSchema.parse({}),
+        encounterParticipant: buildEncounter().participants[0],
+        roundState: buildDoubleAttackRoundState({ reviewedPhase1: false }),
+      });
+      // -1 is a figure the generator cannot produce: the penalty is bounded -4..0 and both rule
+      // reductions give -2. So a -1 that survives can only be the GM's.
+      expect(penaltyFiguresByPhase(declared)).toEqual({ phase1: -4, phase2: -4 });
+
+      return scenarioParticipantCombatContextSchema.parse({
+        ...declared,
+        modifierBuckets: {
+          ...declared.modifierBuckets,
+          situationDb: declared.modifierBuckets.situationDb.map((entry) =>
+            isAttackPhaseDefensivePenaltyModifier(entry) && entry.sourcePhase === "phase1"
+              ? { ...entry, value: -1 }
+              : entry,
+          ),
+        },
+      });
+    }
+
+    it("keeps the GM's committed phase-1 figure and still rebuilds the unreviewed phase", () => {
+      const projected = projectCombatActionGeneratedModifiers({
+        actionId: "double_attack",
+        combatContext: storedContextAfterPhase1Review(),
+        encounterParticipant: buildEncounter().participants[0],
+        roundState: buildDoubleAttackRoundState({ reviewedPhase1: true }),
+      });
+
+      expect(penaltyFiguresByPhase(projected)).toEqual({ phase1: -1, phase2: -4 });
+    });
+
+    it("rebuilds the same row when no review is committed for the phase", () => {
+      const projected = projectCombatActionGeneratedModifiers({
+        actionId: "double_attack",
+        combatContext: storedContextAfterPhase1Review(),
+        encounterParticipant: buildEncounter().participants[0],
+        roundState: buildDoubleAttackRoundState({ reviewedPhase1: false }),
+      });
+
+      expect(penaltyFiguresByPhase(projected)).toEqual({ phase1: -4, phase2: -4 });
+    });
+
+    it("does not re-create a row the GM removed in the reviewed phase", () => {
+      const stored = storedContextAfterPhase1Review();
+      const afterRemoval = scenarioParticipantCombatContextSchema.parse({
+        ...stored,
+        modifierBuckets: {
+          ...stored.modifierBuckets,
+          situationDb: stored.modifierBuckets.situationDb.filter(
+            (entry) =>
+              !(isAttackPhaseDefensivePenaltyModifier(entry) && entry.sourcePhase === "phase1"),
+          ),
+        },
+      });
+
+      const projected = projectCombatActionGeneratedModifiers({
+        actionId: "double_attack",
+        combatContext: afterRemoval,
+        encounterParticipant: buildEncounter().participants[0],
+        roundState: buildDoubleAttackRoundState({ reviewedPhase1: true }),
+      });
+
+      expect(penaltyFiguresByPhase(projected)).toEqual({ phase2: -4 });
+    });
+
+    it("reads only this participant's review, so another combatant's row still rebuilds", () => {
+      const projected = projectCombatActionGeneratedModifiers({
+        actionId: "double_attack",
+        combatContext: storedContextAfterPhase1Review(),
+        encounterParticipant: buildEncounter().participants[0],
+        roundState: combatRoundStateSchema.parse({
+          ...buildDoubleAttackRoundState({ reviewedPhase1: false }),
+          commands: [{ ...REVIEWED_PHASE_1_COMMAND, participantId: "gladiator" }],
+        }),
+      });
+
+      expect(penaltyFiguresByPhase(projected)).toEqual({ phase1: -4, phase2: -4 });
+    });
   });
 });
