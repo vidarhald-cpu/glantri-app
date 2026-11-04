@@ -925,3 +925,113 @@ describe("live combat modifiers", () => {
     });
   });
 });
+
+describe("#899 a GM modifier committed in the review reaches the panel summary once", () => {
+  const committedLifecycle = {
+    applicability: {
+      combatWide: true,
+      encounterId: "encounter-1",
+      rollPurposes: [],
+      roundNumber: 1,
+    },
+    createdAt: "2026-05-19T00:00:00.000Z",
+    createdRevision: "2026-05-19T00:00:00.000Z",
+    createdSequence: 1,
+    id: "modifier-899-db-parry",
+    lifecycle: {
+      duration: {
+        creationRoundCounts: false,
+        kind: "rounds" as const,
+        remaining: 2,
+        startPhase: "phase1" as const,
+        startRound: 1,
+        startSequence: 1,
+        transitionBoundary: "round_boundary" as const,
+      },
+      state: "active" as const,
+    },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: "participant-1",
+    payload: {
+      category: "db_parry" as const,
+      contributionScope: "calculation" as const,
+      kind: "numeric" as const,
+      unit: "percentage" as const,
+      value: -7,
+    },
+    provenanceCompleteness: "complete" as const,
+    publicLabel: "GM cover",
+    schemaVersion: 1 as const,
+    sourceFamily: "manual" as const,
+    sourceReferences: { rowId: "modifier-899-db-parry" },
+    version: 1,
+    visibility: { audience: "public" as const, sourceIdentity: "public" as const },
+  };
+
+  /** The pair the API persists for one row added in the modifier review. */
+  const committedCombatContext: ScenarioParticipantCombatContext = {
+    modifierBuckets: {
+      general: [],
+      situationDb: [
+        {
+          canonicalLifecycle: committedLifecycle,
+          durationRounds: 2,
+          id: "modifier-899-db-parry",
+          notes: "GM cover",
+          scope: "until",
+          value: -7,
+        },
+      ],
+      situationInitiative: [],
+      situationObSkill: [],
+    },
+  };
+
+  const committedCombatEffects: CombatEffectsState = {
+    effects: [
+      {
+        canonicalLifecycle: committedLifecycle,
+        canonicalTransitions: [],
+        combatModifierBucket: "db_parry",
+        combatWide: true,
+        createdAt: "2026-05-19T00:00:00.000Z",
+        damage: 0,
+        description: "GM cover",
+        duration: "2 rounds",
+        effectGroup: "db",
+        generalDamage: 0,
+        id: "modifier-899-db-parry",
+        modifierValue: -7,
+        sourceEventId: "event-899",
+        status: "active",
+        targetParticipantId: "participant-1",
+        type: "other_modifier",
+        updatedAt: "2026-05-19T00:00:00.000Z",
+      },
+    ],
+    events: [
+      {
+        createdAt: "2026-05-19T00:00:00.000Z",
+        description: "GM cover",
+        id: "event-899",
+        sourceLabel: "GM cover",
+        sourceType: "gm_adjustment",
+        targetParticipantId: "participant-1",
+      },
+    ],
+  };
+
+  it("reads the committed row's own value, not twice it", () => {
+    const summary = buildEncounterLiveCombatModifierSummary({
+      combatContext: committedCombatContext,
+      combatEffects: committedCombatEffects,
+      currentRound: 1,
+      encounterId: "encounter-1",
+      ownerParticipantId: "participant-1",
+      phaseKey: "phase1",
+    });
+
+    expect(summary.dbRaw).toBe(-7);
+  });
+});

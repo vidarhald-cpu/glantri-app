@@ -1119,3 +1119,235 @@ describe("persistent combat modifier refresh lifecycle", () => {
     ).toEqual([]);
   });
 });
+
+describe("#899 one bucket row per combat effect", () => {
+  const emptyBuckets = (): ScenarioParticipantCombatContext["modifierBuckets"] => ({
+    general: [],
+    situationDb: [],
+    situationInitiative: [],
+    situationObSkill: [],
+  });
+
+  const committedLifecycle = {
+    applicability: {
+      combatWide: true,
+      encounterId: "encounter-1",
+      rollPurposes: [],
+      roundNumber: 1,
+    },
+    createdAt: "2026-07-12T10:00:00.000Z",
+    createdRevision: "2026-07-12T10:00:00.000Z",
+    createdSequence: 1,
+    id: "modifier-899-db",
+    lifecycle: {
+      duration: {
+        creationRoundCounts: false,
+        kind: "rounds" as const,
+        remaining: 2,
+        startPhase: "phase1" as const,
+        startRound: 1,
+        startSequence: 1,
+        transitionBoundary: "round_boundary" as const,
+      },
+      state: "active" as const,
+    },
+    lineage: {},
+    missingFacts: [],
+    ownerParticipantId: "participant-1",
+    payload: {
+      category: "db_parry" as const,
+      contributionScope: "calculation" as const,
+      kind: "numeric" as const,
+      unit: "percentage" as const,
+      value: -7,
+    },
+    provenanceCompleteness: "complete" as const,
+    publicLabel: "GM cover",
+    schemaVersion: 1 as const,
+    sourceFamily: "manual" as const,
+    sourceReferences: { rowId: "modifier-899-db" },
+    version: 1,
+    visibility: { audience: "public" as const, sourceIdentity: "public" as const },
+  };
+
+  /** The exact pair `applyCanonicalModifierReviewToParticipantState` persists for one added row. */
+  function committedReviewState(input: { lifecycleRemaining?: number } = {}) {
+    const lifecycle = input.lifecycleRemaining
+      ? {
+          ...committedLifecycle,
+          lifecycle: {
+            ...committedLifecycle.lifecycle,
+            duration: {
+              ...committedLifecycle.lifecycle.duration,
+              remaining: input.lifecycleRemaining,
+            },
+          },
+        }
+      : committedLifecycle;
+    return participantState({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [
+            {
+              canonicalLifecycle: committedLifecycle,
+              durationRounds: 2,
+              id: "modifier-899-db",
+              notes: "GM cover",
+              scope: "until",
+              value: -7,
+            },
+          ],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      combatEffects: {
+        effects: [
+          {
+            canonicalLifecycle: lifecycle,
+            canonicalTransitions: [],
+            combatModifierBucket: "db_parry",
+            combatWide: true,
+            createdAt: "2026-07-12T10:00:00.000Z",
+            damage: 0,
+            description: "GM cover",
+            duration: `${lifecycle.lifecycle.duration.remaining} rounds`,
+            effectGroup: "db",
+            generalDamage: 0,
+            id: "modifier-899-db",
+            modifierValue: -7,
+            sourceEventId: "event-899",
+            status: "active",
+            targetParticipantId: "participant-1",
+            type: "other_modifier",
+            updatedAt: "2026-07-12T10:00:00.000Z",
+          },
+        ],
+        events: [
+          {
+            createdAt: "2026-07-12T10:00:00.000Z",
+            description: "GM cover",
+            id: "event-899",
+            sourceLabel: "GM cover",
+            sourceType: "gm_adjustment",
+            targetParticipantId: "participant-1",
+          },
+        ],
+      },
+    });
+  }
+
+  function dbParryTotal(state: ScenarioParticipantState, currentRound: number) {
+    const refreshed = refreshScenarioParticipantPersistentCombatModifiers({
+      currentRound,
+      state,
+    });
+    return {
+      contributions: buildLiveCombatModifierContributionProjection({
+        combatContext: refreshed.combat.combatContext,
+        combatEffects: refreshed.combatEffects,
+        currentRound,
+        encounterId: "encounter-1",
+        ownerParticipantId: "participant-1",
+      }).contributions.filter((contribution) => contribution.bucket === "db_parry"),
+      merged: getMergedCombatModifierTotals(refreshed.combat.combatContext).dbParry,
+      rows: refreshed.combat.combatContext.modifierBuckets.situationDb,
+    };
+  }
+
+  it("counts a committed GM modifier once in every reader", () => {
+    const { contributions, merged, rows } = dbParryTotal(committedReviewState(), 1);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: "modifier-899-db", value: -7 });
+    expect(rows[0]?.imported).not.toBe(true);
+    expect(contributions.map((contribution) => contribution.value)).toEqual([-7]);
+    expect(contributions.reduce((total, contribution) => total + contribution.value, 0)).toBe(-7);
+    expect(merged).toBe(-7);
+    expect(
+      resolveCombatModifierContributions({
+        bucket: "db_parry",
+        context: { ownerParticipantId: "participant-1", roundNumber: 1 },
+        contributions,
+      }).total,
+    ).toBe(-7);
+  });
+
+  it("removes the contribution entirely once the owning effect is gone", () => {
+    const state = participantState({
+      combatContext: { modifierBuckets: emptyBuckets() },
+      combatEffects: { effects: [], events: [] },
+    });
+
+    const { contributions, merged, rows } = dbParryTotal(state, 1);
+    expect(rows).toEqual([]);
+    expect(contributions).toEqual([]);
+    expect(merged).toBe(0);
+  });
+
+  it("keeps the retained row's duration following its source effect", () => {
+    expect(dbParryTotal(committedReviewState(), 1).rows[0]).toMatchObject({
+      durationRounds: 2,
+      sourceDuration: "2 rounds",
+    });
+    // A Round End duration decrement is written to the effect only. The single retained row must
+    // still report the effect's remaining duration, which the disposable imported row used to.
+    expect(dbParryTotal(committedReviewState({ lifecycleRemaining: 1 }), 2).rows[0]).toMatchObject({
+      durationRounds: 1,
+      sourceDuration: "1 round",
+    });
+  });
+
+  it("still projects a persistent effect that owns no bucket row of its own", () => {
+    const state = participantState({
+      combatContext: { modifierBuckets: emptyBuckets() },
+      combatEffects: effects(
+        effect({
+          combatModifierBucket: "db_parry",
+          effectGroup: "db",
+          id: "outside-review-effect",
+          modifierValue: -5,
+          type: "other_modifier",
+        }),
+      ),
+    });
+
+    const { contributions, merged, rows } = dbParryTotal(state, 1);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: "import:character_effect:outside-review-effect:db_parry",
+      imported: true,
+      value: -5,
+    });
+    expect(contributions.map((contribution) => contribution.value)).toEqual([-5]);
+    expect(merged).toBe(-5);
+  });
+
+  it("does not fold two distinct effects that share a bucket", () => {
+    const state = participantState({
+      combatContext: {
+        modifierBuckets: {
+          ...emptyBuckets(),
+          situationDb: [{ id: "unrelated-manual", notes: "manual", scope: "until", value: 2 }],
+        },
+      },
+      combatEffects: effects(
+        effect({
+          combatModifierBucket: "db_parry",
+          effectGroup: "db",
+          id: "other-effect",
+          modifierValue: -5,
+          type: "other_modifier",
+        }),
+      ),
+    });
+
+    const { contributions, merged } = dbParryTotal(state, 1);
+    expect(contributions.map((contribution) => contribution.id).sort()).toEqual([
+      "import:character_effect:other-effect:db_parry",
+      "unrelated-manual",
+    ]);
+    expect(merged).toBe(-3);
+  });
+});
