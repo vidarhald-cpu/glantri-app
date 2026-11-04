@@ -30,7 +30,10 @@ function encounter(revision = "2026-07-26T12:00:00.000Z") {
 
 describe("active combat mutation response", () => {
   it("contains active state without archived rounds or a full encounter", () => {
-    const response = buildActiveCombatMutationResponse({ encounter: encounter() });
+    const response = buildActiveCombatMutationResponse({
+      encounter: encounter(),
+      viewer: { kind: "gm" },
+    });
     const serialized = JSON.stringify(response);
 
     expect(response).toMatchObject({
@@ -54,6 +57,7 @@ describe("active combat mutation response", () => {
           rounds: [],
         },
       },
+      viewer: { kind: "gm" },
     });
     const withLargeHistory = buildActiveCombatMutationResponse({
       encounter: {
@@ -71,13 +75,17 @@ describe("active combat mutation response", () => {
           })),
         },
       },
+      viewer: { kind: "gm" },
     });
 
     expect(JSON.stringify(withLargeHistory)).toBe(JSON.stringify(withoutHistory));
   });
 
   it("rejects history-bearing or full-encounter response fields", () => {
-    const response = buildActiveCombatMutationResponse({ encounter: encounter() });
+    const response = buildActiveCombatMutationResponse({
+      encounter: encounter(),
+      viewer: { kind: "gm" },
+    });
 
     expect(() =>
       activeCombatMutationResponseSchema.parse({
@@ -100,6 +108,7 @@ describe("active combat mutation response", () => {
         mutationPresentation: {
           result: "x".repeat(70 * 1024),
         },
+        viewer: { kind: "gm" },
       }),
     ).toThrow("remain compact");
   });
@@ -108,7 +117,10 @@ describe("active combat mutation response", () => {
     const current = encounter();
     const nextFull = encounter("2026-07-26T12:01:00.000Z");
     nextFull.combatRoundState!.currentStep = "initiative_phase_1";
-    const response = buildActiveCombatMutationResponse({ encounter: nextFull });
+    const response = buildActiveCombatMutationResponse({
+      encounter: nextFull,
+      viewer: { kind: "gm" },
+    });
 
     const applied = applyActiveCombatMutationResponse({
       currentEncounter: current,
@@ -129,6 +141,7 @@ describe("active combat mutation response", () => {
         taskId: "round:3:declaration-boundary:task",
       },
       encounter: current,
+      viewer: { kind: "gm" },
     });
 
     expect(response.deterministicAdvance).toEqual({
@@ -148,7 +161,10 @@ describe("active combat mutation response", () => {
   });
 
   it("fails closed when a response is applied to another encounter", () => {
-    const response = buildActiveCombatMutationResponse({ encounter: encounter() });
+    const response = buildActiveCombatMutationResponse({
+      encounter: encounter(),
+      viewer: { kind: "gm" },
+    });
     const other = encounterSessionSchema.parse({
       ...encounter(),
       id: "encounter-2",

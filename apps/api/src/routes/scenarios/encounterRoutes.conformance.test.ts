@@ -135,7 +135,11 @@ describe("combat route canonical-conformance guards", () => {
     expect(routeSource).toContain("scenarioParticipant.controlledByUserId !== user.id");
     expect(routeSource).toContain("blocker: completed.blocker");
     expect(routeSource).toContain("declaration.combatContext");
-    expect(routeSource).toContain("buildCombatRoundCommandEnvelope({ state: completed.state })");
+    // #925. The envelope now declares the viewer it is built for; the state it summarises is
+    // unchanged.
+    expect(routeSource).toContain("buildCombatRoundCommandEnvelope({");
+    expect(routeSource).toContain("state: completed.state,");
+    expect(routeSource).toContain("viewer: resolveCombatRoundCommandEnvelopeViewer({");
   });
 
   it("canonicalizes targeted secondary declarations and derives Parry from stable Dodge identity", () => {
