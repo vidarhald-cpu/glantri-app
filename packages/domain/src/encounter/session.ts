@@ -357,6 +357,17 @@ export const encounterSessionSchema = z.object({
   kind: encounterKindSchema.default("combat"),
   participantMembershipMode: encounterParticipantMembershipModeSchema.optional(),
   participants: z.array(encounterParticipantSchema).default([]),
+  /**
+   * The roster the Encounter will run with from the next round, when the GM has changed it while
+   * a round was already under way. Combatants enter and leave only between rounds, so the change
+   * waits here and replaces `participants` at the round boundary.
+   *
+   * It is a holding field, not a record of anything: it is the whole next roster rather than a
+   * list of additions and removals, it carries no round number, no order and no history, and it
+   * is read at exactly one point — the round-end commit. Nothing in play depends on it, and no
+   * combat rule refers to it. Absent means the in-force roster is the only roster.
+   */
+  pendingParticipants: z.array(encounterParticipantSchema).optional(),
   playerOutcome: z.string().optional(),
   roleplayState: roleplayStateSchema.optional(),
   scenarioId: idSchema.optional(),
@@ -488,6 +499,138 @@ function encounterParticipantMatchesScenarioParticipant(input: {
       input.encounterParticipant.characterId === input.scenarioParticipant.characterId,
     )
   );
+}
+
+/**
+ * Whether a GM roster change has to wait for the round boundary instead of taking effect now.
+ *
+ * Combatants enter and leave only between rounds: after the GM commits round end and before the
+ * first action of the next round. The round-end commit empties the command list, so a round that
+ * has recorded no command of its own is still inside that window and a change made then applies
+ * immediately. Anything after the first recorded command of a round waits.
+ *
+ * Only an Encounter that can still reach a round boundary holds anything. A completed or archived
+ * Encounter keeps the round state of its last round, and a change held there would never apply.
+ */
+export function encounterRosterChangeWaitsForRoundBoundary(encounter: {
+  combatRoundState?: CombatRoundState;
+  status: EncounterStatus;
+}): boolean {
+  const state = encounter.combatRoundState;
+
+  if (!state || !isEncounterMutable(encounter.status)) {
+    return false;
+  }
+
+  return state.commands.some((command) => command.roundNumber === state.roundNumber);
+}
+
+/**
+ * Which combatants an Encounter roster holds, as a value two rosters can be compared on.
+ *
+ * The ruling is about entering and leaving combat, so a roster change is a change to *who* is
+ * present. `declaration`, `facing`, `initiative`, `label`, `order`, `orientation` and `position`
+ * describe a combatant already in play and change freely during a round; the fields here are the
+ * ones that say which combatant a row is. Order is not part of it either: re-ordering a roster
+ * adds and removes nobody.
+ *
+ * Built from an array rather than an object so the comparison cannot turn on key order.
+ */
+function encounterRosterMembership(participants: EncounterParticipant[]): string {
+  return JSON.stringify(
+    participants
+      .map((participant) =>
+        JSON.stringify([
+          participant.participantType,
+          participant.id,
+          participant.scenarioParticipantId ?? null,
+          participant.characterId ?? null,
+          participant.adHocName ?? null,
+        ]),
+      )
+      .sort(),
+  );
+}
+
+/**
+ * Whether two Encounter rosters hold the same combatants — nobody has entered and nobody has left.
+ *
+ * This is what makes the between-rounds rule one rule rather than one rule per route. A route that
+ * submits a whole Encounter session, rather than a roster, asks this to tell a GM roster change
+ * from an ordinary save that happens to carry the roster it loaded.
+ */
+export function encounterRostersHoldTheSameCombatants(
+  one: EncounterParticipant[],
+  other: EncounterParticipant[],
+): boolean {
+  return encounterRosterMembership(one) === encounterRosterMembership(other);
+}
+
+/**
+ * The membership mode governing the roster in force.
+ *
+ * An absent mode behaves as `explicit`, which is both what the roster routes have always defaulted
+ * to and what an active Encounter is required to carry.
+ */
+export function encounterParticipantMembershipModeInForce(encounter: {
+  participantMembershipMode?: EncounterParticipantMembershipMode;
+}): EncounterParticipantMembershipMode {
+  return encounter.participantMembershipMode ?? "explicit";
+}
+
+/**
+ * Why a roster held for the round boundary could never take effect, or `undefined` when it could.
+ *
+ * A held roster is refused when it is submitted rather than when the boundary tries to write it,
+ * so the GM is told at the point they can still do something about it and the round-end commit is
+ * not left unable to advance. These are the structural conditions an active Encounter roster must
+ * satisfy; the database-level conditions it also satisfies are rechecked when the roster is
+ * actually written, and can still have changed by then.
+ */
+export function encounterHeldRosterRefusal(
+  participants: EncounterParticipant[],
+): string | undefined {
+  const scenarioParticipantIds = participants.map(
+    (participant) => participant.scenarioParticipantId,
+  );
+
+  if (scenarioParticipantIds.some((participantId) => !participantId)) {
+    return "Every Encounter participant must belong to the Scenario.";
+  }
+
+  if (
+    scenarioParticipantIds.length === 0 ||
+    new Set(scenarioParticipantIds).size !== scenarioParticipantIds.length
+  ) {
+    return "Choose one or more distinct Scenario participants.";
+  }
+
+  return undefined;
+}
+
+/**
+ * The Encounter roster fields to persist when the round-end commit crosses into the next round.
+ *
+ * This is the one point that reads the waiting roster. It replaces the roster in force and stops
+ * existing; it is never consulted again and leaves no trace of itself. With nothing waiting the
+ * Encounter is returned unchanged, so an ordinary round-end commit writes exactly what it wrote
+ * before.
+ */
+export function withEncounterRosterForNextRound<
+  T extends {
+    participants: EncounterParticipant[];
+    pendingParticipants?: EncounterParticipant[];
+  },
+>(encounter: T): T {
+  if (!encounter.pendingParticipants) {
+    return encounter;
+  }
+
+  return {
+    ...encounter,
+    participants: encounter.pendingParticipants,
+    pendingParticipants: undefined,
+  };
 }
 
 export function resolveEncounterParticipantMembership(input: {
