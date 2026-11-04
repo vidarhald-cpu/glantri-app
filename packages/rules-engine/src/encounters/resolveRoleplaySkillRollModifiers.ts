@@ -52,6 +52,13 @@ export function resolveRoleplaySkillRollModifiers(input: {
   const adjustment = resolveWorkbookPercentageAdjustment(skillTotal, absoluteModifier);
 
   if (adjustment == null) {
+    // #922. This is no longer reachable from this entry point, and it is kept rather than deleted
+    // because unreachable is not a safety property. After the Product Owner's ruling (comment
+    // 20793) the rule answers a base below zero, so the only remaining no-answer is a non-integer
+    // figure — and `normalizeInteger` above truncates both the skill total and every modifier
+    // value before the lookup sees them, which the spec asserts rather than assumes. The reaction
+    // stays a warning plus no modifier rather than a silent zero: this pipeline has a warning
+    // channel, so an unapplied modifier is disclosed on it.
     warnings.push(
       `No percentage modifier table entry for skill total ${skillTotal} and raw modifier ${rawModifierSum}.`,
     );

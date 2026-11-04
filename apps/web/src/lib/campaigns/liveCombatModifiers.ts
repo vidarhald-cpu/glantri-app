@@ -21,6 +21,7 @@ import {
 import {
   calculateWorkbookPercentageAdjustmentTrace,
   resolveWorkbookPercentageAdjustment,
+  type WorkbookPercentageAdjustmentAxis,
   type WorkbookRawModifier,
 } from "@glantri/rules-engine";
 
@@ -160,10 +161,25 @@ export interface EncounterInitiativeModifierCalculation {
    * workbook grid (#922). Carried for review; no surface displays it yet — that is #940.
    */
   extrapolated: boolean;
-  extrapolatedAxes: readonly ("base" | "modifier")[];
+  /**
+   * Which grid edges the adjustment was resolved outside. Taken from the rules-engine type rather
+   * than restated, so a new edge — `base_below_zero` under the #922 ruling — cannot be carried by
+   * the lookup and silently dropped by this type (#922).
+   */
+  extrapolatedAxes: readonly WorkbookPercentageAdjustmentAxis[];
   modifiedInitiative: number;
   modifierAdjustment: number;
   rawModifierTotal: number;
+  /**
+   * `false` when the rule had no reading of the input at all, so `modifiedInitiative` is the
+   * unadjusted base and `rawModifierTotal` was not applied to it (#922).
+   *
+   * Carried because without it a refused adjustment is indistinguishable in this object from a
+   * figure the rule answered with no adjustment: both report `modifierAdjustment: 0` beside a
+   * non-zero `rawModifierTotal`. Which surfaces display it is #940 and a Product Owner decision;
+   * nothing here renders it.
+   */
+  resolved: boolean;
 }
 
 function getEffectMagnitude(effect: CombatEffect): number {
@@ -519,14 +535,21 @@ export function getCombatModifierRowsVisibleAtStep(
  * screen yet, deliberately:** which GM-visible surfaces show it, and how, is #940 and a Product
  * Owner decision naming surfaces and widths, so nothing here renders it.
  *
- * `extrapolated` is `false` when the rule has no reading of the input at all — a base below zero,
- * or a non-integer one. That is not an understatement: no adjustment is applied in that case and
- * the base is returned unchanged, so there is no extrapolated figure to flag. The absent
- * adjustment itself is reported by `resolved`.
+ * A base below zero is no longer one of those inputs. Under the Product Owner's ruling on #922
+ * (comment 20793) the rule answers it at one point per raw step, flagged `base_below_zero`, so this
+ * function now returns a resolved extrapolated figure where it used to return the base unchanged.
+ * `{baseValue: -3, rawModifier: -4}` returned −3 at the previous candidate and returns −7 here.
+ *
+ * `extrapolated` is `false` when the rule has no reading of the input at all, which after the
+ * ruling means a non-integer base or modifier. That is not an understatement: no adjustment is
+ * applied in that case and the base is returned unchanged, so there is no extrapolated figure to
+ * flag. The absent adjustment itself is reported by `resolved`, which
+ * `buildEncounterInitiativeModifierCalculation` now carries onto the calculation so an unapplied
+ * modifier is not recorded as an ordinary figure.
  */
 export interface LiveRawModifierAdjustment {
   extrapolated: boolean;
-  extrapolatedAxes: readonly ("base" | "modifier")[];
+  extrapolatedAxes: readonly WorkbookPercentageAdjustmentAxis[];
   /** `false` when the rule has no reading of the input and `value` is the unadjusted base. */
   resolved: boolean;
   value: number;
@@ -588,6 +611,7 @@ export function buildEncounterInitiativeModifierCalculation(input: {
     modifiedInitiative: adjustment.value,
     modifierAdjustment: adjustment.value - input.baseInitiative,
     rawModifierTotal,
+    resolved: adjustment.resolved,
   };
 }
 

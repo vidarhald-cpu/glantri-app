@@ -439,7 +439,7 @@ describe("live combat modifiers", () => {
    * Opening `lookupWorkbookPercentageAdjustment` for every caller activated this one. The measured
    * delta, base `a14c5c73` against the open-ended lookup: `{9, -20}` returned the base 9 unchanged
    * and now returns −11; `{9, -16}` returned 9 and now returns −7; `{60, -3}` returned 60 and now
-   * returns 42; `{9, -15}` is 6 at both heads. The Product Owner's ruling is that every
+   * returns 42; `{9, -15}` is −6 at both heads. The Product Owner's ruling is that every
    * extrapolation is flagged for review, so the fact travels with the figure.
    *
    * **The mutation this guards against:** going back to the value-only lookup here, which drops
@@ -525,15 +525,27 @@ describe("live combat modifiers", () => {
       );
     }
 
-    // An input the rule has no reading of returns the base unchanged — which it did at the base
-    // commit too — and says the adjustment was not resolved rather than claiming it was in-grid.
+    // #922, Product Owner ruling comment 20793. A base below zero used to be an input the rule had
+    // no reading of, and this returned the base unchanged with `resolved: false`. It now resolves
+    // at one point per raw step and is flagged on the edge below the grid: −3 with a four-step
+    // penalty is −7, where this head's predecessor returned −3.
     expect(resolveLiveRawModifierAdjustment({ baseValue: -3, rawModifier: -4 })).toEqual({
+      extrapolated: true,
+      extrapolatedAxes: ["base_below_zero"],
+      resolved: true,
+      value: -7,
+    });
+    expect(applyLiveRawModifierToCombatValue({ baseValue: -3, rawModifier: -4 })).toBe(-7);
+    expect(applyLiveRawModifierToCombatValue({ baseValue: -3, rawModifier: -4 })).not.toBe(-3);
+
+    // What still has no reading is a figure that is not a whole number of steps, and the unapplied
+    // adjustment is reported by `resolved` rather than looking like an in-grid zero.
+    expect(resolveLiveRawModifierAdjustment({ baseValue: -3, rawModifier: -4.5 })).toEqual({
       extrapolated: false,
       extrapolatedAxes: [],
       resolved: false,
       value: -3,
     });
-    expect(applyLiveRawModifierToCombatValue({ baseValue: -3, rawModifier: -4 })).toBe(-3);
   });
 
   it("#922 carries the flag onto the initiative calculation a surface reads", () => {
@@ -568,6 +580,40 @@ describe("live combat modifiers", () => {
     expect(inGrid.rawModifierTotal).toBe(-15);
     expect(inGrid.extrapolated).toBe(false);
     expect(inGrid.extrapolatedAxes).toEqual([]);
+    expect(inGrid.resolved).toBe(true);
+    expect(pastEdge.resolved).toBe(true);
+
+    // #922. A base initiative below zero resolves at one point per step and is flagged on the edge
+    // below the grid.
+    const belowZero = buildEncounterInitiativeModifierCalculation({
+      baseInitiative: -2,
+      combatContext: {
+        modifierBuckets: {
+          ...combatContext.modifierBuckets,
+          situationInitiative: [{ id: "committed", scope: "until", value: -4 }],
+        },
+      },
+    });
+
+    expect(belowZero.rawModifierTotal).toBe(-4);
+    expect(belowZero.extrapolated).toBe(true);
+    expect(belowZero.extrapolatedAxes).toEqual(["base_below_zero"]);
+    expect(belowZero.resolved).toBe(true);
+    expect(belowZero.modifiedInitiative).toBe(-2 - lookupWorkbookPercentageAdjustment(-2, 4)!);
+    expect(belowZero.modifierAdjustment).not.toBe(0);
+
+    // And `resolved` is carried rather than produced and dropped: an unapplied adjustment is no
+    // longer indistinguishable from a figure the rule answered with no adjustment, which is what
+    // `modifierAdjustment: 0` beside a non-zero `rawModifierTotal` used to look like.
+    const unresolvable = buildEncounterInitiativeModifierCalculation({
+      baseInitiative: 9.5,
+      combatContext,
+    });
+
+    expect(unresolvable.rawModifierTotal).toBe(-20);
+    expect(unresolvable.resolved).toBe(false);
+    expect(unresolvable.modifierAdjustment).toBe(0);
+    expect(unresolvable.modifiedInitiative).toBe(9.5);
   });
 
   it("documents previous defense overlay versus summed raw modifier strategy", () => {
@@ -737,6 +783,47 @@ describe("live combat modifiers", () => {
       finalValue: 10 - lookupWorkbookPercentageAdjustment(10, 4)!,
       rawModifiers: [{ label: "DB/Parry", value: -4 }],
     });
+  });
+
+  it("#922 traces a DB/Parry adjustment on a base below zero instead of returning nothing", () => {
+    // Product Owner ruling on #922, comment 20793. This call site returns `null` on a no-answer, so
+    // a base below zero used to produce no calculation at all for the GM panel to show.
+    const calculation = buildEncounterDbParryModifierCalculation({
+      baseValue: -11,
+      liveModifiers: {
+        dbRaw: -4,
+        generalFatigueRaw: 0,
+        initiativeRaw: 0,
+        modifierNoteLabels: [],
+        obSkillRaw: 0,
+      },
+    });
+
+    expect(calculation).not.toBeNull();
+    expect(calculation).toMatchObject({
+      baseValue: -11,
+      extrapolated: true,
+      extrapolatedAxes: ["base_below_zero"],
+      percentageAdjustment: lookupWorkbookPercentageAdjustment(-11, 4),
+      rawModifierTotal: -4,
+    });
+    // The ruling's own worked figure.
+    expect(calculation?.finalValue).toBe(-15);
+
+    // And a figure the rule has no reading of still returns nothing rather than a wrong trace.
+    expect(
+      buildEncounterDbParryModifierCalculation({
+        baseValue: -11,
+        extraRawModifiers: [{ label: "fractional", value: -0.5 }],
+        liveModifiers: {
+          dbRaw: -4,
+          generalFatigueRaw: 0,
+          initiativeRaw: 0,
+          modifierNoteLabels: [],
+          obSkillRaw: 0,
+        },
+      }),
+    ).toBeNull();
   });
 
   it("leaves DB/Parry unchanged when only Skill/OB or Initiative modifiers exist", () => {

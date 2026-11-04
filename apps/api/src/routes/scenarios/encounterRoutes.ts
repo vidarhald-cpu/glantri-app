@@ -501,6 +501,12 @@ function buildObservationRollBasis(input: {
     ],
   });
   if (!trace) {
+    // #922. Fail closed, and the caller turns this into an automation stop rather than a roll. Two
+    // things about it are disclosed rather than changed here, because both are outside this
+    // change's scope: the message still says "outside the canonical workbook table", which after
+    // the open-ended lookup is no longer the condition it describes; and this basis carries
+    // `percentageAdjustment` without `extrapolated`, so an extrapolated observation figure is
+    // recorded unflagged. A visible flag on this surface is #940 and a Product Owner decision.
     throw new RangeError("Observation modifiers are outside the canonical workbook table.");
   }
   return {
@@ -5472,7 +5478,10 @@ function recordCanonicalServerCombatInitiative(input: {
   submittedBy: "gm" | "player";
   submittedAt: string;
   userId: string;
-}): { initiative: ReturnType<typeof buildCombatRoundInitiativeResult>; state: CombatRoundState } {
+}): {
+  initiative: ReturnType<typeof buildCombatRoundInitiativeResult>;
+  state: CombatRoundState;
+} | null {
   const initiativeProjection = buildLiveCombatModifierContributionProjection({
     combatContext: input.scenarioParticipant.state.combat.combatContext,
     combatEffects: input.scenarioParticipant.state.combatEffects,
@@ -5501,9 +5510,18 @@ function recordCanonicalServerCombatInitiative(input: {
     baseValue: input.initiativeBase,
     rawModifiers: [{ label: "Initiative", value: rawModifier }],
   });
+  if (trace === null) {
+    // #922. `?? input.initiativeBase` silently dropped the whole committed initiative modifier on
+    // a no-answer and rolled anyway, recording the roll as ordinary — the same fail-open shape as
+    // the missile defence commit, on a different figure. The settled rule removes the cause a
+    // negative base used to be, but unreachable is not a safety property, so this returns no
+    // result and the two callers refuse with the refusal each already has.
+    return null;
+  }
+
   const initiative = buildCombatRoundInitiativeResult({
     baseInitiative: input.initiativeBase,
-    modifierAdjustment: (trace?.finalValue ?? input.initiativeBase) - input.initiativeBase,
+    modifierAdjustment: trace.finalValue - input.initiativeBase,
     roll: rollOpenEndedD6(),
   });
   return {
@@ -12141,6 +12159,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         submittedAt,
         userId: user.id,
       });
+      if (!rolled) {
+        // #922. The rule has no reading of this participant's initiative with its committed
+        // modifiers, so nothing is rolled and nothing is recorded, rather than rolling with the
+        // modifier quietly dropped. The cause is named instead of being reported as missing
+        // context, because refreshing combat cannot repair it.
+        return reply.code(409).send({
+          code: "initiative_modifier_out_of_range",
+          error:
+            "This participant's initiative works out to a value this calculation has no reading for, so it cannot be rolled. Nothing was rolled. Report it with the participant's initiative figures.",
+        });
+      }
       const savedEncounter = await encounterService.updateCombatEncounter({
         expectedRevision: encounter.updatedAt,
         campaignId: access.campaignId,
@@ -15624,6 +15653,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 submittedBy: "gm",
                 userId: user.id,
               });
+              if (!rolled) {
+                // #922. Same no-answer, same refusal shape as this block already uses for an
+                // incomplete initiative context above: the automation stops rather than recording
+                // a roll whose committed modifier was quietly dropped.
+                return {
+                  kind: "stopped" as const,
+                  projection: apiProjection,
+                  reason: "roll_not_eligible" as const,
+                };
+              }
               const nextState = attachCombatStepAutomationCommandLink({
                 commandId,
                 countsTowardProcessed,
@@ -17967,6 +18006,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   ],
                 })
               : undefined;
+          // #922. `breakOffTrace` is `null` only when the rule has no reading of this composition,
+          // and `undefined` when no composition was attempted — no ordinary Dodge, or no Break Off
+          // DB/Parry row to apply. `?? awareBaseDb` cannot tell those apart, so on a no-answer it
+          // used to resolve the shot against the **unadjusted** base: a committed four-point
+          // penalty applied on a positive base (7 → 3) was discarded on a negative one, the
+          // response was 200, the attack was recorded as a hit, and nothing said an adjustment had
+          // been dropped. Independent QA drove that and classified it a regression against `dev`,
+          // which refused the same rows (verdict comment 20745, finding 1).
+          //
+          // The settled rule removes the cause — a defence below zero now answers — but a
+          // fail-open fallback must not survive on being hard to reach, so the no-answer refuses
+          // here exactly as the melee origin does, with the same code and the same sentence. After
+          // this guard `?? awareBaseDb` applies only to `undefined`, which is the honest case.
+          if (breakOffTrace === null) {
+            return reply.code(409).send({
+              code: "defense_context_unavailable",
+              error: getCombatDefenseRefusalMessage(["workbook_adjustment"]),
+            });
+          }
           const defenderDb = breakOffTrace?.finalValue ?? awareBaseDb;
           const attackerRoundParticipant = roundState.participants.find(
             (participant) => participant.participantId === body.attackerParticipantId,

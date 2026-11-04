@@ -102,7 +102,10 @@ import {
   shieldTemplates,
   weaponTemplates,
 } from "@glantri/content/equipment";
-import { lookupWorkbookPercentageAdjustment } from "@glantri/rules-engine";
+import {
+  calculateWorkbookPercentageAdjustmentTrace,
+  lookupWorkbookPercentageAdjustment,
+} from "@glantri/rules-engine";
 
 import { ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION } from "./scenarios/combatMutationResponse";
 
@@ -21559,7 +21562,29 @@ describe("scenarios route contract", () => {
     await app.close();
   });
 
-  it("stops Observe automation before invalid targets or incomplete relationship profiles", async () => {
+  /**
+   * #922 — measured behaviour change, disclosed rather than absorbed.
+   *
+   * The first half of this test used to assert that Observe automation **stops** for the
+   * `missingProfileIndex` participant, under the name "incomplete relationship profiles". The stop
+   * was not produced by anything about the relationship profile. It was produced by the
+   * percentage-adjustment lookup refusing a negative base: a participant with no character build
+   * resolves an observation base of **−3** (its unknown-skill penalty, measured, not computed
+   * here), the fixture adds a general modifier of 999, `buildObservationRollBasis` threw the
+   * `RangeError` it throws on a no-answer, and `resolveApiCombatObservationRollContext` caught that
+   * as `observation_review_required`.
+   *
+   * Under the Product Owner's ruling (comment 20793) a base below zero answers, so the throw stops
+   * arriving and the automation proceeds — which is the ruling's intended effect at this call site,
+   * not a defect in this change. What it exposes is that **no guard on a participant without a
+   * character build exists**: the stop was an artefact of the lookup's refusal. Whether Observe
+   * automation should stop for such a participant is a product decision, recorded in the lane
+   * report rather than decided here, so this now asserts what the route actually does.
+   *
+   * The `target_invalid` half below is unaffected and is the control: it stops for a reason that is
+   * its own.
+   */
+  it("runs Observe automation past a participant with no character build, and stops on an invalid target", async () => {
     const ambiguousPrepared = makeObservationAutomationFixture({
       missingProfileIndex: 2,
       participantCount: 3,
@@ -21582,13 +21607,13 @@ describe("scenarios route contract", () => {
     });
     expect(ambiguousResponse.statusCode, ambiguousResponse.body).toBe(200);
     expect(ambiguousResponse.json().workflow).toMatchObject({
-      processedCount: 1,
-      stopParticipantId: "encounter-participant-2",
-      stopReason: "observation_review_required",
+      processedCount: 3,
+      stepComplete: true,
+      stopReason: "end_of_step",
     });
     expect(
       combatRoundStateSchema.parse(ambiguousFixture.encounter.combatRoundState).observationAttempts,
-    ).toHaveLength(1);
+    ).toHaveLength(3);
     await ambiguousApp.close();
 
     vi.clearAllMocks();
@@ -23205,6 +23230,7 @@ describe("scenarios route contract", () => {
   function makeDefenderDbParryTotalFixture(
     rawTotal: number,
     options: {
+      breakOffAttackerObModifier?: number;
       breakOffDefenderDbParryModifier?: -4 | -3 | -2;
       withLegacyDefenseSnapshot?: boolean;
     } = {},
@@ -23220,7 +23246,8 @@ describe("scenarios route contract", () => {
        * effective DB — which the committed `situationDb` total above can drive below zero.
        */
       breakOffProposals:
-        options.breakOffDefenderDbParryModifier === undefined
+        options.breakOffDefenderDbParryModifier === undefined &&
+        options.breakOffAttackerObModifier === undefined
           ? fixture.encounter.combatRoundState.breakOffProposals
           : [
               {
@@ -23229,8 +23256,12 @@ describe("scenarios route contract", () => {
                 id: "break-off-922",
                 pairKey: makeDistancePairKey("encounter-participant-1", "encounter-participant-2"),
                 result: {
-                  attackerObModifier: 0,
-                  defenderDbParryModifier: options.breakOffDefenderDbParryModifier,
+                  // #922. A non-zero attacker OB modifier is what gives the attacker's
+                  // opponent-specific adjustment a non-zero raw total, which is the only way to
+                  // reach the lookup at `encounterRoutes.ts:17436` rather than short-circuit on a
+                  // zero modifier.
+                  attackerObModifier: options.breakOffAttackerObModifier ?? 0,
+                  defenderDbParryModifier: options.breakOffDefenderDbParryModifier ?? 0,
                   escaped: false,
                   tableRowId:
                     options.breakOffDefenderDbParryModifier === -4
@@ -23295,6 +23326,7 @@ describe("scenarios route contract", () => {
   async function driveAttackAgainstDbParryTotal(
     rawTotal: number,
     options: {
+      breakOffAttackerObModifier?: number;
       breakOffDefenderDbParryModifier?: -4 | -3 | -2;
       combatResponseVersion?: string;
       user?: typeof mocks.playerUser | typeof mocks.adminUser;
@@ -23345,6 +23377,9 @@ describe("scenarios route contract", () => {
       | undefined;
 
     return {
+      attackerCalculation: command?.facts.attackerCalculation as
+        | Record<string, unknown>
+        | undefined,
       attackResponse,
       attackResult: updatedState
         ? getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -23539,103 +23574,559 @@ describe("scenarios route contract", () => {
   });
 
   /**
-   * #922 repair cycle 1, finding 1 — the refusal this issue was filed about, re-keyed.
+   * #922 — the complaint this issue was filed about, driven to a **resolution** on the melee path.
    *
-   * Making the lookup open-ended did not remove the wall; it **moved** it. The adjustment can now
-   * exceed the base, so a canonical effective DB can be negative — and a negative base is the one
-   * input `resolveWorkbookPercentageAdjustment` still refuses, by design and unchanged. An
-   * ordinary committed Break Off result row composes a second adjustment on exactly that base, so
-   * the refusal is live on the melee path at this head.
+   * The history, because it is what the rows below are measured against. Making the lookup
+   * open-ended did not remove the wall, it **moved** it: the adjustment can now exceed the base, so
+   * an ordinary committed total drives the canonical effective DB below zero, and a base below zero
+   * was the one input the lookup still refused. An ordinary committed `COMBAT_BREAK_OFF_RESULT_TABLE`
+   * row composes a second adjustment on exactly that base, so the refusal stayed live — first
+   * wearing the false "no defensive skill" sentence, then an honest one.
    *
-   * The first candidate keyed the cause split on the canonical defence being *incomplete*. Here it
-   * is `complete` and the defender holds Dodge, so the split did not fire and the original false
-   * sentence came back. The cause is now read from the composition that actually failed, so the
-   * sentence written for it is the sentence sent.
+   * Product Owner ruling on #922, comment 20793, settles the rule: a defence may go below zero, it
+   * is not floored, and at a base of zero or below each point of raw modifier moves the value by one
+   * point. So the lookup answers, and these rows resolve. The refusal still exists for an input the
+   * rule has no reading of, and `#922 names the real missing fact in the refusal that survives`
+   * covers the sentence it sends.
    *
-   * **Still a refusal, on purpose.** Whether a negative defence should resolve rather than refuse
-   * is Product Owner question 14 on #934 and is not pre-empted here; refusing with an honest cause
-   * is correct under either answer.
+   * Every figure below is the route's own recorded figure or the lookup's own output for the same
+   * composition. None is computed here from a base and a modifier.
    *
-   * **The mutation this guards against:** keying the branch back on `canonicalDefense.completeness`
-   * — every negative-base row below then returns `attack_defender_defense_unavailable` and the
-   * sentence about a defensive skill the defender demonstrably has, which is what this head did.
+   * **The mutations this guards against:** restoring the lookup's negative-base refusal, which
+   * returns every negative row to a 409; recording a below-zero figure with no flag; and dropping
+   * the committed Break Off penalty on a negative base, which the `delta` column catches because
+   * the penalised figure would equal the unpenalised one.
    */
-  it("#922 refuses a negative canonical defence by its real cause, not a missing defensive skill", async () => {
-    const WORKBOOK_ADJUSTMENT_REFUSAL =
-      "This opponent's defence works out to a value this calculation has no reading for, so the attack cannot be resolved. Nothing was recorded. This is not something the opponent's skills or equipment can repair; report it with the opponent's defence figures.";
+  it("#922 resolves a negative canonical defence and keeps the committed Break Off penalty in it", async () => {
     const committedRows = [-2, -10, -11, -14, -20, -26];
     const measured: Array<{
-      code: unknown;
       committedRow: number;
+      composedAxes: unknown;
       effectiveDb: unknown;
-      error: unknown;
+      flag: unknown;
+      penalisedDb: unknown;
+      penalisedFromLookup: unknown;
       status: number;
     }> = [];
 
     for (const committedRow of committedRows) {
-      // A refusal performs no `updateEncounter`, so the defender's canonical effective DB is read
-      // from the paired run of the same committed row with no Break Off penalty, which resolves.
       const withoutBreakOff = await driveAttackAgainstDbParryTotal(committedRow);
       const withBreakOff = await driveAttackAgainstDbParryTotal(committedRow, {
         breakOffDefenderDbParryModifier: -4,
       });
-      const body = withBreakOff.attackResponse.json() as Record<string, unknown>;
 
       expect(withoutBreakOff.status, `row ${committedRow} without Break Off`).toBe(200);
       expect(withoutBreakOff.defenderCalculation?.["completeness"]).toBe("complete");
+
+      // The canonical effective DB the route recorded for the unpenalised run is the base the
+      // penalised run composes its second adjustment on. The expected penalised figure is the
+      // lookup's own output for that composition, not arithmetic performed here.
+      const base = withoutBreakOff.defenderCalculation?.["effectiveDb"] as number;
+      const composed = calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: base,
+        rawModifiers: [{ label: "Break Off result · DB/Parry", value: -4 }],
+      });
+
       measured.push({
-        code: body["code"],
         committedRow,
-        effectiveDb: withoutBreakOff.defenderCalculation?.["effectiveDb"],
-        error: body["error"],
+        composedAxes: composed?.extrapolatedAxes,
+        effectiveDb: base,
+        flag: withBreakOff.attackResult?.extrapolatedWorkbookAdjustments,
+        penalisedDb: withBreakOff.attackResult?.defenderDb,
+        penalisedFromLookup: composed?.finalValue,
         status: withBreakOff.status,
       });
     }
 
     // Five rows whose canonical effective DB is negative, and the one control row that is not.
+    // Every row resolves, and the recorded defence is the lookup's own figure for the composition.
     expect(measured).toEqual([
-      { code: undefined, committedRow: -2, effectiveDb: 7, error: undefined, status: 200 },
       {
-        code: "defense_context_unavailable",
+        committedRow: -2,
+        composedAxes: [],
+        effectiveDb: 7,
+        // Absent rather than empty: the field is `optional()` with no default, deliberately, so a
+        // resolution that extrapolated nothing carries no flag at all.
+        flag: undefined,
+        penalisedDb: 3,
+        penalisedFromLookup: 3,
+        status: 200,
+      },
+      {
+        // The cleanest row for the new edge: the canonical total of −10 is inside the authored
+        // grid, so `base_below_zero` on the Break Off composition is the **only** extrapolation in
+        // this resolution, and it is what turns the recorded flag on.
         committedRow: -10,
+        composedAxes: ["base_below_zero"],
         effectiveDb: -1,
-        error: WORKBOOK_ADJUSTMENT_REFUSAL,
-        status: 409,
+        flag: ["defender_db"],
+        penalisedDb: -5,
+        penalisedFromLookup: -5,
+        status: 200,
       },
       {
-        code: "defense_context_unavailable",
         committedRow: -11,
+        composedAxes: ["base_below_zero"],
         effectiveDb: -2,
-        error: WORKBOOK_ADJUSTMENT_REFUSAL,
-        status: 409,
+        flag: ["defender_db"],
+        penalisedDb: -6,
+        penalisedFromLookup: -6,
+        status: 200,
       },
       {
-        code: "defense_context_unavailable",
         committedRow: -14,
+        composedAxes: ["base_below_zero"],
         effectiveDb: -5,
-        error: WORKBOOK_ADJUSTMENT_REFUSAL,
-        status: 409,
+        flag: ["defender_db"],
+        penalisedDb: -9,
+        penalisedFromLookup: -9,
+        status: 200,
       },
       {
-        code: "defense_context_unavailable",
+        // The ruling's own worked figure: a defence of −11 with a further four-step penalty is −15.
         committedRow: -20,
+        composedAxes: ["base_below_zero"],
         effectiveDb: -11,
-        error: WORKBOOK_ADJUSTMENT_REFUSAL,
-        status: 409,
+        flag: ["defender_db"],
+        penalisedDb: -15,
+        penalisedFromLookup: -15,
+        status: 200,
       },
       {
-        code: "defense_context_unavailable",
         committedRow: -26,
+        composedAxes: ["base_below_zero"],
         effectiveDb: -17,
-        error: WORKBOOK_ADJUSTMENT_REFUSAL,
-        status: 409,
+        flag: ["defender_db"],
+        penalisedDb: -21,
+        penalisedFromLookup: -21,
+        status: 200,
       },
     ]);
-    // The false sentence and its code reach none of the negative-base rows.
-    for (const row of measured.filter((entry) => entry.status === 409)) {
-      expect(row.code, `row ${row.committedRow}`).not.toBe("attack_defender_defense_unavailable");
-      expect(String(row.error), `row ${row.committedRow}`).not.toContain("no defensive skill");
-      expect(String(row.error), `row ${row.committedRow}`).not.toContain("such as Dodge");
+
+    for (const row of measured) {
+      // Nothing refuses, and the committed penalty is in the recorded figure rather than dropped:
+      // the penalised defence differs from the unpenalised base on every row, including the
+      // negative ones, which is where the missile path silently kept the base.
+      expect(row.status, `row ${row.committedRow}`).toBe(200);
+      expect(row.penalisedDb, `row ${row.committedRow}`).not.toBe(row.effectiveDb);
+      expect(row.penalisedDb, `row ${row.committedRow}`).toBe(row.penalisedFromLookup);
+    }
+
+    // Every below-zero resolution is flagged for review on the new edge and carries the recorded
+    // flag; the one positive control row does neither. So both discriminate in the same run.
+    expect(measured.filter((row) => (row.effectiveDb as number) < 0)).toHaveLength(5);
+    for (const row of measured.filter((entry) => (entry.effectiveDb as number) < 0)) {
+      expect(row.composedAxes, `row ${row.committedRow}`).toEqual(["base_below_zero"]);
+      expect(row.flag, `row ${row.committedRow}`).toEqual(["defender_db"]);
+    }
+    expect(measured.find((row) => row.committedRow === -2)?.composedAxes).toEqual([]);
+    expect(measured.find((row) => row.committedRow === -2)?.flag).toBeUndefined();
+  });
+
+  /**
+   * #922 — the attacker's own opponent-specific OB composition, at `encounterRoutes.ts:17436`.
+   *
+   * This is the other call site where a below-zero base is live in play rather than hypothetical:
+   * the committed `situationDb` row drives the defence negative, and the same fixture's distance
+   * and attack-phase modifiers drive `canonicalOffense.preOpponentOb` negative. A no-answer there
+   * refuses with `attacker_modifier_out_of_range`, which is an honest refusal rather than a silent
+   * substitution — so what the ruling changes at this site is that the refusal stops arriving for
+   * this cause.
+   *
+   * The non-zero Break Off attacker OB modifier matters: with a zero raw total the lookup
+   * short-circuits before it can refuse anything, so a row without it would prove nothing here.
+   *
+   * **The mutation this guards against:** restoring the lookup's negative-base refusal, which
+   * returns `409 attacker_modifier_out_of_range` on the rows below.
+   */
+  it("#922 resolves the attacker's opponent-specific OB on a base below zero", async () => {
+    const measured = [];
+
+    for (const committedRow of [-2, -20]) {
+      const driven = await driveAttackAgainstDbParryTotal(committedRow, {
+        breakOffAttackerObModifier: -2,
+      });
+      const body = driven.attackResponse.json() as Record<string, unknown>;
+
+      measured.push({
+        code: body["code"],
+        committedRow,
+        opponentSpecificRawPercentage:
+          driven.attackerCalculation?.["opponentSpecificRawPercentage"],
+        preOpponentOb: driven.attackerCalculation?.["preOpponentOb"],
+        recordedOb: driven.attackResult?.ob,
+        status: driven.status,
+      });
+    }
+
+    expect(measured).toEqual([
+      {
+        code: undefined,
+        committedRow: -2,
+        // Recorded as 0 although a −2 opponent-specific row was applied: the recorded attacker
+        // calculation's own figure omits the Break Off contribution. Pre-existing at the baseline
+        // and outside this change; asserted as observed and disclosed in the lane report rather
+        // than described as correct.
+        opponentSpecificRawPercentage: 0,
+        preOpponentOb: -1,
+        recordedOb: -3,
+        status: 200,
+      },
+      {
+        code: undefined,
+        committedRow: -20,
+        opponentSpecificRawPercentage: 0,
+        preOpponentOb: -1,
+        recordedOb: -3,
+        status: 200,
+      },
+    ]);
+    for (const row of measured) {
+      expect(row.status, `row ${row.committedRow}`).toBe(200);
+      expect(row.code, `row ${row.committedRow}`).toBeUndefined();
+      // The site is actually reached on a base below zero.
+      expect(row.preOpponentOb, `row ${row.committedRow}`).toBeLessThan(0);
+      // And the opponent-specific penalty is in the recorded OB rather than dropped: a −2 raw
+      // modifier on a base of −1 moves the OB by two points, which is one point per step.
+      expect(row.recordedOb, `row ${row.committedRow}`).not.toBe(row.preOpponentOb);
+      expect(row.recordedOb, `row ${row.committedRow}`).toBe(-3);
+    }
+  });
+
+  /**
+   * #922 — the **missile** commit path, which is where the previous repair cycle failed.
+   *
+   * `encounterRoutes.ts` composed the Break Off DB/Parry adjustment for a committed missile defence
+   * review as `breakOffTrace?.finalValue ?? awareBaseDb`. On a negative base the trace was `null`,
+   * so `?? awareBaseDb` yielded the **unadjusted** base: independent QA drove it and measured a
+   * four-point committed penalty applying on a positive base (7 → 3) and being discarded on a
+   * negative one, with the response `200` and the attack recorded as a hit (verdict comment 20745,
+   * finding 1).
+   *
+   * Two things close that here. The rule answers a base below zero, so the penalty applies; and the
+   * no-answer now refuses rather than substituting the base, so the fallback cannot fail open again
+   * for any other cause.
+   *
+   * Every figure below is the route's own recorded figure or the lookup's own output. The committed
+   * penalty is proved **present** by the figure differing from the unpenalised base on the negative
+   * rows, which is exactly the comparison that failed before.
+   */
+  it("#922 keeps the committed Break Off penalty in a missile defence commit on a negative base", async () => {
+    const bow = weaponTemplates.find((candidate) => candidate.id === "weapon-template-bow");
+    if (!bow?.missileProfile) throw new Error("Missing Short bow missile fixture.");
+    const missileProfile = bow.missileProfile;
+    const weaponItemId = "item-weapon-template-bow";
+    const source = {
+      attackModeId: "mode-1",
+      itemId: weaponItemId,
+      sourceKind: "weapon" as const,
+      weaponInstanceId: weaponItemId,
+      weaponSourceId: `weapon:${weaponItemId}`,
+      // The canonical loadout's missile hand uses the historical `throwing` source slot.
+      weaponSourceSlot: "throwing" as const,
+      weaponTemplateId: bow.id,
+    };
+    const makeMissileAttacker = () => {
+      const build = makeDodgeCharacterBuild("character-1", "The Gladiator");
+      // An attack from the `throwing` slot takes its OB from Throwing (`treatAsThrownUse`).
+      build.progression.skills.push({
+        category: "secondary",
+        categoryId: "combat",
+        groupId: "basic_missile_training",
+        secondaryRanks: 8,
+        skillId: "throwing",
+      });
+      const bowEquipment = makeCanonicalWeaponDefenseEquipmentState({
+        characterId: "character-1",
+        templateId: bow.id,
+      });
+
+      return makeCombatScenarioParticipantWithWeapon({
+        characterId: "character-1",
+        id: "participant-1",
+        snapshot: {
+          build,
+          equipmentState: {
+            ...bowEquipment,
+            activeLoadoutByCharacterId: {
+              "character-1": {
+                ...bowEquipment.activeLoadoutByCharacterId["character-1"],
+                activeMissileWeaponItemId: weaponItemId,
+                activePrimaryWeaponItemId: null,
+              },
+            },
+          },
+        },
+        weaponName: bow.name,
+      });
+    };
+
+    const driveMissileCommit = async (input: {
+      breakOffDefenderDbParryModifier?: -4;
+      committedRow: number;
+    }) => {
+      const baseState = makeOpenPhase1AttackRoundState({ snapshotWeaponName: bow.name });
+      const combatRoundState = combatRoundStateSchema.parse({
+        ...baseState,
+        breakOffProposals:
+          input.breakOffDefenderDbParryModifier === undefined
+            ? []
+            : [
+                {
+                  attackerParticipantId: "encounter-participant-1",
+                  escapeeParticipantId: "encounter-participant-2",
+                  id: "break-off-922-missile",
+                  pairKey: makeDistancePairKey(
+                    "encounter-participant-1",
+                    "encounter-participant-2",
+                  ),
+                  result: {
+                    attackerObModifier: 0,
+                    defenderDbParryModifier: input.breakOffDefenderDbParryModifier,
+                    escaped: false,
+                    tableRowId: "defender_minus_21_or_less",
+                  },
+                  roundNumber: 1,
+                  status: "committed",
+                },
+              ],
+        missileReadiness: [
+          {
+            aimCompletedRounds: 0,
+            aimLevel: 0,
+            aimRequiredRounds: 0,
+            ammoFamily: missileProfile.ammoFamily,
+            ammoItemId: "arrow-stack-1",
+            ammoItemRevision: "2026-01-01T00:00:00.000Z",
+            baseCompletedRounds: 1,
+            baseRequiredRounds: 1,
+            family: missileProfile.family,
+            gmPreparationAdjustment: 0,
+            id: `missile-readiness:encounter-participant-1:${weaponItemId}`,
+            lastProgressRound: 1,
+            participantId: "encounter-participant-1",
+            phase: "phase1" as const,
+            profile: missileProfile,
+            rapidShot: false,
+            status: "ready" as const,
+            targetParticipantId: "encounter-participant-2",
+            updatedAt: "2026-01-01T00:02:00.000Z",
+            weaponItemId,
+            weaponTemplateId: bow.id,
+          },
+        ],
+        participants: baseState.participants.map((participant, index) => {
+          if (index === 0) {
+            return {
+              ...participant,
+              declaration: {
+                ...participant.declaration,
+                attackOpportunities: buildCombatRoundDeclaredAttackOpportunities({
+                  actionId: "attack_parry",
+                  participantId: "encounter-participant-1",
+                  phaseContexts: {
+                    phase1: testCombatPhaseContext("encounter-participant-2"),
+                  },
+                  roundNumber: 1,
+                  sources: { phase1: source },
+                }),
+              },
+            };
+          }
+
+          // The defender declares the action its committed `situationDb` row was generated by, so
+          // the row is an active contribution rather than an inactive one — the same shape the
+          // melee fixture above uses.
+          return {
+            ...participant,
+            declaration: {
+              actionId: "adjust_range_attack",
+              adjustDistance: {
+                currentDistance: 3,
+                requestedDistance: 2,
+                targetParticipantId: "encounter-participant-1",
+              },
+              phaseContexts: {
+                phase2: {
+                  modifierBuckets: emptyModifierBuckets(),
+                  targetParticipantId: "encounter-participant-1",
+                },
+              },
+              roundNumber: 1,
+              submittedAt: "2026-01-01T00:01:00.000Z",
+              submittedBy: "player",
+            },
+          };
+        }),
+      });
+      const encounter = encounterSessionSchema.parse({
+        ...makeCombatEncounter({ participants: makeTwoCombatEncounterParticipants() }),
+        combatRoundState,
+        updatedAt: "2026-08-10T10:00:00.000Z",
+      });
+      const fixture = setupMutableCombatRouteState({
+        encounter,
+        participants: [
+          makeMissileAttacker(),
+          {
+            ...makeCombatScenarioParticipant({ id: "participant-2" }),
+            characterId: "character-2",
+            snapshot: {
+              build: makeDodgeCharacterBuild("character-2", "Scyrian cavalry guy"),
+              displayName: "Scyrian cavalry guy",
+              equipmentState: makeMovementBurdenEquipmentState({ characterId: "character-2" }),
+              sourceUpdatedAt: "2026-08-07T09:00:00.000Z",
+            },
+            state: {
+              ...makeCombatScenarioParticipant().state,
+              combat: {
+                combatContext: {
+                  modifierBuckets: {
+                    ...emptyModifierBuckets(),
+                    situationDb: [
+                      {
+                        ...adjustRangePhase1DbParryModifierEntry,
+                        expiresAtRound: 1,
+                        sourceEncounterId: "encounter-1",
+                        sourceRoundNumber: 1,
+                        value: input.committedRow,
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          } as unknown as ScenarioParticipant,
+        ],
+        user: mocks.adminUser,
+      });
+      mocks.characterEquipmentReadModelService.getCharacterEquipmentState.mockResolvedValue(
+        makeMovementBurdenEquipmentState({ characterId: "character-1" }),
+      );
+      mocks.combatItemInteractionService.commitMissileWeaponAttack.mockImplementation(
+        async (payload: { session: EncounterSession }) => ({
+          encounter: await mocks.encounterService.updateEncounter({ session: payload.session }),
+        }),
+      );
+
+      const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+      const shotApp = await buildScenarioTestApp();
+      const shotResponse = await shotApp.inject({
+        method: "POST",
+        payload: {
+          defenderParticipantId: "encounter-participant-2",
+          phase: "phase1",
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-round/roll-attack",
+      });
+      await shotApp.close();
+      expect(shotResponse.statusCode, JSON.stringify(shotResponse.json())).toBe(200);
+      const reviewState = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      const defenseReviewTask = buildCombatProgressionProjection(reviewState as never)
+        .boundary.processes.flatMap((process) => process.stages.flatMap((stage) => stage.tasks))
+        .find((task) => task.kind === "defense_review");
+      if (!defenseReviewTask) throw new Error("Expected a canonical defense-review task.");
+      // The attack id the task itself names, so the authorization cannot read as stale.
+      const attackId = (defenseReviewTask.identity as unknown as Record<string, unknown>)
+        .attackResultId as string;
+      const reviewApp = await buildScenarioTestApp();
+      const reviewResponse = await reviewApp.inject({
+        method: "POST",
+        payload: {
+          attackId,
+          attackerParticipantId: "encounter-participant-1",
+          aware: true,
+          defenderParticipantId: "encounter-participant-2",
+          executionGroupId: defenseReviewTask.executionGroupId,
+          expectedRevision: fixture.encounter.updatedAt,
+          phase: "phase1",
+          sourceSelections: [],
+          taskId: defenseReviewTask.id,
+        },
+        url: "/encounters/encounter-1/combat-round/commit-defense-review",
+      });
+      await reviewApp.close();
+      randomSpy.mockRestore();
+
+      const committedState = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      const attackResult = committedState.participants.find(
+        (participant) => participant.participantId === "encounter-participant-1",
+      )?.attackResults?.phase1;
+      const defenderCalculation = committedState.commands.at(-1)?.facts.defenderCalculation as
+        | Record<string, unknown>
+        | undefined;
+
+      return {
+        attackResult,
+        defenderCalculation,
+        reviewBody: reviewResponse.json() as Record<string, unknown>,
+        status: reviewResponse.statusCode,
+      };
+    };
+
+    const committedRows = [-2, -20, -26];
+    const measured: Array<{
+      committedRow: number;
+      penalised: unknown;
+      penalisedFromLookup: unknown;
+      unpenalised: unknown;
+      status: number;
+    }> = [];
+
+    for (const committedRow of committedRows) {
+      const withoutBreakOff = await driveMissileCommit({ committedRow });
+      vi.clearAllMocks();
+      const withBreakOff = await driveMissileCommit({
+        breakOffDefenderDbParryModifier: -4,
+        committedRow,
+      });
+      vi.clearAllMocks();
+
+      expect(
+        withoutBreakOff.status,
+        `row ${committedRow} without Break Off: ${JSON.stringify(withoutBreakOff.reviewBody)}`,
+      ).toBe(200);
+      const base = withoutBreakOff.attackResult?.defenderDb as number;
+      const composed = calculateWorkbookPercentageAdjustmentTrace({
+        baseValue: base,
+        rawModifiers: [{ label: "Break Off result · DB/Parry", value: -4 }],
+      });
+
+      measured.push({
+        committedRow,
+        penalised: withBreakOff.attackResult?.defenderDb,
+        penalisedFromLookup: composed?.finalValue,
+        status: withBreakOff.status,
+        unpenalised: base,
+      });
+    }
+
+    expect(measured).toEqual([
+      { committedRow: -2, penalised: 3, penalisedFromLookup: 3, status: 200, unpenalised: 7 },
+      {
+        // The row the previous cycle resolved with the penalty dropped: `penalised` equalled
+        // `unpenalised` at −11. It is now −15, the ruling's own worked figure.
+        committedRow: -20,
+        penalised: -15,
+        penalisedFromLookup: -15,
+        status: 200,
+        unpenalised: -11,
+      },
+      {
+        committedRow: -26,
+        penalised: -21,
+        penalisedFromLookup: -21,
+        status: 200,
+        unpenalised: -17,
+      },
+    ]);
+
+    for (const row of measured) {
+      expect(row.status, `row ${row.committedRow}`).toBe(200);
+      // The committed penalty is in the recorded figure on every row, negative base included.
+      expect(row.penalised, `row ${row.committedRow}`).not.toBe(row.unpenalised);
+      expect(row.penalised, `row ${row.committedRow}`).toBe(row.penalisedFromLookup);
     }
   });
 
@@ -23724,6 +24215,94 @@ describe("scenarios route contract", () => {
       "extrapolatedWorkbookAdjustments",
     ]) {
       expect(playerAttack, field).not.toHaveProperty(field);
+    }
+
+    /**
+     * #922 — the same enumeration on the **new edge**, because a new axis value must not slip past
+     * the allow-list. A committed row of −10 is inside the authored grid, so the only extrapolation
+     * in this resolution is the Break Off composition's `base_below_zero`: the flag below is turned
+     * on by the new edge and by nothing else. Read off a driven player `200` and the raw body, per
+     * top-level key — not the handler's return expression, and not a 4xx, which would prove only
+     * that a refusal names nobody.
+     */
+    const belowZeroPlayerLegacy = await driveAttackAgainstDbParryTotal(-10, {
+      breakOffDefenderDbParryModifier: -4,
+    });
+    const belowZeroPlayerCompact = await driveAttackAgainstDbParryTotal(-10, {
+      breakOffDefenderDbParryModifier: -4,
+      combatResponseVersion: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
+    });
+    const belowZeroGmLegacy = await driveAttackAgainstDbParryTotal(-10, {
+      breakOffDefenderDbParryModifier: -4,
+      user: mocks.adminUser,
+    });
+    const belowZeroGmCompact = await driveAttackAgainstDbParryTotal(-10, {
+      breakOffDefenderDbParryModifier: -4,
+      combatResponseVersion: ACTIVE_COMBAT_MUTATION_RESPONSE_VERSION,
+      user: mocks.adminUser,
+    });
+
+    for (const driven of [
+      belowZeroPlayerLegacy,
+      belowZeroPlayerCompact,
+      belowZeroGmLegacy,
+      belowZeroGmCompact,
+    ]) {
+      expect(driven.status, JSON.stringify(driven.attackResponse.json())).toBe(200);
+      expect(driven.attackResult?.extrapolatedWorkbookAdjustments).toEqual(["defender_db"]);
+    }
+    // The canonical defence trace is in-grid on this row, so the flag is the new edge's alone.
+    expect(belowZeroPlayerLegacy.percentageTrace?.["extrapolated"]).toBe(false);
+    expect(belowZeroPlayerLegacy.percentageTrace?.["extrapolatedAxes"]).toEqual([]);
+
+    expect(readKeys(belowZeroPlayerLegacy.attackResponse.json())).toEqual({
+      attackResult: false,
+      command: false,
+      commandEnvelope: false,
+      encounter: false,
+    });
+    expect(readKeys(belowZeroPlayerCompact.attackResponse.json())).toEqual({
+      activeCombatState: false,
+      commandEnvelope: false,
+      encounterId: false,
+      mutationPresentation: false,
+      nextTask: false,
+      revision: false,
+      version: false,
+    });
+    // Discrimination on the new edge too, in the same run.
+    expect(readKeys(belowZeroGmLegacy.attackResponse.json())).toMatchObject({ attackResult: true });
+    expect(readKeys(belowZeroGmCompact.attackResponse.json())).toMatchObject({
+      mutationPresentation: true,
+    });
+
+    // And the axis value itself reaches no player body, on either contract. It reaches no GM body
+    // either on this row, and that is measured rather than claimed: the Break Off composition's
+    // trace is not part of the recorded defence calculation, so only the `defender_db` flag
+    // travels for it, not which edge it crossed. Recorded as a limitation of this row's proof — the
+    // flag is the discriminating column here, and it is asserted above in both directions.
+    for (const driven of [
+      belowZeroPlayerLegacy,
+      belowZeroPlayerCompact,
+      belowZeroGmLegacy,
+      belowZeroGmCompact,
+    ]) {
+      expect(JSON.stringify(driven.attackResponse.json())).not.toContain("base_below_zero");
+    }
+
+    // The channel that does carry the axis value is the recorded percentage trace, and it reaches
+    // no player body on either contract — asserted here so a new axis value cannot ride in on it,
+    // with the GM's body in the same run as the control.
+    for (const driven of [belowZeroPlayerLegacy, belowZeroPlayerCompact]) {
+      const body = JSON.stringify(driven.attackResponse.json());
+      expect(body).not.toContain("percentageTrace");
+      expect(body).not.toContain("extrapolatedAxes");
+      expect(body).not.toContain("defenderCalculation");
+    }
+    for (const driven of [belowZeroGmLegacy, belowZeroGmCompact]) {
+      const body = JSON.stringify(driven.attackResponse.json());
+      expect(body).toContain("percentageTrace");
+      expect(body).toContain("extrapolatedAxes");
     }
   });
 

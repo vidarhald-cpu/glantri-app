@@ -28,6 +28,11 @@ export const COMBAT_REFUSAL_CODES_RELOAD_CANNOT_REPAIR = [
   // #694, extended to melee by #922: the cause-aware defence refusal, including a defence value
   // the rule has no reading of.
   "defense_context_unavailable",
+  // #922: this participant's initiative works out to a value the calculation has no reading for.
+  // The initiative roll used to drop the committed modifier and roll anyway; it refuses now, and
+  // the refusal has to reach the GM rather than land on the refresh-and-retry fallback, which is
+  // where this issue's first two codes landed.
+  "initiative_modifier_out_of_range",
 ] as const;
 
 export type CombatRefusalReloadCannotRepairCode =

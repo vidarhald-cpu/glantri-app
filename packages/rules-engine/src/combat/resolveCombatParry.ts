@@ -35,6 +35,19 @@ export function resolveCombatParry(input: ResolveCombatParryInput): CombatParryR
     baseValue: input.parryBase,
     rawModifiers,
   });
+
+  if (rawModifiers.length > 0 && trace === null) {
+    // #922. A no-answer used to fall through as `modifierAdjustment: 0` and `rawModifierTotal: 0`,
+    // which reports a parry resolved with no modifiers rather than a parry whose modifiers were
+    // dropped — the caller cannot tell those apart, and the parry total is wrong either way. The
+    // settled rule removes the cause a parry base below zero used to be; the remaining cause is a
+    // non-integer figure, which this resolver already refuses for its own two inputs above. So it
+    // refuses the same way here rather than resolving on a figure it knows is wrong.
+    throw new RangeError(
+      "Combat parry modifiers are outside the canonical workbook calculation's readable range.",
+    );
+  }
+
   const modifierAdjustment = trace ? trace.finalValue - input.parryBase : 0;
   const total = input.parryBase + modifierAdjustment + input.rollTotal;
 

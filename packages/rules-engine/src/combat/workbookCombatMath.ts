@@ -208,8 +208,17 @@ export interface WorkbookRawModifier {
   value: number;
 }
 
-/** An axis of the authored grid a percentage adjustment was resolved past (#922). */
-export type WorkbookPercentageAdjustmentAxis = "base" | "modifier";
+/**
+ * An edge of the authored grid a percentage adjustment was resolved outside (#922).
+ *
+ * `base` and `modifier` are the two edges past the grid's last authored row and column.
+ * `base_below_zero` is the third edge, below the grid rather than past it: the grid's first
+ * authored row is base 0, so a base below zero has no authored row at all and every figure the
+ * rule produces there is an extrapolation. Product Owner ruling on #922 (comment 20793) settles
+ * what the rule says there; the standing ruling on the same issue (comment 20326) requires every
+ * extrapolation to be flagged for review, and that applies to this edge as it does to the others.
+ */
+export type WorkbookPercentageAdjustmentAxis = "base" | "base_below_zero" | "modifier";
 
 export interface WorkbookPercentageAdjustmentTrace {
   baseValue: number;
@@ -385,9 +394,25 @@ function workbookOpenEndedPercentageAdjustment(rawOb: number, absoluteModifier: 
  * committed damage could not be attacked at all, and the refusal blamed the defender for lacking a
  * defensive skill it had.
  *
+ * A base of zero or below answers one point per raw step. Product Owner ruling on #922, comment
+ * 20793, recorded verbatim there: *"One point per step is a better way to word it, and that's what
+ * I meant"*, agreeing that *"for results below zero, we use the 1 per tenth rule"* means each point
+ * of raw modifier moves the value by one point. So a defence is allowed to go below zero and is not
+ * floored, and the proportional calculation — ten percent of the base per step — does not apply
+ * there, because applied to a negative base it would move the magnitude the wrong way.
+ *
+ * That is one continuous rule with the authored grid's own treatment of the low bases: `Prosent`
+ * authors bases 1 to 10 as a flat one point per raw step, so the rule this function applies below
+ * zero is the rule the grid already stops scaling into. The base-0 row is the same figure for the
+ * same reason, which is why one branch now covers a base of zero or below rather than two branches
+ * that happened to agree. The two differ only in the flag: base 0 has an authored row, so it is not
+ * an extrapolation on the base edge, while a base below zero has none and is flagged
+ * `base_below_zero`.
+ *
  * `null` survives for an input the rule has no reading of: a non-integer base or step, or a
- * negative one. A negative base is a third edge, below the grid rather than past it, and this
- * change does not invent a reading for it.
+ * negative step. A negative step cannot be reached through
+ * `calculateWorkbookPercentageAdjustmentTrace`, which passes `Math.abs` of the raw total, so it is
+ * a programming error rather than a game state; it is still refused rather than coerced.
  */
 export function resolveWorkbookPercentageAdjustment(
   rawOb: number,
@@ -401,24 +426,40 @@ export function resolveWorkbookPercentageAdjustment(
     return null;
   }
 
-  if (rawOb < 0 || absoluteModifier < 0) {
+  if (absoluteModifier < 0) {
     return null;
   }
 
   const pastModifierEdge = absoluteModifier > WORKBOOK_PERCENTAGE_ADJUSTMENT_AUTHORED_MAX_STEP;
 
-  if (rawOb === 0) {
-    // The workbook table row for 0 is all zeroes, but the surrounding low-base rows encode a
-    // minimum one-point effect per raw step. Treat base 0 as the same low-base minimum rule so
-    // combat values can move away from zero under live modifiers.
+  if (rawOb <= 0) {
+    // One point per raw step, for a base of zero and for every base below it, as one rule.
     //
-    // #922 correction to the previous wording here, which called the zero row an import defect:
-    // `Prosent!B5:P5` is authored as literal zeroes in the source workbook, so this override is a
-    // deliberate deviation from the source rather than a repair of a bad transcription. The
-    // behaviour is unchanged and pre-dates #922; only the claim about why is corrected.
+    // Below zero this is the Product Owner's ruling on #922 (comment 20793). At zero the behaviour
+    // is unchanged and pre-dates #922: the authored row for base 0 is all zeroes, while the
+    // surrounding low-base rows encode one point per raw step, and this lookup has always applied
+    // the low-base rule at zero so a combat value can move away from zero under live modifiers.
+    // The ruling makes those two the same rule rather than two branches with the same arithmetic.
+    //
+    // `Prosent!B5:P5` is authored as literal zeroes in the source workbook, so the zero row is a
+    // deliberate deviation from the source rather than a repair of a bad transcription. Whether
+    // the zero row should keep deviating is Product Owner question 15 on #934 and is open; this
+    // change neither settles it nor changes what the zero row returns.
+    const belowZeroAxes: WorkbookPercentageAdjustmentAxis[] = [];
+    if (rawOb < 0) {
+      // The grid's first authored row is base 0, so a base below zero is outside it on a third
+      // edge and the figure is an extrapolation under the standing ruling (comment 20326). Base 0
+      // has an authored row and is not flagged on this edge, whatever the open question decides
+      // about the figure it returns.
+      belowZeroAxes.push("base_below_zero");
+    }
+    if (pastModifierEdge) {
+      belowZeroAxes.push("modifier");
+    }
+
     return {
-      extrapolated: pastModifierEdge,
-      extrapolatedAxes: pastModifierEdge ? ["modifier"] : [],
+      extrapolated: belowZeroAxes.length > 0,
+      extrapolatedAxes: belowZeroAxes,
       value: absoluteModifier,
     };
   }

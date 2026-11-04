@@ -32,6 +32,9 @@ describe("#922 combat refusals a reload cannot repair carry the server's own sen
       "attack_defender_defense_unavailable",
       "attacker_modifier_out_of_range",
       "defense_context_unavailable",
+      // #922: the initiative roll refuses instead of dropping the committed modifier, and its
+      // sentence has to reach the GM rather than the refresh-and-retry fallback.
+      "initiative_modifier_out_of_range",
     ]);
     for (const code of COMBAT_REFUSAL_CODES_RELOAD_CANNOT_REPAIR) {
       expect(isCombatRefusalReloadCannotRepair(code), code).toBe(true);

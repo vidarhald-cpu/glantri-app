@@ -82,17 +82,47 @@ describe("resolveRoleplaySkillRollModifiers", () => {
     expect(result.warnings[0]).not.toContain("No percentage modifier table entry");
   });
 
-  it("still reports an input the rule has no reading of, and applies nothing", () => {
+  it("applies one point per step below zero, and flags the edge below the grid", () => {
+    // #922, Product Owner ruling comment 20793. A skill total below zero used to be one of the
+    // inputs the rule had no reading of, and this pipeline dropped the modifier to zero and warned
+    // that no table entry existed. The rule now answers it at one point per raw step, flagged on
+    // the edge below the authored grid rather than past it.
     const result = resolveRoleplaySkillRollModifiers({
       skillTotal: -1,
       modifiers: [{ bucket: "other", label: "Other", source: "manual", value: -3 }],
     });
 
     expect(result).toMatchObject({
-      percentageModifier: 0,
+      percentageModifier: -3,
       rawModifierSum: -3,
     });
-    expect(result.warnings[0]).toContain("No percentage modifier table entry");
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("extrapolated past the authored table");
+    expect(result.warnings[0]).toContain("base_below_zero");
+    expect(result.warnings[0]).not.toContain("No percentage modifier table entry");
+  });
+
+  it("has no reachable no-answer left, because it truncates both of its own inputs", () => {
+    // #922. The remaining cause of a no-answer from the lookup is a non-integer figure, and this
+    // pipeline passes neither: `normalizeInteger` truncates the skill total and every modifier
+    // value before the lookup sees them. So the "No percentage modifier table entry" warning is
+    // now unreachable from this entry point, which is asserted here rather than assumed — a
+    // fractional input on either side still resolves and still applies a modifier.
+    const fractionalBase = resolveRoleplaySkillRollModifiers({
+      skillTotal: -1.75,
+      modifiers: [{ bucket: "other", label: "Other", source: "manual", value: -3 }],
+    });
+    const fractionalModifier = resolveRoleplaySkillRollModifiers({
+      skillTotal: 20,
+      modifiers: [{ bucket: "other", label: "Other", source: "manual", value: -3.75 }],
+    });
+
+    expect(fractionalBase.percentageModifier).toBe(-3);
+    expect(fractionalBase.warnings.join(" ")).not.toContain("No percentage modifier table entry");
+    expect(fractionalModifier.rawModifierSum).toBe(-3);
+    expect(fractionalModifier.warnings.join(" ")).not.toContain(
+      "No percentage modifier table entry",
+    );
   });
 
   it("flags nothing for a modifier inside the authored grid", () => {

@@ -16,8 +16,21 @@ export const acceptedCombatDefenseEquipmentSchema = z.object({
   sourceKind: z.enum(["combined", "single", "unarmed"]),
 });
 
-/** Which authored-grid axis a recorded adjustment ran past (#922). */
-export const acceptedCombatDefenseExtrapolationAxisSchema = z.enum(["base", "modifier"]);
+/**
+ * Which edge of the authored grid a recorded adjustment was resolved outside (#922).
+ *
+ * `base` and `modifier` are the edges past the grid's last authored row and column.
+ * `base_below_zero` is the edge below it: the grid's first authored row is base 0, so a defence
+ * below zero has no authored row at all, and the figure comes from the rule the Product Owner
+ * settled in comment 20793. Mirrors `WorkbookPercentageAdjustmentAxis` in `@glantri/rules-engine`;
+ * a value added there has to be added here too, or a recorded resolution carrying it stops
+ * parsing.
+ */
+export const acceptedCombatDefenseExtrapolationAxisSchema = z.enum([
+  "base",
+  "base_below_zero",
+  "modifier",
+]);
 
 export const acceptedCombatDefensePercentageTraceSchema = z.object({
   baseValue: z.number().int(),
