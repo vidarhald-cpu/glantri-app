@@ -24293,11 +24293,73 @@ describe("#894 — the committed order records the publication state the commit 
       measured.push([`${phase} no action work`, boundaryOf(committed.state)]);
     }
 
+    // The Combat-Experience branch, which the source comment on
+    // `buildCombatRoundCommittedInitiativeOrder` names. When
+    // `getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId` returns a participant,
+    // `afterCommitCursor` is built from `getCombatRoundPhaseActionStepForPhase` instead of the
+    // command's own after-cursor. It is the only branch of `afterCommitCursor` with its own cursor
+    // derivation, so it is the branch a future short-of-boundary path would most likely arrive on,
+    // and it is watched here rather than only asserted in prose.
+    const combatExperienceCursorSteps: Array<[string, string | undefined]> = [];
+    const combatExperienceRecords: Array<Array<[string, boolean]>> = [];
+    for (const phase of ["phase1", "phase2"] as const) {
+      const visibility = { gladiator: { guard: true }, guard: { gladiator: true } };
+      const committed = commitPreparedPhaseInitiative({
+        phase,
+        state: preparePhaseInitiativeCompleteState({
+          actionId: phase === "phase1" ? "attack_parry" : "parry_attack",
+          gladiatorInitiative: 6,
+          guardInitiative: 4,
+          phase,
+        }),
+        visibility,
+      });
+
+      // That this case really stands on that branch rather than silently drifting onto the
+      // ordinary path: Combat Experience is required of a participant, and the returned state
+      // carries the branch's signature — `phaseResolutionCursor` cleared. Both still hold if the
+      // branch's own cursor derivation changes, so the boundary below is what reports that.
+      expect(
+        getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
+          phase,
+          state: committed,
+          visibility,
+        }),
+      ).toBe("gladiator");
+      expect(committed.phaseResolutionCursor).toBeUndefined();
+      measured.push([`${phase} Combat Experience required`, boundaryOf(committed)]);
+      combatExperienceCursorSteps.push([phase, committed.currentCursor?.step]);
+      combatExperienceRecords.push(
+        (committed.committedInitiativeOrders.at(-1)?.entries ?? []).map((entry) => [
+          entry.participantId,
+          entry.initiativePublished,
+        ]),
+      );
+    }
+
     expect(measured).toEqual([
       ["phase1 rolled", "phase1_resolution"],
       ["phase1 bulk_skipped", "phase1_resolution"],
       ["phase1 no action work", "phase1_resolution"],
       ["phase2 no action work", "phase2_resolution"],
+      ["phase1 Combat Experience required", "phase1_resolution"],
+      ["phase2 Combat Experience required", "phase2_resolution"],
+    ]);
+
+    // The cursor that branch derives for itself, and the record it writes at the boundary above.
+    expect(combatExperienceCursorSteps).toEqual([
+      ["phase1", "A1"],
+      ["phase2", "A2"],
+    ]);
+    expect(combatExperienceRecords).toEqual([
+      [
+        ["gladiator", true],
+        ["guard", true],
+      ],
+      [
+        ["gladiator", true],
+        ["guard", true],
+      ],
     ]);
     for (const [label, boundary] of measured) {
       expect(
