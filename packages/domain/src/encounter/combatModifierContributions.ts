@@ -2,6 +2,7 @@ import type {
   ScenarioCombatModifierBucket,
   ScenarioCombatModifierEntry,
 } from "../campaign/scenario";
+import { isAttackPhaseDefensivePenaltySourceRule } from "./combatAttackPhasePenalty";
 import {
   canonicalCombatModifierEffectSchema,
   type CanonicalCombatModifierEffect,
@@ -328,10 +329,9 @@ export function normalizeScenarioCombatModifierEntry(
           : canonicalLifecycle.lifecycle.state === "active"
             ? "active"
             : "pending"
-    :
-    input.currentRound !== undefined &&
-    input.entry.expiresAtRound !== undefined &&
-    input.entry.expiresAtRound < input.currentRound
+    : input.currentRound !== undefined &&
+        input.entry.expiresAtRound !== undefined &&
+        input.entry.expiresAtRound < input.currentRound
       ? "expired"
       : "active";
   const inferredApplicability = canonicalLifecycle
@@ -343,7 +343,12 @@ export function normalizeScenarioCombatModifierEntry(
             : undefined,
         combatWide: canonicalLifecycle.applicability.combatWide,
         opponentParticipantId: canonicalLifecycle.applicability.opponentParticipantId,
-        opportunityId: canonicalLifecycle.applicability.opportunityId,
+        // A row persisted before #884 still carries the attack opportunity in its stored
+        // applicability. The penalty is per phase, so the dimension is dropped here as well as at
+        // the point the canonical effect is written, and a stored round keeps no stale narrowing.
+        opportunityId: isAttackPhaseDefensivePenaltySourceRule(input.entry.sourceRule)
+          ? undefined
+          : canonicalLifecycle.applicability.opportunityId,
         pairKey: canonicalLifecycle.applicability.pairKey,
         phase: canonicalLifecycle.applicability.phase,
         participantId: canonicalLifecycle.ownerParticipantId,
@@ -396,10 +401,7 @@ export function normalizeScenarioCombatModifierEntry(
   };
 }
 
-function isPhaseAfter(
-  phase: "phase1" | "phase2",
-  expiresAfterPhase: "phase1" | "phase2",
-): boolean {
+function isPhaseAfter(phase: "phase1" | "phase2", expiresAfterPhase: "phase1" | "phase2"): boolean {
   return PHASE_ORDER[phase] > PHASE_ORDER[expiresAfterPhase];
 }
 
@@ -486,10 +488,7 @@ export function doesCombatModifierContributionApply(
   if (!matchesDimension(applicability.opportunityId, context.opportunityId)) return false;
   if (!matchesDimension(applicability.proposalId, context.proposalId)) return false;
   if (!matchesDimension(applicability.rollType, context.rollType)) return false;
-  if (
-    context.rollPurpose &&
-    applicability.excludedRollPurposes?.includes(context.rollPurpose)
-  ) {
+  if (context.rollPurpose && applicability.excludedRollPurposes?.includes(context.rollPurpose)) {
     return false;
   }
   if (!matchesDimension(applicability.skillId, context.skillId)) return false;
@@ -533,9 +532,10 @@ export function resolveCombatModifierContributions(input: {
   context: CombatCalculationContext;
   contributions: readonly CombatModifierContribution[];
 }): CombatModifierResolution {
-  const rows = filterApplicableCombatModifierContributions(input.contributions, input.context).filter(
-    (contribution) => contribution.bucket === input.bucket,
-  );
+  const rows = filterApplicableCombatModifierContributions(
+    input.contributions,
+    input.context,
+  ).filter((contribution) => contribution.bucket === input.bucket);
 
   return {
     bucket: input.bucket,
@@ -666,7 +666,7 @@ export function resolveCombatDodgeModifiers(input: {
     }
   }
   const contributions = [...contributionsById.values()];
-  const bucketResolutions = (['general_fatigue', 'skill_ob'] as const).map((bucket) =>
+  const bucketResolutions = (["general_fatigue", "skill_ob"] as const).map((bucket) =>
     resolveCombatModifierContributions({
       bucket,
       context: input.context,

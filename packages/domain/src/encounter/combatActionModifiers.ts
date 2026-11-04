@@ -11,13 +11,15 @@ import {
   type CombatDistance,
 } from "./combatDistance";
 import type { MovementIntent } from "./combatMovementIntent";
-import type { CombatAttackPhaseDefensivePenalty } from "./combatAttackPhasePenalty";
+import {
+  ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE,
+  type CombatAttackPhaseDefensivePenalty,
+} from "./combatAttackPhasePenalty";
 import {
   attachCanonicalLifecycleToModifierBucketRow,
+  restateCanonicalModifierBucketRowValue,
   type CanonicalCombatModifierCompatibilityContext,
 } from "./combatModifierLifecycleCompatibility";
-
-export const ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE = "attack-phase-defensive-penalty";
 
 export const ATTACK_PARRY_DB_PARRY_MODIFIER_ID = "generated:attack-parry:phase1:db-parry";
 export const ATTACK_PARRY_DB_PARRY_SOURCE_RULE = "attack-parry-db-parry-phase1";
@@ -456,13 +458,17 @@ export function softenCombatActionGeneratedBackOutModifier(input: {
       return entry;
     }
 
-    const nextEntry = {
-      ...entry,
-      notes: `simultaneous attack backout: DB/Parry -2% in ${input.phase}`,
-      provisional: false,
-      sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:simultaneous_attack_backout`,
-      value: -2,
-    };
+    // The row carries an attached canonical projection, and resolution reads the value from that
+    // projection rather than from `entry.value`, so the reduction is restated on both (#884).
+    const nextEntry = restateCanonicalModifierBucketRowValue({
+      entry: {
+        ...entry,
+        notes: `simultaneous attack backout: DB/Parry -2% in ${input.phase}`,
+        provisional: false,
+        sourceRule: `${ATTACK_PHASE_DEFENSIVE_PENALTY_SOURCE_RULE}:simultaneous_attack_backout`,
+      },
+      nextValue: -2,
+    });
 
     softenedModifiers.push({
       bucketKey: "situationDb",
@@ -718,12 +724,16 @@ export function cancelDoubleAttackPhase2GeneratedModifiers(
         (entry.sourceActionId === "double_attack" &&
           entry.sourcePhase === "phase2" &&
           isAttackPhaseDefensivePenaltyModifier(entry))
-          ? {
-              ...entry,
-              notes: "double attack cancelled after Attack 1",
-              sourceRule: DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE,
-              value: -2,
-            }
+          ? // Resolution reads an attached canonical projection in preference to `entry.value`, so
+            // the reduction is restated on both (#884).
+            restateCanonicalModifierBucketRowValue({
+              entry: {
+                ...entry,
+                notes: "double attack cancelled after Attack 1",
+                sourceRule: DOUBLE_ATTACK_CANCELLED_PHASE2_DB_PARRY_SOURCE_RULE,
+              },
+              nextValue: -2,
+            })
           : entry,
       ),
       situationObSkill: combatContext.modifierBuckets.situationObSkill.filter(
@@ -838,6 +848,12 @@ export function applyCombatActionGeneratedModifiers(input: {
   actionId?: string;
   attackPhaseDefensivePenalties?: readonly CombatAttackPhaseDefensivePenalty[];
   combatContext: ScenarioParticipantCombatContext;
+  /**
+   * Phases of the current round whose GM modifier review is already committed. Option B of #901:
+   * generation does not run over the attack-phase defensive-penalty rows of such a phase again.
+   * `getCombatRoundCommittedModifierReviewPhases` derives it from the round state.
+   */
+  committedModifierReviewPhases?: readonly ("phase1" | "phase2")[];
   distanceModifiers?: readonly CombatActionGeneratedDistanceModifierInput[];
   initiativeModifiers?: readonly ScenarioCombatModifierEntry[];
   parryModifier?: { dodgeSkillValue: number; percentageModifier: number };
@@ -848,9 +864,17 @@ export function applyCombatActionGeneratedModifiers(input: {
     ownerParticipantId: string;
   };
 }): ScenarioParticipantCombatContext {
+  // Option B of #901 (ruling, comment 20229): after the GM commits the review for a phase, the
+  // engine stops rebuilding that phase's attack-phase defensive-penalty rows. Both halves are
+  // needed, because the pass is a drop followed by a rebuild and either half alone discards the
+  // GM's decision: an edited row that survives the drop would be replaced by a regenerated one at
+  // -4, and a removed row that is not regenerated would still be dropped and re-added. So a
+  // reviewed phase keeps whatever rows it has and contributes no generated ones.
+  const reviewedPhases = new Set(input.committedModifierReviewPhases ?? []);
   const situationDbWithoutGeneratedActionModifiers =
     input.combatContext.modifierBuckets.situationDb.filter((entry) => {
       if (isAttackPhaseDefensivePenaltyModifier(entry)) {
+        if (entry.sourcePhase !== undefined && reviewedPhases.has(entry.sourcePhase)) return true;
         return input.attackPhaseDefensivePenalties === undefined;
       }
       return !isCombatActionGeneratedDbParryModifier(entry);
@@ -863,10 +887,10 @@ export function applyCombatActionGeneratedModifiers(input: {
     input.combatContext.modifierBuckets.situationInitiative.filter(
       (entry) => !isCombatActionGeneratedInitiativeModifier(entry),
     );
-  const generatedAttackPhaseDefensivePenaltyModifiers =
-    input.attackPhaseDefensivePenalties
-      ?.map(buildAttackPhaseDefensivePenaltyModifier)
-      .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry)) ?? [];
+  const generatedAttackPhaseDefensivePenaltyModifiers = (input.attackPhaseDefensivePenalties ?? [])
+    .filter((penalty) => !reviewedPhases.has(penalty.phase))
+    .map(buildAttackPhaseDefensivePenaltyModifier)
+    .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
   const generatedDbParryModifiers =
     input.actionId === "adjust_range_attack"
       ? buildAdjustRangeAttackGeneratedDbParryModifiers(input.adjustDistance)
@@ -926,9 +950,7 @@ export function applyCombatActionGeneratedModifiers(input: {
         ...generatedAttackPhaseDefensivePenaltyModifiers.map((entry) =>
           withSourceProvenance("situation_db", entry),
         ),
-        ...generatedDbParryModifiers.map((entry) =>
-          withSourceProvenance("situation_db", entry),
-        ),
+        ...generatedDbParryModifiers.map((entry) => withSourceProvenance("situation_db", entry)),
       ],
       situationInitiative: [
         ...situationInitiativeWithoutGeneratedActionModifiers,

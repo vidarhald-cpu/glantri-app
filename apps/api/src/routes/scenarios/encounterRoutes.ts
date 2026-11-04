@@ -133,6 +133,7 @@ import {
   fingerprintCombatModifierResolution,
   getCombatRoundInitiativePhaseForStep,
   getCombatBreakOffPairConsequence,
+  getCombatRoundCommittedModifierReviewPhases,
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundNextEventSequence,
   getCombatNpcDeclarationProposalAttackSources,
@@ -5879,11 +5880,21 @@ function applyGeneratedCombatActionModifiersForDeclaration(input: {
     input.actionId === "parry"
       ? getScenarioParticipantDodgeSkillValue(input.scenarioParticipant)
       : undefined;
+  // Option B of #901 is gated here rather than at each caller, because this helper is the single
+  // seam every generation pass in this file goes through: the declaration-preparation builder, the
+  // ordinary `/combat-declaration` submission, and `recomputeRoundDeclarationCombatActionModifiers`
+  // (which the adjust-distance commit and the pair-distance route both run). All four already carry
+  // the round state, so the gate is derived once and cannot be forgotten by a caller.
+  const committedModifierReviewPhases = getCombatRoundCommittedModifierReviewPhases({
+    participantId: input.encounterParticipant.id,
+    state: input.roundState,
+  });
   return applyCombatActionGeneratedModifiers({
     actionId: input.actionId,
     attackPhaseDefensivePenalties: input.attackPhaseDefensivePenalties,
     adjustDistance: input.adjustDistance,
     combatContext: input.combatContext,
+    committedModifierReviewPhases,
     sourceEncounterId: input.encounterId,
     sourceRoundNumber: input.roundState.roundNumber,
     lifecycleContext: input.lifecycleContext,

@@ -1,7 +1,8 @@
 import type { ScenarioCombatModifierEntry } from "../campaign/scenario";
-import type {
-  CombatAttackPhaseDefensivePenalty,
-  CombatAttackPhasePenaltyCommitment,
+import {
+  isAttackPhaseDefensivePenaltySourceRule,
+  type CombatAttackPhaseDefensivePenalty,
+  type CombatAttackPhasePenaltyCommitment,
 } from "./combatAttackPhasePenalty";
 import type { CombatEffect, CombatEffectEvent } from "./combatEffects";
 import {
@@ -323,10 +324,7 @@ function familyForBucketRow(
 ): CanonicalCombatModifierSourceFamily {
   if (entry.sourceType === "feint" || entry.sourceRule?.startsWith("feint:")) return "feint";
   if (entry.sourceOpportunityId) return "attack_opportunity";
-  if (
-    entry.sourceActionId === "offensive_parry" ||
-    entry.sourceRule?.includes("offensive-parry")
-  ) {
+  if (entry.sourceActionId === "offensive_parry" || entry.sourceRule?.includes("offensive-parry")) {
     return "offensive_parry";
   }
   if (entry.sourceActionId === "parry") return "declaration";
@@ -442,11 +440,18 @@ export function adaptModifierBucketRowToCanonicalLifecycle(input: {
     : input.entry.generated && input.entry.sourceRoundNumber
       ? "active"
       : "pending_review";
+  // The attack-phase defensive penalty applies for a whole phase, so its attack opportunity is
+  // provenance only and is deliberately absent from `applicability`. It stays on the row and in
+  // `sourceReferences.opportunityId` below, which the `attack_opportunity` family requires. See
+  // `isAttackPhaseDefensivePenaltySourceRule` for why the narrowing could never be satisfied.
+  const opportunityIsProvenanceOnly = isAttackPhaseDefensivePenaltySourceRule(
+    input.entry.sourceRule,
+  );
   const effect = canonicalCombatModifierEffectSchema.parse({
     applicability: {
       combatWide: input.entry.combatWide ?? false,
       encounterId: input.entry.sourceEncounterId ?? input.context.encounterId,
-      opportunityId: input.entry.sourceOpportunityId,
+      opportunityId: opportunityIsProvenanceOnly ? undefined : input.entry.sourceOpportunityId,
       phase: input.entry.sourcePhase,
       processId: input.entry.sourceProcessId,
       rollPurposes: [],
@@ -512,6 +517,39 @@ export function attachCanonicalLifecycleToModifierBucketRow(input: {
     : input.entry;
 }
 
+/**
+ * Restates a generated row's numeric value on the row **and** on its attached canonical payload.
+ *
+ * `normalizeScenarioCombatModifierEntry` resolves a row's value from
+ * `canonicalLifecycle.payload.value` whenever a projection is attached, and falls back to
+ * `entry.value` only when there is none. A producer that rewrites a row in place by spreading it
+ * therefore leaves the resolved number at the old figure while the row and its note read the new
+ * one. That is how the rule's two reductions of the attack-phase defensive penalty — Double Attack
+ * with the second attack cancelled, and simultaneous attack back-out — kept resolving at -4 over a
+ * row labelled -2% (#884).
+ *
+ * This is for the producers that restate a value in place and hold no accepted revision or
+ * sequence, so no lifecycle transition can be recorded. `transitionCanonicalModifierBucketRow` is
+ * the equivalent for a caller that has them and wants the transition recorded.
+ */
+export function restateCanonicalModifierBucketRowValue(input: {
+  entry: ScenarioCombatModifierEntry;
+  nextValue: number;
+}): ScenarioCombatModifierEntry {
+  if (!input.entry.canonicalLifecycle) {
+    return { ...input.entry, value: input.nextValue };
+  }
+  const effect = canonicalCombatModifierEffectSchema.parse(input.entry.canonicalLifecycle);
+  return {
+    ...input.entry,
+    canonicalLifecycle:
+      effect.payload.kind === "numeric"
+        ? { ...effect, payload: { ...effect.payload, value: input.nextValue } }
+        : effect,
+    value: input.nextValue,
+  };
+}
+
 /** Updates an attached producer projection without changing its stable effect identity. */
 export function transitionCanonicalModifierBucketRow(input: {
   acceptedRevision: string;
@@ -544,10 +582,7 @@ export function transitionCanonicalModifierBucketRow(input: {
   return {
     ...input.entry,
     canonicalLifecycle: transitioned.effect,
-    canonicalTransitions: [
-      ...(input.entry.canonicalTransitions ?? []),
-      transitioned.transition,
-    ],
+    canonicalTransitions: [...(input.entry.canonicalTransitions ?? []), transitioned.transition],
     value: input.nextValue ?? input.entry.value,
   };
 }
