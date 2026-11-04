@@ -78,6 +78,29 @@ describe("a roster refuses an identity two rows can claim (#947)", () => {
   });
 
   /**
+   * A row may legitimately be its own mapping — the alias helper deduplicates within a
+   * row, so a row whose `id` equals its own `scenarioParticipantId` claims one identity
+   * and not two. Worth a case of its own: a condition that refused this would refuse a
+   * shape the product writes.
+   */
+  it("accepts a row whose identity is its own mapping, in either form", () => {
+    expect(
+      encounterRosterIdentityRefusal([
+        { characterId: "character-a", id: "participant-a", scenarioParticipantId: "participant-a" },
+        {
+          characterId: "character-b",
+          id: "scenario-participant-b",
+          scenarioParticipantId: "participant-b",
+        },
+      ]),
+    ).toBeUndefined();
+  });
+
+  it("accepts a roster with no rows, which is how the Scenario fallback is written", () => {
+    expect(encounterRosterIdentityRefusal([])).toBeUndefined();
+  });
+
+  /**
    * One case per alias form the readers resolve a row through, because the condition
    * is only as good as its coverage of the ways two rows can meet. Each is stated as
    * the identity the second row borrows from the first.
@@ -170,7 +193,7 @@ describe("a roster row's identity must describe its own mapping (#947)", () => {
       encounterRosterScenarioIdentityRefusal({
         participants: [
           mappedRow("encounter-participant-a", "participant-a", "character-a"),
-          derivedRow("participant-b", "character-b"),
+          { id: "participant-b", scenarioParticipantId: "participant-b" },
           { id: "scenario-fallback-participant-c", scenarioParticipantId: "participant-c" },
           adHocRow("3f2a9c18-0000-4000-8000-000000000001"),
         ],
