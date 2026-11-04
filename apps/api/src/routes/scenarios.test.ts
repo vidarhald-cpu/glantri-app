@@ -17538,71 +17538,34 @@ describe("scenarios route contract", () => {
     ).toBe("encounter-participant-2");
   });
 
-  it("keeps an exact Observe opponent identity ahead of a colliding legacy actor alias", async () => {
+  /**
+   * Forgejo #947. This case used to drive the declaration route with a roster in which
+   * one row's `characterId` was another row's `id`, and assert that the exact `id`
+   * match still won the Observe target. That tie-break is unchanged, and it is covered
+   * on a writable roster by "canonicalizes and persists the selected Offensive Parry
+   * opponent" above and by the Gladiator/Scyrian Observe case below.
+   *
+   * What changed is the premise: `encounterSessionSchema` now refuses a roster in which
+   * two rows claim one identity, so the colliding roster this case defended against
+   * cannot be written or read any more. The fixture is kept and the assertion moved to
+   * the boundary, because the reader's robustness is no longer what stands between a
+   * viewer and a mis-resolved combatant — the roster is.
+   *
+   * Whether the reader's own tie-break should now be simplified is a separate decision
+   * and is not taken here.
+   */
+  it("refuses the roster the Observe tie-break used to defend against", () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants().map((participant, index) =>
       index === 0 ? { ...participant, characterId: "encounter-participant-2" } : participant,
-    ) as unknown as EncounterSession["participants"];
-    setupCombatDeclarationRoute({
-      encounter: { participants: encounterParticipants },
-      participant: {
-        characterId: "encounter-participant-2",
-        snapshot: {
-          build: makeDodgeCharacterBuild("character-actor", "Scyrian cavalry guy"),
-          displayName: "Scyrian cavalry guy",
-        },
-      },
-      participants: [
-        {
-          characterId: "encounter-participant-2",
-          id: "participant-1",
-          snapshot: {
-            build: makeDodgeCharacterBuild("character-actor", "Scyrian cavalry guy"),
-            displayName: "Scyrian cavalry guy",
-          },
-        },
-        {
-          controlledByUserId: "other-player",
-          id: "participant-2",
-          snapshot: { displayName: "The Gladiator" },
-        },
-      ],
-      user: mocks.adminUser,
-    });
-    const app = await buildScenarioTestApp();
+    );
+    const refused = encounterSessionSchema.safeParse(
+      makeCombatEncounter({ participants: encounterParticipants }),
+    );
 
-    const response = await app.inject({
-      method: "POST",
-      payload: {
-        actionId: "parry",
-        combatContext: { modifierBuckets: emptyModifierBuckets() },
-        scenarioParticipantId: "participant-1",
-        secondaryActionContext: {
-          action: "observe_opponent",
-          targetParticipantId: "encounter-participant-2",
-        },
-        secondaryActionId: "observe_opponent",
-      },
-      url: "/encounters/encounter-1/combat-declaration",
-    });
-
-    await app.close();
-
-    expect(response.statusCode, response.body).toBe(200);
-    const savedRoundState =
-      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
-    expect(
-      savedRoundState.participants.find(
-        (participant: { participantId: string }) =>
-          participant.participantId === "encounter-participant-1",
-      )?.declaration,
-    ).toMatchObject({
-      actionId: "parry",
-      secondaryActionContext: {
-        action: "observe_opponent",
-        targetParticipantId: "encounter-participant-2",
-      },
-      secondaryActionId: "observe_opponent",
-    });
+    expect(refused.success).toBe(false);
+    expect(refused.error?.issues.map((issue) => issue.message)).toEqual([
+      "Two Encounter participants claim the identity encounter-participant-2. Give every combatant a distinct identity.",
+    ]);
   });
 
   it("accepts the persisted Gladiator and Scyrian mutual-target Observe declaration", async () => {
