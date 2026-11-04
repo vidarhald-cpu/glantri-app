@@ -397,12 +397,17 @@ function withRecordedItemActionActorOnRoster(input: {
   // in that shape before this change as well. The refusal above is taken first, because refusing
   // changes no roster and so cannot choose a membership source.
   if (!membership.explicitMode) return input.encounter;
+  // Setting a row aside needs the verdict taken from a resolved row to be attached to the row that
+  // was submitted, and in explicit mode the resolver maps the roster one row to one row in order,
+  // so an index is that correspondence. A row's `id` is not: the schema permits two rows to carry
+  // one (#947), which is the condition this whole gate exists to refuse. This equality is the one
+  // thing the index relies on; if a later change to the resolver breaks it, the gate refuses
+  // instead of pairing the wrong row. It is a fail-closed belt and holds today.
+  if (membership.participants.length !== input.encounter.participants.length) return undefined;
 
   // Every unattributed row answering for the recorded identity is set aside, and the actor's own
   // row is restored from the record if the roster no longer carries one. The result always names
-  // at least the actor, so the membership source cannot change here. In explicit mode the resolver
-  // maps the roster one row to one row in order, so the verdict at an index is the verdict of the
-  // submitted row at that index.
+  // at least the actor, so the membership source cannot change here.
   const retained = input.encounter.participants.filter((_, index) => verdicts[index] !== "nobody");
   if (actorRows > 0) return { ...input.encounter, participants: retained };
   return {
