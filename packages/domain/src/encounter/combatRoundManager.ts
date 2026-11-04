@@ -29974,28 +29974,54 @@ function getCombatRoundLatestEventForCommand(input: {
 
 /**
  * Every participant id a state's timeline refers to, whether or not that participant is still on a
- * roster: the round records' own rows, and the ids the commands themselves carry. Used to decide
- * which ids a non-entitled viewer must never be handed, so a departed combatant — who appears in no
- * live roster at all — is included.
+ * roster. Used to decide which ids a non-entitled viewer must never be handed, so a departed
+ * combatant — who appears in no live roster at all — is included.
+ *
+ * Collected from every structure a latest-event summary can take an identity out of, not only the
+ * round's participant rows: the commands and their cursors, which `commandId` is built from, and the
+ * snapshots, phase-resolution records and attack results, which `resultId` is built from. A source
+ * left out here would not leak a *name* — `getCombatRoundLatestEventLabel` decides that
+ * independently — but could leave an id inside a structured result id unexamined by the belt below.
  */
 function getCombatRoundTimelineParticipantIds(
   timelineStates: readonly CombatRoundState[],
 ): Set<string> {
   const participantIds = new Set<string>();
+  const add = (participantId?: string) => {
+    if (participantId) participantIds.add(participantId);
+  };
 
   for (const timelineState of timelineStates) {
     for (const participant of timelineState.participants) {
-      participantIds.add(participant.participantId);
+      add(participant.participantId);
+      for (const result of Object.values(participant.attackResultsByOpportunity ?? {})) {
+        add(result.attackerParticipantId);
+        add(result.defenderParticipantId);
+      }
+      for (const result of Object.values(participant.attackResults)) {
+        add(result?.attackerParticipantId);
+        add(result?.defenderParticipantId);
+      }
     }
     for (const command of timelineState.commands) {
-      participantIds.add(command.participantId);
-      if (command.beforeCursor.participantId) {
-        participantIds.add(command.beforeCursor.participantId);
-      }
-      if (command.afterCursor.participantId) {
-        participantIds.add(command.afterCursor.participantId);
-      }
+      add(command.participantId);
+      add(command.beforeCursor.participantId);
+      add(command.afterCursor.participantId);
     }
+    for (const snapshot of timelineState.stepSnapshots) {
+      add(snapshot.participantId);
+    }
+    for (const result of timelineState.phaseResolutionResults) {
+      add(result.attackerParticipantId);
+      add(result.defenderParticipantId);
+    }
+    for (const participantId of Object.keys(timelineState.phaseResolutionStatuses)) {
+      add(participantId);
+    }
+    add(timelineState.activeParticipantId);
+    add(timelineState.selectedParticipantId);
+    add(timelineState.phaseResolutionCursor?.participantId);
+    add(timelineState.currentCursor?.participantId);
   }
 
   return participantIds;

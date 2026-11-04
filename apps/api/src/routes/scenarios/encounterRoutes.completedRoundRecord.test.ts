@@ -1123,6 +1123,20 @@ describe("#925 a completed round is recorded history, not rebuilt from the live 
     expect(JSON.stringify(playerEnvelope)).not.toContain(DEPARTED_LABEL);
     expect(JSON.stringify(playerEnvelope)).not.toContain(DEPARTED_PARTICIPANT);
     expect(playerEnvelope.latestEvent?.summaryText).not.toBe(gmEnvelope.latestEvent?.summaryText);
+
+    /*
+     * Why the summary is withheld rather than renamed, asserted rather than argued. Take the GM's
+     * summary and replace the departed combatant's **label** with the established redaction phrase —
+     * the repair the Combat Log's precedent would suggest. The result still carries the departed
+     * combatant's participant id, inside `commandId`, because `buildCombatRoundCommandId` embeds it
+     * by construction. A label-only repair would therefore have left an identifier in a player
+     * response, which is why the belt drops the whole summary.
+     */
+    const labelOnlyRedaction = JSON.parse(
+      JSON.stringify(gmEnvelope.latestEvent).split(DEPARTED_LABEL).join("another combatant"),
+    );
+    expect(JSON.stringify(labelOnlyRedaction)).not.toContain(DEPARTED_LABEL);
+    expect(JSON.stringify(labelOnlyRedaction)).toContain(DEPARTED_PARTICIPANT);
   });
 
   // ===== item 9, the enumeration by response key (#938) ==========================================
