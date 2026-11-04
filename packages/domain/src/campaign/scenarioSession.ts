@@ -14,6 +14,7 @@ import {
   encounterStatusSchema,
   isUserAssignedToEncounterMembership,
   isUserEntitledToTerminalEncounterHistory,
+  resolveEncounterParticipantMembership,
   type EncounterSession,
 } from "../encounter/session";
 import {
@@ -338,6 +339,18 @@ function projectCombatOutcomeSummary(input: {
  *
  * Both of those hold whether or not the actor is still on the roster: a stranger occupying the
  * recorded identity defeats the GM's hide of a combatant who never left just as readily.
+ *
+ * **The question is asked of the consumer's own collection, not of a list of alias forms.** This
+ * gate's first attempt at the condition above enumerated the raw roster rows, and that was wrong
+ * for a reason no longer enumeration could fix: `buildPlayerSafeCombatScopeForParticipants` builds
+ * both of its id sets out of `resolveEncounterParticipantMembership(...).participants`, and the
+ * resolver **backfills** `scenarioParticipantId` and `characterId` onto a row that arrived without
+ * them. A row therefore answers downstream through aliases the raw row does not carry, and all
+ * three backfilled forms reached the disclosure. So this gate resolves membership with the same
+ * call the consumer makes and asks its question of those rows, through the same alias helper. The
+ * two collections are the same collection by construction, which is what makes the property hold
+ * for any alias form the resolver or the alias helper may yield later, including ones that do not
+ * exist yet. Any future form is seen by both sides or by neither.
  */
 function withRecordedItemActionActorOnRoster(input: {
   action: { ownerParticipantId: string };
@@ -345,48 +358,53 @@ function withRecordedItemActionActorOnRoster(input: {
   encounter: EncounterSession;
   scenarioParticipants: ScenarioParticipant[];
 }): EncounterSession | undefined {
-  // Whether a row can answer for the recorded owner identity, over the same alias set the
-  // player-safe scope resolves ids through — not only `id`, which is one alias of five.
+  // The collection the downstream question is asked against, resolved by the call that builds it.
+  const membership = resolveEncounterParticipantMembership({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+  // Whether a row can answer for the recorded owner identity. Applied to `membership.participants`
+  // below, this is the same alias helper over the same rows the player-safe scope builds its two
+  // id sets from, so the alias set inspected here is that set rather than a restatement of it.
   const answersForTheOwner = (participant: EncounterSession["participants"][number]) =>
     getCombatDistanceParticipantAliases(participant).includes(input.action.ownerParticipantId);
-  const describedBy = (participant: EncounterSession["participants"][number]) =>
-    scenarioParticipantDescribedByRosterRow({
+  /**
+   * What one resolved row has to say about the recorded owner identity.
+   *
+   * `silent` rows do not answer for it at all; `theActor` rows answer for the participant the
+   * record names; `aStranger` rows answer for somebody else; `nobody` rows answer for a
+   * participant the Scenario does not have, or for two of them at once.
+   */
+  const verdictFor = (participant: EncounterSession["participants"][number]) => {
+    if (!answersForTheOwner(participant)) return "silent" as const;
+    const described = scenarioParticipantDescribedByRosterRow({
       participant,
       scenarioParticipants: input.scenarioParticipants,
     });
-  const describesTheActor = (participant: EncounterSession["participants"][number]) =>
-    describedBy(participant)?.id === input.actor.id;
-  const answering = input.encounter.participants.filter((participant) =>
-    answersForTheOwner(participant),
-  );
-  if (
-    answering.some((participant) => {
-      const described = describedBy(participant);
-      return described !== undefined && described.id !== input.actor.id;
-    })
-  ) {
-    return undefined;
-  }
-  const actorRows = answering.filter((participant) => describesTheActor(participant));
+    if (described === undefined) return "nobody" as const;
+    return described.id === input.actor.id ? ("theActor" as const) : ("aStranger" as const);
+  };
+  const verdicts = membership.participants.map((participant) => verdictFor(participant));
+  if (verdicts.includes("aStranger")) return undefined;
+  const answering = verdicts.filter((verdict) => verdict !== "silent").length;
+  const actorRows = verdicts.filter((verdict) => verdict === "theActor").length;
   // Only the actor answers for their own recorded identity, so the live roster already decides
   // this correctly and everything that depends on those rows is untouched.
-  if (actorRows.length === answering.length && actorRows.length > 0) return input.encounter;
+  if (actorRows === answering && actorRows > 0) return input.encounter;
   // A roster that names nobody and does not declare itself explicit is resolved from the Scenario
   // instead, so adding a row to it would not restore an actor — it would decide how the Encounter
   // chooses its participants. That decision is not this reader's, and the outcome was unreadable
-  // in that shape before this change as well.
-  const wouldChooseTheMembershipSource =
-    input.encounter.participants.length === 0 &&
-    input.encounter.participantMembershipMode !== "explicit";
-  if (wouldChooseTheMembershipSource) return input.encounter;
+  // in that shape before this change as well. The refusal above is taken first, because refusing
+  // changes no roster and so cannot choose a membership source.
+  if (!membership.explicitMode) return input.encounter;
 
   // Every unattributed row answering for the recorded identity is set aside, and the actor's own
   // row is restored from the record if the roster no longer carries one. The result always names
-  // at least the actor, so the membership source cannot change here.
-  const retained = input.encounter.participants.filter(
-    (participant) => !answersForTheOwner(participant) || describesTheActor(participant),
-  );
-  if (actorRows.length > 0) return { ...input.encounter, participants: retained };
+  // at least the actor, so the membership source cannot change here. In explicit mode the resolver
+  // maps the roster one row to one row in order, so the verdict at an index is the verdict of the
+  // submitted row at that index.
+  const retained = input.encounter.participants.filter((_, index) => verdicts[index] !== "nobody");
+  if (actorRows > 0) return { ...input.encounter, participants: retained };
   return {
     ...input.encounter,
     participants: [
@@ -409,6 +427,15 @@ function withRecordedItemActionActorOnRoster(input: {
  *
  * Ambiguity answers nobody. A row matching two participants describes neither of them well enough
  * to answer a privacy question, and the membership resolver already declines to map it.
+ *
+ * **This resolves; it does not read `scenarioParticipantId` and compare it.** The two are not the
+ * same answer, and the difference is a disclosure rather than a nicety. A row carrying the actor's
+ * mapping *and* another participant's `characterId` matches two participants, so the resolver
+ * declines to map it and leaves its `characterId` alone — while a field comparison would read its
+ * `scenarioParticipantId`, call it the actor's own row, and keep it on the roster, where the GM's
+ * entry for that other participant answers the visibility question about the actor. The retained
+ * case "sets aside a row that holds the actor's mapping and another participant's character"
+ * fails if this correspondence is changed to a field comparison.
  */
 function scenarioParticipantDescribedByRosterRow(input: {
   participant: EncounterSession["participants"][number];

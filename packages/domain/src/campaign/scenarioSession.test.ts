@@ -671,6 +671,224 @@ describe("Scenario session privacy projection", () => {
 
         expect({ after, before }).toEqual({ after: [], before: ["item-outcome"] });
       });
+
+      /**
+       * Forgejo #930 repair cycle 2. The question above was first asked of the **submitted**
+       * roster rows, and the sets it is answered against are built from
+       * `resolveEncounterParticipantMembership(...).participants`, which **backfills**
+       * `scenarioParticipantId` and `characterId` onto a row that arrived without them. A row
+       * therefore answered for the recorded identity through an alias the gate never inspected,
+       * in all three backfilled forms, so the gate now resolves membership with the same call the
+       * consumer makes and asks its question of those rows.
+       *
+       * Each case keeps one viewer completely fixed — in the recorded audience, controlling their
+       * own participant, with the GM's hide of the actor never lifted — and permits sight of the
+       * stranger's row under that row's own key, which is the ordinary thing to do for a combatant
+       * the viewer is meant to see. Each is paired against the identical state with the stranger's
+       * row absent, so a reading can only have come from that row.
+       */
+      describe("and never through an alias the membership resolver backfills", () => {
+        /** A roster row exactly as submitted: an optional field left out is really absent. */
+        function submittedRow(input: {
+          characterId?: string;
+          id: string;
+          label: string;
+          scenarioParticipantId?: string;
+        }) {
+          return {
+            ...(input.characterId ? { characterId: input.characterId } : {}),
+            ...(input.scenarioParticipantId
+              ? { scenarioParticipantId: input.scenarioParticipantId }
+              : {}),
+            declaration: {
+              actionType: "none" as const,
+              defenseFocus: "none" as const,
+              defensePosture: "none" as const,
+              targetLocation: "any" as const,
+            },
+            facing: "north" as const,
+            id: input.id,
+            initiative: 0,
+            label: input.label,
+            order: 2,
+            orientation: "neutral" as const,
+            participantType: "scenario" as const,
+            position: { x: 0, y: 0, zone: "center" as const },
+          };
+        }
+
+        /**
+         * The actor has left, a third participant's row is on the roster, and the recorded owner
+         * identity is whatever `recordedOwnerIdentity` says. The GM's matrix holds no truthy entry
+         * for that identity, which is the hide, and shows the stranger's row under its own id.
+         */
+        function readAsTheViewer(input: {
+          recordedOwnerIdentity: string;
+          strangerRow?: ReturnType<typeof submittedRow>;
+        }) {
+          const current = itemHistoryFixture();
+          current.participants.push(participant("participant-c", "user-c", "Player C"));
+          current.action.ownerParticipantId = input.recordedOwnerIdentity;
+          current.currentEncounter.combatRoundState!.genericActions = [current.action];
+          removeActorFromRoster(current);
+          if (input.strangerRow) {
+            current.currentEncounter.participants.push(input.strangerRow);
+          }
+          current.currentEncounter.roleplayState = {
+            ...current.currentEncounter.roleplayState!,
+            visibility: {
+              "encounter-participant-a": {
+                "encounter-participant-a": true,
+                "encounter-participant-c": true,
+              },
+            },
+          };
+          return view(current).history.map((entry) => entry.summary);
+        }
+
+        /** Carries only the third participant's character, so the resolver supplies the mapping. */
+        const ROW_WITHOUT_A_SCENARIO_MAPPING = submittedRow({
+          characterId: "character-participant-c",
+          id: "encounter-participant-c",
+          label: "Player C",
+        });
+        /** Carries only the mapping, so the resolver supplies the character. */
+        const ROW_WITHOUT_A_CHARACTER = submittedRow({
+          id: "encounter-participant-c",
+          label: "Player C",
+          scenarioParticipantId: "participant-c",
+        });
+
+        it("refuses when the recorded identity is a backfilled Scenario-participant id", () => {
+          expect({
+            withTheStrangerRow: readAsTheViewer({
+              recordedOwnerIdentity: "participant-c",
+              strangerRow: ROW_WITHOUT_A_SCENARIO_MAPPING,
+            }),
+            withoutTheStrangerRow: readAsTheViewer({ recordedOwnerIdentity: "participant-c" }),
+          }).toEqual({ withTheStrangerRow: [], withoutTheStrangerRow: [] });
+        });
+
+        it("refuses when the recorded identity is the backfilled mapping's `scenario-` form", () => {
+          expect({
+            withTheStrangerRow: readAsTheViewer({
+              recordedOwnerIdentity: "scenario-participant-c",
+              strangerRow: ROW_WITHOUT_A_SCENARIO_MAPPING,
+            }),
+            withoutTheStrangerRow: readAsTheViewer({
+              recordedOwnerIdentity: "scenario-participant-c",
+            }),
+          }).toEqual({ withTheStrangerRow: [], withoutTheStrangerRow: [] });
+        });
+
+        it("refuses when the recorded identity is a backfilled character id", () => {
+          expect({
+            withTheStrangerRow: readAsTheViewer({
+              recordedOwnerIdentity: "character-participant-c",
+              strangerRow: ROW_WITHOUT_A_CHARACTER,
+            }),
+            withoutTheStrangerRow: readAsTheViewer({
+              recordedOwnerIdentity: "character-participant-c",
+            }),
+          }).toEqual({ withTheStrangerRow: [], withoutTheStrangerRow: [] });
+        });
+
+        /**
+         * The same correction in the other direction, which is why it is one correction and not
+         * an enumeration. The resolver does not only fill a missing `scenarioParticipantId` — it
+         * **re-points** one, replacing whatever the row submitted with the mapping of the single
+         * participant the row matches. A row re-pointed at the actor's recorded identity, which
+         * also carries a third participant's `characterId`, is therefore resolved back onto that
+         * third participant, and the recorded identity is not among its aliases in either of the
+         * sets the question is answered against.
+         *
+         * Asking the submitted row refused that state. Nothing was gained by it: the row could not
+         * answer for the actor downstream at all, so the refusal only withheld a past outcome from
+         * a viewer entitled to it — the #930 defect itself, one function further on. Asking the
+         * resolved row gives the ordinary answer, and the GM's hide still decides it.
+         */
+        it("reads a re-pointed row as the participant it resolves to, and still honours the hide", () => {
+          /** The recorded identity is re-pointed onto a row whose character is Player C's. */
+          function readWithTheRepointedRow(theActorIsVisible: boolean) {
+            const current = itemHistoryFixture();
+            current.participants.push(participant("participant-c", "user-c", "Player C"));
+            removeActorFromRoster(current);
+            current.currentEncounter.participants.push(
+              submittedRow({
+                characterId: "character-participant-c",
+                id: "row-c",
+                label: "Player C",
+                scenarioParticipantId: "encounter-participant-b",
+              }),
+            );
+            current.currentEncounter.roleplayState = {
+              ...current.currentEncounter.roleplayState!,
+              visibility: {
+                "encounter-participant-a": {
+                  "encounter-participant-a": true,
+                  "encounter-participant-b": theActorIsVisible,
+                },
+              },
+            };
+            return view(current).history.map((entry) => entry.summary);
+          }
+
+          expect({
+            whenTheGmHidesTheActor: readWithTheRepointedRow(false),
+            whenTheGmPermitsTheActor: readWithTheRepointedRow(true),
+          }).toEqual({
+            whenTheGmHidesTheActor: [],
+            whenTheGmPermitsTheActor: ["Player B dropped the dagger."],
+          });
+        });
+
+        /**
+         * Which participant a row describes is settled by **resolving** the row, not by reading
+         * its `scenarioParticipantId` and comparing it. This case is the difference, and the
+         * difference is a disclosure.
+         *
+         * The actor's own row also carries a third participant's `characterId`, so it matches two
+         * Scenario participants and the membership resolver declines to map it — which means its
+         * `characterId` is left as submitted and stays an alias of the row. A field comparison
+         * reads `scenarioParticipantId`, calls the row the actor's own, and keeps it, and the GM's
+         * entry for that third participant then answers the visibility question about the actor.
+         * Resolving instead sets the row aside and restores the actor from the record, carrying
+         * the actor's own character and nobody else's.
+         *
+         * The viewer is fixed, the actor never leaves the roster, and the GM's hide of the actor
+         * is never lifted — the matrix holds no truthy entry for the recorded identity at all.
+         */
+        it("sets aside a row that holds the actor's mapping and another participant's character", () => {
+          const current = itemHistoryFixture();
+          current.participants.push(participant("participant-c", "user-c", "Player C"));
+          current.currentEncounter.participants[1] = submittedRow({
+            characterId: "character-participant-c",
+            id: "encounter-participant-b",
+            label: "Player B",
+            scenarioParticipantId: "participant-b",
+          });
+          // Player C's row id is their character id, which the roster schema permits and the
+          // roster route accepts, so the GM's entry showing them is keyed on that string.
+          current.currentEncounter.participants.push(
+            submittedRow({
+              id: "character-participant-c",
+              label: "Player C",
+              scenarioParticipantId: "participant-c",
+            }),
+          );
+          current.currentEncounter.roleplayState = {
+            ...current.currentEncounter.roleplayState!,
+            visibility: {
+              "encounter-participant-a": {
+                "character-participant-c": true,
+                "encounter-participant-a": true,
+              },
+            },
+          };
+
+          expect(view(current).history.map((entry) => entry.summary)).toEqual([]);
+        });
+      });
     });
   });
 

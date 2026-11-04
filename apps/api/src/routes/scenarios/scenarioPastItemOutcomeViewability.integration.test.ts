@@ -116,7 +116,12 @@ if (!hasTaskApplicationDatabase) {
      * - **bystander** is in the Encounter and sees everyone, but is not in the recorded audience.
      *   They must never receive the row, before or after the removal.
      */
-    async function seed() {
+    async function seed(
+      options: {
+        actorRowIdIsTheBystandersCharacter?: boolean;
+        bystanderRowOmitsItsCharacter?: boolean;
+      } = {},
+    ) {
       const gm = await createTestUser(prisma, { displayName: "GM", roles: ["game_master"] });
       const ownerUser = await createTestUser(prisma, { displayName: "Owner player" });
       const recipientUser = await createTestUser(prisma, { displayName: "Recipient player" });
@@ -180,10 +185,16 @@ if (!hasTaskApplicationDatabase) {
 
       const encounterService = new EncounterService();
       const encounterId = `encounter-${scenario.id}`;
+      // `encounterParticipantSchema` puts no condition on a row's `id`, so the acting combatant's
+      // row can be given an id that another participant's record also carries. The repair-cycle-2
+      // case below needs that, and every other case in this file takes the default.
+      const actorRowId = options.actorRowIdIsTheBystandersCharacter
+        ? bystanderCharacter.id
+        : "encounter-participant-owner";
       const encounterParticipants = [
         {
           characterId: ownerCharacter.id,
-          id: "encounter-participant-owner",
+          id: actorRowId,
           label: ownerCharacter.name,
           participantType: "character",
           scenarioParticipantId: ownerParticipant.id,
@@ -196,7 +207,9 @@ if (!hasTaskApplicationDatabase) {
           scenarioParticipantId: recipientParticipant.id,
         },
         {
-          characterId: bystanderCharacter.id,
+          // The bystander's row omits the optional `characterId`, which the roster route accepts
+          // on an active Encounter, so the membership resolver is what supplies it on every read.
+          ...(options.bystanderRowOmitsItsCharacter ? {} : { characterId: bystanderCharacter.id }),
           id: "encounter-participant-bystander",
           label: bystanderCharacter.name,
           participantType: "character",
@@ -246,6 +259,8 @@ if (!hasTaskApplicationDatabase) {
       });
 
       return {
+        actorRowId,
+        bystanderCharacterId: bystanderCharacter.id,
         campaign,
         encounterId: started.id,
         encounterService,
@@ -319,7 +334,7 @@ if (!hasTaskApplicationDatabase) {
           itemId: current.item.id,
           itemOperation: "pass",
           operation: "declare",
-          participantId: "encounter-participant-owner",
+          participantId: current.actorRowId,
           recipientParticipantId: "encounter-participant-recipient",
           visibleToParticipantIds: [],
         },
@@ -341,10 +356,7 @@ if (!hasTaskApplicationDatabase) {
           actionId,
           operation: "resolve",
           resultText: RESULT_TEXT,
-          visibleToParticipantIds: [
-            "encounter-participant-owner",
-            "encounter-participant-recipient",
-          ],
+          visibleToParticipantIds: [current.actorRowId, "encounter-participant-recipient"],
         },
       });
       return actionId;
@@ -758,6 +770,103 @@ if (!hasTaskApplicationDatabase) {
         // and not an artefact of the paused status.
         const ownerReading = await itemOutcomeRows(current.cookies.owner, current.scenario.id);
         expect(ownerReading.itemRows.map((row) => row.summary)).toEqual([RESULT_TEXT]);
+      });
+
+      /**
+       * #930 repair cycle 2, and the reaching condition that needs **no** window at all.
+       *
+       * The two sets the question is answered against are built from
+       * `resolveEncounterParticipantMembership(...).participants`, and that resolver **backfills**
+       * `characterId` onto a row submitted without one. The bystander's row here omits it, so the
+       * submitted row's alias set does not hold the bystander's character id and the resolved
+       * row's does — and the recorded owner identity is, verbatim, that same character id, because
+       * the acting combatant's own roster row was given it as its `id`.
+       *
+       * Everything is written through the GM's own routes while the Encounter is **active**: the
+       * roster is submitted wholesale with `PATCH /encounters/:encounterId/participants` and
+       * returns 200, so there is no 409 and no paused Encounter anywhere in this case. The
+       * recipient is in the recorded audience, controls their own participant, and the GM's hide
+       * of the actor is never lifted — the matrix holds no truthy entry for the recorded identity.
+       * The reading is paired against the identical state with the bystander's row also gone.
+       */
+      it("refuses when a bystander's row answers through an alias the membership resolver supplies", async () => {
+        const current = await seed({
+          actorRowIdIsTheBystandersCharacter: true,
+          bystanderRowOmitsItsCharacter: true,
+        });
+        expect(current.actorRowId).toBe(current.bystanderCharacterId);
+        await resolveItemPass(current);
+        await completeRound(current);
+
+        // The GM shows the recipient the bystander's row, under that row's own id, and never
+        // names the recorded identity — so the actor is hidden throughout.
+        await writeVisibility(current, {
+          "encounter-participant-recipient": {
+            "encounter-participant-bystander": true,
+            "encounter-participant-recipient": true,
+          },
+        });
+        const before = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+
+        const roster = await encounterRevision(current.encounterId);
+        const rowsByIdentity = new Map(
+          roster.participants.map((participant) => [participant.id, participant]),
+        );
+        const withoutTheActor = await patchRoster(current, [
+          rowsByIdentity.get("encounter-participant-recipient")! as unknown as Record<
+            string,
+            unknown
+          >,
+          rowsByIdentity.get("encounter-participant-bystander")! as unknown as Record<
+            string,
+            unknown
+          >,
+        ]);
+        expect(withoutTheActor.status).toBe("active");
+        // Read back from the stored roster: the row that answers still has no `characterId` of its
+        // own, which is the whole mechanism.
+        expect(
+          withoutTheActor.participants.map((participant) => [
+            participant.id,
+            participant.characterId,
+          ]),
+        ).toEqual([
+          ["encounter-participant-recipient", expect.any(String)],
+          ["encounter-participant-bystander", undefined],
+        ]);
+        const withTheBystanderRow = await itemOutcomeRows(
+          current.cookies.recipient,
+          current.scenario.id,
+        );
+
+        // The pair: the same state with the bystander's row also removed.
+        await patchRoster(current, [
+          rowsByIdentity.get("encounter-participant-recipient")! as unknown as Record<
+            string,
+            unknown
+          >,
+        ]);
+        const withoutTheBystanderRow = await itemOutcomeRows(
+          current.cookies.recipient,
+          current.scenario.id,
+        );
+
+        expect({
+          whileTheActorIsPresentAndHidden: before.itemRows.map((row) => row.summary),
+          withTheBystanderRowPresent: withTheBystanderRow.itemRows.map((row) => row.summary),
+          withTheBystanderRowAlsoRemoved: withoutTheBystanderRow.itemRows.map((row) => row.summary),
+        }).toEqual({
+          whileTheActorIsPresentAndHidden: [],
+          withTheBystanderRowPresent: [],
+          withTheBystanderRowAlsoRemoved: [],
+        });
+        for (const reading of [before, withTheBystanderRow, withoutTheBystanderRow]) {
+          expect(reading.raw).not.toContain(RESULT_TEXT);
+        }
+
+        // The GM record is whole throughout.
+        const gm = await itemOutcomeRows(current.cookies.gm, current.scenario.id);
+        expect(gm.itemRows.map((row) => row.summary)).toEqual([RESULT_TEXT]);
       });
     });
   });
