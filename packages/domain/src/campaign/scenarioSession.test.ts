@@ -8,7 +8,10 @@ import {
   projectCombatGenericActionsForPlayer,
   reviewCombatGenericAction,
 } from "../encounter/combatGenericAction";
-import { initializeCombatRoundState } from "../encounter/combatRoundManager";
+import {
+  completedCombatRoundSchema,
+  initializeCombatRoundState,
+} from "../encounter/combatRoundManager";
 import { encounterSessionSchema } from "../encounter/session";
 import { scenarioParticipantSchema, scenarioSchema } from "./scenario";
 import {
@@ -286,52 +289,89 @@ describe("Scenario session privacy projection", () => {
         viewerMode,
       });
     expect(view(original).history).toHaveLength(1);
-    const mutations: Array<(current: ReturnType<typeof itemHistoryFixture>) => void> = [
-      (current) => {
-        current.eventLogs[0]!.payload.audienceParticipantIds = [];
-      },
-      (current) => {
-        current.eventLogs[0]!.payload.audienceParticipantIds = ["participant-b"];
-      },
-      (current) => {
-        current.eventLogs[0]!.payload.actionId = "missing";
-      },
-      (current) => {
-        current.eventLogs[0]!.payload.encounterId = "missing";
-      },
-      (current) => {
-        current.eventLogs[0]!.payload.actorParticipantId = "missing";
-      },
-      (current) => {
-        current.currentEncounter.participants[1]!.scenarioParticipantId = undefined;
-      },
-      (current) => {
-        current.action.itemInteraction!.visibleToParticipantIds = [];
-      },
-      (current) => {
-        current.action.resolution!.visibleToParticipantIds = [];
-      },
-      (current) => {
-        current.action.status = "active";
-      },
-      (current) => {
-        current.action.resolution = undefined;
-      },
-      (current) => {
-        current.participants[1]!.visibilityOverrides = { visibility: "hidden" };
-      },
-      (current) => {
-        current.participants[0]!.controlledByUserId = "someone-else";
-      },
-      (current) => {
-        current.currentEncounter.combatRoundState = undefined;
-      },
+    // Named, so a failure says which condition stopped denying rather than only that one did.
+    // Every entry here is a property of the **record** or of the **viewer**, never of the
+    // Encounter roster as it stands now: #930 removed the roster from this decision, and a case
+    // that denied only because a combatant had left belongs in the restored-actor cases below.
+    const mutations: Array<[string, (current: ReturnType<typeof itemHistoryFixture>) => void]> = [
+      [
+        "the row records no audience",
+        (current) => {
+          current.eventLogs[0]!.payload.audienceParticipantIds = [];
+        },
+      ],
+      [
+        "the viewer is not in the recorded audience",
+        (current) => {
+          current.eventLogs[0]!.payload.audienceParticipantIds = ["participant-b"];
+        },
+      ],
+      [
+        "the row names no action that exists",
+        (current) => {
+          current.eventLogs[0]!.payload.actionId = "missing";
+        },
+      ],
+      [
+        "the row names no Encounter that exists",
+        (current) => {
+          current.eventLogs[0]!.payload.encounterId = "missing";
+        },
+      ],
+      [
+        "the row names an actor the Scenario does not have",
+        (current) => {
+          current.eventLogs[0]!.payload.actorParticipantId = "missing";
+        },
+      ],
+      [
+        "the action recorded no Item audience",
+        (current) => {
+          current.action.itemInteraction!.visibleToParticipantIds = [];
+        },
+      ],
+      [
+        "the action recorded no result audience",
+        (current) => {
+          current.action.resolution!.visibleToParticipantIds = [];
+        },
+      ],
+      [
+        "the action never completed",
+        (current) => {
+          current.action.status = "active";
+        },
+      ],
+      [
+        "the action carries no result",
+        (current) => {
+          current.action.resolution = undefined;
+        },
+      ],
+      [
+        "the actor is suppressed by the fail-closed participant belt",
+        (current) => {
+          current.participants[1]!.visibilityOverrides = { visibility: "hidden" };
+        },
+      ],
+      [
+        "the viewer controls nobody in the audience",
+        (current) => {
+          current.participants[0]!.controlledByUserId = "someone-else";
+        },
+      ],
+      [
+        "the Encounter carries no combat round state",
+        (current) => {
+          current.currentEncounter.combatRoundState = undefined;
+        },
+      ],
     ];
-    for (const mutate of mutations) {
+    for (const [name, mutate] of mutations) {
       const current = itemHistoryFixture();
       mutate(current);
-      expect(view(current).history).toEqual([]);
-      expect(view(current, "gm").history).toHaveLength(1);
+      expect(view(current).history, name).toEqual([]);
+      expect(view(current, "gm").history, name).toHaveLength(1);
     }
     expect(
       projectScenarioObjectiveHistory({
@@ -340,6 +380,151 @@ describe("Scenario session privacy projection", () => {
         viewerMode: "player",
       }),
     ).toEqual([]);
+  });
+
+  /**
+   * Forgejo #930. Whether a resolved Item outcome can be read must not be decided by who is on the
+   * Encounter roster now. Each case holds the viewer — user A, in the row's recorded audience,
+   * controlling participant A, with an unchanged visibility row — completely fixed, and changes
+   * only something about the actor's presence. The driven before/after pair for the same breach is
+   * in `apps/api/src/routes/scenarios/scenarioPastItemOutcomeViewability.integration.test.ts`.
+   */
+  describe("a resolved Item outcome is read against the record, not the present roster (#930)", () => {
+    const view = (current: ReturnType<typeof itemHistoryFixture>, userId = "user-a") =>
+      buildScenarioSessionView({
+        availableObjects: [],
+        encounters: [current.currentEncounter],
+        eventLogs: current.eventLogs,
+        participants: current.participants,
+        scenario: current.scenario,
+        userId,
+        viewerMode: "player",
+      });
+
+    /** The actor leaves the Encounter roster; nothing about the viewer changes. */
+    function removeActorFromRoster(current: ReturnType<typeof itemHistoryFixture>): void {
+      current.currentEncounter.participants = current.currentEncounter.participants.filter(
+        (participant) => participant.id !== "encounter-participant-b",
+      );
+    }
+
+    /** The round the action was resolved in is archived and a new one is in force. */
+    function archiveTheActionsRound(current: ReturnType<typeof itemHistoryFixture>): void {
+      const state = current.currentEncounter.combatRoundState!;
+      current.currentEncounter.combatRoundState = {
+        ...state,
+        genericActions: [],
+        roundNumber: 2,
+        rounds: [
+          completedCombatRoundSchema.parse({
+            genericActions: [current.action],
+            participants: state.participants,
+            roundNumber: 1,
+          }),
+        ],
+      };
+    }
+
+    it("stays readable to an unchanged viewer when the actor leaves the roster", () => {
+      const current = itemHistoryFixture();
+      const before = view(current).history.map((entry) => entry.id);
+      removeActorFromRoster(current);
+      const after = view(current).history.map((entry) => entry.id);
+
+      expect({ after, before }).toEqual({ after: ["item-outcome"], before: ["item-outcome"] });
+    });
+
+    it("stays readable when the action's own round has been archived and the actor has left", () => {
+      const current = itemHistoryFixture();
+      archiveTheActionsRound(current);
+      const before = view(current).history.map((entry) => entry.id);
+      removeActorFromRoster(current);
+      // The archived round's `participants` entry is stripped of a departed combatant on every
+      // read (#925), so the actor's identity is taken from the stored action and the stored row
+      // rather than from that entry.
+      current.currentEncounter.combatRoundState!.rounds[0]!.participants = [];
+      const after = view(current).history.map((entry) => entry.id);
+
+      expect({ after, before }).toEqual({ after: ["item-outcome"], before: ["item-outcome"] });
+    });
+
+    it("stays readable when the actor's roster row loses its Scenario mapping", () => {
+      const current = itemHistoryFixture();
+      // Previously this denied, for the same reason the removal did: the decision was taken by
+      // re-resolving the actor through the roster. The row records who acted, so a roster row
+      // that no longer carries the mapping cannot make a past outcome unreadable.
+      current.currentEncounter.participants[1]!.scenarioParticipantId = undefined;
+
+      expect(view(current).history.map((entry) => entry.id)).toEqual(["item-outcome"]);
+    });
+
+    it("never decides how an Encounter with no named roster chooses its participants", () => {
+      const current = itemHistoryFixture();
+      // A roster naming nobody is resolved from the Scenario instead. Restoring the recorded actor
+      // into it would turn it into a one-combatant explicit roster and withhold the outcome from
+      // the viewer, which is the failure this guard exists to prevent — so the case is exercised
+      // with an action whose owner the Scenario fallback can resolve.
+      current.action.ownerParticipantId = "participant-b";
+      current.action.itemInteraction!.visibleToParticipantIds = ["participant-a", "participant-b"];
+      current.action.resolution!.visibleToParticipantIds = ["participant-a", "participant-b"];
+      current.currentEncounter.combatRoundState!.genericActions = [current.action];
+      current.currentEncounter.participantMembershipMode = "defaultAllActive";
+      current.currentEncounter.participants = [];
+      current.currentEncounter.roleplayState = {
+        ...current.currentEncounter.roleplayState!,
+        visibility: {},
+      };
+
+      expect(view(current).history.map((entry) => entry.id)).toEqual(["item-outcome"]);
+    });
+
+    it("keeps withholding the outcome from a viewer the GM has hidden the actor from", () => {
+      const current = itemHistoryFixture();
+      current.currentEncounter.roleplayState!.visibility["encounter-participant-a"]![
+        "encounter-participant-b"
+      ] = false;
+      const before = view(current).history;
+      removeActorFromRoster(current);
+      const after = view(current).history;
+
+      // The live per-viewer store is the entitlement decision and keeps denying after the
+      // removal. Repairing the identity half must not collapse it, and the Scenario-level
+      // suppression this row would otherwise fall under does not apply to a participant who
+      // belongs to no Encounter.
+      expect({ after, before }).toEqual({ after: [], before: [] });
+    });
+
+    it("discloses nothing to a viewer outside the recorded audience when the actor leaves", () => {
+      const current = itemHistoryFixture();
+      current.participants.push(participant("participant-c", "user-c", "Player C"));
+      current.currentEncounter.participants.push({
+        declaration: {
+          actionType: "none",
+          defenseFocus: "none",
+          defensePosture: "none",
+          targetLocation: "any",
+        },
+        facing: "north",
+        id: "encounter-participant-c",
+        initiative: 0,
+        label: "Player C",
+        order: 2,
+        orientation: "neutral",
+        participantType: "scenario",
+        position: { x: 0, y: 0, zone: "center" },
+        scenarioParticipantId: "participant-c",
+      });
+      current.currentEncounter.roleplayState!.visibility["encounter-participant-c"] = {
+        "encounter-participant-a": true,
+        "encounter-participant-b": true,
+      };
+
+      const before = view(current, "user-c").history;
+      removeActorFromRoster(current);
+      const after = view(current, "user-c").history;
+
+      expect({ after, before }).toEqual({ after: [], before: [] });
+    });
   });
 
   it("keeps owned and closed Item history, archived control rules, and other chronology unchanged", () => {

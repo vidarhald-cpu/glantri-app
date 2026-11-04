@@ -9,6 +9,7 @@ import {
 import { projectCombatGenericActionsForPlayer } from "../encounter/combatGenericAction";
 import { buildPlayerSafeCombatScopeForUser } from "../encounter/combatPlayerVisibility";
 import {
+  encounterParticipantSchema,
   encounterStatusSchema,
   isUserAssignedToEncounterMembership,
   isUserEntitledToTerminalEncounterHistory,
@@ -291,6 +292,64 @@ function projectCombatOutcomeSummary(input: {
   });
 }
 
+/**
+ * The Encounter roster an already-resolved Item action is read against (#930).
+ *
+ * A resolved Item action is recorded history, and the Product Owner's architecture statement is
+ * that history is never evaluated against the present. The acting combatant's identity is recorded
+ * twice by the same write: `action.ownerParticipantId` in Encounter-participant space, and the
+ * row's `actorParticipantId` in Scenario-participant space, translated through the roster **in
+ * force at the time**. Re-performing that translation against the roster as it stands *now* was
+ * the breach: removing the actor between rounds made the outcome unreadable to a viewer whose own
+ * participation, control and visibility had not changed at all.
+ *
+ * So the actor's row is taken from the record instead of being looked up again. Nothing is
+ * invented: both ids come from the stored action and the stored row, and the label is the actor's
+ * own Scenario-participant display name, which is where the archived-round projection and the
+ * Combat Log already take a historical label from. The roster is only supplemented, never
+ * overridden — a combatant still in force keeps their live row and everything that depends on it.
+ *
+ * **Visibility stays a separate, live decision.** The restored row is handed to the established
+ * player-safe combat scope exactly like any other, so the GM's per-viewer matrix still decides
+ * whether this viewer may see the actor, and the empty-matrix default is still answered in the one
+ * place that owns it. Identity resolves against the record; entitlement resolves against the live
+ * store. Only the first of those was wrong.
+ */
+function withRecordedItemActionActorOnRoster(input: {
+  action: { ownerParticipantId: string };
+  actor: ScenarioParticipant;
+  encounter: EncounterSession;
+}): EncounterSession {
+  const alreadyInForce = input.encounter.participants.some(
+    (participant) =>
+      participant.id === input.action.ownerParticipantId ||
+      participant.scenarioParticipantId === input.action.ownerParticipantId ||
+      participant.scenarioParticipantId === input.actor.id,
+  );
+  // A roster that names nobody and does not declare itself explicit is resolved from the Scenario
+  // instead, so adding a row to it would not restore an actor — it would decide how the Encounter
+  // chooses its participants. That decision is not this reader's, and the outcome was unreadable
+  // in that shape before this change as well.
+  const wouldChooseTheMembershipSource =
+    input.encounter.participants.length === 0 &&
+    input.encounter.participantMembershipMode !== "explicit";
+  if (alreadyInForce || wouldChooseTheMembershipSource) return input.encounter;
+
+  return {
+    ...input.encounter,
+    participants: [
+      ...input.encounter.participants,
+      encounterParticipantSchema.parse({
+        ...(input.actor.characterId ? { characterId: input.actor.characterId } : {}),
+        id: input.action.ownerParticipantId,
+        label: input.actor.snapshot.displayName,
+        participantType: "scenario",
+        scenarioParticipantId: input.actor.id,
+      }),
+    ],
+  };
+}
+
 function canViewCurrentItemOutcome(
   event: ScenarioEventLog,
   context: ObjectiveHistoryContext | undefined,
@@ -304,29 +363,26 @@ function canViewCurrentItemOutcome(
     .flatMap((round) => round.genericActions)
     .find((entry) => entry.id === payload.actionId);
   if (action?.preset !== "item_interaction" || action.status !== "completed") return false;
-  const owner = encounter.participants.find(
-    (participant) =>
-      participant.id === action.ownerParticipantId ||
-      participant.scenarioParticipantId === action.ownerParticipantId,
+  // The actor the row itself recorded, resolved in the id space the row recorded it in. A row
+  // naming no actor, or naming a participant the Scenario no longer has, still publishes to
+  // nobody.
+  const actor = context.participants.find(
+    (participant) => participant.id === eventActorParticipantId(event),
   );
-  if (
-    !owner?.scenarioParticipantId ||
-    owner.scenarioParticipantId !== eventActorParticipantId(event)
-  ) {
-    return false;
-  }
+  if (!actor) return false;
+  const rosterForRecordedAction = withRecordedItemActionActorOnRoster({ action, actor, encounter });
   const scope = buildPlayerSafeCombatScopeForUser({
     // Terminal history uses the existing read-only relationship interpretation;
     // active-control resolution deliberately rejects an archived Encounter.
     encounter:
-      encounter.status === "archived" &&
+      rosterForRecordedAction.status === "archived" &&
       isUserEntitledToTerminalEncounterHistory({
-        encounter,
+        encounter: rosterForRecordedAction,
         scenarioParticipants: context.participants,
         userId: context.userId,
       })
-        ? { ...encounter, status: "completed" }
-        : encounter,
+        ? { ...rosterForRecordedAction, status: "completed" }
+        : rosterForRecordedAction,
     scenarioParticipants: context.participants,
     userId: context.userId,
   });
