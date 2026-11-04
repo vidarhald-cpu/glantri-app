@@ -115,9 +115,12 @@ import {
   combatStepAutomationStartRequestSchema,
   combatStepAutomationCommandLinkSchema,
   combatNpcDeclarationProposalProvenanceSchema,
+  encounterHeldRosterRefusal,
+  encounterParticipantMembershipModeInForce,
   encounterParticipantMembershipModeSchema,
   encounterParticipantSchema,
   encounterRosterChangeWaitsForRoundBoundary,
+  encounterRostersHoldTheSameCombatants,
   encounterSessionSchema,
   encounterStatusSchema,
   withEncounterRosterForNextRound,
@@ -8447,10 +8450,60 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const body = parseBodyObject(request.body, "Encounter payload");
-      const encounterSession = encounterSessionSchema.parse(body.session);
+      const submittedSession = encounterSessionSchema.parse(body.session);
       const expectedRevision =
-        parseOptionalString(body, "expectedRevision") ?? encounterSession.updatedAt;
+        parseOptionalString(body, "expectedRevision") ?? submittedSession.updatedAt;
       if (!expectedRevision) throw new Error("Refresh the Encounter before saving.");
+      // Combatants enter and leave only between rounds. This route is the second origin for a GM
+      // roster change on this resource, and there is one rule rather than one rule per route, so a
+      // change arriving here waits for the round boundary on exactly the same terms as one
+      // arriving through the roster `PATCH`.
+      //
+      // The shape of the decision differs because this route submits the whole session: it is a
+      // roster change only when the combatants it submits are not the combatants in force. An
+      // ordinary save carrying back the roster it loaded — the Items panel, every roleplay
+      // persist — changes nobody and is written exactly as before.
+      const waitsForRoundBoundary = encounterRosterChangeWaitsForRoundBoundary(existingEncounter);
+      if (waitsForRoundBoundary) {
+        // Refused rather than held, for the reason given on the roster `PATCH`.
+        if (
+          encounterParticipantMembershipModeInForce(submittedSession) !==
+          encounterParticipantMembershipModeInForce(existingEncounter)
+        ) {
+          throw new Error(
+            "Commit round end before changing how this Encounter chooses its participants.",
+          );
+        }
+      }
+      const heldRosterChange =
+        waitsForRoundBoundary &&
+        !encounterRostersHoldTheSameCombatants(
+          submittedSession.participants,
+          existingEncounter.participants,
+        )
+          ? submittedSession.participants
+          : undefined;
+      if (heldRosterChange) {
+        const heldRosterRefusal = encounterHeldRosterRefusal(heldRosterChange);
+        if (heldRosterRefusal) {
+          throw new Error(heldRosterRefusal);
+        }
+      }
+      // The waiting roster is never taken from this route's body. A held change is intent the GM
+      // placed through the roster route, so an ordinary session save can neither forge one nor
+      // drop one: the stored field is carried forward untouched unless this request is itself the
+      // roster change, in which case the submitted roster waits and the roster in force stands.
+      const encounterSession: EncounterSession = heldRosterChange
+        ? {
+            ...submittedSession,
+            participantMembershipMode: existingEncounter.participantMembershipMode,
+            participants: existingEncounter.participants,
+            pendingParticipants: heldRosterChange,
+          }
+        : {
+            ...submittedSession,
+            pendingParticipants: existingEncounter.pendingParticipants,
+          };
       const statusChanged = encounterSession.status !== existingEncounter.status;
       const itemReferencesChanged =
         JSON.stringify(encounterSession.itemReferences ?? []) !==
@@ -8674,25 +8727,26 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         throw new Error("Refresh the Encounter before changing participants.");
       }
       // Combatants enter and leave only between rounds, so a change made part-way through a round
-      // is held and replaces the roster at the round boundary. This is the only gate: the decision
-      // belongs where the change originates, not in whatever surface offered the control.
+      // is held and replaces the roster at the round boundary. The decision belongs where the
+      // change originates, so every origin on this resource applies it — see the `PUT` above.
       const waitsForRoundBoundary = encounterRosterChangeWaitsForRoundBoundary(existingEncounter);
       if (waitsForRoundBoundary) {
-        // The held roster is refused now if it could never take effect, rather than failing the
-        // round-end commit later. These are the structural conditions an active Encounter roster
-        // must satisfy; the database-level conditions it also satisfies are rechecked when the
-        // roster is actually written, and can still have changed by then.
-        const heldScenarioParticipantIds = body.participants.map(
-          (participant) => encounterParticipantSchema.parse(participant).scenarioParticipantId,
-        );
-        if (heldScenarioParticipantIds.some((participantId) => !participantId)) {
-          throw new Error("Every Encounter participant must belong to the Scenario.");
-        }
+        // Only the roster waits. The membership mode decides how the roster in force is chosen, so
+        // a mode submitted part-way through a round would govern nothing that can change yet, and
+        // holding it would hand the round-end commit a mode an active Encounter cannot carry.
+        // Refuse it instead of accepting a change and then dropping it.
         if (
-          heldScenarioParticipantIds.length === 0 ||
-          new Set(heldScenarioParticipantIds).size !== heldScenarioParticipantIds.length
+          participantMembershipMode !== encounterParticipantMembershipModeInForce(existingEncounter)
         ) {
-          throw new Error("Choose one or more distinct Scenario participants.");
+          throw new Error(
+            "Commit round end before changing how this Encounter chooses its participants.",
+          );
+        }
+        const heldRosterRefusal = encounterHeldRosterRefusal(
+          body.participants.map((participant) => encounterParticipantSchema.parse(participant)),
+        );
+        if (heldRosterRefusal) {
+          throw new Error(heldRosterRefusal);
         }
       }
       const encounterSession = encounterSessionSchema.parse(

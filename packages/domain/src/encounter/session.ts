@@ -526,6 +526,89 @@ export function encounterRosterChangeWaitsForRoundBoundary(encounter: {
 }
 
 /**
+ * Which combatants an Encounter roster holds, as a value two rosters can be compared on.
+ *
+ * The ruling is about entering and leaving combat, so a roster change is a change to *who* is
+ * present. `declaration`, `facing`, `initiative`, `label`, `order`, `orientation` and `position`
+ * describe a combatant already in play and change freely during a round; the fields here are the
+ * ones that say which combatant a row is. Order is not part of it either: re-ordering a roster
+ * adds and removes nobody.
+ *
+ * Built from an array rather than an object so the comparison cannot turn on key order.
+ */
+function encounterRosterMembership(participants: EncounterParticipant[]): string {
+  return JSON.stringify(
+    participants
+      .map((participant) =>
+        JSON.stringify([
+          participant.participantType,
+          participant.id,
+          participant.scenarioParticipantId ?? null,
+          participant.characterId ?? null,
+          participant.adHocName ?? null,
+        ]),
+      )
+      .sort(),
+  );
+}
+
+/**
+ * Whether two Encounter rosters hold the same combatants — nobody has entered and nobody has left.
+ *
+ * This is what makes the between-rounds rule one rule rather than one rule per route. A route that
+ * submits a whole Encounter session, rather than a roster, asks this to tell a GM roster change
+ * from an ordinary save that happens to carry the roster it loaded.
+ */
+export function encounterRostersHoldTheSameCombatants(
+  one: EncounterParticipant[],
+  other: EncounterParticipant[],
+): boolean {
+  return encounterRosterMembership(one) === encounterRosterMembership(other);
+}
+
+/**
+ * The membership mode governing the roster in force.
+ *
+ * An absent mode behaves as `explicit`, which is both what the roster routes have always defaulted
+ * to and what an active Encounter is required to carry.
+ */
+export function encounterParticipantMembershipModeInForce(encounter: {
+  participantMembershipMode?: EncounterParticipantMembershipMode;
+}): EncounterParticipantMembershipMode {
+  return encounter.participantMembershipMode ?? "explicit";
+}
+
+/**
+ * Why a roster held for the round boundary could never take effect, or `undefined` when it could.
+ *
+ * A held roster is refused when it is submitted rather than when the boundary tries to write it,
+ * so the GM is told at the point they can still do something about it and the round-end commit is
+ * not left unable to advance. These are the structural conditions an active Encounter roster must
+ * satisfy; the database-level conditions it also satisfies are rechecked when the roster is
+ * actually written, and can still have changed by then.
+ */
+export function encounterHeldRosterRefusal(
+  participants: EncounterParticipant[],
+): string | undefined {
+  const scenarioParticipantIds = participants.map(
+    (participant) => participant.scenarioParticipantId,
+  );
+
+  if (scenarioParticipantIds.some((participantId) => !participantId)) {
+    return "Every Encounter participant must belong to the Scenario.";
+  }
+
+  if (
+    scenarioParticipantIds.length === 0 ||
+    new Set(scenarioParticipantIds).size !== scenarioParticipantIds.length
+  ) {
+    return "Choose one or more distinct Scenario participants.";
+  }
+
+  return undefined;
+}
+
+/**
  * The Encounter roster fields to persist when the round-end commit crosses into the next round.
  *
  * This is the one point that reads the waiting roster. It replaces the roster in force and stops
