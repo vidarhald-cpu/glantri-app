@@ -95,6 +95,7 @@ import {
   initializeCombatRoundState,
   interruptCombatRoundMissileReadiness,
   isCombatRoundCombatExperienceWindowOpen,
+  isCombatRoundCommittedInitiativeEntryPublished,
   isCombatRoundEndReviewComplete,
   isCombatRoundPhaseCombatExperienceRollRequired,
   isCombatRoundPhaseInitiativeResolutionOpen,
@@ -190,8 +191,10 @@ import {
 } from "./combatModifierLifecycle";
 import type { CombatModifierContribution } from "./combatModifierContributions";
 import {
+  COMBAT_PROGRESSION_BOUNDARIES,
   advanceCombatProgressionBoundary,
   buildCombatProgressionProjection,
+  isCombatInitiativeCommitted,
 } from "./combatProgressionProjection";
 import {
   resolveCombatAttackPhaseDefensivePenalties,
@@ -24020,5 +24023,349 @@ describe("#875 — committing initiative records the order it committed", () => 
     expect(Object.hasOwn(stored, "committedInitiativeOrders")).toBe(false);
     expect(() => combatRoundStateSchema.parse(stored)).not.toThrow();
     expect(combatRoundStateSchema.parse(stored).committedInitiativeOrders).toEqual([]);
+  });
+});
+
+/**
+ * #894 — the stored publication flag describes the state the commit produces.
+ *
+ * Product Owner ruling of 2026-11-03 (revised): the flag is the existing canonical predicate
+ * `isCombatInitiativeCommitted` evaluated against the resulting workflow state, not
+ * `published = roll exists`, and not the predicate against the pre-transition state.
+ *
+ * The level each criterion is proven at, and why:
+ *
+ * - **Criterion 1** (rolled before the publication boundary is not published) is proven at the
+ *   **evaluation** level. Every reachable commit path advances past `phase1_initiative` /
+ *   `phase2_initiative` — enumerated and asserted below — so no stored record can predate its own
+ *   publication boundary. Fabricating one would be a correct measurement of a position the game
+ *   cannot occupy, so the rule is measured where it is real: the pre-commit boundary that the state
+ *   the commit receives genuinely stands on, read out of the production projection rather than
+ *   written down.
+ * - **Criteria 2 and 3** are proven at the **record** level, on the entries a real commit writes.
+ * - **Criterion 4** is per-viewer visibility and is proven in `combatPlayerVisibility.test.ts`
+ *   against `roleplayState.visibility`, the store production writes, with two participations.
+ */
+describe("#894 — the committed order records the publication state the commit produces", () => {
+  const participants = [
+    participant({ id: "alpha", label: "Alpha" }),
+    participant({ id: "beta", label: "Beta" }),
+    participant({ id: "gamma", label: "Gamma" }),
+  ];
+
+  /** Declarations for all three, then standing on the given phase's initiative step. */
+  function atInitiative(phase: "phase1" | "phase2") {
+    let state = initializeCombatRoundState({ encounter: encounter({ participants }) });
+    for (const id of ["alpha", "beta", "gamma"]) {
+      state = declareTestRoundAction({
+        participantId: id,
+        phase1Target: id === "alpha" ? "beta" : "alpha",
+        phase2Target: id === "alpha" ? "beta" : "alpha",
+        state,
+      });
+    }
+    return advanceToStep(state, phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2");
+  }
+
+  function withInitiative(
+    state: ReturnType<typeof initializeCombatRoundState>,
+    phase: "phase1" | "phase2",
+    totals: Record<string, number>,
+  ) {
+    let next = state;
+    for (const [participantId, total] of Object.entries(totals)) {
+      next = recordCombatRoundInitiative({
+        command: { createdAt: "2026-01-01T00:02:00.000Z", createdByUserId: "gm-1" },
+        initiative: {
+          baseInitiative: 0,
+          modifierAdjustment: 0,
+          rolls: [total],
+          rollTotal: total,
+          total,
+        },
+        participantId,
+        phase,
+        state: next,
+        submittedBy: "gm",
+      });
+    }
+    return next;
+  }
+
+  /** The boundary a state stands on, as the production projection reports it. */
+  function boundaryOf(state: ReturnType<typeof initializeCombatRoundState>) {
+    return buildCombatProgressionProjection(state).boundary.kind;
+  }
+
+  function isPastInitiativeBoundary(
+    boundary: ReturnType<typeof boundaryOf>,
+    phase: "phase1" | "phase2",
+  ) {
+    const initiativeBoundary = phase === "phase1" ? "phase1_initiative" : "phase2_initiative";
+    return (
+      COMBAT_PROGRESSION_BOUNDARIES.indexOf(boundary) >
+      COMBAT_PROGRESSION_BOUNDARIES.indexOf(initiativeBoundary)
+    );
+  }
+
+  const rolledPhase1 = () =>
+    withInitiative(atInitiative("phase1"), "phase1", { alpha: 3, beta: 6 });
+
+  function commitPhase1(state: ReturnType<typeof initializeCombatRoundState>) {
+    return commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      nonParticipatingParticipantIds: new Set(["gamma"]),
+      phase: "phase1",
+      state,
+    });
+  }
+
+  it("CRITERION 1, evaluation level — a rolled total at the pre-commit boundary is unpublished", () => {
+    const rolled = rolledPhase1();
+    // The boundary is read out of the state the commit is actually handed, not asserted from a
+    // literal, so this is the rule measured at a position the game really occupies.
+    const preCommitBoundary = boundaryOf(rolled);
+    expect(preCommitBoundary).toBe("phase1_initiative");
+    const betaRoll = rolled.participants.find((entry) => entry.participantId === "beta")
+      ?.initiatives.phase1;
+
+    // The roll exists — so an implementation reading "a roll exists" would publish here.
+    expect(betaRoll?.total).toBe(6);
+    expect(
+      isCombatRoundCommittedInitiativeEntryPublished({
+        afterCommitBoundary: preCommitBoundary,
+        initiativeResult: betaRoll,
+        phase: "phase1",
+      }),
+    ).toBe(false);
+    // And it is the canonical predicate that says so, not a second rule written here.
+    expect(
+      isCombatInitiativeCommitted({
+        boundary: preCommitBoundary,
+        historical: false,
+        step: "initiative_phase_1",
+      }),
+    ).toBe(false);
+  });
+
+  it("CRITERION 2, record level — the same roll is published by the commit that advances past it", () => {
+    const rolled = rolledPhase1();
+    const committed = commitPhase1(rolled);
+    const producedBoundary = boundaryOf(committed.state);
+
+    // The transition the commit made, and that it really crossed the publication boundary.
+    expect(boundaryOf(rolled)).toBe("phase1_initiative");
+    expect(producedBoundary).toBe("phase1_resolution");
+    expect(isPastInitiativeBoundary(producedBoundary, "phase1")).toBe(true);
+
+    // Atomic: the state handed in carries no record, and the one state returned carries both the
+    // advanced cursor and the record describing it. Nothing is written and read back.
+    expect(rolled.committedInitiativeOrders).toEqual([]);
+    expect(committed.state.currentCursor?.step).toBe("A1");
+    const record = committed.state.committedInitiativeOrders.at(-1);
+    expect(record?.commandId).toBe(committed.command.id);
+    expect(record?.entries.find((entry) => entry.participantId === "beta")).toEqual({
+      initiativePublished: true,
+      initiativeResult: {
+        baseInitiative: 0,
+        modifierAdjustment: 0,
+        rolls: [6],
+        rollTotal: 6,
+        total: 6,
+      },
+      participantId: "beta",
+    });
+
+    // Every stored flag equals the canonical rule read against the boundary the commit produced.
+    for (const entry of record?.entries ?? []) {
+      expect(entry.initiativePublished).toBe(
+        isCombatRoundCommittedInitiativeEntryPublished({
+          afterCommitBoundary: producedBoundary,
+          initiativeResult: entry.initiativeResult,
+          phase: "phase1",
+        }),
+      );
+    }
+  });
+
+  it("CRITERION 3, record level — a participant with no roll is unpublished at a published boundary", () => {
+    const committed = commitPhase1(rolledPhase1());
+    const producedBoundary = boundaryOf(committed.state);
+    const gamma = committed.state.committedInitiativeOrders
+      .at(-1)
+      ?.entries.find((entry) => entry.participantId === "gamma");
+
+    // Non-vacuous: the phase itself IS published at this boundary, so the `false` below is the
+    // absent total doing the work rather than an unpublished phase.
+    expect(
+      isCombatInitiativeCommitted({
+        boundary: producedBoundary,
+        historical: false,
+        step: "initiative_phase_1",
+      }),
+    ).toBe(true);
+    expect(gamma?.initiativeResult).toBeUndefined();
+    expect(gamma?.initiativePublished).toBe(false);
+  });
+
+  it("publishes a phase-2 commit on the phase-2 step, which the phase-1 boundary does not", () => {
+    const afterPhase1 = commitPhase1(rolledPhase1()).state;
+    const atPhase2 = advanceToStep(afterPhase1, "initiative_phase_2");
+    const rolled = withInitiative(atPhase2, "phase2", { alpha: 5, beta: 1, gamma: 4 });
+
+    // Phase 1 is long past, yet the phase-2 step is still unpublished at the phase-2 boundary.
+    expect(boundaryOf(rolled)).toBe("phase2_initiative");
+    expect(
+      isCombatInitiativeCommitted({
+        boundary: "phase2_initiative",
+        historical: false,
+        step: "initiative_phase_2",
+      }),
+    ).toBe(false);
+
+    const committed = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase2",
+      state: rolled,
+    });
+    expect(boundaryOf(committed.state)).toBe("phase2_resolution");
+    expect(
+      committed.state.committedInitiativeOrders
+        .at(-1)
+        ?.entries.map((entry) => [entry.participantId, entry.initiativePublished]),
+    ).toEqual([
+      ["alpha", true],
+      ["gamma", true],
+      ["beta", true],
+    ]);
+  });
+
+  /**
+   * The premise criterion 1's level rests on. If a commit path is ever added that does not advance
+   * past the initiative boundary, this is the test that says so — and `false` then becomes the
+   * correct stored value on that path, with no change to the rule.
+   */
+  it("every reachable commit path produces a boundary strictly past the initiative boundary", () => {
+    const measured: Array<[string, ReturnType<typeof boundaryOf>]> = [];
+
+    // Rolled totals, phase 1.
+    const rolled = commitPhase1(rolledPhase1()).state;
+    measured.push(["phase1 rolled", boundaryOf(rolled)]);
+
+    // `bulk_skipped`: `completeRemainingCombatRoundStep` writes a real initiative result with
+    // total 0, so these entries have a total and the boundary alone decides them.
+    const bulk = completeRemainingCombatRoundStep({
+      command: { createdAt: "2026-01-01T00:02:30.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: atInitiative("phase1"),
+    });
+    expect(
+      bulk.state.participants.map((entry) => {
+        const initiative = entry.initiatives.phase1;
+        return initiative && "resolutionType" in initiative ? initiative.resolutionType : undefined;
+      }),
+    ).toEqual(["bulk_skipped", "bulk_skipped", "bulk_skipped"]);
+    const bulkCommitted = commitCombatRoundPhaseInitiativeResolution({
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      phase: "phase1",
+      state: bulk.state,
+    });
+    measured.push(["phase1 bulk_skipped", boundaryOf(bulkCommitted.state)]);
+    expect(
+      bulkCommitted.state.committedInitiativeOrders
+        .at(-1)
+        ?.entries.every((entry) => entry.initiativePublished),
+    ).toBe(true);
+
+    // No declared action anywhere, so the phase opens with no executable action work at all and
+    // `initializeCombatRoundPhaseResolutionCursor` falls through to phase completion.
+    for (const phase of ["phase1", "phase2"] as const) {
+      const bare = advanceToStep(
+        initializeCombatRoundState({ encounter: encounter({ participants }) }),
+        phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2",
+      );
+      const committed = commitCombatRoundPhaseInitiativeResolution({
+        command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+        nonParticipatingParticipantIds: new Set(["alpha", "beta", "gamma"]),
+        phase,
+        state: bare,
+      });
+      measured.push([`${phase} no action work`, boundaryOf(committed.state)]);
+    }
+
+    // The Combat-Experience branch, which the source comment on
+    // `buildCombatRoundCommittedInitiativeOrder` names. When
+    // `getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId` returns a participant,
+    // `afterCommitCursor` is built from `getCombatRoundPhaseActionStepForPhase` instead of the
+    // command's own after-cursor. It is the only branch of `afterCommitCursor` with its own cursor
+    // derivation, so it is the branch a future short-of-boundary path would most likely arrive on,
+    // and it is watched here rather than only asserted in prose.
+    const combatExperienceCursorSteps: Array<[string, string | undefined]> = [];
+    const combatExperienceRecords: Array<Array<[string, boolean]>> = [];
+    for (const phase of ["phase1", "phase2"] as const) {
+      const visibility = { gladiator: { guard: true }, guard: { gladiator: true } };
+      const committed = commitPreparedPhaseInitiative({
+        phase,
+        state: preparePhaseInitiativeCompleteState({
+          actionId: phase === "phase1" ? "attack_parry" : "parry_attack",
+          gladiatorInitiative: 6,
+          guardInitiative: 4,
+          phase,
+        }),
+        visibility,
+      });
+
+      // That this case really stands on that branch rather than silently drifting onto the
+      // ordinary path: Combat Experience is required of a participant, and the returned state
+      // carries the branch's signature — `phaseResolutionCursor` cleared. Both still hold if the
+      // branch's own cursor derivation changes, so the boundary below is what reports that.
+      expect(
+        getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId({
+          phase,
+          state: committed,
+          visibility,
+        }),
+      ).toBe("gladiator");
+      expect(committed.phaseResolutionCursor).toBeUndefined();
+      measured.push([`${phase} Combat Experience required`, boundaryOf(committed)]);
+      combatExperienceCursorSteps.push([phase, committed.currentCursor?.step]);
+      combatExperienceRecords.push(
+        (committed.committedInitiativeOrders.at(-1)?.entries ?? []).map((entry) => [
+          entry.participantId,
+          entry.initiativePublished,
+        ]),
+      );
+    }
+
+    expect(measured).toEqual([
+      ["phase1 rolled", "phase1_resolution"],
+      ["phase1 bulk_skipped", "phase1_resolution"],
+      ["phase1 no action work", "phase1_resolution"],
+      ["phase2 no action work", "phase2_resolution"],
+      ["phase1 Combat Experience required", "phase1_resolution"],
+      ["phase2 Combat Experience required", "phase2_resolution"],
+    ]);
+
+    // The cursor that branch derives for itself, and the record it writes at the boundary above.
+    expect(combatExperienceCursorSteps).toEqual([
+      ["phase1", "A1"],
+      ["phase2", "A2"],
+    ]);
+    expect(combatExperienceRecords).toEqual([
+      [
+        ["gladiator", true],
+        ["guard", true],
+      ],
+      [
+        ["gladiator", true],
+        ["guard", true],
+      ],
+    ]);
+    for (const [label, boundary] of measured) {
+      expect(
+        isPastInitiativeBoundary(boundary, label.startsWith("phase1") ? "phase1" : "phase2"),
+        label,
+      ).toBe(true);
+    }
   });
 });
