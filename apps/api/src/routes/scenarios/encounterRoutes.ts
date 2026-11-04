@@ -7791,10 +7791,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           request.headers[ACTIVE_COMBAT_MUTATION_RESPONSE_HEADER],
         ),
         payload,
-        // #925. This hook runs after the handler that knew who was asking, so it has no viewer to
-        // declare. The handlers that build an envelope put it in the payload and this adapter
-        // passes it through untouched; the viewer below is only reached by the fallback for a
-        // payload that carries none, and it is entitled to nobody.
+        /*
+         * #925. This hook runs after the handler that knew who was asking, so it has no viewer to
+         * declare. The handlers that build an envelope put it in the payload and this adapter
+         * passes it through untouched; the viewer below is only reached by the fallback for a
+         * payload that carries none, and it is entitled to nobody.
+         *
+         * Consequence, recorded rather than absorbed: on that fallback the synthesised
+         * `latestEvent` is now withheld for **every** viewer, the GM included. Nothing is newly
+         * disclosed — the fallback builds its envelope from the active state with the archived
+         * rounds already stripped, so it never carried the #925 finding — and no surface reads the
+         * field. The honest fix is for those handlers to build their own envelope, which is a
+         * change across roughly forty-seven of them. Letting a serialization hook assert a GM
+         * viewer is the shape this repair exists to remove, so it is not done here.
+         */
         viewer: UNATTRIBUTED_COMBAT_ROUND_COMMAND_ENVELOPE_VIEWER,
       }),
     );
