@@ -86,7 +86,9 @@ import {
  *   value itself stays in `weaponDmb`, which that schema requires to equal the roll's total.
  *
  * The player-facing attack result names neither. Player output that carries an attack result's
- * fields outside that schema removes both with `withoutAttackResultWorkbookImportProvenance`.
+ * fields in an open record no schema enumerates removes both with
+ * `withoutAttackResultWorkbookImportProvenance`; output that has a player-facing schema is built
+ * from it instead (#922 repair cycle 1 — see that helper).
  */
 export const ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS = [
   "weaponDmbRoll",
@@ -96,7 +98,15 @@ export const ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS = [
 /**
  * An attack result, or an event fact bucket copied from one, without
  * `ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS`: for player output that is not parsed through
- * the player-facing attack result — the combat history's event facts and the roll-attack response.
+ * the player-facing attack result — **the combat history's open event fact buckets**, which are
+ * privacy Tier 4's (#528) and the one remaining caller.
+ *
+ * The roll-attack response used this too until #922 repair cycle 1, and that is why it stopped:
+ * removing named fields leaves every other field of the stored shape in player output, including
+ * every field added later. One such field reached the attacking player on both of that route's
+ * response contracts. The route's own attack shapes now go through the player-facing schemas that
+ * name their fields. This helper survives only where the output is an open record no schema
+ * enumerates yet, and it is not the thing to reach for on a shape that has one.
  */
 export function withoutAttackResultWorkbookImportProvenance<Attack extends object>(
   attack: Attack,

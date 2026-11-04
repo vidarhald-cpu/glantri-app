@@ -511,7 +511,7 @@ export function getCombatModifierRowsVisibleAtStep(
  * where it used to return the base unchanged past the grid's last authored row, it now returns an
  * extrapolated figure. Measured delta, base `a14c5c73` against the first #922 candidate:
  * `{baseValue: 9, rawModifier: -20}` returned 9 and now returns −11; `{9, -16}` returned 9 and now
- * returns −7; `{60, -3}` returned 60 and now returns 42; `{9, -15}` is 6 at both heads. So a
+ * returns −7; `{60, -3}` returned 60 and now returns 42; `{9, -15}` is −6 at both heads. So a
  * displayed combat figure changed value at exactly the inputs #922 is about, and the Product
  * Owner's ruling says every extrapolation is flagged for review.
  *
