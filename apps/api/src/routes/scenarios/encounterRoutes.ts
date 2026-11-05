@@ -107,6 +107,8 @@ import {
   CanonicalCombatModifierReviewError,
   canonicalCombatModifierEffectSchema,
   canonicalCombatModifierReviewTransactionSchema,
+  clearSupersededGmFigureMarks,
+  combatContextHasSupersededGmFigure,
   commitCanonicalCombatModifierReview,
   combatAttackSourceRefSchema,
   combatDistanceSchema,
@@ -5107,7 +5109,11 @@ function getStraightforwardStepAutomationModifierReview(input: {
     roundNumber: input.state.roundNumber,
     scenarioParticipantId: input.participant.id,
   });
+  // #931. A review that was re-offered because a rule event superseded the GM's figure exists so
+  // the GM decides again. Automation must not commit it unchanged, which would end the mark with
+  // no GM decision behind it.
   const straightforward =
+    !combatContextHasSupersededGmFigure(currentContext, input.task.identity.phase) &&
     getCanonicalCombatModifierReviewState(review) === "ready" &&
     review.automaticProposals.every((proposal) => !proposal.mayOverride) &&
     review.decisions.length === 0 &&
@@ -9343,15 +9349,42 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           type: commandType,
         });
+        // #931. This commit is the GM's decision on the reviewed phase, so it ends any rule
+        // supersession mark that phase's rows carry: the retained figure and the note suffix. It
+        // clears nothing else, and never a value, so the GM's figure is whatever the submission
+        // carries, the superseded figure included.
+        const reviewedPhase = commandType === "review_modifiers_phase1" ? "phase1" : "phase2";
+        const clearReviewedPhaseMarks = (context: ScenarioParticipantCombatContext | undefined) =>
+          context
+            ? clearSupersededGmFigureMarks({
+                combatContext: scenarioParticipantCombatContextSchema.parse(context),
+                phase: reviewedPhase,
+              })
+            : undefined;
+        submittedCombatContext = clearReviewedPhaseMarks(submittedCombatContext)!;
+        const reviewedPhaseContexts = {
+          phase1:
+            reviewedPhase === "phase1"
+              ? clearReviewedPhaseMarks(
+                  submittedPhaseContexts?.phase1 ?? declaration.phaseContexts?.phase1,
+                )
+              : (submittedPhaseContexts?.phase1 ?? declaration.phaseContexts?.phase1),
+          phase2:
+            reviewedPhase === "phase2"
+              ? clearReviewedPhaseMarks(
+                  submittedPhaseContexts?.phase2 ?? declaration.phaseContexts?.phase2,
+                )
+              : (submittedPhaseContexts?.phase2 ?? declaration.phaseContexts?.phase2),
+        };
         const canonicalCutoff =
           roundState.events.reduce((maximum, event) => Math.max(maximum, event.sequence), 0) + 1;
         const modifierReview = buildCanonicalCombatModifierReviewFromDraft({
           canonicalCutoff,
           commandId,
           createdAt: submittedAt,
-          currentContext: scenarioParticipantCombatContextSchema.parse(
+          currentContext: clearReviewedPhaseMarks(
             declaration.combatContext ?? existingCombatContext,
-          ),
+          )!,
           draftContext: submittedCombatContext,
           encounterId: encounter.id,
           participantState: scenarioParticipant.state,
@@ -9378,10 +9411,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           declaration: {
             ...declaration,
             combatContext: submittedCombatContext,
-            phaseContexts: {
-              phase1: submittedPhaseContexts?.phase1 ?? declaration.phaseContexts?.phase1,
-              phase2: submittedPhaseContexts?.phase2 ?? declaration.phaseContexts?.phase2,
-            },
+            phaseContexts: reviewedPhaseContexts,
             submittedAt,
             submittedByUserId: user.id,
           },

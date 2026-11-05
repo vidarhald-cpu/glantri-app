@@ -2983,3 +2983,84 @@ describe("#863 V2 — declaration content after the step closes, committed damag
     );
   });
 });
+
+/**
+ * #931. A declaration event records its `phaseContexts` whole into `involvedOutcome`, which an
+ * `involved` viewer receives — and the declaring player is one. A by-response-key sweep of real
+ * player reads measured `supersededGmFigure` arriving there, four levels down. The Product Owner's
+ * ruling (comment 21255) is that the supersession is GM workflow and reaches no player; the
+ * disposition on comment 21269 authorizes keeping this lane's own field out of the bucket without
+ * narrowing the bucket, which stays #528's.
+ */
+describe("the superseded GM figure never reaches a player through an event fact bucket (#931)", () => {
+  const supersededRow = {
+    application: "percentage",
+    generated: true,
+    id: "generated:attack-phase-penalty:round:1:participant:aria:phase2:attack_2:db-parry",
+    notes: "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+    scope: "until",
+    sourceActionId: "double_attack",
+    sourcePhase: "phase2",
+    supersededGmFigure: { text: "committed weapon attack: DB/Parry -4% in phase2", value: -1 },
+    value: -2,
+  };
+
+  const declarationWithSupersededRow = () =>
+    event({
+      actorParticipantId: "aria",
+      facts: {
+        gmReview: {},
+        involvedOutcome: {
+          actionId: "double_attack",
+          phaseContexts: {
+            phase2: {
+              modifierBuckets: {
+                general: [],
+                situationDb: [supersededRow],
+                situationInitiative: [],
+                situationObSkill: [],
+              },
+            },
+          },
+        },
+        publicOutcome: { actionLabel: "Double Attack" },
+        rollerPrivate: {},
+      },
+      ownerParticipantId: "aria",
+      step: "select_actions",
+      type: "declaration",
+      visibility: {
+        identityRefs: [{ participantId: "aria", role: "actor" }],
+        involvedParticipantIds: ["aria"],
+        outcomeScope: "involved",
+      },
+    });
+
+  it("keeps it for the GM and removes it for the declaring player", () => {
+    const declaration = declarationWithSupersededRow();
+    // The instrument is alive: the event really carries the figure before projection.
+    expect(JSON.stringify(declaration)).toContain("supersededGmFigure");
+
+    const gm = projectCombatHistoryEvent({
+      event: declaration,
+      participants,
+      viewer: { kind: "gm" },
+    });
+    const own = projectCombatHistoryEvent({
+      event: declaration,
+      participants,
+      viewer: player(["aria"], ["aria", "borin"]),
+    });
+
+    // The GM's own read is unchanged: the figure is still there, and so is the rest of the bucket.
+    expect(JSON.stringify(gm)).toContain("supersededGmFigure");
+    expect(gm?.facts.involvedOutcome).toBeDefined();
+
+    // The declaring player receives the bucket, and the row, without the figure.
+    expect(own?.facts.involvedOutcome).toBeDefined();
+    expect(JSON.stringify(own)).not.toContain("supersededGmFigure");
+    expect(JSON.stringify(own)).toContain(
+      "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+    );
+  });
+});

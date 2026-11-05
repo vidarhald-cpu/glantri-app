@@ -293,6 +293,75 @@ describe("buildScenarioPlayerProjection", () => {
     ).not.toHaveProperty("canonicalLifecycle");
   });
 
+  it("does not hand the controlling player the figure a rule event superseded (#931)", () => {
+    // This projection sanitises the combat context with a denylist, so a new entry field reaches
+    // the player by default. A real player read measured `supersededGmFigure` arriving here, and
+    // the ruling on #931 comment 21255 is that the supersession is GM workflow: the player sees
+    // the resulting figure, never that the GM had entered another one.
+    const supersededRow = {
+      application: "percentage" as const,
+      generated: true,
+      id: "generated:attack-phase-penalty:round:1:participant:participant-1:phase2:attack_2:db-parry",
+      notes: "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+      scope: "until" as const,
+      sourceActionId: "double_attack",
+      sourcePhase: "phase2" as const,
+      supersededGmFigure: { text: "committed weapon attack: DB/Parry -4% in phase2", value: -1 },
+      value: -2,
+    };
+    // The instrument is alive: the stored row really does carry the figure.
+    expect(supersededRow).toHaveProperty("supersededGmFigure");
+
+    const projection = buildScenarioPlayerProjection({
+      participants: [
+        createParticipant({
+          controlledByUserId: "player-1",
+          displayName: "Ser Caldus",
+          id: "participant-1",
+          role: "player_character",
+          state: {
+            combat: {
+              combatContext: {
+                modifierBuckets: {
+                  general: [],
+                  situationDb: [supersededRow],
+                  situationInitiative: [],
+                  situationObSkill: [],
+                },
+              },
+              engaged: false,
+            },
+            conditions: [],
+            equipment: {},
+            health: {
+              bleeding: 0,
+              currentHp: 8,
+              dead: false,
+              maxHp: 10,
+              unconscious: false,
+              wounds: 0,
+            },
+            modifiers: [],
+            resources: {},
+            snapshotVersion: 1,
+          } as ScenarioParticipant["state"],
+        }),
+      ],
+      scenario,
+      userId: "player-1",
+      viewerMode: "player",
+    });
+
+    const row = projection.controlledParticipant?.combatContext?.modifierBuckets.situationDb[0];
+    expect(row).not.toHaveProperty("supersededGmFigure");
+    // Nowhere else in the body either, and the row the player is entitled to is untouched.
+    expect(JSON.stringify(projection)).not.toContain("supersededGmFigure");
+    expect(row).toMatchObject({
+      notes: "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+      value: -2,
+    });
+  });
+
   it("returns a safe no-assignment projection when the user controls no active scenario participant", () => {
     const projection = buildScenarioPlayerProjection({
       participants: [

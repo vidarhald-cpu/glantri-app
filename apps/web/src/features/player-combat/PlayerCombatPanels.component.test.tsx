@@ -2,7 +2,12 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { canonicalCombatModifierEffectSchema } from "@glantri/domain";
+import {
+  canonicalCombatModifierEffectSchema,
+  scenarioParticipantCombatContextSchema,
+  supersedeGmCommittedAttackPhasePenaltyRows,
+  SUPERSEDED_GM_FIGURE_NOTE_MARKER,
+} from "@glantri/domain";
 
 import type { CombatSituationLifecycleEffect } from "./combatSituationAwareness";
 import { buildPlayerCombatLoadoutSummary } from "./playerCombatPhaseModel";
@@ -1091,6 +1096,101 @@ describe("PlayerCombatModifierPanel", () => {
       value: 3,
     });
     expect(onRemoveEntry).toHaveBeenCalledWith("situation_initiative", "manual-initiative");
+  });
+});
+
+describe("a row a rule event superseded, read through the Details path (#931)", () => {
+  // The row the Double Attack cancel writes after the GM committed -1: the rule's -2 with the
+  // GM's figure retained. It is produced by the same pure function the rule writer calls, so what
+  // is rendered is what the server stores.
+  //
+  // Since the ruling on #931 comment 21255 the Details cell carries NOTHING about the
+  // supersession. A rendered reading measured the note clipped before the mark at 768, 1024 and
+  // 1440 CSS px, and `notes` is on the player allowlist while the supersession is GM workflow.
+  // The signal is the re-offered task label, bound in
+  // `features/combat-history/view-models/currentActionPresentation.test.ts`. What this file binds
+  // is the other half: the Details cell stays the row's own text and leaks nothing.
+  function supersededRow() {
+    const row = (value: number, notes: string) => ({
+      application: "percentage" as const,
+      generated: true,
+      id: "generated:attack-phase-penalty:round:1:participant:enc-d:phase2:attack_2:db-parry",
+      notes,
+      scope: "until" as const,
+      sourceActionId: "double_attack",
+      sourcePhase: "phase2" as const,
+      sourceRule: "attack-phase-defensive-penalty:double_attack_second_cancelled",
+      value,
+    });
+    const contextOf = (entry: ReturnType<typeof row>) =>
+      scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: { situationDb: [entry] },
+      });
+    const { combatContext } = supersedeGmCommittedAttackPhasePenaltyRows({
+      next: contextOf(row(-2, "Double Attack second attack cancelled: DB/Parry -2% in phase2")),
+      phase: "phase2",
+      previous: contextOf(row(-1, "committed weapon attack: DB/Parry -4% in phase2")),
+    });
+    return combatContext.modifierBuckets.situationDb[0]!;
+  }
+
+  const rowsFor = (entry: ReturnType<typeof supersededRow>) => [
+    {
+      bucketKey: "situation_db" as const,
+      entries: [entry],
+      label: "DB/Parry",
+      total: entry.value,
+    },
+  ];
+
+  it("keeps the supersession out of the Details cell and off the row's text", () => {
+    const entry = supersededRow();
+    // Retained structurally, and nowhere in the text.
+    expect(entry.supersededGmFigure).toEqual({
+      text: "committed weapon attack: DB/Parry -4% in phase2",
+      value: -1,
+    });
+    expect(entry.notes).toBe("Double Attack second attack cancelled: DB/Parry -2% in phase2");
+
+    // The GM's review surface: the editable modifier panel, whose Details cell is the row's note.
+    const editable = render(
+      <PlayerCombatModifierPanel
+        onAddEntry={vi.fn()}
+        onRemoveEntry={vi.fn()}
+        onUpdateEntry={vi.fn()}
+        rows={rowsFor(entry)}
+      />,
+    );
+    const details = screen.getByLabelText("DB/Parry modifier details") as HTMLInputElement;
+    expect(details.value).toBe("Double Attack second attack cancelled: DB/Parry -2% in phase2");
+    expect(details.value).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+    expect(details.value).not.toMatch(/supersed/i);
+    expect(details.value).not.toContain("review again");
+    // The rule's number is the one in force and the GM can still edit it.
+    expect(screen.getByLabelText("DB/Parry modifier value")).toHaveValue(-2);
+    // Nothing anywhere in the rendered panel names the superseded figure.
+    expect(editable.container.textContent ?? "").not.toMatch(/supersed/i);
+    editable.unmount();
+  });
+
+  it("shows no mark on a row no rule event superseded", () => {
+    const plain = {
+      ...supersededRow(),
+      notes: "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+    };
+    delete (plain as { supersededGmFigure?: unknown }).supersededGmFigure;
+    render(
+      <PlayerCombatModifierPanel
+        onAddEntry={vi.fn()}
+        onRemoveEntry={vi.fn()}
+        onUpdateEntry={vi.fn()}
+        rows={rowsFor(plain)}
+      />,
+    );
+
+    expect((screen.getByLabelText("DB/Parry modifier details") as HTMLInputElement).value).toBe(
+      "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+    );
   });
 });
 

@@ -3929,6 +3929,79 @@ describe("combat round manager", () => {
     ).toBe(-4);
   });
 
+  it("does not supersede on the take-back path: an undone back-out restores the recorded penalty unmarked (#931)", () => {
+    // The two undo call sites of `applyAttackPhaseDefensivePenaltyModifiers` return to what was
+    // there before; that is not a rule changing the situation, so nothing is superseded and no
+    // review is re-offered, even when the GM has committed the phase's review.
+    const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
+      gladiatorActionId: "double_attack",
+      phase: "phase1",
+      scyrianActionId: "double_attack",
+    });
+    const combatContext = applyCombatActionGeneratedModifiers({
+      actionId: "double_attack",
+      attackPhaseDefensivePenalties: committedAttackPenaltiesFor({
+        participantId: "gladiator",
+        state: gate,
+      }),
+      combatContext: testPhaseContext("scenario-scyrian"),
+    });
+    const gmReviewed = recordCombatRoundParticipantStepReview({
+      command: { createdAt: "2026-01-01T00:02:00.000Z" },
+      participantId: "gladiator",
+      state: combatRoundStateSchema.parse({
+        ...gate,
+        participants: gate.participants.map((participant) =>
+          participant.participantId === "gladiator" && participant.declaration
+            ? {
+                ...participant,
+                declaration: {
+                  ...participant.declaration,
+                  combatContext,
+                  phaseContexts: { phase1: combatContext },
+                },
+              }
+            : participant,
+        ),
+      }),
+      step: "review_action_modifiers",
+      submittedBy: "gm",
+    });
+    const backedOut = backOutCombatRoundPhaseAttack({
+      combatContext,
+      command: { createdAt: "2026-01-01T00:03:00.000Z", createdByUserId: "gm-1" },
+      participantId: "gladiator",
+      phase: "phase1",
+      state: gmReviewed,
+      updatedAt: "2026-01-01T00:03:00.000Z",
+      visibility,
+    });
+    const restored = undoLatestCombatRoundCommand({ state: backedOut.state });
+    if (!restored) throw new Error("The back-out could not be taken back.");
+    const gladiator = (state: typeof restored) =>
+      state.participants.find((participant) => participant.participantId === "gladiator")!;
+    const rowsOf = (state: typeof restored) =>
+      [
+        ...(gladiator(state).declaration?.combatContext?.modifierBuckets.situationDb ?? []),
+        ...(gladiator(state).declaration?.phaseContexts?.phase1?.modifierBuckets.situationDb ?? []),
+      ].filter((entry) => entry.id.startsWith("generated:attack-phase-penalty:"));
+
+    expect(backedOut.state.commands.at(-1)?.type).toBe("submit_phase_initiative_choice");
+    expect(restored.commands.map((command) => command.type)).toContain("review_modifiers_phase1");
+    expect(restored.commands.map((command) => command.type)).not.toContain(
+      "submit_phase_initiative_choice",
+    );
+    expect(rowsOf(restored).length).toBeGreaterThan(0);
+    // The recorded penalty is back: the generator's -4 on both attacks, not the back-out's -2.
+    expect(rowsOf(restored).map((entry) => entry.value)).toEqual(rowsOf(restored).map(() => -4));
+    expect(rowsOf(restored).every((entry) => entry.supersededGmFigure === undefined)).toBe(true);
+    expect(rowsOf(restored).every((entry) => !entry.notes?.includes("GM figure superseded"))).toBe(
+      true,
+    );
+    // The committed review stays committed: nothing is re-offered by taking a back-out back.
+    expect(gladiator(restored).stepStatuses.review_action_modifiers).toBe("gmEdited");
+  });
+
   it("backs out even when no generated DB/Parry modifier can be softened", () => {
     const { state: gate, visibility } = prepareScenarioTargetPhaseCombatExperienceGate({
       phase: "phase1",
