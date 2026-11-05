@@ -342,8 +342,31 @@ describe("task stack Playwright propagation", () => {
     expect(() => resolvePlaywrightTargets({ ...ciLive, CI_SERVICE_STATE_DIR: "x" })).toThrow(
       /live Alpha stack/,
     );
-    expect(
-      resolvePlaywrightTargets({ ...ciLive, CI: "true", CI_SERVICE_STATE_DIR: ".ci/x" }).API_URL,
-    ).toBe("http://localhost:4000");
+    const ci = { CI: "true", CI_SERVICE_STATE_DIR: ".ci/x" };
+    for (const loopback of [
+      "http://localhost:4000",
+      "http://127.0.0.1:4000",
+      "http://127.1.2.3:3000",
+      "http://[::1]:3000",
+    ]) {
+      expect(
+        resolvePlaywrightTargets({ ...good, ...ci, PLAYWRIGHT_API_URL: loopback }).API_URL,
+      ).toBe(loopback);
+    }
+
+    // Even with both CI signals set, a non-loopback host on a live port is refused.
+    for (const lan of [
+      "http://192.168.1.50:4000",
+      "http://10.0.0.5:3000",
+      "http://alpha.example.test:3000",
+      "http://0.0.0.0:4000",
+      "http://127.0.0.1.example.test:4000",
+    ]) {
+      for (const name of Object.keys(good)) {
+        expect(() => resolvePlaywrightTargets({ ...good, ...ci, [name]: lan })).toThrow(
+          /live Alpha stack/,
+        );
+      }
+    }
   });
 });

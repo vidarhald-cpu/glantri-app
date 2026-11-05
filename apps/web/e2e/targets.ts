@@ -18,7 +18,9 @@
  * The one exemption is the repository's own CI job, whose isolated runner serves the web and API
  * containers on 3000 and 4000 and sets all three variables explicitly in the workflow. It is
  * recognised by two signals that no developer shell sets: `CI` and the job-level
- * `CI_SERVICE_STATE_DIR` that `.github/workflows/ci.yml` declares for that job.
+ * `CI_SERVICE_STATE_DIR` that `.github/workflows/ci.yml` declares for that job. Even then it only
+ * lifts the rule for loopback hosts; ports 3000 and 4000 stay refused on every non-loopback host
+ * in every environment, CI included.
  */
 
 const LIVE_ALPHA_PORTS: ReadonlySet<string> = new Set(["3000", "4000"]);
@@ -43,6 +45,17 @@ function isRepositoryCiJob(environment: TargetEnvironment): boolean {
   return Boolean(environment.CI) && Boolean(environment.CI_SERVICE_STATE_DIR);
 }
 
+/** Loopback is a property of the resolved host: `localhost`, `127.0.0.0/8` and `::1`. */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "[::1]" ||
+    /^127(?:\.\d{1,3}){3}$/.test(host)
+  );
+}
+
 function requireTarget(
   name: TargetVariable,
   environment: TargetEnvironment,
@@ -65,7 +78,7 @@ function requireTarget(
     throw new Error(`${name} is not a valid URL: ${value}`);
   }
 
-  if (!allowLivePorts && LIVE_ALPHA_PORTS.has(parsed.port)) {
+  if (LIVE_ALPHA_PORTS.has(parsed.port) && !(allowLivePorts && isLoopbackHost(parsed.hostname))) {
     throw new Error(
       `${name}=${value} targets port ${parsed.port} on host ${parsed.hostname}. Ports 3000 and ` +
         "4000 are the live Alpha stack and are refused on every host, loopback or not, because " +
