@@ -19,8 +19,13 @@ import {
   buildCombatHistorySourceViewFromPersistedSession,
   buildEncounterAccessMetadataViewFromPersistedSession,
   buildCombatRoundDeclaredAttackOpportunities,
+  applyCombatActionGeneratedModifiers,
   buildCombatProgressionProjection,
   buildCombatHistorySourceViewFromState,
+  resolveCanonicalCombatAttackModifierFacts,
+  resolveCombatAttackPhaseDefensivePenalties,
+  restateCanonicalModifierBucketRowValue,
+  SUPERSEDED_GM_FIGURE_NOTE_MARKER,
   completedCombatRoundSchema,
   projectCombatHistory,
   getCombatRoundOpenPerformTaskForParticipant,
@@ -33276,6 +33281,313 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
       expect(privateKeyPaths(response.json())).toEqual(
         expect.arrayContaining(NARROWED_DECLARATION_LOCATIONS),
       );
+    });
+  });
+
+  /**
+   * #931. One driven walk through the production routes at the open phase-2 modifier review: the
+   * GM commits -1 on the Double Attack second attack's DB/Parry row, the second attack is
+   * cancelled, the GM commits -1 again, and an unrelated rule event runs. After every step the
+   * figure is read in the three places it has been measured to disagree: the stored row (the
+   * declaration the round state carries), the participant's combat context (which the decision
+   * route copies the declaration's onto), and the resolved defence modifier total.
+   *
+   * The resolved total is read through `resolveCanonicalCombatAttackModifierFacts`, the function
+   * `POST /combat-round/roll-attack` calls and records as `defenderCalculation.dynamicRawPercentage`
+   * (`defenderResolution.total`, encounterRoutes.ts). `roll-attack` itself is not driven here: a
+   * phase-2 attack against the Double Attack's owner needs a phase-2 initiative walk this test does
+   * not build, and the figure under test is the one that function resolves from the persisted state.
+   */
+  describe("a GM's committed phase-2 figure and the Double Attack cancel, driven through the routes (#931)", () => {
+    const OWNER = "encounter-participant-1";
+    const ATTACKER = "encounter-participant-2";
+
+    function startWalk() {
+      const fixture = preparePhaseCombatExperienceBackOutRouteFixture();
+      const base = fixture.roundState.participants.find(
+        (entry) => entry.participantId === OWNER,
+      )!.declaration!;
+      const opportunities = buildCombatRoundDeclaredAttackOpportunities({
+        actionId: "double_attack",
+        participantId: OWNER,
+        phaseContexts: base.phaseContexts,
+        roundNumber: fixture.roundState.roundNumber,
+      });
+      const penalties = resolveCombatAttackPhaseDefensivePenalties({
+        commitment: "committed",
+        opportunities,
+        participantId: OWNER,
+        roundNumber: fixture.roundState.roundNumber,
+      });
+      const generated = applyCombatActionGeneratedModifiers({
+        actionId: "double_attack",
+        attackPhaseDefensivePenalties: penalties,
+        combatContext: scenarioParticipantCombatContextSchema.parse({}),
+        lifecycleContext: {
+          createdAt: "2026-01-01T00:00:00.000Z",
+          createdRevision: "2026-01-01T00:00:00.000Z",
+          createdSequence: 0,
+          encounterId: fixture.encounter.id,
+          ownerParticipantId: "participant-1",
+          visibility: { audience: "involved", sourceIdentity: "public" },
+        },
+        sourceEncounterId: fixture.encounter.id,
+        sourceRoundNumber: fixture.roundState.roundNumber,
+      });
+      const phase1Result = buildCombatRoundAttackRollResult({
+        actionId: "double_attack",
+        attackerParticipantId: OWNER,
+        defenderDb: 20,
+        defenderParticipantId: ATTACKER,
+        ob: 0,
+        phase: "phase1",
+        rollD20: 1,
+        rollTotal: 1,
+        rolledAt: "2026-01-01T00:03:00.000Z",
+        weaponName: "Sword",
+      });
+      const atReview = combatRoundStateSchema.parse({
+        ...fixture.roundState,
+        currentCursor: {
+          participantId: OWNER,
+          roundNumber: fixture.roundState.roundNumber,
+          step: "M2",
+        },
+        currentStep: "review_phase_2_modifiers",
+        participants: fixture.roundState.participants.map((participant) =>
+          participant.participantId === OWNER
+            ? {
+                ...participant,
+                attackResults: { ...participant.attackResults, phase1: phase1Result },
+                declaration: {
+                  ...participant.declaration,
+                  attackOpportunities: opportunities,
+                  attackPhaseDefensivePenalties: penalties,
+                  combatContext: generated,
+                  phaseContexts: { ...participant.declaration?.phaseContexts, phase2: generated },
+                },
+              }
+            : participant,
+        ),
+        phaseResolutionCursor: undefined,
+        selectedParticipantId: OWNER,
+        selectedStep: "review_phase_2_modifiers",
+      });
+      const route = setupMutableCombatRouteState({
+        encounter: { ...fixture.encounter, combatRoundState: atReview },
+        participants: [
+          {
+            ...fixture.participants[0]!,
+            state: {
+              ...fixture.participants[0]!.state,
+              combat: { ...fixture.participants[0]!.state.combat, combatContext: generated },
+            },
+          },
+          fixture.participants[1]!,
+        ],
+        user: mocks.adminUser,
+      });
+      mocks.encounterService.commitCombatModifierReview.mockImplementation(
+        async (update: {
+          participant: { id: string };
+          scenarioId: string;
+          session: EncounterSession;
+          state: unknown;
+        }) => ({
+          encounter: await mocks.encounterService.updateEncounter({ session: update.session }),
+          participant: await mocks.encounterService.updateScenarioParticipantState({
+            participantId: update.participant.id,
+            scenarioId: update.scenarioId,
+            state: update.state,
+          }),
+        }),
+      );
+      return route;
+    }
+
+    type Walk = ReturnType<typeof startWalk>;
+    const roundOf = (walk: Walk) => walk.encounter.combatRoundState as CombatRoundState;
+    const declarationOf = (walk: Walk) =>
+      roundOf(walk).participants.find((entry) => entry.participantId === OWNER)!.declaration!;
+    const phase2Rows = (context: unknown) =>
+      scenarioParticipantCombatContextSchema
+        .parse(context)
+        .modifierBuckets.situationDb.filter(
+          (entry) =>
+            entry.id.startsWith("generated:attack-phase-penalty:") &&
+            entry.sourcePhase === "phase2",
+        );
+    const participantContext = (walk: Walk) =>
+      scenarioParticipantStateSchema.parse(
+        walk.participants.find((entry) => entry.id === "participant-1")!.state,
+      ).combat.combatContext!;
+    /** The three places the figure lives, as one reading. */
+    const readFigure = (walk: Walk) => ({
+      participantContext: phase2Rows(participantContext(walk)).map((row) => row.value),
+      resolved: resolveCanonicalCombatAttackModifierFacts({
+        attackerCombatantId: ATTACKER,
+        attackerScenarioParticipant: scenarioParticipantSchema.parse(
+          walk.participants.find((entry) => entry.id === "participant-2"),
+        ),
+        defenderCombatantId: OWNER,
+        defenderScenarioParticipant: scenarioParticipantSchema.parse(
+          walk.participants.find((entry) => entry.id === "participant-1"),
+        ),
+        encounterId: "encounter-1",
+        phase: "phase2",
+        state: roundOf(walk),
+      }).defenderResolution.total,
+      storedRow: phase2Rows(declarationOf(walk).combatContext).map((row) => row.value),
+    });
+    const modifierReviewOwners = (walk: Walk) =>
+      buildCombatProgressionProjection(roundOf(walk))
+        .boundary.processes.flatMap((process) => process.stages)
+        .flatMap((stage) => stage.tasks)
+        .filter((candidate) => candidate.kind === "modifier_review")
+        .map((candidate) => candidate.owner?.kind === "combatant" && candidate.owner.participantId);
+
+    async function commitReview(
+      app: Awaited<ReturnType<typeof buildScenarioTestApp>>,
+      walk: Walk,
+      value: number,
+    ) {
+      const declaration = declarationOf(walk);
+      const edit = (context: unknown) => {
+        const parsed = scenarioParticipantCombatContextSchema.parse(context);
+        return {
+          ...parsed,
+          modifierBuckets: {
+            ...parsed.modifierBuckets,
+            situationDb: parsed.modifierBuckets.situationDb.map((entry) =>
+              entry.id.startsWith("generated:attack-phase-penalty:") &&
+              entry.sourcePhase === "phase2"
+                ? restateCanonicalModifierBucketRowValue({ entry, nextValue: value })
+                : entry,
+            ),
+          },
+        };
+      };
+      return app.inject({
+        method: "POST",
+        payload: {
+          actionId: declaration.actionId,
+          combatContext: edit(declaration.combatContext),
+          movementId: declaration.movementId,
+          movementIntent: declaration.movementIntent,
+          phaseContexts: {
+            phase1: declaration.phaseContexts?.phase1,
+            phase2: edit(declaration.phaseContexts?.phase2),
+          },
+          scenarioParticipantId: "participant-1",
+        },
+        url: "/encounters/encounter-1/combat-declaration",
+      });
+    }
+
+    it("walks: commit -1, cancel, re-commit -1, unrelated rule event", async () => {
+      const walk = startWalk();
+      const app = await buildScenarioTestApp();
+      try {
+        // Step 0, control: the generator's own figure, in all three places.
+        expect(readFigure(walk)).toEqual({
+          participantContext: [-4],
+          resolved: -4,
+          storedRow: [-4],
+        });
+
+        // Step 1: the GM commits -1, a figure the generator cannot produce.
+        const commit = await commitReview(app, walk, -1);
+        expect(commit.statusCode, commit.body).toBe(200);
+        expect(readFigure(walk)).toEqual({
+          participantContext: [-1],
+          resolved: -1,
+          storedRow: [-1],
+        });
+        expect(modifierReviewOwners(walk)).not.toContain(OWNER);
+
+        // Step 2: the Double Attack second attack is cancelled. The rule's -2 is in force in all
+        // three places, the GM's -1 is retained on the row, and the row is marked.
+        const cancel = await app.inject({
+          method: "POST",
+          payload: {
+            decision: "cancel",
+            opportunityId: declarationOf(walk).attackOpportunities?.find(
+              (opportunity) => opportunity.phase === "phase2",
+            )?.id,
+            scenarioParticipantId: "participant-1",
+          },
+          url: "/encounters/encounter-1/combat-round/double-attack-phase2-decision",
+        });
+        expect(cancel.statusCode, cancel.body).toBe(200);
+        expect(readFigure(walk)).toEqual({
+          participantContext: [-2, -2],
+          resolved: -2,
+          storedRow: [-2, -2],
+        });
+        for (const row of [
+          ...phase2Rows(declarationOf(walk).combatContext),
+          ...phase2Rows(participantContext(walk)),
+        ]) {
+          expect(row.supersededGmFigure).toEqual({ text: expect.any(String), value: -1 });
+          // #931 comment 21255: the fact is GM-only, so it lives in the structured field and
+          // nowhere in `notes`, which is on the player-facing allowlist.
+          expect(row.notes).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+          expect(row.notes).not.toMatch(/supersed/i);
+        }
+        expect(modifierReviewOwners(walk)).toContain(OWNER);
+
+        // Step 2b: an unrelated generation pass while the review is re-offered. The review command
+        // still stands, so the #915 gate stays closed: the pass rebuilds nothing, the rule's -2
+        // stays with the GM's -1 retained, and the row is still marked.
+        const midPass = await app.inject({
+          method: "POST",
+          payload: { distance: 3, participantAId: OWNER, participantBId: ATTACKER },
+          url: "/encounters/encounter-1/combat-round/pair-distance",
+        });
+        expect(midPass.statusCode, midPass.body).toBe(200);
+        expect(readFigure(walk)).toEqual({
+          participantContext: [-2, -2],
+          resolved: -2,
+          storedRow: [-2, -2],
+        });
+        for (const row of phase2Rows(declarationOf(walk).combatContext)) {
+          expect(row.supersededGmFigure?.value).toBe(-1);
+        }
+        expect(modifierReviewOwners(walk)).toContain(OWNER);
+
+        // Step 3: the GM re-commits the identical -1. It is accepted, not refused as a closed
+        // review, it sticks in all three places, and the mark is gone.
+        const recommit = await commitReview(app, walk, -1);
+        expect(recommit.statusCode, recommit.body).toBe(200);
+        expect(readFigure(walk)).toEqual({
+          participantContext: [-1, -1],
+          resolved: -1,
+          storedRow: [-1, -1],
+        });
+        for (const row of [
+          ...phase2Rows(declarationOf(walk).combatContext),
+          ...phase2Rows(participantContext(walk)),
+        ]) {
+          expect(row.supersededGmFigure).toBeUndefined();
+          expect(row.notes).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+        }
+        expect(modifierReviewOwners(walk)).not.toContain(OWNER);
+
+        // Step 4: an unrelated rule event (the generation pass the distance route runs) leaves it.
+        const pass = await app.inject({
+          method: "POST",
+          payload: { distance: 3, participantAId: OWNER, participantBId: ATTACKER },
+          url: "/encounters/encounter-1/combat-round/pair-distance",
+        });
+        expect(pass.statusCode, pass.body).toBe(200);
+        expect(readFigure(walk)).toEqual({
+          participantContext: [-1, -1],
+          resolved: -1,
+          storedRow: [-1, -1],
+        });
+      } finally {
+        await app.close();
+      }
     });
   });
 

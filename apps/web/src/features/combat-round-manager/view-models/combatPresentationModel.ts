@@ -26,6 +26,7 @@ import {
   buildCombatTrackerModel,
   buildCurrentActionPresentation,
   getCombatProgressionPresentationTasks,
+  getSupersededModifierReviewKeys,
   VISIBLE_COMBAT_ROUND_TRACKER_STEPS,
   type CombatProgressionTrackerIndex,
   type CombatTrackerCellFacts,
@@ -527,6 +528,9 @@ export function buildActiveCombatPresentation(input: {
         encounterId: input.encounterId,
         encounterRevision: input.encounterRevision,
         progression,
+        // Derived from this surface's own round state. A GM's state carries
+        // `supersededGmFigure`; a player's cannot (#931 comment 21255).
+        supersededModifierReviewKeys: getSupersededModifierReviewKeys(input.roundState),
         viewer: { kind: "gm" },
       }) ?? undefined,
   );
