@@ -21624,6 +21624,7 @@ describe("scenarios route contract", () => {
       badIndex?: number;
       negativeBasisIndex?: number;
       participantCount?: number;
+      playerControlledIndex?: number;
       runId: string;
     }) {
       const prepared = makeObservationAutomationFixture({
@@ -21631,6 +21632,7 @@ describe("scenarios route contract", () => {
         missingProfileIndex: input.badIndex,
         negativeBasisIndex: input.negativeBasisIndex,
         participantCount: input.participantCount ?? 5,
+        playerControlledIndex: input.playerControlledIndex,
       });
       const fixture = setupMutableCombatRouteState({
         encounter: prepared.encounter,
@@ -21867,6 +21869,33 @@ describe("scenarios route contract", () => {
       // Resolved by hand, so it is no longer awaiting manual review: a resolved Observation must
       // never also be reported as set aside.
       expect(finalState.observationManualReviews).toEqual([]);
+    });
+
+    /**
+     * The marker's reach, bounded. Observe automation is NPC batch processing, so a
+     * player-controlled observer is the player's own work however underivable its basis is: the
+     * run stops for the player rather than setting their task aside, and no marker is written.
+     * The `player_action_required` check precedes the derivation check in
+     * `classifyApiCombatStepAutomationTask`, and this is what pins that order.
+     */
+    it("never sets aside a player-controlled observer's own Observe check", async () => {
+      const { app, fixture, response } = await runObservationBatch({
+        badIndex: 0,
+        playerControlledIndex: 0,
+        runId: "observation-skip-player-controlled",
+      });
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().workflow).toMatchObject({
+        processedCount: 0,
+        skippedTasks: [],
+        stopParticipantId: "encounter-participant-1",
+        stopReason: "player_action_required",
+      });
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.observationManualReviews).toEqual([]);
+      expect(state.observationAttempts).toEqual([]);
     });
 
     it("negative control — a batch with no missing data skips nothing and completes", async () => {
