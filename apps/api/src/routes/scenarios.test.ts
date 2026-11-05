@@ -17547,18 +17547,39 @@ describe("scenarios route contract", () => {
   /**
    * Forgejo #947. This case used to drive the declaration route with a roster in which
    * one row's `characterId` was another row's `id`, and assert that the exact `id`
-   * match still won the Observe target. That tie-break is unchanged, and it is covered
-   * on a writable roster by "canonicalizes and persists the selected Offensive Parry
-   * opponent" above and by the Gladiator/Scyrian Observe case below.
+   * match still won the Observe target — the exact-`id`-before-alias ordering in
+   * `resolveEncounterParticipantByRollParticipantId`. It now asserts that
+   * `encounterSessionSchema` refuses that roster, which is the behaviour this change
+   * adds, and the fixture is kept so the refusal is measured on the exact shape the
+   * reader used to be asked to survive.
    *
-   * What changed is the premise: `encounterSessionSchema` now refuses a roster in which
-   * two rows claim one identity, so the colliding roster this case defended against
-   * cannot be written or read any more. The fixture is kept and the assertion moved to
-   * the boundary, because the reader's robustness is no longer what stands between a
-   * viewer and a mis-resolved combatant — the roster is.
+   * **Two claims an earlier version of this comment made are false, corrected here
+   * rather than removed, because this comment is the record of what the case pinned.**
+   *
+   * It said the ordering remained covered by "canonicalizes and persists the selected
+   * Offensive Parry opponent" above and by the Gladiator/Scyrian Observe case below.
+   * Independent QA measured otherwise (issue #947, comment 21083): inverting the
+   * ordering left this whole file at 555 passed, and the entire repository green,
+   * while replacing the resolver's body with `return undefined` failed 22 cases in
+   * this file — neither of them among those 22. Neither named case depends on the
+   * resolver's answer at all.
+   *
+   * It also said the colliding roster could no longer be written or read. The
+   * roster-local condition is stated over the **raw** rows;
+   * `resolveEncounterParticipantMembership` then backfills `scenarioParticipantId` and
+   * `characterId`, and every reader applies the ordering to the **resolved**
+   * collection. A roster whose raw rows share no alias and whose resolved rows do is
+   * accepted, and is written through the GM's own `PATCH` at a 200 — the
+   * past-item-viewability cycle-2 shape, still carried by a route case here.
+   *
+   * **The ordering is load-bearing, and it is covered in
+   * `packages/domain/src/encounter/encounterRosterIdentity.test.ts`** — "an exact
+   * identity is preferred over a colliding alias (#947)", three cases over the exported
+   * function and one control, each failing under the inverted ordering and needing no
+   * roster write.
    *
    * Whether the reader's own tie-break should now be simplified is a separate decision
-   * and is not taken here.
+   * and is not taken here. The measurement above argues against it.
    */
   it("refuses the roster the Observe tie-break used to defend against", () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants().map((participant, index) =>

@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import type { ScenarioParticipant } from "../campaign/scenario";
+
 import {
+  encounterParticipantSchema,
   encounterRosterIdentityRefusal,
   encounterRosterScenarioIdentityRefusal,
   encounterSessionSchema,
+  resolveEncounterParticipantByRollParticipantId,
+  resolveEncounterParticipantMembership,
+  type EncounterParticipant,
 } from "./session";
 
 /**
@@ -63,6 +69,27 @@ function session(participants: unknown[], pendingParticipants?: unknown[]) {
     title: "The ford",
     updatedAt: now,
   };
+}
+
+/** A roster row as the schema normalizes it, so the readers below are given real rows. */
+function rosterRow(row: Record<string, unknown>): EncounterParticipant {
+  return encounterParticipantSchema.parse(row);
+}
+
+function scenarioParticipant(id: string, characterId: string): ScenarioParticipant {
+  return {
+    characterId,
+    createdAt: now,
+    id,
+    isActive: true,
+    joinSource: "gm_added",
+    role: "player_character",
+    scenarioId: "scenario-1",
+    snapshot: { displayName: `Participant ${id}` },
+    sourceType: "character",
+    state: {},
+    updatedAt: now,
+  } as ScenarioParticipant;
 }
 
 describe("a roster refuses an identity two rows can claim (#947)", () => {
@@ -276,5 +303,113 @@ describe("a roster row's identity must describe its own mapping (#947)", () => {
         scenarioParticipants,
       }),
     ).toBeUndefined();
+  });
+});
+
+/**
+ * Forgejo #947, repair cycle 1 — the defence this branch removed, restored where it
+ * can be stated without a roster write.
+ *
+ * `resolveEncounterParticipantByRollParticipantId` prefers a row whose own `id` is the
+ * requested identity over a row that merely answers for it through an alias. That
+ * ordering decides which combatant a reader answers about when two rows can answer,
+ * and it is the only thing that decides it.
+ *
+ * The branch deleted the route case that pinned the ordering and recorded that the
+ * roster conditions above had made a colliding roster unwritable. **That ground is
+ * false, measured.** The roster-local condition is stated over the **raw** rows;
+ * `resolveEncounterParticipantMembership` then backfills `scenarioParticipantId` and
+ * `characterId`, and every reader applies the tie-break to the **resolved** collection.
+ * Independent QA (issue #947, comment 21083) drove the surviving shape through the GM's
+ * own `PATCH` at a 200, and showed that inverting the ordering left the entire
+ * repository green — so the ordering was load-bearing and covered nowhere.
+ *
+ * The third case below carries that shape and is the one that makes the preference
+ * reachable rather than hypothetical; the first two state the preference itself over a
+ * two-row colliding array, in both orders, so the answer cannot come from the roster's
+ * order. Each of the three fails when the ordering in `session.ts` is inverted.
+ */
+describe("an exact identity is preferred over a colliding alias (#947)", () => {
+  /** The acting row's own `id` is the bystander's Character id. */
+  const theRowHoldingTheIdentity = rosterRow(
+    mappedRow("character-bystander", "participant-owner", "character-owner"),
+  );
+  /** The bystander's own row answers for the same Character through its alias. */
+  const theRowAnsweringThroughItsCharacter = rosterRow(
+    mappedRow("row-bystander", "participant-bystander", "character-bystander"),
+  );
+
+  it("prefers the row whose own id is the requested identity", () => {
+    const resolved = resolveEncounterParticipantByRollParticipantId({
+      participantId: "character-bystander",
+      participants: [theRowHoldingTheIdentity, theRowAnsweringThroughItsCharacter],
+    });
+
+    expect(resolved?.id).toBe("character-bystander");
+    expect(resolved?.scenarioParticipantId).toBe("participant-owner");
+  });
+
+  it("prefers it from behind the colliding row, so the answer is not the roster's order", () => {
+    const resolved = resolveEncounterParticipantByRollParticipantId({
+      participantId: "character-bystander",
+      participants: [theRowAnsweringThroughItsCharacter, theRowHoldingTheIdentity],
+    });
+
+    expect(resolved?.id).toBe("character-bystander");
+    expect(resolved?.scenarioParticipantId).toBe("participant-owner");
+  });
+
+  /**
+   * The reachable shape, and the reason the preference still has work to do: the raw
+   * rows share no alias, so the roster conditions accept this roster and the GM can
+   * write it. The collision appears only after the membership resolver backfills the
+   * bystander's own `characterId`, which is the collection every reader resolves
+   * against — the same roster the past-item-viewability gate refuses on.
+   */
+  it("answers a collision the roster conditions accept, because readers resolve and they do not", () => {
+    const rawRows = [
+      {
+        id: "row-bystander",
+        label: "Row row-bystander",
+        participantType: "character" as const,
+        scenarioParticipantId: "participant-bystander",
+      },
+      mappedRow("character-bystander", "participant-owner", "character-owner"),
+    ];
+    expect(encounterSessionSchema.safeParse(session(rawRows)).success).toBe(true);
+    expect(encounterRosterIdentityRefusal(rawRows)).toBeUndefined();
+
+    const resolvedRoster = resolveEncounterParticipantMembership({
+      encounter: encounterSessionSchema.parse(session(rawRows)),
+      scenarioParticipants: [
+        scenarioParticipant("participant-owner", "character-owner"),
+        scenarioParticipant("participant-bystander", "character-bystander"),
+      ],
+    }).participants;
+
+    expect(encounterRosterIdentityRefusal(resolvedRoster)).toContain(
+      "claim the identity character-bystander",
+    );
+    expect(
+      resolveEncounterParticipantByRollParticipantId({
+        participantId: "character-bystander",
+        participants: resolvedRoster,
+      })?.scenarioParticipantId,
+    ).toBe("participant-owner");
+  });
+
+  /**
+   * The control that makes the preference a preference rather than "always answer with
+   * the row that was asked for": with no row holding the identity, the alias fallback
+   * still answers. This case passes under the inverted ordering, and it is here so that
+   * the three above are known to be measuring the ordering and not the lookup.
+   */
+  it("still answers through the alias when no row holds the identity exactly", () => {
+    expect(
+      resolveEncounterParticipantByRollParticipantId({
+        participantId: "character-bystander",
+        participants: [theRowAnsweringThroughItsCharacter],
+      })?.id,
+    ).toBe("row-bystander");
   });
 });
