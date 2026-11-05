@@ -201,11 +201,11 @@ export function buildCombatModifierRowProjection(
       });
       return Boolean(
         contribution &&
-          isCombatModifierContributionActive(contribution, {
-            ...(input.encounterId ? { encounterId: input.encounterId } : {}),
-            ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
-            ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
-          }),
+        isCombatModifierContributionActive(contribution, {
+          ...(input.encounterId ? { encounterId: input.encounterId } : {}),
+          ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
+          ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
+        }),
       );
     },
   );

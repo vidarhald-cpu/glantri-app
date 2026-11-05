@@ -112,9 +112,8 @@ function hasDeclaredAction(
 function collectCanonicalEffectsFromRows(
   rows: ReturnType<typeof buildCombatModifierRowProjection>,
 ): NonNullable<NonNullable<CombatRoundStepSnapshot["modifierSummary"]>["effects"]> {
-  const effects: NonNullable<
-    NonNullable<CombatRoundStepSnapshot["modifierSummary"]>["effects"]
-  > = [];
+  const effects: NonNullable<NonNullable<CombatRoundStepSnapshot["modifierSummary"]>["effects"]> =
+    [];
   for (const row of rows) {
     for (const entry of row.entries as ScenarioCombatModifierEntry[]) {
       const parsed = canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle);
@@ -379,8 +378,10 @@ export function getCommittedCombatRoundSteps(input: {
   return COMBAT_ROUND_STEPS.slice(previousIndex, nextIndex);
 }
 
-export interface WithDerivedCombatRoundStepSnapshotsInput
-  extends Omit<DeriveCombatRoundStepSnapshotsInput, "state" | "step"> {
+export interface WithDerivedCombatRoundStepSnapshotsInput extends Omit<
+  DeriveCombatRoundStepSnapshotsInput,
+  "state" | "step"
+> {
   /** The state the transition produced. Snapshots are upserted into this one. */
   nextState: CombatRoundState;
   /** The state being committed — every derived figure is read from this one. */

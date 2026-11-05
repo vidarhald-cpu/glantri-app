@@ -62,8 +62,7 @@ function resolveOpportunityWeapon(input: {
   const resolved = item
     ? resolveEffectiveItemTemplate(item, Object.fromEntries(context.templatesById))
     : context.templatesById.get(input.opportunity.weaponTemplateId);
-  const template =
-    resolved && "attackModes" in resolved ? (resolved as WeaponTemplate) : undefined;
+  const template = resolved && "attackModes" in resolved ? (resolved as WeaponTemplate) : undefined;
   if (!template) return {};
   const modes = template.attackModes ?? [];
   const mode = input.opportunity.attackModeId
