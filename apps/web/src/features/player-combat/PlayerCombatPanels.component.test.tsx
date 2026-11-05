@@ -2,7 +2,12 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { canonicalCombatModifierEffectSchema } from "@glantri/domain";
+import {
+  canonicalCombatModifierEffectSchema,
+  scenarioParticipantCombatContextSchema,
+  supersedeGmCommittedAttackPhasePenaltyRows,
+  SUPERSEDED_GM_FIGURE_NOTE_MARKER,
+} from "@glantri/domain";
 
 import type { CombatSituationLifecycleEffect } from "./combatSituationAwareness";
 import { buildPlayerCombatLoadoutSummary } from "./playerCombatPhaseModel";
@@ -1091,6 +1096,87 @@ describe("PlayerCombatModifierPanel", () => {
       value: 3,
     });
     expect(onRemoveEntry).toHaveBeenCalledWith("situation_initiative", "manual-initiative");
+  });
+});
+
+describe("a row a rule event superseded, read through the Details path (#931)", () => {
+  // The row the Double Attack cancel writes after the GM committed -1: the rule's -2 with the
+  // GM's figure retained and the mark in the row's own note. It is produced by the same pure
+  // function the rule writer calls, so what is rendered is what the server stores.
+  function supersededRow() {
+    const row = (value: number, notes: string) => ({
+      application: "percentage" as const,
+      generated: true,
+      id: "generated:attack-phase-penalty:round:1:participant:enc-d:phase2:attack_2:db-parry",
+      notes,
+      scope: "until" as const,
+      sourceActionId: "double_attack",
+      sourcePhase: "phase2" as const,
+      sourceRule: "attack-phase-defensive-penalty:double_attack_second_cancelled",
+      value,
+    });
+    const contextOf = (entry: ReturnType<typeof row>) =>
+      scenarioParticipantCombatContextSchema.parse({
+        modifierBuckets: { situationDb: [entry] },
+      });
+    const { combatContext } = supersedeGmCommittedAttackPhasePenaltyRows({
+      next: contextOf(row(-2, "Double Attack second attack cancelled: DB/Parry -2% in phase2")),
+      phase: "phase2",
+      previous: contextOf(row(-1, "committed weapon attack: DB/Parry -4% in phase2")),
+    });
+    return combatContext.modifierBuckets.situationDb[0]!;
+  }
+
+  const rowsFor = (entry: ReturnType<typeof supersededRow>) => [
+    {
+      bucketKey: "situation_db" as const,
+      entries: [entry],
+      label: "DB/Parry",
+      total: entry.value,
+    },
+  ];
+
+  it("shows the mark in the Details cell the GM reviews", () => {
+    const entry = supersededRow();
+    const note = `Double Attack second attack cancelled: DB/Parry -2% in phase2${SUPERSEDED_GM_FIGURE_NOTE_MARKER}DB/Parry -1%; review again`;
+    expect(entry.notes).toBe(note);
+
+    // The GM's review surface: the editable modifier panel, whose Details cell is the row's note.
+    const editable = render(
+      <PlayerCombatModifierPanel
+        onAddEntry={vi.fn()}
+        onRemoveEntry={vi.fn()}
+        onUpdateEntry={vi.fn()}
+        rows={rowsFor(entry)}
+      />,
+    );
+    // The GM's row: the Details cell carries the rule's number, the GM's figure and the instruction.
+    const details = screen.getByLabelText("DB/Parry modifier details") as HTMLInputElement;
+    expect(details.value).toContain("DB/Parry -1%");
+    expect(details.value).toContain("superseded by the rule");
+    expect(details.value).toContain("review again");
+    expect(screen.getByLabelText("DB/Parry modifier value")).toHaveValue(-2);
+    editable.unmount();
+  });
+
+  it("shows no mark on a row no rule event superseded", () => {
+    const plain = {
+      ...supersededRow(),
+      notes: "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+    };
+    delete (plain as { supersededGmFigure?: unknown }).supersededGmFigure;
+    render(
+      <PlayerCombatModifierPanel
+        onAddEntry={vi.fn()}
+        onRemoveEntry={vi.fn()}
+        onUpdateEntry={vi.fn()}
+        rows={rowsFor(plain)}
+      />,
+    );
+
+    expect((screen.getByLabelText("DB/Parry modifier details") as HTMLInputElement).value).toBe(
+      "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+    );
   });
 });
 

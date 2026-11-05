@@ -204,6 +204,14 @@ export const scenarioCombatModifierEntrySchema = z.object({
   sourceRoundNumber: z.number().int().positive().optional(),
   sourceRule: z.string().optional(),
   sourceType: scenarioCombatModifierSourceTypeSchema.optional(),
+  /**
+   * The figure the GM had committed for this row when a rule event replaced it (#931). Both halves
+   * are kept: `value` is the number, `text` the row's own note as the GM left it. It is a row
+   * field rather than part of `canonicalLifecycle.payload`, because resolution reads the payload
+   * and a retained figure stored there would be read as the row's current value. Absent on every
+   * row no rule event has superseded, and absent means exactly that: nothing is inferred.
+   */
+  supersededGmFigure: z.object({ text: z.string(), value: z.number() }).optional(),
   provisional: z.boolean().optional(),
   value: z.number().default(0),
 });

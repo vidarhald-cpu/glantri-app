@@ -304,6 +304,159 @@ export function applyAttackPhaseDefensivePenaltyModifiers(input: {
   });
 }
 
+/**
+ * What a rule event does to a figure the GM has already committed, while the review that committed
+ * it is still open (#931, Product Owner ruling on comment 20917, narrowed on comment 21064).
+ *
+ * The rule's number applies, and it applies visibly: the superseded figure is kept on the row, the
+ * row's own note says so through the existing notes-to-Details path, and the caller returns the
+ * row to review. This is the one place that decides what counts as a superseded row; callers decide
+ * only whether a rule event has happened and whether a review boundary is open to return it to.
+ */
+export const SUPERSEDED_GM_FIGURE_NOTE_MARKER = " · GM figure superseded by the rule: ";
+
+const ATTACK_PHASE_PENALTY_ROW_ID_PREFIX = "generated:attack-phase-penalty:";
+
+/**
+ * A generated attack-phase DB/Parry row of one phase, recognised by the id the generator gives it
+ * and not by its source rule. A Double Attack cancel rewrites the row's source rule to a value
+ * `isAttackPhaseDefensivePenaltyModifier` does not recognise, while the id is stable.
+ */
+function isAttackPhasePenaltyRowOfPhase(
+  entry: ScenarioCombatModifierEntry,
+  phase: "phase1" | "phase2",
+): boolean {
+  return entry.sourcePhase === phase && entry.id.startsWith(ATTACK_PHASE_PENALTY_ROW_ID_PREFIX);
+}
+
+function formatSupersededFigure(entry: ScenarioCombatModifierEntry, value: number): string {
+  return `DB/Parry ${value > 0 ? "+" : ""}${value}${entry.application === "percentage" ? "%" : ""}`;
+}
+
+export function stripSupersededGmFigureNote(notes: string | undefined): string | undefined {
+  if (notes === undefined) return undefined;
+  const index = notes.indexOf(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+  const stripped = index < 0 ? notes : notes.slice(0, index);
+  return stripped.length > 0 ? stripped : undefined;
+}
+
+/**
+ * Marks every attack-phase row of `phase` in `next` whose figure differs from the figure `previous`
+ * held for the same row id. A row `previous` did not hold is a row the GM removed (or never had),
+ * and its superseded figure is 0. A figure that did not change is not a supersession and is left
+ * alone, so a rule event that lands on the GM's own number marks nothing.
+ *
+ * A row `previous` already carries a superseded figure for keeps that figure: the GM has not
+ * reviewed since, so the figure the GM committed is still the older one.
+ */
+export function supersedeGmCommittedAttackPhasePenaltyRows(input: {
+  next: ScenarioParticipantCombatContext;
+  phase: "phase1" | "phase2";
+  previous: ScenarioParticipantCombatContext;
+}): { combatContext: ScenarioParticipantCombatContext; supersededRowIds: string[] } {
+  const previousById = new Map<string, ScenarioCombatModifierEntry>();
+  for (const entry of input.previous.modifierBuckets.situationDb) {
+    if (isAttackPhasePenaltyRowOfPhase(entry, input.phase) && !previousById.has(entry.id)) {
+      previousById.set(entry.id, entry);
+    }
+  }
+  const supersededRowIds: string[] = [];
+  const situationDb = input.next.modifierBuckets.situationDb.map((entry) => {
+    if (!isAttackPhasePenaltyRowOfPhase(entry, input.phase)) return entry;
+    const previous = previousById.get(entry.id);
+    const committed = previous?.supersededGmFigure ?? {
+      text: previous ? (previous.notes ?? "") : "removed by the GM",
+      value: previous?.value ?? 0,
+    };
+    if (committed.value === entry.value) return entry;
+    supersededRowIds.push(entry.id);
+    const base = stripSupersededGmFigureNote(entry.notes);
+    return {
+      ...entry,
+      notes: `${base ?? ""}${SUPERSEDED_GM_FIGURE_NOTE_MARKER}${formatSupersededFigure(
+        entry,
+        committed.value,
+      )}; review again`,
+      supersededGmFigure: committed,
+    };
+  });
+  return {
+    combatContext:
+      supersededRowIds.length === 0
+        ? input.next
+        : scenarioParticipantCombatContextSchema.parse({
+            ...input.next,
+            modifierBuckets: { ...input.next.modifierBuckets, situationDb },
+          }),
+    supersededRowIds: [...new Set(supersededRowIds)],
+  };
+}
+
+/**
+ * Keeps, for each phase in `phases`, the attack-phase rows `previous` held, in place of whatever
+ * `next` rebuilt for that phase. This is the #915 generation gate applied to a writer that rebuilds
+ * every attack-phase row at once: a phase the GM has committed is the GM's, and a decision about
+ * another phase is not a rule event for it.
+ */
+export function keepGmCommittedAttackPhasePenaltyRows(input: {
+  next: ScenarioParticipantCombatContext;
+  phases: readonly ("phase1" | "phase2")[];
+  previous: ScenarioParticipantCombatContext;
+}): ScenarioParticipantCombatContext {
+  if (input.phases.length === 0) return input.next;
+  const inKeptPhase = (entry: ScenarioCombatModifierEntry) =>
+    input.phases.some((phase) => isAttackPhasePenaltyRowOfPhase(entry, phase));
+  return scenarioParticipantCombatContextSchema.parse({
+    ...input.next,
+    modifierBuckets: {
+      ...input.next.modifierBuckets,
+      situationDb: [
+        ...input.previous.modifierBuckets.situationDb.filter(inKeptPhase),
+        ...input.next.modifierBuckets.situationDb.filter((entry) => !inKeptPhase(entry)),
+      ],
+    },
+  });
+}
+
+export function combatContextHasSupersededGmFigure(
+  combatContext: ScenarioParticipantCombatContext,
+  phase: "phase1" | "phase2",
+): boolean {
+  return combatContext.modifierBuckets.situationDb.some(
+    (entry) => entry.sourcePhase === phase && entry.supersededGmFigure !== undefined,
+  );
+}
+
+/**
+ * Clears the superseded mark from the rows of the reviewed phase: the retained field and the note
+ * suffix. The note is stripped by its marker whether or not the field survived the client's round
+ * trip, so a submission that dropped the field still loses the visible text. The GM's decision on
+ * the row is whatever the submission carries; this never touches a value.
+ */
+export function clearSupersededGmFigureMarks(input: {
+  combatContext: ScenarioParticipantCombatContext;
+  phase: "phase1" | "phase2";
+}): ScenarioParticipantCombatContext {
+  const marked = (entry: ScenarioCombatModifierEntry) =>
+    entry.sourcePhase === input.phase &&
+    (entry.supersededGmFigure !== undefined ||
+      entry.notes?.includes(SUPERSEDED_GM_FIGURE_NOTE_MARKER) === true);
+  if (!input.combatContext.modifierBuckets.situationDb.some(marked)) return input.combatContext;
+  return scenarioParticipantCombatContextSchema.parse({
+    ...input.combatContext,
+    modifierBuckets: {
+      ...input.combatContext.modifierBuckets,
+      situationDb: input.combatContext.modifierBuckets.situationDb.map((entry) => {
+        if (!marked(entry)) return entry;
+        const { supersededGmFigure: _cleared, ...rest } = entry;
+        void _cleared;
+        const notes = stripSupersededGmFigureNote(entry.notes);
+        return notes === undefined ? rest : { ...rest, notes };
+      }),
+    },
+  });
+}
+
 function isCombatActionGeneratedObSkillModifier(entry: ScenarioCombatModifierEntry): boolean {
   return isDoubleAttackGeneratedObSkillModifier(entry) || isDistanceGeneratedObSkillModifier(entry);
 }
