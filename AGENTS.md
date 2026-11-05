@@ -61,7 +61,7 @@ Before non-trivial work:
 3. Confirm outcome, scope, ownership, accepted baseline branch/SHA, reserved hotspots, acceptance examples, verification, and Git authority.
 4. Fetch and resolve the live `origin/dev` SHA. Stop for contract refresh if it differs from the accepted baseline; do not silently choose a new baseline.
 5. Verify canonical provisioning source, origin/common Git directory and requested versus observed exact `HEAD`; use the authorized continuation parent when specified. QA is detached with no branch/upstream. Never infer from `main`, remote HEAD, or defaults. Inspect current task sources/tests, not old branches or chat history.
-6. Stop if the task requires an unapproved product/rule decision, an unknown baseline, or uncoordinated hotspot edits.
+6. Stop if the task requires an unapproved product/rule decision, an unknown baseline, or uncoordinated hotspot edits. Before treating something as an unapproved decision, apply [search before raising a decision that looks historical](#search-before-raising-a-decision-that-looks-historical).
 
 Beyond this file and the task contract, a worker reads only the additional task-specific documents or sections its dispatch packet explicitly names. Area documents are required only when the task touches that area; decision records, audits, and historical reports are read on demand. `docs/process/development-operating-model.md` is primarily an Orchestrator/control-plane reference and is **not** mandatory startup reading for ordinary workers. Do not create redundant provider-specific copies of general policy.
 
@@ -101,6 +101,18 @@ Product Owner process ruling, effective **2026-09-24**. It governs how workers u
 Escalate to the control plane when: two **current controlling** sources genuinely conflict; a choice materially changes current V1 product behaviour; security, privacy, or authorization is materially affected; destructive handling of data that actually requires preservation is involved; or a consequential architectural choice is required for the current slice.
 
 Differences with historical or non-controlling material are normally documentation maintenance, not a product-owner decision. The Orchestrator has authority to perform that maintenance, but **not** to reinterpret or override newer approved product intent merely to manufacture semantic coherence with older documentation.
+
+### Search before raising a decision that looks historical
+
+This applies to the Orchestrator and to every worker. The trigger is any moment you are about to put a question to the product owner or the control plane, or to open an issue, because existing behaviour looks wrong or inconsistent. Typical cases are behaviour that appears to contradict a source document, a comment that reads like a bug, and an inconsistency that has plainly been there a long time.
+
+Before you raise it:
+
+1. **Search prior decisions and issues, and find the introducing commit.** Search `docs/decisions/`, closed and open Forgejo issues and their comments, and the history of the code or data in question (`git log -S` or `git blame` to the commit that introduced the behaviour). Name the introducing commit and the ruling or issue it came from, or state that you searched and found none.
+2. **If the current behaviour is already backed by a prior ruling and a regression test, report it as previously settled.** Cite the ruling, the introducing commit, and the test. Do not present it as an open question, and do not describe the application as disagreeing with its source on purpose when a recorded ruling says it does. Both the ruling and the test are required: a test alone, or a ruling with no test, is not yet settled and goes to the control plane as a question that names what you found.
+3. **If the behaviour is correct but its explanation is wrong, say so explicitly and correct the explanation.** A stale comment, issue wording, or rationale is not a reason to reopen the decision it describes. Fix or queue the corrected explanation as documentation maintenance, and leave the behaviour and its test alone.
+
+Worked example: the workbook zero row was put to the product owner as an open question. It was the product owner's own ruling of 19 May 2026, commit `0f3682335bdeca4312ab096398eb24286092b177`, still implemented and still pinned by a regression test. One search would have shown that.
 
 ### Decision frontier
 
