@@ -21640,17 +21640,20 @@ describe("scenarios route contract", () => {
         user: mocks.adminUser,
       });
       const app = await buildScenarioTestApp();
-      const response = await app.inject({
-        method: "POST",
-        payload: stepAutomationRequest({
-          encounter: prepared.encounter,
-          operationFamily: "roll_remaining",
-          participants: prepared.participants,
-          runId: input.runId,
-        }),
-        url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+      const payload = stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: prepared.participants,
+        runId: input.runId,
       });
-      return { app, fixture, response };
+      const post = () =>
+        app.inject({
+          method: "POST",
+          payload,
+          url: "/encounters/encounter-1/combat-round/run-gm-step-workflow",
+        });
+      const response = await post();
+      return { app, fixture, post, response };
     }
 
     function executableTasksFor(fixture: {
@@ -21869,6 +21872,88 @@ describe("scenarios route contract", () => {
       // Resolved by hand, so it is no longer awaiting manual review: a resolved Observation must
       // never also be reported as set aside.
       expect(finalState.observationManualReviews).toEqual([]);
+    });
+
+    /**
+     * Replaying the same `runId` reports the same skip. The replay path re-derives the report from
+     * present state rather than remembering it, and marking changes that state, so this is the
+     * assertion that the GM report does not quietly empty out on the second request — a skip the
+     * GM cannot see does not satisfy the ruling, on either path.
+     */
+    it("reports the same skip when the same run is replayed", async () => {
+      const { app, fixture, post, response } = await runObservationBatch({
+        badIndex: 0,
+        runId: "observation-skip-replay",
+      });
+      const replay = await post();
+      await app.close();
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json().workflow.alreadyAccepted).toBe(true);
+      const reported = (body: string) =>
+        JSON.parse(body).workflow.skippedTasks.map(
+          (skipped: { participantId: string; reason: string }) => [
+            skipped.participantId,
+            skipped.reason,
+          ],
+        );
+      expect(reported(replay.body)).toEqual(reported(response.body));
+      expect(reported(replay.body)).toEqual([
+        ["encounter-participant-1", "observation_basis_data_missing"],
+      ]);
+      expect(replay.json().workflow).toMatchObject({
+        processedCount: 4,
+        stepComplete: false,
+        stopReason: "gm_decision_required",
+      });
+      // The replay resolved nothing further and wrote no second marker.
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.observationAttempts).toHaveLength(4);
+      expect(state.observationManualReviews).toHaveLength(1);
+    });
+
+    /**
+     * The disclosed edge of the replay path: a run in which *every* task was skipped accepts no
+     * task, so it attaches no automation command link and has nothing to replay — and marking did
+     * change the revision. The second request is therefore refused as stale rather than replayed.
+     * `409 stale_revision` is an already-handled response, and it is asserted here rather than
+     * reasoned about.
+     */
+    it("refuses a replay as stale when the run accepted nothing at all", async () => {
+      // Two participants observing each other, and the first has no Intelligence value, so both
+      // contests are underivable: one for its own data, one for its target's.
+      const prepared = makeObservationAutomationFixture({
+        missingProfileIndex: 0,
+        participantCount: 2,
+      });
+      const fixture = setupMutableCombatRouteState({
+        encounter: prepared.encounter,
+        participants: prepared.participants,
+        user: mocks.adminUser,
+      });
+      const app = await buildScenarioTestApp();
+      const payload = stepAutomationRequest({
+        encounter: prepared.encounter,
+        operationFamily: "roll_remaining",
+        participants: prepared.participants,
+        runId: "observation-skip-all",
+      });
+      const url = "/encounters/encounter-1/combat-round/run-gm-step-workflow";
+      const first = await app.inject({ method: "POST", payload, url });
+      const second = await app.inject({ method: "POST", payload, url });
+      await app.close();
+
+      expect(first.statusCode, first.body).toBe(200);
+      expect(first.json().workflow.processedCount).toBe(0);
+      expect(first.json().workflow.skippedTasks).toHaveLength(2);
+      expect(second.statusCode, second.body).toBe(409);
+      expect(second.json().code).toBe("stale_revision");
+
+      // Both are recorded and still unresolved, so the GM has them either way.
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      expect(state.observationManualReviews).toHaveLength(2);
+      expect(state.observationAttempts).toEqual([]);
     });
 
     /**
