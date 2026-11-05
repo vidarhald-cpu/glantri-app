@@ -1,6 +1,7 @@
 import {
   buildCombatActivityFacts,
   COMBAT_ACTIVITY_FACTS_PAYLOAD_KEY,
+  encounterRosterScenarioIdentityRefusal,
   encounterSessionSchema,
   encounterSessionSummarySchema,
   isCombatStepEventPublishedToActivity,
@@ -147,6 +148,48 @@ function explicitScenarioParticipantIds(encounter: EncounterSession): string[] {
   return [...uniqueIds];
 }
 
+/**
+ * A roster row's identity must describe the participant its mapping describes.
+ *
+ * The roster-local half of the condition — that no two rows claim one identity —
+ * is in `encounterSessionSchema` and so reaches every writer without a query. This
+ * half cannot be: a row can carry the identity of a Scenario participant who is
+ * not on the roster at all, which the submitted document does not contain. It is
+ * asked here, where the Scenario's participants are known, at every status, and
+ * next to the presence check that already refuses an incoherent roster.
+ *
+ * It costs one indexed read of the Scenario's participants per Encounter write.
+ * The in-force roster and the held roster are both checked: a held roster becomes
+ * the roster in force at the next round boundary.
+ */
+async function assertEncounterRosterIdentity(input: {
+  encounter: EncounterSession;
+  scenarioId: string;
+  transaction: Prisma.TransactionClient;
+}): Promise<void> {
+  const rosters = [input.encounter.participants, input.encounter.pendingParticipants ?? []].filter(
+    (roster) => roster.length > 0,
+  );
+
+  if (rosters.length === 0) return;
+
+  const scenarioParticipants = await input.transaction.scenarioParticipant.findMany({
+    select: { characterId: true, id: true },
+    where: { scenarioId: input.scenarioId },
+  });
+
+  for (const roster of rosters) {
+    const refusal = encounterRosterScenarioIdentityRefusal({
+      participants: roster,
+      scenarioParticipants,
+    });
+
+    if (refusal) {
+      throw new EncounterPresenceError("invalid_active_membership", refusal);
+    }
+  }
+}
+
 async function assertActiveEncounterPresence(input: {
   encounter: EncounterSession;
   scenarioId: string;
@@ -242,6 +285,11 @@ export function createPrismaEncounterRepository(
             "Closed or archived Scenarios cannot contain new Encounters.",
           );
         }
+        await assertEncounterRosterIdentity({
+          encounter: normalized,
+          scenarioId: input.scenarioId,
+          transaction,
+        });
         return transaction.encounter.create({
           data: {
             campaignId: normalized.campaignId ?? null,
@@ -326,6 +374,11 @@ export function createPrismaEncounterRepository(
         },
         beforePersist: async (transaction, encounter) => {
           if (!encounter.scenarioId) return;
+          await assertEncounterRosterIdentity({
+            encounter,
+            scenarioId: encounter.scenarioId,
+            transaction,
+          });
           audienceParticipantIds =
             encounter.status === "active"
               ? await assertActiveEncounterPresence({
@@ -402,6 +455,11 @@ export function createPrismaEncounterRepository(
         },
         beforePersist: async (transaction, encounter) => {
           if (!encounter.scenarioId) return;
+          await assertEncounterRosterIdentity({
+            encounter,
+            scenarioId: encounter.scenarioId,
+            transaction,
+          });
           await assertActiveEncounterPresence({
             encounter,
             scenarioId: encounter.scenarioId,
