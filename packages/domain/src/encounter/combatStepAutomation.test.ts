@@ -409,4 +409,105 @@ describe("canonical GM step automation", () => {
     expect(result.finalTask?.kind).toBe("attack");
     expect(calls).toBe(2);
   });
+
+  /**
+   * #948. One participant the run cannot resolve does not halt the remaining batch. The position
+   * of that participant is driven explicitly, because a batch that only works when the
+   * unresolvable row comes last is not fixed.
+   */
+  describe("#948 one unresolvable participant is skipped and the batch continues", () => {
+    async function runBatchWithOneUnresolvable(input: {
+      badIndex: number;
+      decision: "skip" | "stop";
+    }) {
+      const participants = ["npc-a", "npc-b", "npc-c", "npc-d"];
+      const tasks = participants.map((participantId) =>
+        task(`observe-${participantId}`, participantId, "observation_roll"),
+      );
+      const badTaskId = tasks[input.badIndex]!.id;
+      // A skipped task resolves nothing, so it stays in the projection; an executed one leaves it.
+      let remaining = [...tasks];
+      return runCombatStepAutomation({
+        classify: ({ task: current }) =>
+          current.id === badTaskId
+            ? input.decision === "skip"
+              ? {
+                  kind: "skip",
+                  missingData: ["intelligence_characteristic"],
+                  reason: "observation_basis_data_missing",
+                }
+              : { kind: "stop", reason: "observation_review_required" }
+            : { countsTowardProcessed: true, kind: "execute" },
+        execute: async ({ task: current }) => {
+          remaining = remaining.filter((candidate) => candidate.id !== current.id);
+          return { kind: "accepted", projection: projection({ tasks: remaining }) };
+        },
+        identity: identity(),
+        initial: projection({ tasks }),
+      });
+    }
+
+    it.each([
+      { badIndex: 0, position: "first" },
+      { badIndex: 1, position: "in the middle" },
+      { badIndex: 3, position: "last" },
+    ])("resolves the other three when the unresolvable one is $position", async ({ badIndex }) => {
+      const result = await runBatchWithOneUnresolvable({ badIndex, decision: "skip" });
+
+      expect(result.processedCount).toBe(3);
+      expect(result.acceptedTasks).toHaveLength(3);
+      expect(result.skippedTasks).toHaveLength(1);
+      expect(result.skippedTasks[0]).toMatchObject({
+        missingData: ["intelligence_characteristic"],
+        participantId: ["npc-a", "npc-b", "npc-c", "npc-d"][badIndex],
+        reason: "observation_basis_data_missing",
+      });
+      expect(result.stopReason).toBe("end_of_step");
+      // The skipped task is still there, so the step is not complete and it stays resolvable.
+      expect(result.stepComplete).toBe(false);
+      expect(result.finalTask?.taskId).toBe(
+        `observe-${["npc-a", "npc-b", "npc-c", "npc-d"][badIndex]}`,
+      );
+    });
+
+    it("negative control — the same batch halts when the condition stops instead of skipping", async () => {
+      const result = await runBatchWithOneUnresolvable({ badIndex: 1, decision: "stop" });
+
+      expect(result.processedCount).toBe(1);
+      expect(result.skippedTasks).toEqual([]);
+      expect(result.stopParticipantId).toBe("npc-b");
+      expect(result.stopReason).toBe("observation_review_required");
+    });
+
+    it("skips every unresolvable participant rather than only the first", async () => {
+      const tasks = ["npc-a", "npc-b", "npc-c"].map((participantId) =>
+        task(`observe-${participantId}`, participantId, "observation_roll"),
+      );
+      let remaining = [...tasks];
+      const result = await runCombatStepAutomation({
+        classify: ({ task: current }) =>
+          current.id === "observe-npc-b"
+            ? { kind: "skip", reason: "observation_target_invalid" }
+            : current.id === "observe-npc-c"
+              ? { kind: "skip", reason: "observation_contest_unavailable" }
+              : { countsTowardProcessed: true, kind: "execute" },
+        execute: async ({ task: current }) => {
+          remaining = remaining.filter((candidate) => candidate.id !== current.id);
+          return { kind: "accepted", projection: projection({ tasks: remaining }) };
+        },
+        identity: identity(),
+        initial: projection({ tasks }),
+      });
+
+      expect(result.processedCount).toBe(1);
+      expect(result.skippedTasks.map((skipped) => [skipped.participantId, skipped.reason])).toEqual(
+        [
+          ["npc-b", "observation_target_invalid"],
+          ["npc-c", "observation_contest_unavailable"],
+        ],
+      );
+      expect(result.stopReason).toBe("end_of_step");
+      expect(result.stepComplete).toBe(false);
+    });
+  });
 });

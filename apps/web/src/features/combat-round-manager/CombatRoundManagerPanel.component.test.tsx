@@ -1733,6 +1733,7 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
           startTaskId: "workflow-ce-task-1",
         },
         processedCount: 1,
+        skippedTasks: [],
         stepComplete: false,
         stopParticipantId: "encounter-defender",
         stopReason: "combat_experience_review_required",
@@ -1756,6 +1757,120 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
     const status = await screen.findByRole("region", { name: "Workflow status" });
     expect(within(status).getByText("Rolled 1 NPC Combat Experience check.")).toBeInTheDocument();
     expect(within(status).getByText(/Combat Experience requires GM review/)).toBeInTheDocument();
+  });
+
+  /**
+   * #948. The skip has to reach the GM, so it is rendered in the Workflow Status section the GM
+   * already reads. The status section is driven by the workflow result alone, so the surrounding
+   * encounter here is the existing Combat Experience fixture.
+   */
+  it("shows the GM which participant an Observe run skipped and why", async () => {
+    const pendingEncounter = buildCombatExperiencePendingEncounter();
+    const encounter = buildCombatExperienceOpenEncounter();
+    const participants = [
+      scenarioParticipant({
+        gmControlled: true,
+        id: "scenario-attacker",
+        name: "The Gladiator",
+        order: 0,
+      }),
+      scenarioParticipant({
+        gmControlled: true,
+        id: "scenario-defender",
+        name: "Scyrian cavalry guy",
+        order: 1,
+      }),
+    ];
+    const pending = render(
+      <CombatRoundManagerPanel encounter={pendingEncounter} scenarioParticipants={participants} />,
+    );
+    pending.unmount();
+
+    const initialState = combatRoundStateSchema.parse(encounter.combatRoundState);
+    const firstRoll = rollCombatRoundCombatExperience({
+      command: {
+        commandId: "workflow-skip-command-1",
+        createdAt: "2026-07-23T10:00:02.000Z",
+        createdByUserId: "gm-1",
+      },
+      participantId: "encounter-attacker",
+      rng: () => 0.5,
+      skillTotal: 11,
+      state: initialState,
+    });
+    const updatedEncounter = encounterSessionSchema.parse({
+      ...encounter,
+      combatRoundState: firstRoll.state,
+      updatedAt: "2026-07-23T10:00:02.000Z",
+    });
+    mocks.runStepWorkflow.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: firstRoll.state,
+        viewer: { kind: "gm" },
+      }),
+      encounter: updatedEncounter,
+      participants,
+      workflow: {
+        acceptedTasks: [],
+        alreadyAccepted: false,
+        attemptedTasks: [],
+        finalRevision: updatedEncounter.updatedAt,
+        identity: {
+          encounterId: encounter.id,
+          gmActorUserId: "gm-1",
+          operationFamily: "roll_remaining",
+          runId: "workflow-skip-run-1",
+          schemaVersion: 1,
+          startExecutionGroupId: "workflow-skip-group-1",
+          startProcessFamily: "observation",
+          startingRevision: encounter.updatedAt,
+          startingRound: 1,
+          startingSequence: 2,
+          startingStep: "round_summary",
+          startTaskId: "workflow-skip-task-1",
+        },
+        processedCount: 1,
+        skippedTasks: [
+          {
+            missingData: ["intelligence_characteristic"],
+            participantId: "encounter-defender",
+            reason: "observation_basis_data_missing",
+            task: {
+              executionGroupId: "workflow-skip-group-2",
+              kind: "observation_roll",
+              participantId: "encounter-defender",
+              taskId: "workflow-skip-task-2",
+            },
+          },
+        ],
+        stepComplete: false,
+        stopReason: "end_of_step",
+      },
+    });
+
+    render(<CombatRoundManagerPanel encounter={encounter} scenarioParticipants={participants} />);
+    fireEvent.change(await screen.findByRole("combobox", { name: "Workflow" }), {
+      target: { value: "complete_remaining" },
+    });
+    // The offered button comes from the surrounding fixture; the status section below is rendered
+    // from the Observe workflow result the server returned.
+    fireEvent.click(screen.getByRole("button", { name: "Roll remaining GM Combat Experience" }));
+
+    await waitFor(() => expect(mocks.runStepWorkflow).toHaveBeenCalledTimes(1));
+    const status = await screen.findByRole("region", { name: "Workflow status" });
+    expect(within(status).getByText("Rolled 1 NPC Observe check.")).toBeInTheDocument();
+    expect(
+      within(status).getByText(
+        "Skipped 1 NPC Observe check, left unresolved for manual resolution.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(status).getByText(
+        "Skipped Scyrian cavalry guy: required Observation data is missing for this participant (Intelligence).",
+      ),
+    ).toBeInTheDocument();
+    // Negative control: no completion claim while a task is still unresolved.
+    expect(within(status).queryByText("Completed Observe work.")).not.toBeInTheDocument();
   });
 
   it("keeps an explicitly cleared empty M1 open without issuing another deterministic request", async () => {
@@ -1897,6 +2012,7 @@ describe("CombatRoundManagerPanel GM workflow selector", () => {
           startTaskId: "workflow-task-1",
         },
         processedCount: 1,
+        skippedTasks: [],
         stepComplete: false,
         stopParticipantId: "encounter-defender",
         stopReason: "modifier_review_required",
