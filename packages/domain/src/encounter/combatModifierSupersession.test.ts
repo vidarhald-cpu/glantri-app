@@ -8,6 +8,7 @@ import {
   buildCombatRoundDeclaredAttackOpportunities,
   canonicalCombatModifierEffectSchema,
   clearSupersededGmFigureMarks,
+  combatContextHasSupersededGmFigure,
   combatRoundStateSchema,
   decideCombatRoundDoubleAttackPhase2,
   getCombatRoundCommittedModifierReviewPhases,
@@ -368,6 +369,26 @@ describe("a Double Attack cancel supersedes the GM's committed phase-2 figure (#
       phase2Rows(clearedDraft).map((row) => row.value),
     );
     expect(phase2Rows(afterUnrelatedPass).every((row) => row.value === -1)).toBe(true);
+  });
+
+  it("reports a marked review so step automation does not treat it as straightforward", () => {
+    const { base, state } = openPhase2Review();
+    const decided = cancel(gmCommitsPhase2Review(state, withPhase2(base, -1)));
+    const marked = scenarioParticipantCombatContextSchema.parse(
+      declarationOf(decided).combatContext,
+    );
+
+    expect(combatContextHasSupersededGmFigure(marked, "phase2")).toBe(true);
+    // Another phase's review is not the marked one.
+    expect(combatContextHasSupersededGmFigure(marked, "phase1")).toBe(false);
+    // An unreviewed generated context, and one the GM has re-committed, carry no mark.
+    expect(combatContextHasSupersededGmFigure(base, "phase2")).toBe(false);
+    expect(
+      combatContextHasSupersededGmFigure(
+        clearSupersededGmFigureMarks({ combatContext: marked, phase: "phase2" }),
+        "phase2",
+      ),
+    ).toBe(false);
   });
 
   it("clears the mark from the reviewed phase only, and by its note even if the field was dropped", () => {
