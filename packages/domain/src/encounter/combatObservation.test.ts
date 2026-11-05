@@ -1273,6 +1273,103 @@ describe("Observe Opponent set aside for manual review (#948)", () => {
     expect(getNextCombatRoundEndTask({ state: marked })).toEqual({ kind: "round_boundary" });
   });
 
+  /**
+   * #948 repair cycle 1. This state — **every** pending attempt marked, so nothing blocks — is the
+   * one the sibling case above constructs, and that case asserts only *counts*. Counts were all
+   * satisfied while both Observe rolls were refused `task_not_ready` and `complete_round` was
+   * refused `boundary_closed`: a marked attempt kept a projected **task** and that task was not
+   * **authorizable**, which is the opposite of what ruling 21059 item 4 requires.
+   *
+   * The cause was the projection disagreeing with itself. `boundaryForStep` reads the blocking set
+   * and answers `round_boundary` once the last blocking attempt is marked, while a stored cursor
+   * still naming the marked observer makes `boundaryForCursorStep` answer `round_end`; that pushes
+   * `cursor_disagrees_with_process` scoped to the boundary id, and `hasRelevantDiagnostic` seeds
+   * its match set with `projection.boundary.id`, so one boundary-scoped diagnostic refuses every
+   * command in the boundary. Marking now re-derives the cursor from the round-end task the state
+   * has, exactly as every other round-end mutation does, so the two answers agree.
+   */
+  it("is authorizable, not merely projected, once no blocking Observe work remains", () => {
+    const marked = mark(mark(twoObserverRound(), "a"), "c");
+
+    // The cursor followed the marker onto the round boundary, so both readings of the boundary
+    // agree and the projection raises no diagnostic.
+    expect(getBlockingCombatObservationAttempts(marked)).toEqual([]);
+    expect(marked.currentCursor).toEqual({ roundNumber: 1, step: "SU" });
+    const projection = buildCombatProgressionProjection(marked);
+    expect(projection.boundary.kind).toBe("round_boundary");
+    expect(projection.diagnostics).toEqual([]);
+
+    // Both marked attempts are authorizable, and the GM can cross the boundary.
+    for (const observerParticipantId of ["a", "c"]) {
+      expect(
+        authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "roll_observation",
+          observationAttemptId: `observation:${observerParticipantId}:b:attempt:1`,
+          participantId: observerParticipantId,
+          projection,
+        }),
+      ).toMatchObject({ ok: true });
+    }
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "complete_round",
+        projection,
+      }),
+    ).toMatchObject({ ok: true });
+
+    // The disabled twin, and the pre-repair shape, one field apart: a stored cursor left naming a
+    // marked observer. The diagnostic keeps its full boundary scope and still refuses the work, so
+    // the repair is cursor/boundary agreement and not a blinded gate.
+    const disagreeing = combatRoundStateSchema.parse({
+      ...marked,
+      currentCursor: { participantId: "a", roundNumber: 1, step: "SU" },
+    });
+    const disagreeingProjection = buildCombatProgressionProjection(disagreeing);
+    expect(disagreeingProjection.boundary.kind).toBe("round_end");
+    expect(disagreeingProjection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "cursor_disagrees_with_process",
+    ]);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "roll_observation",
+        observationAttemptId: "observation:a:b:attempt:1",
+        participantId: "a",
+        projection: disagreeingProjection,
+      }),
+    ).toMatchObject({ code: "task_not_ready", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "complete_round",
+        projection: disagreeingProjection,
+      }),
+    ).toMatchObject({ code: "boundary_closed", ok: false });
+  });
+
+  /**
+   * #948 repair cycle 1. The cursor refresh is the canonical round-end derivation, not a special
+   * case for the stranded shape: with one attempt marked and another still blocking, the cursor
+   * moves to the blocking observer — the participant `getNextCombatRoundEndTask` names.
+   */
+  it("moves the round-end cursor to the work that is still blocking", () => {
+    const unmarked = twoObserverRound();
+    expect(unmarked.currentCursor?.participantId).toBe("a");
+
+    const marked = mark(unmarked, "a");
+    expect(getNextCombatRoundEndTask({ state: marked })).toMatchObject({
+      kind: "observation_roll",
+      participantId: "c",
+    });
+    expect(marked.currentCursor?.participantId).toBe("c");
+    // Still at `round_end`, because `c`'s attempt genuinely blocks: the boundary is not released
+    // by marking, only by the blocking set emptying.
+    expect(buildCombatProgressionProjection(marked).boundary.kind).toBe("round_end");
+    expect(buildCombatProgressionProjection(marked).diagnostics).toEqual([]);
+  });
+
   it("re-presents the unresolved attempt in the next round rather than consuming it", () => {
     const marked = mark(twoObserverRound(), "a");
     const boundary = resolveCombatObservationRoundBoundary({ state: marked });

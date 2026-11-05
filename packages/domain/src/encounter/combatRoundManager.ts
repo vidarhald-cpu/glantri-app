@@ -3448,6 +3448,46 @@ export function getBlockingCombatObservationAttempts(
 }
 
 /**
+ * #948 repair cycle 1. Re-derives the stored round-end cursor from the round-end task the state
+ * now has, which is what every other round-end mutation already does with
+ * `getNextCombatRoundEndTask` + `getCombatRoundEndTaskCursor` (see `recordCombatObservationRoll`,
+ * `commitCombatRoundEndParticipantReview` and the distance-roll commands).
+ *
+ * Marking an attempt changes which attempts block the round, so it changes which round-end task is
+ * current. Leaving the cursor behind made the projection disagree with itself: `boundaryForStep`
+ * reads the blocking set and answered `round_boundary`, while the stored cursor still named the
+ * marked observer so `boundaryForCursorStep` answered `round_end`. That pushed
+ * `cursor_disagrees_with_process` scoped to the boundary id, and `hasRelevantDiagnostic` refuses
+ * **every** command in a boundary carrying such a diagnostic — so the marked Observe roll the
+ * ruling requires to stay resolvable was refused `task_not_ready`, and `complete_round` was
+ * refused `boundary_closed`. The repair is this agreement, not a weaker marker and not a blinded
+ * diagnostic: the diagnostic keeps its full scope and still catches a genuine disagreement.
+ *
+ * It only moves a cursor that already stands in this round's round-end family (`SU`), so the
+ * writer can never teleport a cursor in from another step or another round, and it is idempotent:
+ * a cursor that already names the current task is returned unchanged.
+ */
+function withRefreshedCombatRoundEndCursor(state: CombatRoundState): CombatRoundState {
+  const cursor = state.currentCursor;
+  if (!cursor || cursor.step !== "SU" || cursor.roundNumber !== state.roundNumber) return state;
+  const nextTask = getNextCombatRoundEndTask({ state });
+  if (!nextTask) return state;
+  const nextCursor = getCombatRoundEndTaskCursor({ state, task: nextTask });
+  if (
+    nextCursor.step === cursor.step &&
+    nextCursor.roundNumber === cursor.roundNumber &&
+    nextCursor.participantId === cursor.participantId
+  ) {
+    return state;
+  }
+  return combatRoundStateSchema.parse({
+    ...state,
+    currentCursor: nextCursor,
+    selectedParticipantId: nextCursor.participantId,
+  });
+}
+
+/**
  * #948 (Product Owner ruling of 2026-11-05). Marks one pending Observe attempt as requiring
  * manual review, because its required inputs could not be derived.
  *
@@ -3457,6 +3497,9 @@ export function getBlockingCombatObservationAttempts(
  * attempt rather than from the caller, so a marker can never name a contest the round does not
  * have. Marking again with the same reason and missing data reports `changed: false` and returns
  * the state unchanged, so a replayed run writes nothing.
+ *
+ * Marking also re-derives the round-end cursor, because the marker changes which round-end task is
+ * current — see `withRefreshedCombatRoundEndCursor` for why leaving it behind stranded the round.
  */
 export function markCombatObservationManualReviewRequired(input: {
   attemptId: string;
@@ -3498,16 +3541,18 @@ export function markCombatObservationManualReviewRequired(input: {
   return {
     changed: true,
     review,
-    state: combatRoundStateSchema.parse({
-      ...normalized,
-      observationManualReviews: existing
-        ? normalized.observationManualReviews.map((entry) =>
-            entry.attemptId === review.attemptId && entry.roundNumber === review.roundNumber
-              ? review
-              : entry,
-          )
-        : [...normalized.observationManualReviews, review],
-    }),
+    state: withRefreshedCombatRoundEndCursor(
+      combatRoundStateSchema.parse({
+        ...normalized,
+        observationManualReviews: existing
+          ? normalized.observationManualReviews.map((entry) =>
+              entry.attemptId === review.attemptId && entry.roundNumber === review.roundNumber
+                ? review
+                : entry,
+            )
+          : [...normalized.observationManualReviews, review],
+      }),
+    ),
   };
 }
 

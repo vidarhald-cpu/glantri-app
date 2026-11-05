@@ -12,6 +12,7 @@ import {
   scenarioParticipantCombatContextSchema,
   scenarioParticipantStateSchema,
   transitionCanonicalCombatModifierEffect,
+  authorizeCombatProgressionTask,
   buildCombatDefenseSnapshotId,
   buildCombatRoundAttackRollResult,
   buildDamagePersistentLifecycle,
@@ -2689,12 +2690,22 @@ function makeObservationAutomationFixture(input: {
   avoidTargetIndex?: number;
   inactiveParticipantIndex?: number;
   missingProfileIndex?: number;
+  /**
+   * #948 repair cycle 1. Several underivable participants at once, which is how the all-marked
+   * state — every pending Observe attempt in the round set aside — is reached through the real
+   * route. `missingProfileIndex` stays as the single-participant spelling the existing cases use.
+   */
+  missingProfileIndexes?: readonly number[];
   negativeBasisIndex?: number;
   observerCount?: number;
   participantCount?: number;
   playerControlledIndex?: number;
 }) {
   const participantCount = input.participantCount ?? 4;
+  const missingProfileIndexes = new Set(
+    input.missingProfileIndexes ??
+      (input.missingProfileIndex === undefined ? [] : [input.missingProfileIndex]),
+  );
   const observerCount = input.observerCount ?? participantCount;
   const targetIndexFor = (observerIndex: number) => {
     for (let offset = 1; offset < participantCount; offset += 1) {
@@ -2791,7 +2802,7 @@ function makeObservationAutomationFixture(input: {
       isActive: input.inactiveParticipantIndex !== index,
       role: input.playerControlledIndex === index ? "player_character" : "npc",
       snapshot: {
-        ...(input.missingProfileIndex === index
+        ...(missingProfileIndexes.has(index)
           ? {}
           : {
               build:
@@ -2808,10 +2819,9 @@ function makeObservationAutomationFixture(input: {
           combatContext: {
             modifierBuckets: {
               ...emptyModifierBuckets(),
-              general:
-                input.missingProfileIndex === index
-                  ? [{ id: `ambiguous-observe-${index + 1}`, scope: "until", value: 999 }]
-                  : [],
+              general: missingProfileIndexes.has(index)
+                ? [{ id: `ambiguous-observe-${index + 1}`, scope: "until", value: 999 }]
+                : [],
             },
           },
         },
@@ -21622,14 +21632,17 @@ describe("scenarios route contract", () => {
   describe("#948 Observe automation skips a participant whose basis cannot be derived", () => {
     async function runObservationBatch(input: {
       badIndex?: number;
+      /** #948 repair cycle 1. Several underivable participants, for the all-marked state. */
+      badIndexes?: readonly number[];
       negativeBasisIndex?: number;
       participantCount?: number;
       playerControlledIndex?: number;
       runId: string;
     }) {
       const prepared = makeObservationAutomationFixture({
-        avoidTargetIndex: input.badIndex,
-        missingProfileIndex: input.badIndex,
+        avoidTargetIndex: input.badIndexes ? undefined : input.badIndex,
+        missingProfileIndexes:
+          input.badIndexes ?? (input.badIndex === undefined ? undefined : [input.badIndex]),
         negativeBasisIndex: input.negativeBasisIndex,
         participantCount: input.participantCount ?? 5,
         playerControlledIndex: input.playerControlledIndex,
@@ -21872,6 +21885,347 @@ describe("scenarios route contract", () => {
       // Resolved by hand, so it is no longer awaiting manual review: a resolved Observation must
       // never also be reported as set aside.
       expect(finalState.observationManualReviews).toEqual([]);
+    });
+
+    /**
+     * #948 repair cycle 1 — the authorization assertions the first head was missing.
+     *
+     * The committed resolvability test above uses `badIndex: 2`, a **middle** position, where the
+     * round still has blocking Observe work after the marker is written, so the cursor keeps
+     * naming a participant and the projected boundary and the cursor agree by accident. In the
+     * **last** position, and whenever **every** pending attempt is marked, the blocking set falls
+     * to zero: `boundaryForStep` answers `round_boundary` from the blocking set while the stored
+     * cursor still named the marked observer, so `boundaryForCursorStep` answered `round_end`.
+     * That pushed `cursor_disagrees_with_process` scoped to the boundary id, and
+     * `hasRelevantDiagnostic` refuses **every** command in such a boundary — so the marked roll
+     * came back `409 task_not_ready` even with the data present, and `complete_round` came back
+     * `boundary_closed`. The GM could neither resolve the attempt nor cross the boundary.
+     *
+     * So the suite proved a marked attempt keeps a projected *task* and never proved that task is
+     * *authorizable*. These cases assert authorization, in the positions where it broke.
+     */
+    function observationProjectionFor(fixture: {
+      encounter: EncounterSession;
+      participants: readonly ScenarioParticipant[];
+    }) {
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      return buildCombatProgressionProjection(state, {
+        participation: projectActiveCombatParticipation({
+          encounterRevision: fixture.encounter.updatedAt,
+          scenarioParticipants: fixture.participants,
+          state,
+        }),
+      });
+    }
+
+    /** The request that resolves one named marked attempt, rather than whichever task is first. */
+    function markedRollRequestFor(
+      fixture: { encounter: EncounterSession; participants: readonly ScenarioParticipant[] },
+      attemptId: string,
+    ) {
+      const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      const task = getCurrentExecutableCombatTasks(observationProjectionFor(fixture)).find(
+        (candidate) =>
+          candidate.kind === "observation_roll" &&
+          candidate.identity.observationAttemptId === attemptId,
+      )!;
+      expect(task, `no executable task for ${attemptId}`).toBeDefined();
+      return {
+        executionGroupId: task.executionGroupId,
+        expectedRevision: fixture.encounter.updatedAt,
+        observationAttemptId: task.identity.observationAttemptId,
+        opponentParticipantId: task.identity.opponentParticipantId,
+        processId: task.processId,
+        relationshipId: task.identity.relationshipId,
+        scenarioParticipantId: state.participants.find(
+          (participant) => participant.participantId === task.identity.participantId,
+        )?.scenarioParticipantId,
+        stageId: task.stageId,
+        taskId: task.id,
+      };
+    }
+
+    /** Gives every named participant a derivable Observation basis, as the GM's repair would. */
+    function withRepairedParticipants(
+      participants: readonly ScenarioParticipant[],
+      scenarioParticipantIds: readonly string[],
+    ) {
+      const repair = new Set(scenarioParticipantIds);
+      const repaired = participants.map((participant, index) =>
+        repair.has(participant.id)
+          ? ({
+              ...participant,
+              snapshot: {
+                ...participant.snapshot,
+                build: makeDodgeCharacterBuild(`character-${index + 1}`, `NPC ${index + 1}`),
+              },
+            } as unknown as ScenarioParticipant)
+          : participant,
+      );
+      mocks.scenarioService.listScenarioParticipants.mockImplementation(async () => repaired);
+      return repaired;
+    }
+
+    const authorizeMarkedRoll = (
+      fixture: { encounter: EncounterSession; participants: readonly ScenarioParticipant[] },
+      attemptId: string,
+      participantId: string,
+    ) =>
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "roll_observation",
+        observationAttemptId: attemptId,
+        participantId,
+        projection: observationProjectionFor(fixture),
+      });
+
+    it.each([{ participantCount: 4 }, { participantCount: 5 }, { participantCount: 6 }])(
+      "authorizes and resolves the marked attempt in the last position, with $participantCount participants",
+      async ({ participantCount }) => {
+        const badIndex = participantCount - 1;
+        const skippedParticipantId = `encounter-participant-${badIndex + 1}`;
+        const { app, fixture, response } = await runObservationBatch({
+          badIndex,
+          participantCount,
+          runId: `observation-skip-last-${participantCount}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json().workflow).toMatchObject({
+          processedCount: participantCount - 1,
+          stepComplete: false,
+          stopReason: "gm_decision_required",
+        });
+        expect(response.json().workflow.skippedTasks).toHaveLength(1);
+
+        const stranded = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+        expect(stranded.observationAttempts).toHaveLength(participantCount - 1);
+        expect(stranded.observationManualReviews).toHaveLength(1);
+        const markedAttemptId = stranded.observationManualReviews[0]!.attemptId;
+        expect(markedAttemptId.startsWith(`observation:${skippedParticipantId}:`)).toBe(true);
+
+        // The projection agrees with itself: the blocking set is empty, so both the boundary the
+        // step derives and the boundary the stored cursor stands on are `round_boundary`.
+        const projection = observationProjectionFor(fixture);
+        expect(getBlockingCombatObservationAttempts(stranded)).toEqual([]);
+        expect(projection.boundary.kind).toBe("round_boundary");
+        expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([]);
+        expect(stranded.currentCursor?.participantId).toBeUndefined();
+
+        // 1. The marked attempt is authorizable, which is what makes it resolvable.
+        expect(authorizeMarkedRoll(fixture, markedAttemptId, skippedParticipantId)).toMatchObject({
+          ok: true,
+        });
+        // 2. And the GM can cross the round boundary, rather than being told it is closed.
+        expect(
+          authorizeCombatProgressionTask({
+            actor: { kind: "gm" },
+            commandType: "complete_round",
+            projection,
+          }),
+        ).toMatchObject({ ok: true });
+
+        // Resolved through the real route once the data exists — no `clear-current-step`, and no
+        // backtrack: the count rises by the marked attempt and loses none of the rolled ones.
+        const repaired = withRepairedParticipants(fixture.participants, [
+          `participant-${badIndex + 1}`,
+        ]);
+        const resolved = await app.inject({
+          method: "POST",
+          payload: markedRollRequestFor({ ...fixture, participants: repaired }, markedAttemptId),
+          url: "/encounters/encounter-1/combat-round/roll-observation",
+        });
+        await app.close();
+
+        expect(resolved.statusCode, resolved.body).toBe(200);
+        const finalState = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+        expect(finalState.observationAttempts).toHaveLength(participantCount);
+        expect(finalState.observationAttempts.map((attempt) => attempt.id)).toContain(
+          markedAttemptId,
+        );
+        expect(finalState.observationManualReviews).toEqual([]);
+      },
+    );
+
+    it.each([{ participantCount: 4 }, { participantCount: 5 }, { participantCount: 6 }])(
+      "authorizes and resolves every marked attempt when all of them are marked, with $participantCount participants",
+      async ({ participantCount }) => {
+        const badIndexes = Array.from({ length: participantCount }, (_, index) => index);
+        const { app, fixture, response } = await runObservationBatch({
+          badIndexes,
+          participantCount,
+          runId: `observation-skip-all-${participantCount}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        // Nothing derivable, so nothing is processed and nothing is manufactured.
+        expect(response.json().workflow).toMatchObject({
+          processedCount: 0,
+          stepComplete: false,
+        });
+        expect(response.json().workflow.skippedTasks).toHaveLength(participantCount);
+
+        const stranded = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+        expect(stranded.observationAttempts).toEqual([]);
+        expect(stranded.observationManualReviews).toHaveLength(participantCount);
+        expect(getPendingCombatObservationAttempts(stranded)).toHaveLength(participantCount);
+        expect(getBlockingCombatObservationAttempts(stranded)).toEqual([]);
+
+        const projection = observationProjectionFor(fixture);
+        expect(projection.boundary.kind).toBe("round_boundary");
+        expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([]);
+        expect(stranded.currentCursor?.participantId).toBeUndefined();
+
+        // Every marked attempt is authorizable, not merely projected — asserted per attempt, as a
+        // count, rather than inferred from the first one.
+        const markedAttempts = stranded.observationManualReviews.map((review) => ({
+          attemptId: review.attemptId,
+          participantId: review.observerParticipantId,
+        }));
+        expect(
+          markedAttempts.filter(
+            (marked) => authorizeMarkedRoll(fixture, marked.attemptId, marked.participantId).ok,
+          ),
+        ).toHaveLength(participantCount);
+        expect(
+          authorizeCombatProgressionTask({
+            actor: { kind: "gm" },
+            commandType: "complete_round",
+            projection,
+          }),
+        ).toMatchObject({ ok: true });
+
+        // All repaired, then resolved one by one through the real route. Every one answers 200 and
+        // the attempt count rises monotonically: the pre-repair head answered 409 to each of them.
+        const repaired = withRepairedParticipants(
+          fixture.participants,
+          badIndexes.map((index) => `participant-${index + 1}`),
+        );
+        const statuses: number[] = [];
+        for (const marked of markedAttempts) {
+          const resolved = await app.inject({
+            method: "POST",
+            payload: markedRollRequestFor(
+              {
+                encounter: fixture.encounter,
+                participants: repaired,
+              },
+              marked.attemptId,
+            ),
+            url: "/encounters/encounter-1/combat-round/roll-observation",
+          });
+          statuses.push(resolved.statusCode);
+        }
+        await app.close();
+
+        expect(statuses).toEqual(Array.from({ length: participantCount }, () => 200));
+        const finalState = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+        expect(finalState.observationAttempts).toHaveLength(participantCount);
+        expect(finalState.observationManualReviews).toEqual([]);
+      },
+    );
+
+    /**
+     * The gate is not blinded. `cursor_disagrees_with_process` keeps its full boundary scope and
+     * still refuses the work in a boundary whose projection genuinely disagrees with itself; what
+     * the repair changed is that marking no longer *creates* that disagreement.
+     *
+     * The disagreement is reconstructed by hand on the repaired state — writing the stored cursor
+     * back onto the marked observer, which is exactly the shape the previous head left behind — so
+     * this is the pre-repair state measured against the post-repair state, one field apart.
+     */
+    it("negative control — a genuine cursor/process disagreement is still caught and still refuses", async () => {
+      const { app, fixture, response } = await runObservationBatch({
+        badIndex: 4,
+        participantCount: 5,
+        runId: "observation-skip-diagnostic-control",
+      });
+      await app.close();
+      expect(response.statusCode, response.body).toBe(200);
+
+      const agreed = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      const markedAttemptId = agreed.observationManualReviews[0]!.attemptId;
+      const observerParticipantId = agreed.observationManualReviews[0]!.observerParticipantId;
+
+      // The repaired shape: cursor on the boundary, no diagnostic, the marked roll authorized.
+      expect(agreed.currentCursor?.participantId).toBeUndefined();
+      expect(
+        buildCombatProgressionProjection(agreed).diagnostics.map((diagnostic) => diagnostic.code),
+      ).toEqual([]);
+
+      // One field different: the stored cursor named back onto the marked observer.
+      const disagreeing = combatRoundStateSchema.parse({
+        ...agreed,
+        currentCursor: {
+          participantId: observerParticipantId,
+          roundNumber: agreed.roundNumber,
+          step: "SU",
+        },
+      });
+      const disagreeingProjection = buildCombatProgressionProjection(disagreeing);
+      expect(disagreeingProjection.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+        "cursor_disagrees_with_process",
+      );
+      expect(
+        authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "roll_observation",
+          observationAttemptId: markedAttemptId,
+          participantId: observerParticipantId,
+          projection: disagreeingProjection,
+        }),
+      ).toMatchObject({ code: "task_not_ready", ok: false });
+    });
+
+    /**
+     * Two underivable participants in six, which sets aside more attempts than there are
+     * underivable participants: an observer whose *target* has no Intelligence value cannot derive
+     * its contest either. The batch still continues, and every marker is still resolvable.
+     */
+    it("continues and stays resolvable with two underivable participants and more markers than them", async () => {
+      const { app, fixture, response } = await runObservationBatch({
+        badIndexes: [1, 4],
+        participantCount: 6,
+        runId: "observation-skip-two-underivable",
+      });
+      expect(response.statusCode, response.body).toBe(200);
+
+      const stranded = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      // Asserted as exact counts rather than as "more than two": two underivable participants set
+      // aside **four** attempts, because an observer whose target carries no Intelligence value
+      // cannot derive its own contest either. Two of six contests are still rolled.
+      expect(
+        stranded.observationManualReviews.map((review) => [
+          review.observerParticipantId,
+          review.reason,
+        ]),
+      ).toEqual([
+        ["encounter-participant-1", "observation_observed_basis_data_missing"],
+        ["encounter-participant-2", "observation_basis_data_missing"],
+        ["encounter-participant-4", "observation_observed_basis_data_missing"],
+        ["encounter-participant-5", "observation_basis_data_missing"],
+      ]);
+      const skipped = 4;
+      expect(response.json().workflow.skippedTasks).toHaveLength(skipped);
+      expect(response.json().workflow.processedCount).toBe(6 - skipped);
+      expect(stranded.observationAttempts).toHaveLength(6 - skipped);
+      expect(getBlockingCombatObservationAttempts(stranded)).toEqual([]);
+
+      const projection = observationProjectionFor(fixture);
+      expect(projection.boundary.kind).toBe("round_boundary");
+      expect(projection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([]);
+      expect(
+        stranded.observationManualReviews.filter(
+          (review) =>
+            authorizeMarkedRoll(fixture, review.attemptId, review.observerParticipantId).ok,
+        ),
+      ).toHaveLength(skipped);
+      expect(
+        authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "complete_round",
+          projection,
+        }),
+      ).toMatchObject({ ok: true });
+      await app.close();
     });
 
     /**
