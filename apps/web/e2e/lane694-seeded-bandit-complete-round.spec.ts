@@ -9,6 +9,7 @@ import {
 
 import { characterPayload } from "./character-fixture";
 import { LANE694_STORAGE_STATE } from "./lane694-global-setup";
+import { API_URL } from "./targets";
 
 /**
  * #694 — a solo GM must be able to complete a whole round against the shipped seeded
@@ -36,7 +37,6 @@ import { LANE694_STORAGE_STATE } from "./lane694-global-setup";
  * This spec needs a seeded database, so it runs under `playwright.lane694.config.ts` rather than
  * in the ordinary suite, whose account bootstrap is incompatible with a seeded game master.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:4000";
 
 const PUNCH_SOURCE_ID = "unarmed:virtual-weapon-template-punch";
 

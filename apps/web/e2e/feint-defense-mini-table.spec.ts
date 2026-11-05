@@ -8,6 +8,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * Forgejo #877 — Product Owner ruling: the phase panels show their DB/DM/P mini tables by default.
@@ -48,8 +49,6 @@ const WALK_CONTROLS = [
   /^Complete damage review$/,
   /^Complete phase 2 action review$/,
 ];
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 const PRIMARY_WEAPON_TEMPLATE = "weapon-template-longsword";
 const SHIELD_TEMPLATE = "shield-template-medium-metal-shield";

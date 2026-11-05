@@ -1,6 +1,5 @@
 import { expect, test, type APIResponse } from "@playwright/test";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+import { API_URL } from "./targets";
 
 async function json<T>(response: APIResponse): Promise<T> {
   if (!response.ok()) throw new Error(`${response.status()} ${await response.text()}`);

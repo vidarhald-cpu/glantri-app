@@ -7,6 +7,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * #771 R2-3 and R2-12 — rendered evidence for a composition change on both Combat surfaces.
@@ -31,7 +32,6 @@ import { characterPayload } from "./character-fixture";
  * below is the rendered one: whatever step navigation lands on, the inspected step is one of the
  * rendered column titles and exactly one tracker cell carries the selection outline.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 /** One row of controls at this type scale measures ~34px; a wrapped line roughly doubles that. */
 const SINGLE_ROW_HEIGHT_LIMIT = 52;

@@ -1,9 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
-const BROWSER_API_URL = process.env.PLAYWRIGHT_BROWSER_API_URL ?? "http://localhost:4000";
+import { API_URL, BROWSER_API_URL } from "./targets";
 
 interface CanonicalCharacter {
   build: {

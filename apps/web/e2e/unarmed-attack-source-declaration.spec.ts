@@ -8,6 +8,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * #590 — Punch and Kick are intrinsic combat attack sources and must be declarable without
@@ -17,7 +18,6 @@ import { characterPayload } from "./character-fixture";
  * field reaches the served bundle and the rendered option list, not only the source file: a
  * snapshot persists the rest of the catalogue, so a source edit alone would prove nothing.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 const PUNCH_SOURCE_ID = "unarmed:virtual-weapon-template-punch";
 const KICK_SOURCE_ID = "unarmed:virtual-weapon-template-kick";

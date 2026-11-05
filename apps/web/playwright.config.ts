@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { WEB_URL } from "./e2e/targets";
+
 export default defineConfig({
   testDir: "./e2e",
   // Lane-scoped proof specs (`e2e/lane<issue>-*.spec.ts`) are deliberately excluded from the
@@ -14,7 +16,7 @@ export default defineConfig({
   reporter: process.env.CI ? "list" : "html",
   globalSetup: "./e2e/global-setup",
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    baseURL: WEB_URL,
     trace: "retain-on-failure",
   },
   projects: [

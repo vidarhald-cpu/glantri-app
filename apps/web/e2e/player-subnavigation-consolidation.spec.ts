@@ -1,8 +1,7 @@
 import { expect, test, type APIResponse } from "@playwright/test";
 import type { EncounterSession } from "@glantri/domain";
 import { createCharacterForE2e } from "./character-fixture";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+import { API_URL } from "./targets";
 
 async function json<T>(response: APIResponse): Promise<T> {
   expect(response.ok(), await response.text()).toBe(true);

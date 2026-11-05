@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
-const API = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
-const WEB = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+import { API_URL as API, WEB_URL as WEB } from "./targets";
 const headers = { origin: WEB, "x-glantri-artifact-mutation": "1" };
 test.describe("AM1 Artifact library and import", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
