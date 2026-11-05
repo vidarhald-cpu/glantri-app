@@ -8190,6 +8190,12 @@ export default function CombatRoundManagerPanel({
       {stepWorkflowStatusPresentation.completion ? (
         <span>{stepWorkflowStatusPresentation.completion}</span>
       ) : null}
+      {stepWorkflowStatusPresentation.skippedSummary ? (
+        <span>{stepWorkflowStatusPresentation.skippedSummary}</span>
+      ) : null}
+      {stepWorkflowStatusPresentation.skippedReports.map((report) => (
+        <span key={report}>{report}</span>
+      ))}
       {stepWorkflowStatusPresentation.stopMessage ? (
         <span>
           {stepWorkflowStatusPresentation.stopParticipantLabel

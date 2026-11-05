@@ -219,6 +219,7 @@ import {
   recordCombatRoundNoEligibleParrySource,
   recordCombatRoundParryResult,
   recordCombatRoundOffensiveParryBrawlingRoll,
+  markCombatObservationManualReviewRequired,
   recordCombatObservationRoll,
   recordContinuedContactMaintenanceRoll,
   reviewCombatRoundDamageResult,
@@ -279,6 +280,8 @@ import {
   type CombatStepAutomationProjection,
   type CombatStepAutomationProcessFamily,
   type CombatStepAutomationRunIdentity,
+  type CombatStepAutomationSkipReason,
+  type CombatStepAutomationSkippedTask,
   type CombatStepAutomationStopReason,
   type CombatRoundEndDistanceCalculationReadiness,
   type CombatGenericActionDuration,
@@ -393,6 +396,7 @@ import {
   resolveCombatMovementBurden,
   getCombatMovementModifierApplicability,
   resolveCombatObservationSkillProfile,
+  findMissingCombatObservationBasisData,
   resolveGenericCombatActionRoll,
   resolveCombatDisarmRoll,
 } from "@glantri/rules-engine";
@@ -545,8 +549,13 @@ type ApiCombatObservationRollContext =
       targetBasis: ReturnType<typeof buildObservationRollBasis>;
     }
   | {
-      kind: "stopped";
-      reason: "observation_review_required" | "target_invalid";
+      /**
+       * #948. One Observe contest that cannot be derived. It is not a batch stop: the caller
+       * skips this task, leaves it unresolved, and carries the reason to the GM.
+       */
+      kind: "not_derivable";
+      missingData: readonly string[];
+      reason: CombatStepAutomationSkipReason;
     };
 
 /** Resolves one exact Observe contest entirely from canonical server-owned combat facts. */
@@ -575,10 +584,10 @@ function resolveApiCombatObservationRollContext(input: {
     scenarioParticipants,
   });
   if (!targetEncounterParticipant || !target?.isActive) {
-    return { kind: "stopped", reason: "target_invalid" };
+    return { kind: "not_derivable", missingData: [], reason: "observation_target_invalid" };
   }
   if (!observerEncounterParticipant || !observer?.isActive) {
-    return { kind: "stopped", reason: "observation_review_required" };
+    return { kind: "not_derivable", missingData: [], reason: "observation_contest_unavailable" };
   }
   const pending = getPendingCombatObservationAttempts(input.state).find(
     (attempt) =>
@@ -587,18 +596,51 @@ function resolveApiCombatObservationRollContext(input: {
       attempt.relationshipId === input.relationshipId &&
       attempt.targetParticipantId === input.targetParticipantId,
   );
-  if (!pending) return { kind: "stopped", reason: "observation_review_required" };
+  if (!pending) {
+    return { kind: "not_derivable", missingData: [], reason: "observation_contest_unavailable" };
+  }
+
+  const observerSkillInput = getScenarioParticipantFeintSkillInput(observer);
+  const targetSkillInput = getScenarioParticipantFeintSkillInput(target);
+  // #948. Guard on the required Observation data being absent, before anything can substitute a
+  // zero for it. `findMissingCombatObservationBasisData` keys on the data the rule reads, so a
+  // Template or monster actor whose Stats live in its persisted snapshot passes here, and a
+  // temporary actor is never judged by its null `entityId`.
+  const observerMissingData = findMissingCombatObservationBasisData({
+    build: observerSkillInput.build,
+    sheetSummary: observerSkillInput.sheetSummary,
+    snapshot: observer.snapshot,
+  });
+  if (observerMissingData.length > 0) {
+    return {
+      kind: "not_derivable",
+      missingData: observerMissingData,
+      reason: "observation_basis_data_missing",
+    };
+  }
+  const targetMissingData = findMissingCombatObservationBasisData({
+    build: targetSkillInput.build,
+    sheetSummary: targetSkillInput.sheetSummary,
+    snapshot: target.snapshot,
+  });
+  if (targetMissingData.length > 0) {
+    return {
+      kind: "not_derivable",
+      missingData: targetMissingData,
+      reason: "observation_observed_basis_data_missing",
+    };
+  }
 
   const observerProfile = resolveCombatObservationSkillProfile({
-    ...getScenarioParticipantFeintSkillInput(observer),
+    ...observerSkillInput,
     skills: defaultCanonicalContent.skills,
   });
   const targetProfile = resolveCombatObservationSkillProfile({
-    ...getScenarioParticipantFeintSkillInput(target),
+    ...targetSkillInput,
     skills: defaultCanonicalContent.skills,
   });
   if (!observerProfile || !targetProfile) {
-    return { kind: "stopped", reason: "observation_review_required" };
+    return { kind: "not_derivable", missingData: [], reason: "observation_basis_not_derivable" };
   }
 
   const observerModifierProjection = buildLiveCombatModifierContributionProjection({
@@ -680,7 +722,7 @@ function resolveApiCombatObservationRollContext(input: {
       }),
     };
   } catch {
-    return { kind: "stopped", reason: "observation_review_required" };
+    return { kind: "not_derivable", missingData: [], reason: "observation_basis_not_derivable" };
   }
 }
 
@@ -5191,6 +5233,12 @@ function classifyApiCombatStepAutomationTask(input: {
   task: CombatProgressionTask;
 }):
   | { kind: "execute"; countsTowardProcessed: boolean }
+  | {
+      kind: "skip";
+      key?: string;
+      missingData: readonly string[];
+      reason: CombatStepAutomationSkipReason;
+    }
   | { kind: "stop"; reason: CombatStepAutomationStopReason } {
   const { operationFamily, task } = input;
   if (task.kind === "gm_advance_boundary" && task.expectedCommand === "complete_round") {
@@ -5350,8 +5398,10 @@ function classifyApiCombatStepAutomationTask(input: {
       const observationAttemptId = task.identity.observationAttemptId;
       const relationshipId = task.identity.relationshipId;
       const targetParticipantId = task.identity.opponentParticipantId;
+      // #948. Every Observe derivation failure is a per-participant skip, not a batch stop. The
+      // task is left unresolved for manual adjudication and the remaining NPCs are processed.
       if (!observationAttemptId || !relationshipId || !targetParticipantId) {
-        return { kind: "stop", reason: "observation_review_required" };
+        return { kind: "skip", missingData: [], reason: "observation_contest_unavailable" };
       }
       const context = resolveApiCombatObservationRollContext({
         encounter: input.encounter,
@@ -5362,8 +5412,15 @@ function classifyApiCombatStepAutomationTask(input: {
         state: input.projection.state,
         targetParticipantId,
       });
-      if (context.kind === "stopped") {
-        return { kind: "stop", reason: context.reason };
+      if (context.kind === "not_derivable") {
+        // #948. The Observe attempt id is the skip's durable identity: the projected task id
+        // carries the boundary and the stage, and both move while the rest of the batch runs.
+        return {
+          kind: "skip",
+          key: observationAttemptId,
+          missingData: context.missingData,
+          reason: context.reason,
+        };
       }
     }
     if (task.kind === "continued_contact_maintenance_roll") {
@@ -6838,6 +6895,10 @@ function buildPlayerFacingCombatRoundStateForUser(input: {
       controlledParticipantIds: controlledEncounterParticipantIds,
       relationships: roundState.observationRelationships,
     }),
+    // #948: a manual-review marker names an observer and a target and says which required datum of
+    // theirs is absent, so no player receives one. The player-facing schema declares the field as a
+    // list only an empty value parses into, so this override is what the player reads.
+    observationManualReviews: [],
     observationRelationships: buildPlayerSafeCombatObservationRelationships({
       controlledParticipantIds: controlledEncounterParticipantIds,
       relationships: roundState.observationRelationships,
@@ -13125,10 +13186,10 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
         targetParticipantId: body.opponentParticipantId,
       });
-      if (observationContext.kind === "stopped") {
+      if (observationContext.kind === "not_derivable") {
         return reply.code(409).send({
           error:
-            observationContext.reason === "target_invalid"
+            observationContext.reason === "observation_target_invalid"
               ? "The observed opponent is no longer available."
               : "Observe Opponent requires exact canonical relationship and skill facts.",
         });
@@ -14934,6 +14995,43 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           identity,
           projection: initial,
         });
+        // #948. A skipped task resolves nothing, so it is still the current task when the same run
+        // is replayed. Re-derive the skips from the present state and walk past them, so a replay
+        // reports the same participants and reasons instead of reading as a changed task.
+        const replayTaskRecord = (replayed: CombatProgressionTask) => ({
+          executionGroupId: replayed.executionGroupId,
+          kind: replayed.kind,
+          participantId:
+            replayed.owner?.kind === "combatant"
+              ? replayed.owner.participantId
+              : replayed.identity.participantId,
+          taskId: replayed.id,
+        });
+        const replaySkippedTasks: CombatStepAutomationSkippedTask[] = [];
+        let blockingTask = currentTask;
+        let blockingDecision = currentDecision;
+        while (blockingTask && blockingDecision?.kind === "skip") {
+          const record = replayTaskRecord(blockingTask);
+          replaySkippedTasks.push({
+            missingData: [...blockingDecision.missingData],
+            participantId: record.participantId,
+            reason: blockingDecision.reason,
+            task: record,
+          });
+          const skippedId = blockingTask.id;
+          blockingTask = initial.tasks[initial.tasks.findIndex((t) => t.id === skippedId) + 1];
+          blockingDecision = blockingTask
+            ? classifyApiCombatStepAutomationTask({
+                combatExperienceSkillLookups,
+                encounter: workingEncounter,
+                operationFamily: start.operationFamily,
+                projection: initial,
+                scenarioParticipants: workingParticipants,
+                scopeProcessFamily: identity.startProcessFamily,
+                task: blockingTask,
+              })
+            : undefined;
+        }
         const acceptedTasks = acceptedLinks.map(({ command, link }) => ({
           commandId: command.id,
           executionGroupId: link.executionGroupId,
@@ -14949,11 +15047,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 currentTask?.kind === "distance_commit"
               ? "distance_review_required"
               : "end_of_step"
-          : currentDecision?.kind === "stop"
-            ? currentDecision.reason
-            : acceptedLinks.length >= DEFAULT_COMBAT_STEP_AUTOMATION_LIMIT
-              ? "safety_limit_reached"
-              : "task_changed";
+          : blockingDecision?.kind === "stop"
+            ? blockingDecision.reason
+            : !blockingTask
+              ? "end_of_step"
+              : acceptedLinks.length >= DEFAULT_COMBAT_STEP_AUTOMATION_LIMIT
+                ? "safety_limit_reached"
+                : "task_changed";
         return {
           commandEnvelope: buildCombatRoundCommandEnvelope({
             state: initial.state,
@@ -14985,23 +15085,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               : undefined,
             identity,
             processedCount: acceptedLinks.filter(({ link }) => link.countsTowardProcessed).length,
+            skippedTasks: replaySkippedTasks,
             stepComplete,
-            stopParticipantId:
-              currentTask?.owner?.kind === "combatant"
-                ? currentTask.owner.participantId
-                : currentTask?.identity.participantId,
-            stopReason,
-            stopTask: currentTask
-              ? {
-                  executionGroupId: currentTask.executionGroupId,
-                  kind: currentTask.kind,
-                  participantId:
-                    currentTask.owner?.kind === "combatant"
-                      ? currentTask.owner.participantId
-                      : currentTask.identity.participantId,
-                  taskId: currentTask.id,
-                }
+            stopParticipantId: blockingTask
+              ? replayTaskRecord(blockingTask).participantId
               : undefined,
+            stopReason,
+            stopTask: blockingTask ? replayTaskRecord(blockingTask) : undefined,
           },
         };
       }
@@ -15042,6 +15132,49 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             scopeProcessFamily: identity.startProcessFamily,
             task,
           }),
+        // #948 (Product Owner ruling of 2026-11-05). Persists the narrow "manual review required"
+        // marker for the Observe attempt this run set aside, then returns the projection that
+        // follows it. Writing it is what unpins the observer's round-end progression, so the
+        // participants after it become executable and the batch continues; the attempt itself
+        // stays listed, unresolved and manually resolvable, and nothing is manufactured for it.
+        recordSkip: async ({ missingData, projection, reason, task }) => {
+          const apiProjection = projection as ApiCombatStepAutomationProjection;
+          const attemptId = task.identity.observationAttemptId;
+          if (task.kind !== "observation_roll" || !attemptId) return apiProjection;
+          const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
+          const markedAt = new Date(
+            Math.max(Date.now(), Number.isFinite(priorRevisionTime) ? priorRevisionTime + 1 : 0),
+          ).toISOString();
+          try {
+            const marked = markCombatObservationManualReviewRequired({
+              attemptId,
+              markedAt,
+              markedByUserId: user.id,
+              missingData,
+              reason,
+              state: apiProjection.state,
+            });
+            if (!marked.changed) return apiProjection;
+            workingEncounter = await encounterService.updateCombatEncounter({
+              campaignId: access.campaignId,
+              encounterId,
+              expectedRevision: workingEncounter!.updatedAt,
+              scenarioId,
+              session: {
+                ...workingEncounter!,
+                combatRoundState: marked.state,
+                currentRound: marked.state.roundNumber,
+                updatedAt: markedAt,
+              },
+            });
+            return project();
+          } catch {
+            // Fail closed. With no persisted marker the attempt keeps blocking its observer, which
+            // is the behaviour before this state existed: the run stops at this participant rather
+            // than continuing on a skip no round state records.
+            return apiProjection;
+          }
+        },
         execute: async ({ commandId, projection, task }) => {
           const apiProjection = projection as ApiCombatStepAutomationProjection;
           const countsTowardProcessed =
@@ -15399,11 +15532,14 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 state: apiProjection.state,
                 targetParticipantId,
               });
-              if (context.kind === "stopped") {
+              if (context.kind === "not_derivable") {
+                // Unreachable in a normal run: classification skips these tasks before they are
+                // executed. Kept as a fail-closed backstop so nothing is ever rolled without a
+                // derived basis.
                 return {
                   kind: "stopped" as const,
                   projection: apiProjection,
-                  reason: context.reason,
+                  reason: "observation_review_required" as const,
                 };
               }
               const rolled = recordCombatObservationRoll({

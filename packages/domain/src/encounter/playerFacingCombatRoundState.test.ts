@@ -636,4 +636,61 @@ describe("#517 player-facing encounter: non-assignability from stored values at 
       }),
     ).toThrow(/Expected never/);
   });
+
+  /**
+   * #948 — the new round-scoped "manual review required" marker, on the same footing.
+   *
+   * A marker names an observer and a target and says which required datum of theirs is absent, so
+   * no player receives one. `observationManualReviews` is `neverPlayerFacing`, so the guarantee is
+   * refusal rather than silent emptying, which is what makes the
+   * `observationManualReviews: []` override in `buildPlayerFacingCombatRoundStateForUser`
+   * (`encounterRoutes.ts`) impossible to forget.
+   */
+  it("#948 — refuses a populated Observe manual-review marker rather than emptying it", () => {
+    const storedReview = {
+      attemptId: "observation:hero:guard:attempt:1",
+      markedAt: TIMESTAMP,
+      markedByUserId: "user-gm",
+      missingData: ["intelligence_characteristic"],
+      observerParticipantId: "hero",
+      reason: "observation_basis_data_missing" as const,
+      relationshipId: "observation:hero:guard",
+      roundNumber: 1,
+      targetParticipantId: "guard",
+    };
+    const state = combatRoundStateSchema.parse({
+      ...storedRoundStateInput(),
+      observationManualReviews: [storedReview],
+    });
+    expect(
+      state.observationManualReviews,
+      "the fixture must really hold a marker, or this proves nothing",
+    ).toEqual([storedReview]);
+    const projectedParticipants = () =>
+      state.participants.map((participant) =>
+        buildPlayerFacingCombatRoundParticipant({ participant }),
+      );
+
+    const build = () =>
+      buildPlayerFacing(playerFacingCombatRoundStateSchema, state, {
+        events: [],
+        participants: projectedParticipants(),
+      });
+    expect(build).toThrow(/Expected never/);
+    expect(build).toThrow(/observationManualReviews/);
+
+    const player = buildPlayerFacing(playerFacingCombatRoundStateSchema, state, {
+      events: [],
+      observationManualReviews: [],
+      participants: projectedParticipants(),
+    });
+    expect(player.observationManualReviews).toEqual([]);
+    expect(JSON.stringify(player)).not.toContain("intelligence_characteristic");
+    expect(() =>
+      playerFacingCombatRoundStateSchema.parse({
+        ...player,
+        observationManualReviews: [storedReview],
+      }),
+    ).toThrow(/Expected never/);
+  });
 });

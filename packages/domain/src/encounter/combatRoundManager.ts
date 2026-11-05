@@ -219,10 +219,13 @@ import { combatSkillContestCalculationSchema } from "./combatSkillContest";
 import {
   buildCombatObservationRelationshipId,
   combatObservationAttemptSchema,
+  combatObservationManualReviewSchema,
   combatObservationRelationshipSchema,
   combatObservationRoundUndoFactSchema,
   getCombatObservationRequiredRounds,
   resolveCombatObservationAttempt,
+  type CombatObservationManualReview,
+  type CombatObservationManualReviewReason,
   type CombatObservationRelationship,
   type CombatObservationAttempt,
   type CombatObservationRollBasis,
@@ -3091,6 +3094,7 @@ export interface CompletedCombatRound {
   genericActions: CombatGenericAction[];
   missileReadiness: CombatMissileReadiness[];
   observationAttempts: CombatObservationAttempt[];
+  observationManualReviews: CombatObservationManualReview[];
   observationRelationships: CombatObservationRelationship[];
   offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
   participants: z.infer<typeof combatRoundParticipantStateSchema>[];
@@ -3131,6 +3135,7 @@ export const completedCombatRoundSchema: z.ZodType<CompletedCombatRound, z.ZodTy
       missileReadiness: z.array(combatMissileReadinessSchema).default([]),
       offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
       observationAttempts: z.array(combatObservationAttemptSchema).default([]),
+      observationManualReviews: z.array(combatObservationManualReviewSchema).default([]),
       observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
       adjustDistanceProposals: z.array(combatAdjustDistanceProposalSchema).default([]),
       phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
@@ -3169,6 +3174,7 @@ export interface CombatRoundState {
   gmBacktrackHold?: z.infer<typeof combatRoundGmBacktrackHoldSchema>;
   offensiveParryContests: z.infer<typeof offensiveParryContestSchema>[];
   observationAttempts: CombatObservationAttempt[];
+  observationManualReviews: CombatObservationManualReview[];
   observationRelationships: CombatObservationRelationship[];
   phaseResolutionCursor?: z.infer<typeof combatRoundPhaseResolutionCursorSchema>;
   phaseResolutionResults: z.infer<typeof combatRoundPhaseResolutionResultSchema>[];
@@ -3209,6 +3215,11 @@ const activeCombatRoundStateShape = {
   gmBacktrackHold: combatRoundGmBacktrackHoldSchema.optional(),
   offensiveParryContests: z.array(offensiveParryContestSchema).default([]),
   observationAttempts: z.array(combatObservationAttemptSchema).default([]),
+  /**
+   * #948. The round's Observe attempts automation has set aside for manual review. A stored round
+   * without the key reads as an empty list, so every pending attempt blocks as it did before.
+   */
+  observationManualReviews: z.array(combatObservationManualReviewSchema).default([]),
   observationRelationships: z.array(combatObservationRelationshipSchema).default([]),
   phaseResolutionCursor: combatRoundPhaseResolutionCursorSchema.optional(),
   phaseResolutionResults: z.array(combatRoundPhaseResolutionResultSchema).default([]),
@@ -3403,6 +3414,149 @@ export function getPendingCombatObservationAttempts(
 }
 
 /**
+ * #948. The round's manual-review markers, scoped to the round being played. A marker written in
+ * an earlier round is never read, so each round decides for itself which attempts are set aside.
+ */
+export function getCombatObservationManualReviews(
+  state: CombatRoundState,
+): CombatObservationManualReview[] {
+  const normalized = combatRoundStateSchema.parse(state);
+  return normalized.observationManualReviews.filter(
+    (review) => review.roundNumber === normalized.roundNumber,
+  );
+}
+
+/**
+ * #948. The pending Observe attempts that still block the round's progression: every pending
+ * attempt except the ones marked for manual review this round.
+ *
+ * This is deliberately **not** the same question as `getPendingCombatObservationAttempts`, which
+ * keeps listing a marked attempt so it stays visible and manually resolvable. Progression-
+ * completeness and Observation-completeness are two different questions about the same attempt:
+ * a marked attempt stops holding the round's cursor, and remains an uncompleted Observation.
+ */
+export function getBlockingCombatObservationAttempts(
+  state: CombatRoundState,
+): PendingCombatObservationAttempt[] {
+  const normalized = combatRoundStateSchema.parse(state);
+  const marked = new Set(
+    getCombatObservationManualReviews(normalized).map((review) => review.attemptId),
+  );
+  return getPendingCombatObservationAttempts(normalized).filter(
+    (attempt) => !marked.has(attempt.attemptId),
+  );
+}
+
+/**
+ * #948 repair cycle 1. Re-derives the stored round-end cursor from the round-end task the state
+ * now has, which is what every other round-end mutation already does with
+ * `getNextCombatRoundEndTask` + `getCombatRoundEndTaskCursor` (see `recordCombatObservationRoll`,
+ * `commitCombatRoundEndParticipantReview` and the distance-roll commands).
+ *
+ * Marking an attempt changes which attempts block the round, so it changes which round-end task is
+ * current. Leaving the cursor behind made the projection disagree with itself: `boundaryForStep`
+ * reads the blocking set and answered `round_boundary`, while the stored cursor still named the
+ * marked observer so `boundaryForCursorStep` answered `round_end`. That pushed
+ * `cursor_disagrees_with_process` scoped to the boundary id, and `hasRelevantDiagnostic` refuses
+ * **every** command in a boundary carrying such a diagnostic — so the marked Observe roll the
+ * ruling requires to stay resolvable was refused `task_not_ready`, and `complete_round` was
+ * refused `boundary_closed`. The repair is this agreement, not a weaker marker and not a blinded
+ * diagnostic: the diagnostic keeps its full scope and still catches a genuine disagreement.
+ *
+ * It only moves a cursor that already stands in this round's round-end family (`SU`), so the
+ * writer can never teleport a cursor in from another step or another round, and it is idempotent:
+ * a cursor that already names the current task is returned unchanged.
+ */
+function withRefreshedCombatRoundEndCursor(state: CombatRoundState): CombatRoundState {
+  const cursor = state.currentCursor;
+  if (!cursor || cursor.step !== "SU" || cursor.roundNumber !== state.roundNumber) return state;
+  const nextTask = getNextCombatRoundEndTask({ state });
+  if (!nextTask) return state;
+  const nextCursor = getCombatRoundEndTaskCursor({ state, task: nextTask });
+  if (
+    nextCursor.step === cursor.step &&
+    nextCursor.roundNumber === cursor.roundNumber &&
+    nextCursor.participantId === cursor.participantId
+  ) {
+    return state;
+  }
+  return combatRoundStateSchema.parse({
+    ...state,
+    currentCursor: nextCursor,
+    selectedParticipantId: nextCursor.participantId,
+  });
+}
+
+/**
+ * #948 (Product Owner ruling of 2026-11-05). Marks one pending Observe attempt as requiring
+ * manual review, because its required inputs could not be derived.
+ *
+ * It resolves nothing and manufactures nothing: no roll, no basis, no attempt record, and the
+ * relationship's `completedAttempts` is untouched. Only an attempt the round currently has
+ * pending can be marked — the observer, target and relationship are taken from that pending
+ * attempt rather than from the caller, so a marker can never name a contest the round does not
+ * have. Marking again with the same reason and missing data reports `changed: false` and returns
+ * the state unchanged, so a replayed run writes nothing.
+ *
+ * Marking also re-derives the round-end cursor, because the marker changes which round-end task is
+ * current — see `withRefreshedCombatRoundEndCursor` for why leaving it behind stranded the round.
+ */
+export function markCombatObservationManualReviewRequired(input: {
+  attemptId: string;
+  markedAt: string;
+  markedByUserId?: string;
+  missingData?: readonly string[];
+  reason: CombatObservationManualReviewReason;
+  state: CombatRoundState;
+}): { changed: boolean; review: CombatObservationManualReview; state: CombatRoundState } {
+  const normalized = combatRoundStateSchema.parse(input.state);
+  const pending = getPendingCombatObservationAttempts(normalized).find(
+    (attempt) => attempt.attemptId === input.attemptId,
+  );
+  if (!pending) {
+    throw new RangeError("Only a pending Observe Opponent attempt can require manual review.");
+  }
+  const review = combatObservationManualReviewSchema.parse({
+    attemptId: pending.attemptId,
+    markedAt: input.markedAt,
+    markedByUserId: input.markedByUserId,
+    missingData: [...(input.missingData ?? [])],
+    observerParticipantId: pending.observerParticipantId,
+    reason: input.reason,
+    relationshipId: pending.relationshipId,
+    roundNumber: normalized.roundNumber,
+    targetParticipantId: pending.targetParticipantId,
+  });
+  const existing = normalized.observationManualReviews.find(
+    (entry) => entry.attemptId === review.attemptId && entry.roundNumber === review.roundNumber,
+  );
+  if (
+    existing &&
+    existing.reason === review.reason &&
+    existing.missingData.length === review.missingData.length &&
+    existing.missingData.every((datum, index) => datum === review.missingData[index])
+  ) {
+    return { changed: false, review: existing, state: normalized };
+  }
+  return {
+    changed: true,
+    review,
+    state: withRefreshedCombatRoundEndCursor(
+      combatRoundStateSchema.parse({
+        ...normalized,
+        observationManualReviews: existing
+          ? normalized.observationManualReviews.map((entry) =>
+              entry.attemptId === review.attemptId && entry.roundNumber === review.roundNumber
+                ? review
+                : entry,
+            )
+          : [...normalized.observationManualReviews, review],
+      }),
+    ),
+  };
+}
+
+/**
  * Records the observer-owned SU command. The observer's open-ended roll and the
  * hidden target roll resolve together in this one canonical mutation.
  */
@@ -3484,6 +3638,12 @@ export function recordCombatObservationRoll(input: {
   let nextState = combatRoundStateSchema.parse({
     ...normalized,
     observationAttempts: [...normalized.observationAttempts, attempt],
+    // #948. The attempt is now resolved, so its manual-review marker is dropped: a resolved
+    // Observation must never also be reported as awaiting manual review. Undoing this roll does
+    // not restore the marker, which puts the attempt back to blocking — the fail-closed side.
+    observationManualReviews: normalized.observationManualReviews.filter(
+      (review) => review.attemptId !== attempt.id,
+    ),
     observationRelationships: relationships,
   });
   const beforeCursor = getCombatRoundEndReviewCursor({
@@ -14582,7 +14742,9 @@ function getRoundEndReviewParticipantTaskId(input: {
   return orderedParticipants.find((participant) => {
     const review = input.roundEndReview.participantReviews[participant.participantId];
     if (review?.status !== "complete") return true;
-    return getPendingCombatObservationAttempts(input.state).some(
+    // #948. Only a *blocking* attempt holds its observer's round-end work open. A marked attempt
+    // stays listed and manually resolvable, but it no longer pins the round-end cursor.
+    return getBlockingCombatObservationAttempts(input.state).some(
       (attempt) => attempt.observerParticipantId === participant.participantId,
     );
   })?.participantId;
@@ -14672,7 +14834,7 @@ export function getNextCombatRoundEndTask(input: {
     const reviewStatus = roundEndReview.participantReviews[reviewParticipantId]?.status;
     const observationAttempt =
       reviewStatus === "complete"
-        ? getPendingCombatObservationAttempts(normalized).find(
+        ? getBlockingCombatObservationAttempts(normalized).find(
             (attempt) => attempt.observerParticipantId === reviewParticipantId,
           )
         : undefined;
@@ -14691,7 +14853,7 @@ export function getNextCombatRoundEndTask(input: {
     };
   }
 
-  const observationAttempt = getPendingCombatObservationAttempts(normalized)[0];
+  const observationAttempt = getBlockingCombatObservationAttempts(normalized)[0];
   if (observationAttempt) {
     return {
       kind: "observation_roll",
@@ -19548,6 +19710,7 @@ function buildCompletedCombatRound(input: {
     missileReadiness: normalized.missileReadiness,
     offensiveParryContests: normalized.offensiveParryContests,
     observationAttempts: normalized.observationAttempts,
+    observationManualReviews: normalized.observationManualReviews,
     observationRelationships: normalized.observationRelationships,
     phaseResolutionCursor: normalized.phaseResolutionCursor,
     phaseResolutionResults: normalized.phaseResolutionResults,
@@ -20072,6 +20235,14 @@ export function initializeCombatRoundState(input: {
     observationAttempts: (existing?.observationAttempts ?? []).filter(
       (attempt) => attempt.roundNumber === roundNumber,
     ),
+    // #948. Round-scoped and per participant: a marker from another round, or one naming a
+    // participant the round no longer has, is dropped rather than read.
+    observationManualReviews: (existing?.observationManualReviews ?? []).filter(
+      (review) =>
+        review.roundNumber === roundNumber &&
+        participantIds.has(review.observerParticipantId) &&
+        participantIds.has(review.targetParticipantId),
+    ),
     observationRelationships: (existing?.observationRelationships ?? []).filter(
       (relationship) =>
         participantIds.has(relationship.observerParticipantId) &&
@@ -20408,6 +20579,7 @@ export function advanceCombatRoundStep(
       missileReadiness: completedRoundState.missileReadiness,
       offensiveParryContests: [],
       observationAttempts: [],
+      observationManualReviews: [],
       observationRelationships: completedRoundState.observationRelationships,
       phaseResolutionCursor: undefined,
       phaseResolutionResults: [],
@@ -30188,6 +30360,7 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
         missileReadiness: round.missileReadiness,
         offensiveParryContests: round.offensiveParryContests,
         observationAttempts: round.observationAttempts,
+        observationManualReviews: round.observationManualReviews,
         observationRelationships: round.observationRelationships,
         phaseResolutionCursor: round.phaseResolutionCursor,
         phaseResolutionResults: round.phaseResolutionResults,

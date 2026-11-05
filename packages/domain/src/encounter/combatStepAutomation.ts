@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { CombatProgressionTask } from "./combatProgressionProjection";
+import { combatObservationManualReviewReasonSchema } from "./combatObservation";
 import { combatParticipationProcessFamilySchema } from "./combatParticipation/types";
 import { combatRoundStepSchema } from "./combatRoundStep";
 
@@ -53,6 +54,18 @@ export const combatStepAutomationStopReasonSchema = z.enum([
 ]);
 export type CombatStepAutomationStopReason = z.infer<typeof combatStepAutomationStopReasonSchema>;
 
+/**
+ * #948. Observation automation is NPC batch processing, so a participant whose required
+ * Observation basis cannot be derived is skipped and the batch continues. A skip resolves
+ * nothing: the task is left for manual adjudication, and no basis is manufactured for it.
+ * Each reason names a distinct derivation failure so the GM report can state it.
+ *
+ * The members live with the Observe rule in `combatObservation.ts`, because the persisted
+ * manual-review marker records the same reason. One vocabulary, two readers.
+ */
+export const combatStepAutomationSkipReasonSchema = combatObservationManualReviewReasonSchema;
+export type CombatStepAutomationSkipReason = z.infer<typeof combatStepAutomationSkipReasonSchema>;
+
 export const combatStepAutomationStartRequestSchema = z.object({
   encounterId: z.string().min(1),
   expectedExecutionGroupId: z.string().min(1),
@@ -77,6 +90,18 @@ export const combatStepAutomationTaskRecordSchema = z.object({
   taskId: z.string().min(1),
 });
 export type CombatStepAutomationTaskRecord = z.infer<typeof combatStepAutomationTaskRecordSchema>;
+
+/**
+ * One participant the run passed over without resolving. `missingData` names the required data
+ * found absent, so the GM report can say which datum is missing rather than only that one is.
+ */
+export const combatStepAutomationSkippedTaskSchema = z.object({
+  missingData: z.array(z.string().min(1)).readonly().default([]),
+  participantId: z.string().min(1).optional(),
+  reason: combatStepAutomationSkipReasonSchema,
+  task: combatStepAutomationTaskRecordSchema,
+});
+export type CombatStepAutomationSkippedTask = z.infer<typeof combatStepAutomationSkippedTaskSchema>;
 
 export const combatStepAutomationCommandLinkSchema = z.object({
   countsTowardProcessed: z.boolean(),
@@ -118,6 +143,7 @@ export const combatStepAutomationRunResultSchema = z.object({
   finalTask: combatStepAutomationTaskRecordSchema.optional(),
   identity: combatStepAutomationRunIdentitySchema,
   processedCount: z.number().int().nonnegative(),
+  skippedTasks: z.array(combatStepAutomationSkippedTaskSchema).readonly().default([]),
   stepComplete: z.boolean(),
   stopParticipantId: z.string().min(1).optional(),
   stopReason: combatStepAutomationStopReasonSchema,
@@ -135,6 +161,20 @@ export interface CombatStepAutomationProjection<State> {
 
 export type CombatStepAutomationTaskDecision =
   | { readonly kind: "execute"; readonly countsTowardProcessed: boolean }
+  | {
+      readonly kind: "skip";
+      /**
+       * #948. A stable identity for the work being passed over, used to report it once. A
+       * projected task id is not stable across a skip: it carries the boundary kind and the stage,
+       * both of which change as the round progresses, so the same Observe attempt is presented
+       * under a second id and would otherwise be reported twice in one run. The classifier knows
+       * the durable identity — the Observe attempt id — and supplies it here. Omitted, the task id
+       * is used.
+       */
+      readonly key?: string;
+      readonly missingData?: readonly string[];
+      readonly reason: CombatStepAutomationSkipReason;
+    }
   | { readonly kind: "stop"; readonly reason: CombatStepAutomationStopReason };
 
 export type CombatStepAutomationExecution<State> =
@@ -213,6 +253,20 @@ export async function runCombatStepAutomation<State>(input: {
   readonly identity: CombatStepAutomationRunIdentity;
   readonly initial: CombatStepAutomationProjection<State>;
   readonly limit?: number;
+  /**
+   * #948. Durably records that this task was set aside, and returns the projection that follows.
+   * Without it a skip is remembered only for the length of this run, so the task it passed over
+   * still blocks its owner's progression and the participants after it never become executable —
+   * which is exactly the behaviour the ruling of 2026-11-05 replaced. A caller that cannot
+   * persist omits it or returns the projection it was given, and the run degrades to that
+   * blocking behaviour rather than continuing on an unrecorded skip.
+   */
+  readonly recordSkip?: (input: {
+    readonly missingData: readonly string[];
+    readonly projection: CombatStepAutomationProjection<State>;
+    readonly reason: CombatStepAutomationSkipReason;
+    readonly task: CombatProgressionTask;
+  }) => Promise<CombatStepAutomationProjection<State>>;
 }): Promise<
   CombatStepAutomationRunResult & { readonly final: CombatStepAutomationProjection<State> }
 > {
@@ -224,11 +278,21 @@ export async function runCombatStepAutomation<State>(input: {
   const prefix = getCombatStepAutomationCommandPrefix(identity);
   const acceptedTasks: CombatStepAutomationTaskRecord[] = [];
   const attemptedTasks: CombatStepAutomationTaskRecord[] = [];
+  const skippedTasks: CombatStepAutomationSkippedTask[] = [];
+  const skippedTaskIds = new Set<string>();
+  const skippedKeys = new Set<string>();
   let processedCount = 0;
   let current = input.initial;
 
   const outsideScope = () =>
     !isCombatStepAutomationProjectionWithinScope({ identity, projection: current });
+
+  /**
+   * #948. A skipped task stays in the projection because nothing resolved it, so the next task is
+   * the first one this run has not already passed over. Order independence comes from here: the
+   * skip is identified by task id rather than by position.
+   */
+  const nextTask = () => current.tasks.find((candidate) => !skippedTaskIds.has(candidate.id));
 
   const finish = (stopReason: CombatStepAutomationStopReason, stopTask?: CombatProgressionTask) => {
     const finalTask = current.tasks[0];
@@ -240,6 +304,7 @@ export async function runCombatStepAutomation<State>(input: {
       finalTask: finalTask ? taskRecord(finalTask) : undefined,
       identity,
       processedCount,
+      skippedTasks,
       stepComplete,
       stopParticipantId:
         stopTask?.owner?.kind === "combatant"
@@ -255,10 +320,38 @@ export async function runCombatStepAutomation<State>(input: {
     if (outsideScope()) {
       return finish("end_of_step");
     }
-    const task = current.tasks[0];
+    const task = nextTask();
     if (!task) return finish("end_of_step");
 
     const decision = input.classify({ projection: current, task });
+    if (decision.kind === "skip") {
+      skippedTaskIds.add(task.id);
+      const skipKey = decision.key ?? task.id;
+      // Report and record the same work once, however many projected task ids it is presented
+      // under while the round moves on around it.
+      if (skippedKeys.has(skipKey)) continue;
+      skippedKeys.add(skipKey);
+      const record = taskRecord(task);
+      const missingData = decision.missingData ?? [];
+      attemptedTasks.push(record);
+      skippedTasks.push(
+        combatStepAutomationSkippedTaskSchema.parse({
+          missingData,
+          participantId: record.participantId,
+          reason: decision.reason,
+          task: record,
+        }),
+      );
+      if (input.recordSkip) {
+        current = await input.recordSkip({
+          missingData,
+          projection: current,
+          reason: decision.reason,
+          task,
+        });
+      }
+      continue;
+    }
     attemptedTasks.push(taskRecord(task));
     if (decision.kind === "stop") return finish(decision.reason, task);
 
@@ -273,5 +366,5 @@ export async function runCombatStepAutomation<State>(input: {
     current = execution.projection;
   }
 
-  return finish("safety_limit_reached", current.tasks[0]);
+  return finish("safety_limit_reached", nextTask());
 }
