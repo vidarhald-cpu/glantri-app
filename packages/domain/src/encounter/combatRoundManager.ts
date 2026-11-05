@@ -88,8 +88,10 @@ import {
   cancelDoubleAttackPhase2GeneratedModifiers,
   isAttackPhaseDefensivePenaltyModifier,
   isReactiveAttackGeneratedInitiativeModifier,
+  keepGmCommittedAttackPhasePenaltyRows,
   restoreCombatActionGeneratedBackOutModifiers,
   softenCombatActionGeneratedBackOutModifier,
+  supersedeGmCommittedAttackPhasePenaltyRows,
 } from "./combatActionModifiers";
 import {
   buildCombatAttackPhasePenaltyResultConsequences,
@@ -23118,15 +23120,6 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
       roundNumber: normalized.roundNumber,
       step: "review_phase_2_modifiers",
     });
-  const firstModifierReviewParticipantId = getFirstCombatRoundPendingModifierReviewParticipantId({
-    phase: "phase2",
-    state: normalized,
-  });
-  const afterCursor = getDefaultCombatRoundCursor({
-    participantId: firstModifierReviewParticipantId,
-    roundNumber: normalized.roundNumber,
-    step: "review_phase_2_modifiers",
-  });
   const updateContext = (context: ScenarioParticipantCombatContext | undefined) => {
     const normalizedContext = scenarioParticipantCombatContextSchema.parse(context ?? {});
     return input.decision === "cancel"
@@ -23187,15 +23180,86 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
       combatContext: context,
       penalties: nextAttackPhaseDefensivePenalties,
     });
+  // #931. This is the one rule event that reaches a figure the GM has already committed while the
+  // review that committed it is still open: `currentStep` is `review_phase_2_modifiers`, which is
+  // checked above. A cancel after the GM committed phase 2 supersedes that figure instead of
+  // overwriting it; a cancel before the GM committed anything has no GM figure to supersede.
+  //
+  // `applyAttackPhaseDefensivePenaltyModifiers` rebuilds the rows of both phases at once, so every
+  // other committed phase, and phase 2 on a decision that is not a cancel, is kept as the GM left
+  // it, which is the #915 generation gate applied to this writer: only the cancel is a rule event.
+  const committedReviewPhases = getCombatRoundCommittedModifierReviewPhases({
+    participantId: input.participantId,
+    state: normalized,
+  });
+  const supersedes = input.decision === "cancel" && committedReviewPhases.includes("phase2");
+  const gmKeptPhases = committedReviewPhases.filter((phase) => !(supersedes && phase === "phase2"));
+  const rebuildPenaltyRows = (
+    previous: ScenarioParticipantCombatContext | undefined,
+    context: ScenarioParticipantCombatContext | undefined,
+  ) => {
+    const previousContext = scenarioParticipantCombatContextSchema.parse(previous ?? {});
+    const rebuilt = keepGmCommittedAttackPhasePenaltyRows({
+      next: updatePenaltyContext(updateContext(context)),
+      phases: gmKeptPhases,
+      previous: previousContext,
+    });
+    return supersedes
+      ? supersedeGmCommittedAttackPhasePenaltyRows({
+          next: rebuilt,
+          phase: "phase2",
+          previous: previousContext,
+        })
+      : { combatContext: rebuilt, supersededRowIds: [] as string[] };
+  };
+  const nextCombatContext = rebuildPenaltyRows(
+    declaration.combatContext,
+    declaration.combatContext,
+  );
+  const nextPhase2Context = rebuildPenaltyRows(
+    declaration.phaseContexts?.phase2,
+    declaration.phaseContexts?.phase2,
+  );
+  const supersededModifierRowIds = [
+    ...new Set([...nextCombatContext.supersededRowIds, ...nextPhase2Context.supersededRowIds]),
+  ];
   const nextDeclaration = combatRoundDeclarationSchema.parse({
     ...declaration,
     attackPhaseDefensivePenalties: nextAttackPhaseDefensivePenalties,
     attackOpportunities: nextOpportunities,
-    combatContext: updatePenaltyContext(updateContext(declaration.combatContext)),
+    combatContext: nextCombatContext.combatContext,
     phaseContexts: {
       ...declaration.phaseContexts,
-      phase2: updatePenaltyContext(updateContext(declaration.phaseContexts?.phase2)),
+      phase2: nextPhase2Context.combatContext,
     },
+  });
+  // Re-offer the committed phase-2 modifier review. The `review_modifiers_phase2` command stays in
+  // `commands`, which is what keeps the #915 generation gate closed so a rebuild cannot restore the
+  // rule's figure over the GM's next decision; only the participant's step status goes back to
+  // pending, which is what the progression projection reads to offer the task.
+  const reofferModifierReview = supersededModifierRowIds.length > 0;
+  const previousModifierReviewStepStatus = participant.stepStatuses.review_phase_2_modifiers;
+  const stateWithReofferedReview = reofferModifierReview
+    ? combatRoundStateSchema.parse({
+        ...normalized,
+        participants: normalized.participants.map((entry) =>
+          entry.participantId === input.participantId
+            ? {
+                ...entry,
+                stepStatuses: { ...entry.stepStatuses, review_phase_2_modifiers: "pending" },
+              }
+            : entry,
+        ),
+      })
+    : normalized;
+  const firstModifierReviewParticipantId = getFirstCombatRoundPendingModifierReviewParticipantId({
+    phase: "phase2",
+    state: stateWithReofferedReview,
+  });
+  const afterCursor = getDefaultCombatRoundCursor({
+    participantId: firstModifierReviewParticipantId,
+    roundNumber: normalized.roundNumber,
+    step: "review_phase_2_modifiers",
   });
   const command = combatRoundCommandSchema.parse({
     afterCursor,
@@ -23211,6 +23275,12 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
         : undefined,
       opportunityId: nextOpportunities.find((entry) => entry.phase === "phase2")?.id,
       previousDeclaration: declaration,
+      ...(reofferModifierReview
+        ? {
+            previousModifierReviewStepStatus: previousModifierReviewStepStatus ?? null,
+            supersededModifierRowIds,
+          }
+        : {}),
     },
     id:
       input.command.commandId ??
@@ -23228,10 +23298,10 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
   });
 
   return combatRoundStateSchema.parse({
-    ...normalized,
+    ...stateWithReofferedReview,
     commands: [...normalized.commands, command],
     currentCursor: afterCursor,
-    participants: normalized.participants.map((entry) =>
+    participants: stateWithReofferedReview.participants.map((entry) =>
       entry.participantId === input.participantId
         ? {
             ...entry,
@@ -25953,6 +26023,9 @@ function undoCombatRoundDoubleAttackPhase2DecisionCommandAtIndex(input: {
   if (!previousDeclaration.success) {
     return undefined;
   }
+  const previousModifierReviewStepStatus = combatRoundStepStatusSchema
+    .nullable()
+    .safeParse(command.facts.previousModifierReviewStepStatus);
   return combatRoundStateSchema.parse({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
@@ -25963,7 +26036,16 @@ function undoCombatRoundDoubleAttackPhase2DecisionCommandAtIndex(input: {
         ? {
             ...participant,
             declaration: previousDeclaration.data,
-            stepStatuses: { ...participant.stepStatuses, phase_2_actions: "pending" },
+            stepStatuses: {
+              ...participant.stepStatuses,
+              phase_2_actions: "pending",
+              // #931: a decision that re-offered the phase-2 modifier review puts back the status
+              // the review had, read from the command's own record and never inferred.
+              ...(previousModifierReviewStepStatus.success &&
+              previousModifierReviewStepStatus.data !== null
+                ? { review_phase_2_modifiers: previousModifierReviewStepStatus.data }
+                : {}),
+            },
           }
         : participant,
     ),

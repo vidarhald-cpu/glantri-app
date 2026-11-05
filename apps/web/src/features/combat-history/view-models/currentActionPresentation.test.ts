@@ -1,16 +1,24 @@
+import {
+  buildPlayerFacingCombatRoundParticipant,
+  combatRoundParticipantStateSchema,
+  scenarioParticipantCombatContextSchema,
+} from "@glantri/domain";
 import type {
   CombatProgressionBoundaryKind,
   CombatProgressionExpectedCommand,
   CombatProgressionPresentationProjection,
   CombatProgressionPresentationTask,
   CombatProgressionTaskKind,
+  CombatRoundParticipantState,
 } from "@glantri/domain";
 import { describe, expect, it } from "vitest";
 
 import {
   buildCurrentActionPresentation,
+  getSupersededModifierReviewKeys,
   labelCurrentActionAsDeclarationEdit,
   resolveCombatTaskCommandContext,
+  supersededModifierReviewKey,
 } from "./currentActionPresentation";
 
 const aria = { kind: "combatant" as const, label: "Aria", participantId: "aria" };
@@ -1601,4 +1609,159 @@ describe("CurrentActionPresentation", () => {
       });
     },
   );
+});
+
+/**
+ * #931 — the re-offered modifier review says a rule changed the GM's committed figure.
+ *
+ * The Product Owner ruled (comment 21255) that the task label is the primary signal, after a
+ * rendered reading measured the earlier note suffix clipped before the mark at 768, 1024 and 1440
+ * CSS px; and that the supersession is GM workflow, so no player sees it.
+ *
+ * The restriction is carried by the player-facing projection, not by a viewer check in this
+ * view-model: `supersededGmFigure` is absent from `playerFacingCombatModifierEntrySchema`, so a
+ * player's round state yields no key and the branch cannot be composed. The last test drives that
+ * through the real projection rather than asserting it from the schema.
+ */
+describe("a re-offered modifier review a rule event superseded (#931)", () => {
+  const SUPERSEDED_SENTENCE = "Rule changed the committed DB/Parry value — review again.";
+  const READY_SENTENCE = "Phase 2 modifiers are ready for review.";
+
+  function supersededRow(overrides: Record<string, unknown> = {}) {
+    return {
+      application: "percentage" as const,
+      generated: true,
+      id: "generated:attack-phase-penalty:round:2:participant:aria:phase2:attack_2:db-parry",
+      notes: "Double Attack second attack cancelled: DB/Parry -2% in phase2",
+      scope: "until" as const,
+      sourceActionId: "double_attack",
+      sourcePhase: "phase2" as const,
+      sourceRule: "attack-phase-defensive-penalty:double_attack_second_cancelled",
+      supersededGmFigure: { text: "committed weapon attack: DB/Parry -4% in phase2", value: -1 },
+      value: -2,
+      ...overrides,
+    };
+  }
+
+  /** One stored round participant whose phase-2 attack-phase row a rule event superseded. */
+  function storedParticipant(participantId: string, row: Record<string, unknown>) {
+    const combatContext = scenarioParticipantCombatContextSchema.parse({
+      modifierBuckets: { situationDb: [row] },
+    });
+    return combatRoundParticipantStateSchema.parse({
+      label: participantId,
+      participantId,
+      declaration: {
+        actionId: "double_attack",
+        combatContext,
+        phaseContexts: { phase2: combatContext },
+        roundNumber: 2,
+        submittedBy: "gm",
+      },
+    });
+  }
+
+  function reviewTask(owner: typeof aria | typeof borin) {
+    const base = task({
+      command: "review_modifiers_phase2",
+      id: "task:modifier-review",
+      kind: "modifier_review",
+      owner,
+      phase: "phase2",
+    });
+    return {
+      ...base,
+      trackerFacet: { ...base.trackerFacet, step: "M2" as const },
+    };
+  }
+
+  function summaryOf(input: {
+    owner?: typeof aria | typeof borin;
+    supersededModifierReviewKeys?: ReadonlySet<string>;
+    viewer?: "gm" | "player";
+  }) {
+    return buildCurrentActionPresentation({
+      encounterId: "encounter-1",
+      encounterRevision: "revision-931",
+      progression: progression({
+        boundary: "phase2_modifier_review",
+        tasks: [reviewTask(input.owner ?? aria)],
+      }),
+      supersededModifierReviewKeys: input.supersededModifierReviewKeys,
+      viewer:
+        input.viewer === "player"
+          ? { controlledParticipantIds: new Set(["aria"]), kind: "player" }
+          : { kind: "gm" },
+    })?.summary;
+  }
+
+  it("leads the GM's summary with the Product Owner's sentence and keeps the existing one", () => {
+    const keys = getSupersededModifierReviewKeys({
+      participants: [storedParticipant("aria", supersededRow())],
+    });
+    expect([...keys]).toEqual([supersededModifierReviewKey("aria", "phase2")]);
+
+    expect(summaryOf({ supersededModifierReviewKeys: keys })).toBe(
+      `${SUPERSEDED_SENTENCE} ${READY_SENTENCE}`,
+    );
+  });
+
+  it("says nothing extra when no rule event superseded the figure", () => {
+    const { supersededGmFigure: _none, ...plain } = supersededRow();
+    void _none;
+    const keys = getSupersededModifierReviewKeys({
+      participants: [storedParticipant("aria", plain)],
+    });
+
+    expect([...keys]).toEqual([]);
+    expect(summaryOf({ supersededModifierReviewKeys: keys })).toBe(READY_SENTENCE);
+    expect(summaryOf({})).toBe(READY_SENTENCE);
+  });
+
+  it("says nothing extra on a review owned by a participant the rule event did not touch", () => {
+    const keys = getSupersededModifierReviewKeys({
+      participants: [storedParticipant("aria", supersededRow())],
+    });
+
+    expect(summaryOf({ owner: borin, supersededModifierReviewKeys: keys })).toBe(READY_SENTENCE);
+  });
+
+  it("keys on the phase: a phase-1 supersession does not label the phase-2 review", () => {
+    const keys = getSupersededModifierReviewKeys({
+      participants: [
+        storedParticipant(
+          "aria",
+          supersededRow({
+            id: "generated:attack-phase-penalty:round:2:participant:aria:phase1:attack_1:db-parry",
+            sourcePhase: "phase1",
+          }),
+        ),
+      ],
+    });
+
+    expect([...keys]).toEqual([supersededModifierReviewKey("aria", "phase1")]);
+    expect(summaryOf({ supersededModifierReviewKeys: keys })).toBe(READY_SENTENCE);
+  });
+
+  it("cannot be composed on a player read, because the projection removes the field it needs", () => {
+    const stored = storedParticipant("aria", supersededRow());
+    // The instrument is alive: the stored participant really does carry the retained figure.
+    expect(
+      getSupersededModifierReviewKeys({ participants: [stored] }).has(
+        supersededModifierReviewKey("aria", "phase2"),
+      ),
+    ).toBe(true);
+
+    // The real player-facing projection, not a hand-made stand-in.
+    const playerFacing = buildPlayerFacingCombatRoundParticipant({ participant: stored });
+    expect(JSON.stringify(playerFacing)).not.toContain("superseded");
+    const playerKeys = getSupersededModifierReviewKeys({
+      participants: [playerFacing as unknown as CombatRoundParticipantState],
+    });
+
+    expect([...playerKeys]).toEqual([]);
+    expect(summaryOf({ supersededModifierReviewKeys: playerKeys, viewer: "player" })).toBe(
+      READY_SENTENCE,
+    );
+  });
 });
