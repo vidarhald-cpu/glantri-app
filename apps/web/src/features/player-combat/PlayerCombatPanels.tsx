@@ -21,11 +21,10 @@ import {
   type ScenarioParticipantParryDirection,
   type ScenarioParticipantTargetLocation,
   getHitLocationFullLabel,
-  buildLiveCombatModifierContributionProjection,
-  type CombatModifierContributionBucket,
-  isCombatModifierContributionActive,
+  buildCombatModifierRowProjection,
+  isMeaningfulCombatModifierEntry,
   isPersistentCombatModifierEntry,
-  normalizeScenarioCombatModifierEntry,
+  sanitizeCombatModifierEntries,
 } from "@glantri/domain";
 
 import {
@@ -36,7 +35,6 @@ import {
   type CurrentActionPresentation,
 } from "@/features/combat-history";
 import {
-  createEmptyPlayerEncounterCombatContext,
   PLAYER_ENCOUNTER_ACTION_OPTIONS,
   PLAYER_ENCOUNTER_PARRY_DIRECTION_OPTIONS,
   getPlayerEncounterActionLabel,
@@ -50,11 +48,9 @@ import {
   type PlayerEncounterOpponentOption,
   type PlayerEncounterOption,
 } from "@/lib/campaigns/playerEncounter";
-import {
-  filterCombatModifierEntriesForPhase,
-  getCombatModifierRowsVisibleAtStep,
-  type EncounterCombatPhaseKey,
-  type EncounterLiveCombatModifierSummary,
+import type {
+  EncounterCombatPhaseKey,
+  EncounterLiveCombatModifierSummary,
 } from "@/lib/campaigns/liveCombatModifiers";
 import {
   buildCombatSituationAwarenessModel,
@@ -968,15 +964,7 @@ export function formatCombatModifierDisplayLine(input: {
     .join(" · ");
 }
 
-export function isMeaningfulCombatModifierEntry(entry: ScenarioCombatModifierEntry): boolean {
-  return entry.value !== 0 || Boolean(entry.notes?.trim()) || Boolean(entry.sourceRule?.trim());
-}
-
-export function sanitizeCombatModifierEntries(
-  entries: readonly ScenarioCombatModifierEntry[],
-): ScenarioCombatModifierEntry[] {
-  return entries.filter(isMeaningfulCombatModifierEntry);
-}
+export { isMeaningfulCombatModifierEntry, sanitizeCombatModifierEntries };
 
 export function sanitizePlayerCombatModifierContext(
   combatContext: ScenarioParticipantCombatContext,
@@ -1091,6 +1079,11 @@ export function getPlayerCombatActionButtonLabel(input: {
         : "Waiting for GM";
 }
 
+/**
+ * #951: the grouping, filtering and totals are the canonical domain projection — the server's
+ * step-snapshot deriver persists exactly these rows, so there is one implementation, not two.
+ * Only the per-entry duration labels stay here, because they are presentation.
+ */
 export function buildPlayerCombatModifierRows(input: {
   combatContext?: ScenarioParticipantCombatContext;
   combatEffects?: CombatEffectsState;
@@ -1105,162 +1098,15 @@ export function buildPlayerCombatModifierRows(input: {
   phaseKey?: EncounterCombatPhaseKey;
   visibleAtStep?: CombatRoundStep;
 }): PlayerCombatModifierBucketView[] {
-  const projection = buildLiveCombatModifierContributionProjection({
-    combatContext: input.combatContext ?? createEmptyPlayerEncounterCombatContext(),
-    combatEffects: input.combatEffects,
-    currentInitiativeGroupId: input.currentInitiativeGroupId,
-    currentRound: input.currentRound,
-    encounterId: input.encounterId,
-    ownerParticipantId: input.ownerParticipantId,
-  });
-  const entriesForContributions = (bucket: CombatModifierContributionBucket) =>
-    projection.contributions
-      .filter((contribution) => contribution.bucket === bucket)
-      .map((contribution) => projection.sourceEntries.get(contribution.id))
-      .filter((entry): entry is ScenarioCombatModifierEntry => Boolean(entry));
-  const entriesForDisplay = (entries: ScenarioCombatModifierEntry[]) =>
-    input.includeAllPhases
-      ? entries
-      : input.visibleAtStep
-        ? getCombatModifierRowsVisibleAtStep(entries, input.visibleAtStep)
-        : filterCombatModifierEntriesForPhase(entries, input.phaseKey);
-  const activeFlatDbEntries = (input.combatContext?.modifierBuckets.situationDb ?? []).filter(
-    (entry) => {
-      if (entry.application !== "flat_db") return false;
-      const contribution = normalizeScenarioCombatModifierEntry({
-        bucket: "situation_db",
-        currentRound: input.currentRound,
-        entry,
-        ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
-      });
-      return Boolean(
-        contribution &&
-        isCombatModifierContributionActive(contribution, {
-          ...(input.encounterId ? { encounterId: input.encounterId } : {}),
-          ...(input.currentRound !== undefined ? { roundNumber: input.currentRound } : {}),
-          ownerParticipantId: input.ownerParticipantId ?? "unknown-participant",
-        }),
-      );
-    },
-  );
-  const visibleFlatDbEntries = entriesForDisplay(activeFlatDbEntries);
-  const displayModifierBuckets = {
-    general: sanitizeCombatModifierEntries(
-      entriesForDisplay(entriesForContributions("general_fatigue")),
-    ),
-    situationDb: sanitizeCombatModifierEntries([
-      ...entriesForDisplay(entriesForContributions("db_parry")),
-      ...visibleFlatDbEntries,
-    ]),
-    situationInitiative: sanitizeCombatModifierEntries(
-      entriesForDisplay(entriesForContributions("initiative")),
-    ),
-    situationObSkill: sanitizeCombatModifierEntries(
-      entriesForDisplay(entriesForContributions("skill_ob")),
-    ),
-  };
-  const applicableContributions = projection.contributions.filter(
-    (contribution) =>
-      !contribution.applicability.phase ||
-      (input.phaseKey !== undefined && contribution.applicability.phase === input.phaseKey),
-  );
-  const opponentSpecificContributions = input.liveModifiers?.opponentSpecificContributions ?? [];
-  const derivedEntriesByBucket = new Map<
-    CombatModifierContributionBucket,
-    PlayerCombatModifierDisplayEntry[]
-  >();
-  for (const contribution of opponentSpecificContributions) {
-    const entries = derivedEntriesByBucket.get(contribution.bucket) ?? [];
-    entries.push({
-      application: "percentage",
-      canonicalLifecycle: contribution.canonicalLifecycle,
-      id: contribution.id,
-      scopeLabel: "Opponent",
-      sourceLabel: `${contribution.label}${
-        input.liveModifiers?.opponentLabel ? ` · ${input.liveModifiers.opponentLabel}` : ""
-      }`,
-      value: contribution.value,
-    });
-    derivedEntriesByBucket.set(contribution.bucket, entries);
-  }
-  const legacyGeneralEntries = (input.liveModifiers?.legacyGeneralEffectEntries ?? []).map(
-    (entry): PlayerCombatModifierDisplayEntry => ({
-      application: "percentage",
-      id: `legacy-effect:${entry.id}`,
-      scopeLabel: "Active",
-      sourceLabel: entry.label,
-      value: entry.value,
-    }),
-  );
-  const totals = {
-    dbParry:
-      applicableContributions
-        .filter((contribution) => contribution.bucket === "db_parry")
-        .reduce((total, contribution) => total + contribution.value, 0) +
-      visibleFlatDbEntries.reduce((total, entry) => total + entry.value, 0) +
-      opponentSpecificContributions
-        .filter((contribution) => contribution.bucket === "db_parry")
-        .reduce((total, contribution) => total + contribution.value, 0),
-    generalFatigue:
-      applicableContributions
-        .filter((contribution) => contribution.bucket === "general_fatigue")
-        .reduce((total, contribution) => total + contribution.value, 0) +
-      legacyGeneralEntries.reduce((total, entry) => total + entry.value, 0),
-    initiative: applicableContributions
-      .filter((contribution) => contribution.bucket === "initiative")
-      .reduce((total, contribution) => total + contribution.value, 0),
-    skillOb:
-      applicableContributions
-        .filter((contribution) => contribution.bucket === "skill_ob")
-        .reduce((total, contribution) => total + contribution.value, 0) +
-      opponentSpecificContributions
-        .filter((contribution) => contribution.bucket === "skill_ob")
-        .reduce((total, contribution) => total + contribution.value, 0),
-  };
-
-  const durationLabelsFor = (entries: readonly ScenarioCombatModifierEntry[]) =>
-    input.includeEntryDurations
-      ? buildEntryDurationLabels({
-          combatEffects: input.combatEffects?.effects,
-          entries,
-          roundNumber: input.currentRound,
-        })
-      : undefined;
-
-  return [
-    {
-      bucketKey: "general",
-      derivedEntries: legacyGeneralEntries,
-      durationLabels: durationLabelsFor(displayModifierBuckets.general),
-      entries: displayModifierBuckets.general,
-      label: "General/Fatigue",
-      locked: true,
-      total: totals.generalFatigue,
-    },
-    {
-      bucketKey: "situation_initiative",
-      durationLabels: durationLabelsFor(displayModifierBuckets.situationInitiative),
-      entries: displayModifierBuckets.situationInitiative,
-      label: "Initiative",
-      total: totals.initiative,
-    },
-    {
-      bucketKey: "situation_ob_skill",
-      durationLabels: durationLabelsFor(displayModifierBuckets.situationObSkill),
-      entries: displayModifierBuckets.situationObSkill,
-      derivedEntries: derivedEntriesByBucket.get("skill_ob"),
-      label: "Skill/OB",
-      total: totals.skillOb,
-    },
-    {
-      bucketKey: "situation_db",
-      durationLabels: durationLabelsFor(displayModifierBuckets.situationDb),
-      entries: displayModifierBuckets.situationDb,
-      derivedEntries: derivedEntriesByBucket.get("db_parry"),
-      label: "DB/Parry",
-      total: totals.dbParry,
-    },
-  ];
+  return buildCombatModifierRowProjection({
+    ...input,
+    buildDurationLabels: (entries) =>
+      buildEntryDurationLabels({
+        combatEffects: input.combatEffects?.effects,
+        entries,
+        roundNumber: input.currentRound,
+      }),
+  }) as PlayerCombatModifierBucketView[];
 }
 
 function CombatSituationRow({ row }: { row: CombatSituationDisplayRow }) {

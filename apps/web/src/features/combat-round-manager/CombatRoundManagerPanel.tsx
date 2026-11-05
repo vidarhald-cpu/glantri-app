@@ -58,7 +58,6 @@ import {
   COMBAT_FEINT_OUTCOME_TABLE,
   COMBAT_BREAK_OFF_RESULT_TABLE,
   COMBAT_ROUND_STEP_LABELS,
-  buildCombatRoundPhaseResolutionResult,
   buildCombatRoundEndPublicChronology,
   buildCombatRoundEndProcessPlan,
   buildLiveCombatModifierContributionProjection,
@@ -68,7 +67,6 @@ import {
   canBackOutCombatRoundPhaseAttack,
   canClearCombatRoundStep,
   characterBuildSchema,
-  canonicalCombatModifierEffectSchema,
   combatRoundStateSchema,
   combatRoundParticipantHasExecutablePhaseAction,
   combatRoundParticipantHasPhaseAttack,
@@ -96,12 +94,9 @@ import {
   getCombatMissileRequiredRounds,
   getCombatRoundPhaseAttackBackOutOpportunity,
   getCombatRoundParticipantPhaseStepStatus,
-  getCombatRoundPhaseResolutionResultForAttack,
   getCombatRoundPhaseResolutionStatus,
   getCombatRoundTimelineRoundStates,
-  getCombatRoundInitiativeRanks,
   getCombatRoundEndDistanceProposalLifecycle,
-  getCombatRoundModifierPhaseForStep,
   getCombatRoundNextEventSequence,
   getCombatRoundResolutionPhaseForStep,
   getCombatRoundStepSnapshot,
@@ -134,7 +129,6 @@ import {
   buildCombatCalculationPresentationLines,
   buildCombatCalculationPresentationFromSnapshot,
   buildDodgeCalculationPresentationFromSnapshot,
-  buildRecordedCombatModifierRows,
   CombatEventResultList,
   CombatLog,
   CombatStepResultList,
@@ -289,7 +283,6 @@ import {
   buildCombatDeclarationAttackSelection,
   buildPlayerCombatDefenseStats,
   buildPlayerCombatLoadoutSummary,
-  buildPlayerCombatPhasePanelModel,
   formatScenarioCombatEquipmentDiagnostic,
   getCombatDeclarationAttackModeUnavailableMessage,
   getCombatDeclarationAttackSourceRequiredMessage,
@@ -1668,23 +1661,6 @@ function buildHistoricalCombatActionResult(input: {
   }
 
   return { interpretedResult: "No recorded result for this step." };
-}
-
-function formatCombatPhaseResolutionSummary(input: {
-  attackResult: CombatRoundAttackRollResult;
-  participantId?: string;
-  resolution: CombatRoundPhaseResolutionResult;
-}): string {
-  const lines = formatCombatPhaseResolutionResultLines(input);
-
-  return lines.sections
-    .flatMap((section) => [
-      section.title,
-      ...section.calculations.flatMap(buildCombatCalculationPresentationLines),
-      section.resultLine,
-    ])
-    .filter((line): line is string => Boolean(line))
-    .join("\n");
 }
 
 function getCombatAttackPhaseForStep(step: CombatRoundStep): CombatRoundPhase | undefined {
@@ -9121,342 +9097,9 @@ export default function CombatRoundManagerPanel({
     };
   }
 
-  function buildCombatRoundStepSnapshots(
-    committedAt: string,
-    stateForSnapshots = roundState,
-  ): CombatRoundStepSnapshot[] {
-    const step = stateForSnapshots.currentStep;
-    const phase = getCombatRoundModifierPhaseForStep(step);
-    const attackPhase = getCombatAttackPhaseForStep(step);
-    const resolutionStepKind = getCombatResolutionStepKind(step);
-    const ranks = phase ? getCombatRoundInitiativeRanks({ phase, state: stateForSnapshots }) : {};
-
-    return stateForSnapshots.participants.map((roundParticipant) => {
-      const encounterParticipant = encounter.participants.find(
-        (participant) => participant.id === roundParticipant.participantId,
-      );
-      const scenarioParticipant = encounterParticipant
-        ? findScenarioParticipantForEncounterParticipant({
-            encounterParticipant,
-            scenarioParticipants: effectiveScenarioParticipants,
-          })
-        : undefined;
-      const declaration = hasCombatRoundDeclarationAction(roundParticipant.declaration)
-        ? roundParticipant.declaration
-        : undefined;
-      const draft = buildDeclarationDraft(scenarioParticipant, declaration, {
-        encounterId: encounter.id,
-        roundNumber: stateForSnapshots.roundNumber,
-      });
-      const phaseSummaries = {
-        phase1: buildScenarioParticipantPhaseSummary({
-          declaration,
-          phaseKey: "phase1",
-          scenarioParticipant,
-        }),
-        phase2: buildScenarioParticipantPhaseSummary({
-          declaration,
-          phaseKey: "phase2",
-          scenarioParticipant,
-        }),
-      };
-      const phaseSummary = buildScenarioParticipantPhaseSummary({
-        declaration,
-        phaseKey: phase,
-        scenarioParticipant,
-      });
-      // Snapshot rows describe everything recorded at this point in the round.
-      // Phase filtering belongs to calculation totals, not historical visibility.
-      const recordedModifierRows = buildRecordedCombatModifierRows({
-        combatContext: draft.combatContext,
-        combatEffects: scenarioParticipant?.state.combatEffects,
-        currentRound: stateForSnapshots.roundNumber,
-        liveModifiers: phaseSummary.liveModifiers,
-        step,
-      });
-      const modifierRows = recordedModifierRows.map((row) => ({
-        bucketKey: row.bucketKey,
-        entries: row.entries,
-        label: row.label,
-        total: row.total,
-      }));
-      const modifierOwnerIds = new Set(
-        [roundParticipant.participantId, scenarioParticipant?.id].filter((id): id is string =>
-          Boolean(id),
-        ),
-      );
-      const modifierEffects = [
-        ...collectCanonicalCombatSituationEffects({
-          combatEffects: scenarioParticipant?.state.combatEffects?.effects,
-          continuedContacts: stateForSnapshots.continuedContacts,
-          unbalancedConditions: stateForSnapshots.unbalancedConditions,
-        }),
-        ...recordedModifierRows.flatMap((row) => [
-          ...row.entries.flatMap((entry) => {
-            const effect = canonicalCombatModifierEffectSchema.safeParse(entry.canonicalLifecycle);
-            return effect.success ? [effect.data] : [];
-          }),
-          ...(row.derivedEntries ?? []).flatMap((entry) =>
-            entry.canonicalLifecycle && "createdAt" in entry.canonicalLifecycle
-              ? [entry.canonicalLifecycle]
-              : [],
-          ),
-        ]),
-      ].filter((effect) => modifierOwnerIds.has(effect.ownerParticipantId));
-      const uniqueModifierEffects = [
-        ...new Map(modifierEffects.map((effect) => [effect.id, effect])).values(),
-      ];
-      const phaseContext = phaseSummary.phaseContext;
-      const targetOptions = buildCombatParticipantCandidates({
-        encounter:
-          encounter.participants.length > 0
-            ? encounter
-            : {
-                participants: effectiveScenarioParticipants
-                  .filter((participant) => participant.isActive)
-                  .map((participant) => ({
-                    characterId: participant.characterId,
-                    id: participant.id,
-                    label: participant.snapshot.displayName,
-                    scenarioParticipantId: participant.id,
-                  })),
-              },
-        activeParticipantIds: new Set(
-          effectiveScenarioParticipants
-            .filter((participant) => participant.isActive)
-            .map((participant) => participant.id),
-        ),
-        actingParticipantId: scenarioParticipant?.id,
-        allowedParticipantIds:
-          encounterScenarioParticipantIds.length > 0
-            ? encounterScenarioParticipantIds
-            : effectiveScenarioParticipants
-                .filter((participant) => participant.isActive)
-                .map((participant) => participant.id),
-        purpose:
-          draft.actionId === "feint_attack" || draft.actionId === "adjust_range_attack"
-            ? "maneuver_target"
-            : "attack_target",
-      })
-        .filter((candidate) => candidate.selectable)
-        .map(({ displayName, participantId }) => ({ displayName, id: participantId }));
-      const buildPhasePanelSnapshot = (phaseKey: PlayerCombatPhaseKey) => {
-        const summary = phaseSummaries[phaseKey];
-        const context = summary.phaseContext ?? draft.phaseContexts[phaseKey];
-        const model = buildPlayerCombatPhasePanelModel({
-          actionId: draft.actionId,
-          attackStats: summary.attackStats,
-          defenseStats: summary.defenseStats,
-          phaseCard: {
-            description: "",
-            phaseLabel: phaseKey === "phase1" ? "Phase 1" : "Phase 2",
-            stats: [],
-            title: "",
-          },
-          phaseContext: context,
-          phaseKey,
-          secondaryActionId: draft.secondaryActionId,
-        });
-        const targetScenarioParticipant = effectiveScenarioParticipants.find(
-          (participant) => participant.id === context.targetParticipantId,
-        );
-        const targetEncounterParticipant = context.targetParticipantId
-          ? findEncounterParticipantForScenarioParticipant({
-              encounterParticipants: encounter.participants,
-              scenarioParticipant: targetScenarioParticipant,
-              scenarioParticipantId: context.targetParticipantId,
-            })
-          : undefined;
-        const distanceRow = getCombatDistanceTableRowForParticipants({
-          participantAId: roundParticipant.participantId,
-          participantAAliases: getCombatDistanceParticipantAliases(roundParticipant),
-          participantBId: targetEncounterParticipant?.id,
-          participantBAliases: [
-            ...getCombatDistanceParticipantAliases(targetEncounterParticipant),
-            ...getCombatDistanceParticipantAliases(targetScenarioParticipant),
-          ],
-          rows: combatDistanceRows,
-        });
-
-        return {
-          attackModeLabel: summary.attackModeLabel,
-          attackSummary: model.showAttackStats ? (model.attackStats ?? undefined) : undefined,
-          defenseSummary: model.showDefenseContext ? (model.defenseStats ?? undefined) : undefined,
-          distanceLabel: targetEncounterParticipant
-            ? `Distance: ${distanceRow?.edge.distance ?? "—"}`
-            : undefined,
-          mainHandParryItemLabel: summary.mainHandParryItemLabel,
-          offHandParryItemLabel: summary.offHandParryItemLabel,
-          phaseContext: context,
-          targetOptions,
-        };
-      };
-      const phaseModel =
-        phase && phaseContext
-          ? buildPlayerCombatPhasePanelModel({
-              actionId: draft.actionId,
-              attackStats: phaseSummary.attackStats,
-              defenseStats: phaseSummary.defenseStats,
-              phaseCard: {
-                description: "",
-                phaseLabel: phase === "phase1" ? "Phase 1" : "Phase 2",
-                stats: [],
-                title: "",
-              },
-              phaseContext,
-              phaseKey: phase,
-              secondaryActionId: draft.secondaryActionId,
-            })
-          : undefined;
-      const initiativeResult = phase ? roundParticipant.initiatives[phase] : undefined;
-      const attackResult = attackPhase
-        ? getCombatRoundOutgoingAttackResultForParticipantPhase({
-            participantId: roundParticipant.participantId,
-            phase: attackPhase,
-            state: stateForSnapshots,
-          })
-        : phase && resolutionStepKind
-          ? getCombatRoundDisplayIncomingAttackResultForParticipantPhase({
-              participantId: roundParticipant.participantId,
-              phase,
-              state: stateForSnapshots,
-            })
-          : undefined;
-      const phaseResolutionResult =
-        phase && resolutionStepKind && attackResult
-          ? (getCombatRoundPhaseResolutionResultForAttack({
-              attackResult,
-              state: stateForSnapshots,
-            }) ??
-            buildCombatRoundPhaseResolutionResult({
-              attackResult,
-              roundNumber: stateForSnapshots.roundNumber,
-              updatedAt: committedAt,
-            }))
-          : undefined;
-      const phaseResolutionStatus = phase
-        ? getCombatRoundPhaseResolutionStatus({
-            participantId: roundParticipant.participantId,
-            phase,
-            state: stateForSnapshots,
-          })
-        : undefined;
-      const actionResultSummary =
-        attackResult && phaseResolutionResult
-          ? formatCombatPhaseResolutionSummary({
-              attackResult,
-              participantId: roundParticipant.participantId,
-              resolution: phaseResolutionResult,
-            })
-          : attackResult
-            ? `${formatCombatAttackResultLine({
-                participantId: roundParticipant.participantId,
-                result: attackResult,
-              })}\nResult: ${attackResult.tableResult}`
-            : initiativeResult
-              ? formatCombatInitiativeFormula(initiativeResult)
-              : undefined;
-      const participantStepStatus = roundParticipant.stepStatuses[step];
-      const actionResultStatus = actionResultSummary
-        ? "recorded"
-        : participantStepStatus === "skipped"
-          ? "skipped"
-          : (attackPhase || (phase && resolutionStepKind)) && !attackResult
-            ? "no_attack"
-            : "no_result";
-      const actionResultReason =
-        step === "phase_2_actions" &&
-        draft.actionId === "double_attack" &&
-        roundParticipant.declaration?.attackOpportunities?.some(
-          (opportunity) =>
-            opportunity.origin === "double_attack" &&
-            opportunity.phase === "phase2" &&
-            opportunity.status === "cancelled",
-        )
-          ? "double_attack_cancelled"
-          : undefined;
-
-      return {
-        actionResultReason,
-        actionResultStatus,
-        actionResultSummary,
-        attackResult,
-        attackSummary:
-          phaseModel?.showAttackStats && phaseModel.attackStats
-            ? phaseModel.attackStats
-            : undefined,
-        committedAt,
-        declarationSummary: {
-          actionId: draft.actionId || undefined,
-          adjustDistance: roundParticipant.declaration?.adjustDistance,
-          actionLabel: draft.actionId ? getPlayerEncounterActionLabel(draft.actionId) : undefined,
-          additionalActionNotes: draft.additionalActionNotes || undefined,
-          intent: draft.declarationIntent,
-          feint:
-            roundParticipant.declaration?.actionId === "feint_attack" &&
-            roundParticipant.declaration.feint
-              ? {
-                  attackerSkillId: roundParticipant.declaration.feint.attackerSkillId,
-                  defenderSkillId: roundParticipant.declaration.feint.defenderSkillId,
-                  method: roundParticipant.declaration.feint.method,
-                  targetParticipantId: roundParticipant.declaration.feint.targetParticipantId,
-                }
-              : undefined,
-          movementId: draft.movementId || undefined,
-          movementLabel:
-            getMovementIntentLabel(draft.movementIntent) ??
-            getPlayerEncounterMovementLabel(draft.movementId),
-          movementIntent: draft.movementIntent,
-          movementPreferenceTargets: draft.movementIntent.distancePreferences.flatMap(
-            (preference) => {
-              const target = effectiveScenarioParticipants.find(
-                (participant) =>
-                  participant.id === preference.targetParticipantId ||
-                  participant.characterId === preference.targetParticipantId,
-              );
-
-              return target
-                ? [{ displayName: target.snapshot.displayName, id: preference.targetParticipantId }]
-                : [];
-            },
-          ),
-          secondaryActionContext: draft.secondaryActionContext,
-          secondaryActionId: draft.secondaryActionId || undefined,
-          secondaryActionLabel: draft.secondaryActionId
-            ? getPlayerEncounterActionLabel(draft.secondaryActionId)
-            : undefined,
-        },
-        defenseSummary:
-          phaseModel?.showDefenseContext && phaseModel.defenseStats
-            ? phaseModel.defenseStats
-            : undefined,
-        id: `${stateForSnapshots.roundNumber}:${roundParticipant.participantId}:${step}`,
-        initiativeRank: initiativeResult ? ranks[roundParticipant.participantId] : undefined,
-        initiativeResult,
-        modifierSummary: {
-          dbFlatAdjustment: phaseSummary.liveModifiers.dbFlatAdjustment ?? 0,
-          dbRaw: phaseSummary.liveModifiers.dbRaw,
-          effects: uniqueModifierEffects,
-          generalFatigueRaw: phaseSummary.liveModifiers.generalFatigueRaw,
-          initiativeRaw: phaseSummary.liveModifiers.initiativeRaw,
-          obSkillRaw: phaseSummary.liveModifiers.obSkillRaw,
-          rows: modifierRows,
-        },
-        participantId: roundParticipant.participantId,
-        participantLabel: roundParticipant.label,
-        phase,
-        phasePanels: {
-          phase1: buildPhasePanelSnapshot("phase1"),
-          phase2: buildPhasePanelSnapshot("phase2"),
-        },
-        phaseContext,
-        phaseResolutionStatus,
-        phaseResolutionResult,
-        roundNumber: stateForSnapshots.roundNumber,
-        step,
-      };
-    });
-  }
+  // #951 / #889: the client no longer builds step snapshots. Product Owner ruling of
+  // 2026-11-06 — the server derives and persists each committed step's authoritative snapshot
+  // from the state it is committing, so this panel sends action and draft inputs only.
 
   async function commitCurrentStep(candidate?: CurrentActionCommandDescriptor) {
     if (isSequentialResolutionStep(roundState.currentStep) && !projectedBoundaryTransitionAction) {
@@ -9546,9 +9189,6 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    const committedAt = new Date().toISOString();
-    const stepSnapshots = buildCombatRoundStepSnapshots(committedAt, roundState);
-
     boundaryTransitionInFlightRef.current = true;
     setSaving(true);
     try {
@@ -9567,7 +9207,6 @@ export default function CombatRoundManagerPanel({
         executionGroupId: boundaryTransitionAction.executionGroupId,
         expectedBoundary: boundaryTransitionAction.expectedBoundary,
         expectedRevision: boundaryTransitionAction.expectedRevision,
-        stepSnapshots,
         targetBoundary: boundaryTransitionAction.targetBoundary,
         taskId: boundaryTransitionAction.taskId,
       });
@@ -10320,31 +9959,6 @@ export default function CombatRoundManagerPanel({
       return;
     }
 
-    const reviewStepSnapshot = isModifierReview
-      ? buildCombatRoundStepSnapshots(new Date().toISOString(), {
-          ...roundState,
-          participants: roundState.participants.map((participant) =>
-            participant.participantId === taskEncounterParticipant.id && participant.declaration
-              ? {
-                  ...participant,
-                  declaration: {
-                    ...participant.declaration,
-                    combatContext:
-                      !inspectorHasLocalModifierEdits && modifierReviewInputSnapshot
-                        ? modifierReviewInputSnapshot.combatContext
-                        : inspectorGeneratedCombatContext,
-                    phaseContexts: requestPhaseContexts,
-                  },
-                }
-              : participant,
-          ),
-        }).find(
-          (snapshot) =>
-            snapshot.participantId === taskEncounterParticipant.id &&
-            snapshot.step === roundState.currentStep,
-        )
-      : undefined;
-
     setSaving(true);
 
     try {
@@ -10417,7 +10031,6 @@ export default function CombatRoundManagerPanel({
           phase1: inspectorPhaseLoadoutSummaries.phase1.attackStats?.weaponName,
           phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName,
         },
-        reviewStepSnapshot,
         scenarioParticipantId: taskScenarioParticipant.id,
         secondaryActionContext: requestSecondaryActionContext,
         secondaryActionId: inspectorDraft.secondaryActionId || undefined,

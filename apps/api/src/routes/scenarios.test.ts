@@ -16278,10 +16278,24 @@ describe("scenarios route contract", () => {
     });
     expect(payload.commandEnvelope).not.toHaveProperty("commands");
     expect(payload.commandEnvelope).not.toHaveProperty("state");
-    expect(updatedEncounter.combatRoundState).toMatchObject({
-      currentStep: "initiative_phase_1",
-      stepSnapshots: expect.arrayContaining([expect.objectContaining(stepSnapshot)]),
-    });
+    // #951: the committed step is recorded by the server, for every participant in the round,
+    // and the client's own `stepSnapshots` payload reaches storage nowhere. The fixture's
+    // `committedAt` is `2026-01-01T00:02:00.000Z`; every stored record carries the server's.
+    expect(updatedEncounter.combatRoundState.currentStep).toBe("initiative_phase_1");
+    expect(
+      updatedEncounter.combatRoundState.stepSnapshots.map(
+        (snapshot: { participantId: string; step: string }) =>
+          `${snapshot.step}:${snapshot.participantId}`,
+      ),
+    ).toEqual([
+      "review_action_modifiers:encounter-participant-1",
+      "review_action_modifiers:encounter-participant-2",
+    ]);
+    expect(
+      updatedEncounter.combatRoundState.stepSnapshots.map(
+        (snapshot: { committedAt: string }) => snapshot.committedAt,
+      ),
+    ).not.toContain(stepSnapshot.committedAt);
     expect(mocks.encounterService.updateEncounter).toHaveBeenCalledWith(
       expect.objectContaining({
         session: expect.objectContaining({
@@ -19664,13 +19678,14 @@ describe("scenarios route contract", () => {
     expect(updatedEncounter.combatRoundState.currentCursor).toEqual(
       updatedEncounter.combatRoundState.commands[0].afterCursor,
     );
-    expect(updatedEncounter.combatRoundState.stepSnapshots).toContainEqual(
-      expect.objectContaining({
-        id: "snapshot:m1:encounter-participant-1",
-        participantId: "encounter-participant-1",
-        step: "review_action_modifiers",
-      }),
-    );
+    // #951 / #889: the review commit records the step for every participant in this round state,
+    // and the record is the server's own. The client-supplied
+    // `snapshot:m1:encounter-participant-1` id never reaches storage.
+    expect(
+      updatedEncounter.combatRoundState.stepSnapshots.map(
+        (snapshot: { id: string }) => snapshot.id,
+      ),
+    ).toEqual(["1:encounter-participant-1:review_action_modifiers"]);
   });
 
   it("rejects an M1 review when the participant modifier revision is stale", async () => {
