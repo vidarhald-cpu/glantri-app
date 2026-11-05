@@ -9,6 +9,7 @@ import {
 import { getCombatDistanceParticipantAliases } from "../encounter/combatDistance";
 import { projectCombatGenericActionsForPlayer } from "../encounter/combatGenericAction";
 import { buildPlayerSafeCombatScopeForUser } from "../encounter/combatPlayerVisibility";
+import { unreadablePlayerFacingEncounterIds } from "../encounter/playerFacingEncounterRosterIdentity";
 import {
   encounterParticipantSchema,
   encounterStatusSchema,
@@ -793,15 +794,29 @@ export function buildScenarioSessionView(input: {
     viewerMode: input.viewerMode,
   });
   const controlledParticipantIds = disclosure.controlledParticipantIds;
+  // Forgejo #963. An Encounter whose roster no longer holds a coherent identity for every row is
+  // not resolved for a player. This reader builds its own Encounter summaries and presence
+  // wording rather than going through `buildPlayerFacingEncounterForUser`, so the projection's
+  // own refusal does not reach it, and the measured disclosure was its `encounters` and
+  // `participants` keys. The GM reading is left exactly as it was: a GM must still be able to see
+  // that the Encounter is there and look at it.
+  const unreadableEncounterIds =
+    input.viewerMode === "gm"
+      ? new Set<string>()
+      : unreadablePlayerFacingEncounterIds({
+          encounters: input.encounters,
+          scenarioParticipants: input.participants,
+        });
   const accessibleEncounters = input.encounters.filter(
     (encounter) =>
       encounter.status !== "archived" &&
       (input.viewerMode === "gm" ||
-        isUserAssignedToEncounterMembership({
-          encounter,
-          scenarioParticipants: input.participants,
-          userId: input.userId,
-        })),
+        (!unreadableEncounterIds.has(encounter.id) &&
+          isUserAssignedToEncounterMembership({
+            encounter,
+            scenarioParticipants: input.participants,
+            userId: input.userId,
+          }))),
   );
   // Presence wording only. Participant suppression is the resolver's decision
   // and is deliberately not conditioned on Encounter status: the previous
@@ -811,6 +826,11 @@ export function buildScenarioSessionView(input: {
 
   for (const encounter of input.encounters) {
     if (encounter.status !== "active" || encounter.participantMembershipMode !== "explicit") {
+      continue;
+    }
+    // An unresolved roster supplies no presence wording either: `encounterId` and
+    // `encounterName` would otherwise name the Encounter this response refuses to resolve.
+    if (unreadableEncounterIds.has(encounter.id)) {
       continue;
     }
     for (const participant of encounter.participants) {

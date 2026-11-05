@@ -93,6 +93,7 @@ export * from "./encounter/criticalInjuryFixtures";
 export * from "./encounter/hitLocation";
 export * from "./encounter/toHitTable";
 export * from "./encounter/session";
+export * from "./encounter/playerFacingEncounterRosterIdentity";
 export * from "./encounter/playerFacingEncounterSession";
 export * from "./encounter/roleplay";
 export * from "./equipment";
