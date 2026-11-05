@@ -11,7 +11,7 @@ import {
   playerFacingRoleplayStateSchema,
 } from "./playerFacingCombatRoundStructures";
 import { buildPlayerFacing, LEAF, playerFacingObject } from "./playerFacingSchema";
-import { encounterSessionSchema, type EncounterSession } from "./session";
+import { encounterSessionObjectSchema, type EncounterSession } from "./session";
 
 /**
  * The player-facing encounter — an encounter as it reaches a non-GM actor — Forgejo issue #502
@@ -31,7 +31,7 @@ import { encounterSessionSchema, type EncounterSession } from "./session";
  */
 export const playerFacingEncounterSessionSchema = playerFacingObject(
   "PlayerFacingEncounterSession",
-  encounterSessionSchema,
+  encounterSessionObjectSchema,
   {
     actionLog: z.array(playerFacingEncounterAttackResolutionSchema).default([]),
     campaignId: LEAF,

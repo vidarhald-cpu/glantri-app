@@ -17593,71 +17593,55 @@ describe("scenarios route contract", () => {
     ).toBe("encounter-participant-2");
   });
 
-  it("keeps an exact Observe opponent identity ahead of a colliding legacy actor alias", async () => {
+  /**
+   * Forgejo #947. This case used to drive the declaration route with a roster in which
+   * one row's `characterId` was another row's `id`, and assert that the exact `id`
+   * match still won the Observe target — the exact-`id`-before-alias ordering in
+   * `resolveEncounterParticipantByRollParticipantId`. It now asserts that
+   * `encounterSessionSchema` refuses that roster, which is the behaviour this change
+   * adds, and the fixture is kept so the refusal is measured on the exact shape the
+   * reader used to be asked to survive.
+   *
+   * **Two claims an earlier version of this comment made are false, corrected here
+   * rather than removed, because this comment is the record of what the case pinned.**
+   *
+   * It said the ordering remained covered by "canonicalizes and persists the selected
+   * Offensive Parry opponent" above and by the Gladiator/Scyrian Observe case below.
+   * Independent QA measured otherwise (issue #947, comment 21083): inverting the
+   * ordering left this whole file at 555 passed, and the entire repository green,
+   * while replacing the resolver's body with `return undefined` failed 22 cases in
+   * this file — neither of them among those 22. Neither named case depends on the
+   * resolver's answer at all.
+   *
+   * It also said the colliding roster could no longer be written or read. The
+   * roster-local condition is stated over the **raw** rows;
+   * `resolveEncounterParticipantMembership` then backfills `scenarioParticipantId` and
+   * `characterId`, and every reader applies the ordering to the **resolved**
+   * collection. A roster whose raw rows share no alias and whose resolved rows do is
+   * accepted, and is written through the GM's own `PATCH` at a 200 — the
+   * past-item-viewability cycle-2 shape, still carried by a route case here.
+   *
+   * **The ordering is load-bearing, and it is covered in
+   * `packages/domain/src/encounter/encounterRosterIdentity.test.ts`** — "an exact
+   * identity is preferred over a colliding alias (#947)", three cases over the exported
+   * function and one control, each failing under the inverted ordering and needing no
+   * roster write.
+   *
+   * Whether the reader's own tie-break should now be simplified is a separate decision
+   * and is not taken here. The measurement above argues against it.
+   */
+  it("refuses the roster the Observe tie-break used to defend against", () => {
     const encounterParticipants = makeTwoCombatEncounterParticipants().map((participant, index) =>
       index === 0 ? { ...participant, characterId: "encounter-participant-2" } : participant,
-    ) as unknown as EncounterSession["participants"];
-    setupCombatDeclarationRoute({
-      encounter: { participants: encounterParticipants },
-      participant: {
-        characterId: "encounter-participant-2",
-        snapshot: {
-          build: makeDodgeCharacterBuild("character-actor", "Scyrian cavalry guy"),
-          displayName: "Scyrian cavalry guy",
-        },
-      },
-      participants: [
-        {
-          characterId: "encounter-participant-2",
-          id: "participant-1",
-          snapshot: {
-            build: makeDodgeCharacterBuild("character-actor", "Scyrian cavalry guy"),
-            displayName: "Scyrian cavalry guy",
-          },
-        },
-        {
-          controlledByUserId: "other-player",
-          id: "participant-2",
-          snapshot: { displayName: "The Gladiator" },
-        },
-      ],
-      user: mocks.adminUser,
-    });
-    const app = await buildScenarioTestApp();
+    );
+    const refused = encounterSessionSchema.safeParse(
+      makeCombatEncounter({ participants: encounterParticipants }),
+    );
 
-    const response = await app.inject({
-      method: "POST",
-      payload: {
-        actionId: "parry",
-        combatContext: { modifierBuckets: emptyModifierBuckets() },
-        scenarioParticipantId: "participant-1",
-        secondaryActionContext: {
-          action: "observe_opponent",
-          targetParticipantId: "encounter-participant-2",
-        },
-        secondaryActionId: "observe_opponent",
-      },
-      url: "/encounters/encounter-1/combat-declaration",
-    });
-
-    await app.close();
-
-    expect(response.statusCode, response.body).toBe(200);
-    const savedRoundState =
-      mocks.encounterService.updateEncounter.mock.calls[0]?.[0]?.session.combatRoundState;
-    expect(
-      savedRoundState.participants.find(
-        (participant: { participantId: string }) =>
-          participant.participantId === "encounter-participant-1",
-      )?.declaration,
-    ).toMatchObject({
-      actionId: "parry",
-      secondaryActionContext: {
-        action: "observe_opponent",
-        targetParticipantId: "encounter-participant-2",
-      },
-      secondaryActionId: "observe_opponent",
-    });
+    expect(refused.success).toBe(false);
+    expect(refused.error?.issues.map((issue) => issue.message)).toEqual([
+      "Two Encounter participants claim the identity encounter-participant-2. Give every combatant a distinct identity.",
+    ]);
   });
 
   it("accepts the persisted Gladiator and Scyrian mutual-target Observe declaration", async () => {
