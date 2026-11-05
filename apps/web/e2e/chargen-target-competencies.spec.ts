@@ -2,12 +2,13 @@ import { expect, test } from "@playwright/test";
 import { getApprovedV2RuntimeContent } from "@glantri/content";
 
 import { expandChargenChooser, gotoChargenStep } from "./chargen-step-navigation";
+import { API_URL } from "./targets";
 
 // One bounded new Slice2 journey; do not retry the known profile prerequisite failure.
 test("target competencies through existing Chargen and authoritative persistence", async ({
   page,
 }, testInfo) => {
-  const api = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+  const api = API_URL;
   const name = `Slice2 target ${Date.now()}`;
   const registration = await page.request.post(`${api}/auth/register`, {
     data: {

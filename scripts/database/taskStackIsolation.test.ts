@@ -12,7 +12,7 @@ import { createServer as createSocketServer, type Server as SocketServer } from 
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { isWildcardHost, resolveApiBinding } from "../../apps/api/src/lib/serverBinding";
 import {
@@ -202,35 +202,32 @@ describe("task-isolated dev stacks", () => {
 
 // The browser proof suite is a second, equally live hop into a database. `global-setup.ts` seeds
 // accounts with POST /auth/register before a single spec runs, and it learns where to send them
-// only from PLAYWRIGHT_API_URL, whose fallback is the shared `http://localhost:4000` default.
-// While a task stack sat on the shared defaults that fallback happened to be right. Once the
-// stack moved to its derived ports, an unpropagated Playwright URL stopped being "unconfigured"
-// and became a deterministic misroute into whatever holds the shared port -- normally the primary
+// only from PLAYWRIGHT_API_URL. It once fell back to the shared `http://localhost:4000` default
+// (removed by Forgejo #966, which made the variable required). While a task stack sat on the shared
+// defaults that fallback happened to be right. Once the stack moved to its derived ports, an
+// unpropagated Playwright URL stopped being "unconfigured" and became a deterministic misroute into whatever holds the shared port -- normally the primary
 // checkout's API on the shared playtest database. So these URLs are stack identity, not test
 // configuration, and they are asserted to equal the stack's own addresses.
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const E2E_DIRECTORY = join(repositoryRoot, "apps", "web", "e2e");
-const PLAYWRIGHT_CONFIG = join(repositoryRoot, "apps", "web", "playwright.config.ts");
 
-/** Every `process.env.X ?? "http://localhost:<port>"` in the browser suite -- the defect shape. */
-function browserSuiteVariablesWithSharedDefaultFallback(): Map<string, Set<string>> {
+/**
+ * Every `?? "http://<host>:3000|4000"` in the browser suite -- the defect shape. Forgejo #966
+ * removed them all: the suite has no default target, so this must find nothing.
+ */
+function browserSuiteSharedDefaultFallbacks(): string[] {
   const sources = [
-    PLAYWRIGHT_CONFIG,
+    ...readdirSync(join(repositoryRoot, "apps", "web"))
+      .filter((entry) => /^playwright.*\.ts$/.test(entry))
+      .map((entry) => join(repositoryRoot, "apps", "web", entry)),
     ...readdirSync(E2E_DIRECTORY)
       .filter((entry) => entry.endsWith(".ts"))
       .map((entry) => join(E2E_DIRECTORY, entry)),
   ];
-  const found = new Map<string, Set<string>>();
-
-  for (const source of sources) {
-    const pattern = /process\.env\.([A-Z0-9_]+)\s*\?\?\s*"(http:\/\/localhost:\d+)"/g;
-    for (const match of readFileSync(source, "utf8").matchAll(pattern)) {
-      const [, name, fallback] = match as unknown as [string, string, string];
-      found.set(name, (found.get(name) ?? new Set<string>()).add(fallback));
-    }
-  }
-
-  return found;
+  const pattern = /\?\?\s*"https?:\/\/[^"]*:(?:3000|4000)"/g;
+  return sources.flatMap((source) =>
+    [...readFileSync(source, "utf8").matchAll(pattern)].map((match) => `${source}: ${match[0]}`),
+  );
 }
 
 describe("task stack Playwright propagation", () => {
@@ -284,22 +281,92 @@ describe("task stack Playwright propagation", () => {
     ).toThrow(/conflicts with this worktree's task stack value/);
   });
 
-  it("propagates every browser-suite variable that falls back to a shared default port", () => {
-    const observed = browserSuiteVariablesWithSharedDefaultFallback();
-    const propagated = stackEnvironmentFor(BUILDER_KEY).environment;
+  it("leaves no shared-default fallback in the browser suite, and propagates every required target", () => {
+    expect(browserSuiteSharedDefaultFallbacks()).toEqual([]);
 
-    // Guards the guard: if this ever finds nothing the assertion below would pass vacuously.
-    expect(observed.size).toBeGreaterThanOrEqual(3);
-    expect([...observed.keys()].sort()).toEqual([
+    // The shared module requires exactly these three, and db:task:exec must steer each of them.
+    const required = [
+      ...readFileSync(join(E2E_DIRECTORY, "targets.ts"), "utf8").matchAll(
+        /^ {2}"(PLAYWRIGHT_[A-Z_]+)",$/gm,
+      ),
+    ].map((match) => match[1]);
+    expect(required.sort()).toEqual([
       "PLAYWRIGHT_API_URL",
       "PLAYWRIGHT_BASE_URL",
       "PLAYWRIGHT_BROWSER_API_URL",
     ]);
-
-    // Any browser-suite entry point whose fallback is a shared default port must be steered by
-    // db:task:exec. A new one added without propagation fails here rather than in production.
-    for (const name of observed.keys()) {
+    const propagated = stackEnvironmentFor(BUILDER_KEY).environment;
+    for (const name of required) {
       expect(Object.keys(propagated)).toContain(name);
+    }
+  });
+
+  it("refuses a missing target and any live-port target on every host, and accepts a task stack", async () => {
+    vi.stubEnv("PLAYWRIGHT_API_URL", "http://127.0.0.1:4777");
+    vi.stubEnv("PLAYWRIGHT_BASE_URL", "http://127.0.0.1:3777");
+    vi.stubEnv("PLAYWRIGHT_BROWSER_API_URL", "http://127.0.0.1:4777");
+    const { resolvePlaywrightTargets } = await import("../../apps/web/e2e/targets");
+    vi.unstubAllEnvs();
+
+    const good = {
+      PLAYWRIGHT_API_URL: "http://127.0.0.1:4777",
+      PLAYWRIGHT_BASE_URL: "http://127.0.0.1:3777",
+      PLAYWRIGHT_BROWSER_API_URL: "http://127.0.0.1:4777",
+    };
+    expect(resolvePlaywrightTargets(good).API_URL).toBe(good.PLAYWRIGHT_API_URL);
+
+    for (const name of Object.keys(good)) {
+      expect(() => resolvePlaywrightTargets({ ...good, [name]: undefined })).toThrow(
+        new RegExp(`${name} is required`),
+      );
+      expect(() => resolvePlaywrightTargets({ ...good, [name]: "" })).toThrow(
+        new RegExp(`${name} is required`),
+      );
+    }
+    for (const live of [
+      "http://localhost:4000",
+      "http://127.0.0.1:3000",
+      "http://0.0.0.0:4000",
+      "http://[::1]:3000",
+      "http://192.168.1.50:4000",
+      "http://alpha.example.test:3000",
+    ]) {
+      expect(() => resolvePlaywrightTargets({ ...good, PLAYWRIGHT_API_URL: live })).toThrow(
+        /live Alpha stack/,
+      );
+    }
+
+    // Only the repository's own CI job, identified by two signals together, may use those ports.
+    const ciLive = { ...good, PLAYWRIGHT_API_URL: "http://localhost:4000" };
+    expect(() => resolvePlaywrightTargets({ ...ciLive, CI: "true" })).toThrow(/live Alpha stack/);
+    expect(() => resolvePlaywrightTargets({ ...ciLive, CI_SERVICE_STATE_DIR: "x" })).toThrow(
+      /live Alpha stack/,
+    );
+    const ci = { CI: "true", CI_SERVICE_STATE_DIR: ".ci/x" };
+    for (const loopback of [
+      "http://localhost:4000",
+      "http://127.0.0.1:4000",
+      "http://127.1.2.3:3000",
+      "http://[::1]:3000",
+    ]) {
+      expect(
+        resolvePlaywrightTargets({ ...good, ...ci, PLAYWRIGHT_API_URL: loopback }).API_URL,
+      ).toBe(loopback);
+    }
+
+    // Even with both CI signals set, a non-loopback host on a live port is refused.
+    for (const lan of [
+      "http://192.168.1.50:4000",
+      "http://10.0.0.5:3000",
+      "http://alpha.example.test:3000",
+      "http://0.0.0.0:4000",
+      "http://127.0.0.1.example.test:4000",
+    ]) {
+      for (const name of Object.keys(good)) {
+        expect(() => resolvePlaywrightTargets({ ...good, ...ci, [name]: lan })).toThrow(
+          /live Alpha stack/,
+        );
+      }
     }
   });
 });

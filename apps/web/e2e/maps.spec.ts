@@ -2,10 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { expect, test, type APIRequestContext, type APIResponse } from "@playwright/test";
+import { API_URL, WEB_URL } from "./targets";
 
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const MAP_MUTATION_HEADERS = {
-  origin: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+  origin: WEB_URL,
   "x-glantri-map-mutation": "1",
 };
 

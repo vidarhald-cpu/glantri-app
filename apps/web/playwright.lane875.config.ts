@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { WEB_URL } from "./e2e/targets";
+
 /**
  * Lane-scoped configuration for the #875 rendered proof. It runs only that spec and keeps it out
  * of the ordinary suite (whose `testIgnore` excludes `lane<n>-` specs), so adding a rendered proof
@@ -18,7 +20,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: /lane875-.*\.spec\.ts/,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+    baseURL: WEB_URL,
     trace: "retain-on-failure",
   },
   workers: 1,

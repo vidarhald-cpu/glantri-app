@@ -2,8 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+import { API_URL } from "./targets";
 
 function loadTestState(): { b2CampaignId: string; characterId: string } {
   return JSON.parse(fs.readFileSync(path.join(__dirname, "test-state.json"), "utf-8")) as {

@@ -9,6 +9,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * #862 V1 — rendered evidence for the two user-visible rows of the player Combat visibility lane,
@@ -35,7 +36,6 @@ import { characterPayload } from "./character-fixture";
  * Nothing here compares geometry, but the same atomicity rule is applied to the text reads so a
  * re-render cannot land between two halves of one assertion.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 /** The twelve columns the player and GM trackers both render (#771 R2-2). `PD` is not one. */
 const VISIBLE_STEP_ABBREVIATIONS = [

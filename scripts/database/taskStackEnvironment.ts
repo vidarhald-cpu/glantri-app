@@ -115,8 +115,8 @@ export function deriveTaskStackAddresses(
  * The Playwright URLs belong here for the same reason as `NEXT_PUBLIC_API_BASE_URL`, and they are
  * derived from the same addresses so they cannot drift from the stack they are supposed to drive.
  * `apps/web/e2e/global-setup.ts` seeds users through `POST /auth/register` against
- * `PLAYWRIGHT_API_URL`, whose own fallback is the shared `http://localhost:4000` default. Leaving
- * it unpropagated while the stack moved to its derived ports would not leave the smoke suite
+ * `PLAYWRIGHT_API_URL`, which had a shared `http://localhost:4000` default until Forgejo #966 made
+ * it required. Leaving it unpropagated while the stack moved to its derived ports would not leave the smoke suite
  * merely unconfigured — it would point the suite's account creation deterministically at whatever
  * process holds the shared default port, which on a developer machine is normally the primary
  * checkout's API on the shared playtest database. That is the exact #276 incident class.

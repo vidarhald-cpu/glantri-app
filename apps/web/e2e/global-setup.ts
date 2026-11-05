@@ -1,15 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import { characterPayload } from "./character-fixture";
+import { API_URL, WEB_URL } from "./targets";
 
 // This module creates real accounts, campaigns and characters through the API before a single
-// spec runs, so PLAYWRIGHT_API_URL decides which database the suite writes into. The fallback is
-// kept — CI and the primary checkout legitimately serve the shared defaults — but it is no longer
-// silent: the resolved target is printed before the first write, and `db:task:exec` supplies this
-// variable so a task-isolated stack is driven at its own derived ports (see Forgejo #276 and
-// `docs/dev-database.md`).
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
-const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
+// spec runs, so the API target decides which database the suite writes into. The target comes only
+// from `./targets`, which has no default and refuses the live Alpha ports (Forgejo #966);
+// `db:task:exec` supplies it so a task-isolated stack is driven at its own derived ports (see
+// Forgejo #276 and `docs/dev-database.md`).
 
 async function apiPost<T = unknown>(
   endpoint: string,

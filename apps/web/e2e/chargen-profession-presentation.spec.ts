@@ -5,6 +5,7 @@ import {
   forEachChargenStep,
   gotoChargenStep,
 } from "./chargen-step-navigation";
+import { API_URL } from "./targets";
 
 /**
  * The Chargen Profession and acquisition presentation contract, in the browser (Forgejo #372).
@@ -27,7 +28,6 @@ import {
  * The note itself is still the rule and is still rendered by `LearningGroupProse`; it simply has no
  * subject in the canonical catalogue, which the `packages/content` and component suites assert.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const SCHOOLING = "Instruction and schooling practice";
 const SPEECH = "Speech and memory practice";
 
