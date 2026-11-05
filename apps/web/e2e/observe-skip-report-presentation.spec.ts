@@ -27,7 +27,10 @@
  *
  * `db:task:e2e` is what derives this worktree's own web/API ports and builds the bundle inside
  * that environment; a build outside it inlines `NEXT_PUBLIC_API_BASE_URL` for whatever stack holds
- * the default ports. Each case writes its PNGs and a geometry JSON, and also prints a `CAPTURE`
+ * the default ports. Ports 3000 and 4000 are the Product Owner's live Alpha stack, and this
+ * instrument mutates a real database, so an enabled run **refuses** to start unless
+ * `PLAYWRIGHT_API_URL` and `PLAYWRIGHT_BASE_URL` are both set explicitly, and refuses any value
+ * on port 3000 or 4000 of a loopback host. Each case writes its PNGs and a geometry JSON, and also prints a `CAPTURE`
  * line to stdout, so a run whose output directory was wrong cannot read as a pass.
  */
 import fs from "node:fs";
@@ -43,8 +46,47 @@ import {
 
 import { characterPayload } from "./character-fixture";
 
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:4000";
 const CAPTURES_ENABLED = process.env.OBSERVE_SKIP_CAPTURES === "1";
+/**
+ * No live-stack default: ports 3000 and 4000 are the Product Owner's live Alpha stack, and this
+ * instrument creates live Scenarios and performs real Observe rolls. On an enabled run both URLs
+ * must be set explicitly, and a value that resolves to port 3000 or 4000 on any loopback host is
+ * refused, because an explicitly set but wrong value is the accident that presence alone does not
+ * prevent. A disabled run never throws here, so an ordinary suite run still collects and skips
+ * this spec.
+ */
+const LIVE_STACK_PORTS = new Set(["3000", "4000"]);
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "[::1]"]);
+
+function requireTaskStackUrl(name: "PLAYWRIGHT_API_URL" | "PLAYWRIGHT_BASE_URL"): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `${name} is required: this instrument has no default target, because the default ports are the live Alpha stack. Run it through \`pnpm db:task:e2e\`, which derives this worktree's own ports.`,
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} is not a valid URL: ${value}`);
+  }
+  const loopback =
+    LOOPBACK_HOSTS.has(parsed.hostname) || /^127(\.\d{1,3}){3}$/.test(parsed.hostname);
+  if (loopback && LIVE_STACK_PORTS.has(parsed.port)) {
+    throw new Error(
+      `${name}=${value} points at port ${parsed.port}, which is the Product Owner's live Alpha stack. This instrument mutates a real database. Use \`pnpm db:task:e2e\`, which derives per-worktree ports.`,
+    );
+  }
+  return value;
+}
+
+const API_URL = CAPTURES_ENABLED
+  ? requireTaskStackUrl("PLAYWRIGHT_API_URL")
+  : (process.env.PLAYWRIGHT_API_URL ?? "unused: captures disabled");
+if (CAPTURES_ENABLED) {
+  requireTaskStackUrl("PLAYWRIGHT_BASE_URL");
+}
 /**
  * No silent sink: an enabled run with no directory fails loudly instead of writing to a path
  * nobody reads, and the resolved directory is named in the printed `CAPTURE` line either way.
