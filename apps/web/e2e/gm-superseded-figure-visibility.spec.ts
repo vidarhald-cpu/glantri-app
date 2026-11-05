@@ -112,12 +112,24 @@ interface TaskControlRead {
   text: string;
 }
 
+/**
+ * The control that completes the task, read from inside the same card as the label. Co-location is
+ * the property that does not depend on where the page happens to be scrolled: a GM cannot complete
+ * the review without being at the card the sentence is in.
+ */
+interface PrimaryActionRead {
+  foundInSameCard: boolean;
+  rect: { bottom: number; height: number; left: number; top: number; width: number };
+  text: string;
+}
+
 interface SurfaceRead {
   currentTaskControl: TaskControlRead;
   details: DetailsRead[];
   label: LabelRead;
   /** Every forbidden substring present anywhere in the rendered page text. */
   pageTextHits: string[];
+  primaryAction: PrimaryActionRead;
 }
 
 /**
@@ -221,6 +233,23 @@ async function readSurface(
         text: (controlNode?.textContent ?? "").trim(),
       };
 
+      // The button that completes the task, taken from inside the label's own card.
+      const actionNode = card ? card.querySelector("button") : null;
+      const actionRect = actionNode?.getBoundingClientRect();
+      const primaryAction = {
+        foundInSameCard: Boolean(actionNode),
+        rect: actionRect
+          ? {
+              bottom: actionRect.bottom,
+              height: actionRect.height,
+              left: actionRect.left,
+              top: actionRect.top,
+              width: actionRect.width,
+            }
+          : { bottom: 0, height: 0, left: 0, top: 0, width: 0 },
+        text: (actionNode?.textContent ?? "").replace(/\s+/g, " ").trim(),
+      };
+
       const details = (
         [
           ...document.querySelectorAll('input[aria-label$="modifier details"]'),
@@ -244,7 +273,7 @@ async function readSurface(
         pageText.includes(needle.toLowerCase()),
       );
 
-      return { currentTaskControl, details, label, pageTextHits };
+      return { currentTaskControl, details, label, pageTextHits, primaryAction };
     },
     { forbiddenTexts: [...forbidden], sentence: supersededSentence },
   );
@@ -751,14 +780,18 @@ test.describe("the #931 supersession signal: the task label, and nothing on the 
     };
 
     /**
-     * Two reads per state and width, each atomic:
+     * Three reads per state and width, each atomic.
      *
-     * - `arrival`, the settled state the GM actually meets. The page autoscrolls to the current
-     *   task a beat after mount, so this is taken after the settle wait and is the read the
-     *   verdict is taken from.
-     * - `followed`, after pressing the current-task control. Recorded for completeness and
-     *   because it is informative: when the inspector is already on the current task, pressing
-     *   the control returns the page to `scrollY` 0 and takes the card back off screen.
+     * - `arrival`, as the GM meets the page after it settles. Its scroll position is **recorded,
+     *   not asserted on**: the page autoscrolls to the current task on this machine and did not
+     *   in CI, where `scrollY` stayed 0 at every width. An assertion that the card is on screen
+     *   at arrival is therefore an assertion about a timing-dependent scroll, not about the
+     *   build, and an earlier revision of this spec made exactly that mistake.
+     * - `inView`, with the card scrolled to. This is the build property: wherever the GM reaches
+     *   it from, the sentence is on screen, complete and unclipped.
+     * - `followed`, after pressing the current-task control. Recorded because it is informative:
+     *   when the inspector is already on the current task, pressing it returns the page to
+     *   `scrollY` 0 and takes the card back off screen.
      */
     const capture = async (stateKey: string, width: number) => {
       await page.setViewportSize({ height: VIEWPORT_HEIGHT, width });
@@ -766,6 +799,19 @@ test.describe("the #931 supersession signal: the task label, and nothing on the 
       const arrival = await readSurface(page, FORBIDDEN_SUBSTRINGS, SUPERSEDED_SENTENCE);
       record(`${stateKey} arrival @ ${width}`, arrival);
       await shoot(`${stateKey}-arrival-${width}`);
+
+      await page.evaluate(() => {
+        const card = [...document.querySelectorAll("section")].find(
+          (node) =>
+            node.firstElementChild?.tagName === "STRONG" &&
+            node.firstElementChild.textContent === "Current action",
+        );
+        card?.scrollIntoView({ block: "center" });
+      });
+      await page.waitForTimeout(800);
+      const inView = await readSurface(page, FORBIDDEN_SUBSTRINGS, SUPERSEDED_SENTENCE);
+      record(`${stateKey} with the card scrolled to @ ${width}`, inView);
+      await shoot(`${stateKey}-inview-${width}`);
 
       const control = page.getByRole("button", { name: /^(Resume )?current task$/i });
       let followed = arrival;
@@ -776,7 +822,7 @@ test.describe("the #931 supersession signal: the task label, and nothing on the 
         record(`${stateKey} after following the current-task control @ ${width}`, followed);
         await shoot(`${stateKey}-followed-${width}`);
       }
-      return { arrival, followed };
+      return { arrival, followed, inView };
     };
 
     // ===== the negative control on the same card, before any rule event =====
@@ -881,20 +927,28 @@ test.describe("the #931 supersession signal: the task label, and nothing on the 
     // ================= PROOF 1: the label, at each usable width =================
     const verdicts: Record<string, unknown> = {};
     for (const width of WIDTHS) {
-      const { arrival, followed } = await capture("s2-after-cancel", width);
-      // The verdict is taken from the settled arrival state, which is what the GM meets.
-      const label = arrival.label;
+      const { arrival, followed, inView } = await capture("s2-after-cancel", width);
+      // The verdict is taken with the card scrolled to: see `capture`, and the report. Arrival is
+      // recorded beside it so the fold question is answered with numbers rather than asserted on.
+      const label = inView.label;
       verdicts[`width ${width}`] = {
         afterPressingTheCurrentTaskControl: {
           labelInsideViewportAtThisScroll: followed.label.insideViewportAtThisScroll,
           rectTop: followed.label.rect.top,
           scrollY: followed.label.scrollY,
         },
-        currentTaskControlAtArrival: arrival.currentTaskControl,
-        detailsCarryForbiddenText: arrival.details.flatMap((entry) => entry.carriesForbiddenText),
-        detailsValues: arrival.details.map((entry) => entry.value),
+        arrival: {
+          currentTaskControl: arrival.currentTaskControl,
+          labelDocumentTop: arrival.label.documentTop,
+          labelInsideFirstViewport: arrival.label.insideFirstViewport,
+          labelInsideViewportAtThisScroll: arrival.label.insideViewportAtThisScroll,
+          scrollY: arrival.label.scrollY,
+        },
+        detailsCarryForbiddenText: inView.details.flatMap((entry) => entry.carriesForbiddenText),
+        detailsValues: inView.details.map((entry) => entry.value),
         label,
-        pageTextHits: arrival.pageTextHits,
+        pageTextHits: inView.pageTextHits,
+        primaryAction: inView.primaryAction,
       };
 
       // Soft, so every width is measured and every artefact written even on a negative result.
@@ -911,11 +965,13 @@ test.describe("the #931 supersession signal: the task label, and nothing on the 
           `the label at ${width}px is not clipped (client ${label.clientWidth}x${label.clientHeight}, scroll ${label.scrollWidth}x${label.scrollHeight})`,
         )
         .toBe(false);
-      // The fold. The card's own document position is below the first viewport on this route, so
-      // what has to be true is that the GM is actually looking at it: the page autoscrolls to the
-      // current task, and after that scroll the label must be on screen. Both halves are stated,
-      // and a current-task control in the first viewport is recorded as the affordance that takes
-      // a GM there from the top of the page.
+      // The fold, answered by properties of the build rather than of a scroll.
+      //
+      // The card sits below the first viewport on this route at every width, so what has to hold
+      // is (a) something in the first viewport takes a GM to it, (b) the sentence is on screen and
+      // readable once the card is reached, and (c) it is in the same card as the control that
+      // completes the review — so a GM cannot act on the task without being where the sentence is.
+      // (c) is the one that does not depend on scrolling at all.
       expect
         .soft(
           arrival.currentTaskControl.found && arrival.currentTaskControl.insideFirstViewport,
@@ -925,11 +981,18 @@ test.describe("the #931 supersession signal: the task label, and nothing on the 
       expect
         .soft(
           label.insideViewportAtThisScroll,
-          `at ${width}px the label is on screen where the page settles (document top ${label.documentTop}, rect top ${label.rect.top}, bottom ${label.rect.bottom}, viewport ${label.innerHeight}, scrollY ${label.scrollY})`,
+          `at ${width}px the label is on screen once the card is reached (document top ${label.documentTop}, rect top ${label.rect.top}, bottom ${label.rect.bottom}, viewport ${label.innerHeight}, scrollY ${label.scrollY})`,
+        )
+        .toBe(true);
+      expect
+        .soft(
+          inView.primaryAction.foundInSameCard &&
+            /complete modifier review/i.test(inView.primaryAction.text),
+          `at ${width}px the control that completes the review is in the same card as the sentence (${JSON.stringify(inView.primaryAction)})`,
         )
         .toBe(true);
       // And the Details cell carries nothing about it, at any width.
-      for (const entry of arrival.details) {
+      for (const entry of inView.details) {
         expect
           .soft(
             entry.carriesForbiddenText,
