@@ -306,12 +306,25 @@ export function applyAttackPhaseDefensivePenaltyModifiers(input: {
 
 /**
  * What a rule event does to a figure the GM has already committed, while the review that committed
- * it is still open (#931, Product Owner ruling on comment 20917, narrowed on comment 21064).
+ * it is still open (#931, Product Owner rulings on comments 20917, 21064 and 21255).
  *
- * The rule's number applies, and it applies visibly: the superseded figure is kept on the row, the
- * row's own note says so through the existing notes-to-Details path, and the caller returns the
- * row to review. This is the one place that decides what counts as a superseded row; callers decide
- * only whether a rule event has happened and whether a review boundary is open to return it to.
+ * The rule's number applies, and it applies visibly: the superseded figure is kept on the row and
+ * the caller returns the row to review. This is the one place that decides what counts as a
+ * superseded row; callers decide only whether a rule event has happened and whether a review
+ * boundary is open to return it to.
+ *
+ * **The fact is GM-only and lives in `supersededGmFigure`, never in `notes`.** A rendered reading
+ * at 768, 1024 and 1440 CSS px measured the note suffix clipped before the mark on the surface the
+ * GM reviews, and the Product Owner then ruled (comment 21255) that the re-offered task label is
+ * the signal and that the supersession is GM workflow rather than table-visible state. `notes` is
+ * on the player allowlist (`playerFacingCombatModifierEntrySchema`) and `supersededGmFigure` is
+ * not, so the structured field is audience-restricted by the projection itself.
+ */
+/**
+ * The suffix the superseded figure used to be written into `notes` as, before the ruling on
+ * comment 21255 moved the signal to the task label. Nothing writes it any more. It is kept so
+ * `clearSupersededGmFigureMarks` can remove it from a stored row that still carries it — that text
+ * is now player-visible material the ruling forbids — and so the proofs can assert its absence.
  */
 export const SUPERSEDED_GM_FIGURE_NOTE_MARKER = " · GM figure superseded by the rule: ";
 
@@ -327,10 +340,6 @@ function isAttackPhasePenaltyRowOfPhase(
   phase: "phase1" | "phase2",
 ): boolean {
   return entry.sourcePhase === phase && entry.id.startsWith(ATTACK_PHASE_PENALTY_ROW_ID_PREFIX);
-}
-
-function formatSupersededFigure(entry: ScenarioCombatModifierEntry, value: number): string {
-  return `DB/Parry ${value > 0 ? "+" : ""}${value}${entry.application === "percentage" ? "%" : ""}`;
 }
 
 export function stripSupersededGmFigureNote(notes: string | undefined): string | undefined {
@@ -370,15 +379,13 @@ export function supersedeGmCommittedAttackPhasePenaltyRows(input: {
     };
     if (committed.value === entry.value) return entry;
     supersededRowIds.push(entry.id);
-    const base = stripSupersededGmFigureNote(entry.notes);
-    return {
-      ...entry,
-      notes: `${base ?? ""}${SUPERSEDED_GM_FIGURE_NOTE_MARKER}${formatSupersededFigure(
-        entry,
-        committed.value,
-      )}; review again`,
-      supersededGmFigure: committed,
-    };
+    // The row's own text is untouched apart from removing a marker an earlier build may have
+    // written: the fact goes only into `supersededGmFigure`, which no player receives.
+    const { notes: previousNotes, ...rest } = entry;
+    const notes = stripSupersededGmFigureNote(previousNotes);
+    return notes === undefined
+      ? { ...rest, supersededGmFigure: committed }
+      : { ...rest, notes, supersededGmFigure: committed };
   });
   return {
     combatContext:
@@ -428,10 +435,12 @@ export function combatContextHasSupersededGmFigure(
 }
 
 /**
- * Clears the superseded mark from the rows of the reviewed phase: the retained field and the note
- * suffix. The note is stripped by its marker whether or not the field survived the client's round
- * trip, so a submission that dropped the field still loses the visible text. The GM's decision on
- * the row is whatever the submission carries; this never touches a value.
+ * Clears the superseded mark from the rows of the reviewed phase: the retained `supersededGmFigure`
+ * field, and any note suffix a build before the ruling on #931 comment 21255 wrote. The note is
+ * stripped by its marker whether or not the field survived the client's round trip, so a submission
+ * that dropped the field still loses that text — which matters more now than it did, because the
+ * text is player-visible and the ruling keeps the supersession off the player side. The GM's
+ * decision on the row is whatever the submission carries; this never touches a value.
  */
 export function clearSupersededGmFigureMarks(input: {
   combatContext: ScenarioParticipantCombatContext;

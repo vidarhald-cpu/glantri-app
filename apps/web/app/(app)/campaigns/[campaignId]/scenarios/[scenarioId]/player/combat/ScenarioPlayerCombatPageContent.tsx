@@ -76,6 +76,7 @@ import {
   CombatTracker,
   getProjectedCombatHistoryCellEvents,
   getCombatProgressionPresentationTasks,
+  getSupersededModifierReviewKeys,
   isCombatViewRevisionUnchanged,
   isProjectedCombatTrackerStageReached,
   PlayerCombatHistoryInspector,
@@ -2043,6 +2044,12 @@ export default function ScenarioPlayerCombatPageContent({
         encounterId: encounterId ?? "",
         encounterRevision: combatHistory?.sourceUpdatedAt,
         progression: combatHistory?.progression,
+        // The same derivation the GM panel runs, over this page's own round state. The round state
+        // here comes from the Encounter this viewer was served, whose declarations pass through
+        // `playerFacingCombatContextSchema` for a player: `supersededGmFigure` is not on that
+        // allowlist, so a player's set is empty and the superseded wording cannot be composed
+        // (#931 comment 21255). A GM reading this page is served the stored state and does see it.
+        supersededModifierReviewKeys: getSupersededModifierReviewKeys(combatRoundState),
         viewer: {
           controlledParticipantIds: new Set(
             selectedRoundParticipant ? [selectedRoundParticipant.participantId] : [],
@@ -2054,6 +2061,7 @@ export default function ScenarioPlayerCombatPageContent({
     [
       combatHistory?.progression,
       combatHistory?.sourceUpdatedAt,
+      combatRoundState,
       encounterId,
       isGameMaster,
       selectedRoundParticipant,

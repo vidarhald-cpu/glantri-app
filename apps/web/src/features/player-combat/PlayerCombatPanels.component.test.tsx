@@ -1101,8 +1101,15 @@ describe("PlayerCombatModifierPanel", () => {
 
 describe("a row a rule event superseded, read through the Details path (#931)", () => {
   // The row the Double Attack cancel writes after the GM committed -1: the rule's -2 with the
-  // GM's figure retained and the mark in the row's own note. It is produced by the same pure
-  // function the rule writer calls, so what is rendered is what the server stores.
+  // GM's figure retained. It is produced by the same pure function the rule writer calls, so what
+  // is rendered is what the server stores.
+  //
+  // Since the ruling on #931 comment 21255 the Details cell carries NOTHING about the
+  // supersession. A rendered reading measured the note clipped before the mark at 768, 1024 and
+  // 1440 CSS px, and `notes` is on the player allowlist while the supersession is GM workflow.
+  // The signal is the re-offered task label, bound in
+  // `features/combat-history/view-models/currentActionPresentation.test.ts`. What this file binds
+  // is the other half: the Details cell stays the row's own text and leaks nothing.
   function supersededRow() {
     const row = (value: number, notes: string) => ({
       application: "percentage" as const,
@@ -1136,10 +1143,14 @@ describe("a row a rule event superseded, read through the Details path (#931)", 
     },
   ];
 
-  it("shows the mark in the Details cell the GM reviews", () => {
+  it("keeps the supersession out of the Details cell and off the row's text", () => {
     const entry = supersededRow();
-    const note = `Double Attack second attack cancelled: DB/Parry -2% in phase2${SUPERSEDED_GM_FIGURE_NOTE_MARKER}DB/Parry -1%; review again`;
-    expect(entry.notes).toBe(note);
+    // Retained structurally, and nowhere in the text.
+    expect(entry.supersededGmFigure).toEqual({
+      text: "committed weapon attack: DB/Parry -4% in phase2",
+      value: -1,
+    });
+    expect(entry.notes).toBe("Double Attack second attack cancelled: DB/Parry -2% in phase2");
 
     // The GM's review surface: the editable modifier panel, whose Details cell is the row's note.
     const editable = render(
@@ -1150,12 +1161,15 @@ describe("a row a rule event superseded, read through the Details path (#931)", 
         rows={rowsFor(entry)}
       />,
     );
-    // The GM's row: the Details cell carries the rule's number, the GM's figure and the instruction.
     const details = screen.getByLabelText("DB/Parry modifier details") as HTMLInputElement;
-    expect(details.value).toContain("DB/Parry -1%");
-    expect(details.value).toContain("superseded by the rule");
-    expect(details.value).toContain("review again");
+    expect(details.value).toBe("Double Attack second attack cancelled: DB/Parry -2% in phase2");
+    expect(details.value).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+    expect(details.value).not.toMatch(/supersed/i);
+    expect(details.value).not.toContain("review again");
+    // The rule's number is the one in force and the GM can still edit it.
     expect(screen.getByLabelText("DB/Parry modifier value")).toHaveValue(-2);
+    // Nothing anywhere in the rendered panel names the superseded figure.
+    expect(editable.container.textContent ?? "").not.toMatch(/supersed/i);
     editable.unmount();
   });
 

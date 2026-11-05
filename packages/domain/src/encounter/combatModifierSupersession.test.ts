@@ -26,12 +26,18 @@ import { restateCanonicalModifierBucketRowValue } from "./combatModifierLifecycl
 
 /**
  * #931 — a rule event that replaces a figure the GM has committed, while the review that committed
- * it is still open (Product Owner rulings on comments 20917 and 21064).
+ * it is still open (Product Owner rulings on comments 20917, 21064 and 21255).
  *
  * The one such event is the Double Attack second-attack cancel, which fires inside the phase-2
  * modifier review. Every figure below is read in the three places they have been measured to
  * disagree: the stored row, the participant's combat context (which is what the route copies the
  * declaration's context onto), and the resolved defence number.
+ *
+ * The ruling on comment 21255 moved the GM-facing signal from the row's `notes` to the re-offered
+ * task label, after a rendered reading measured the note clipped before the mark at every usable
+ * width. These tests therefore assert `supersededGmFigure` is set and `notes` is left clean:
+ * `notes` is on the player allowlist and `supersededGmFigure` is not, so the restriction the
+ * ruling requires is carried by the projection rather than by a viewer check.
  */
 describe("a Double Attack cancel supersedes the GM's committed phase-2 figure (#931)", () => {
   const ENCOUNTER_ID = "encounter-931";
@@ -269,8 +275,12 @@ describe("a Double Attack cancel supersedes the GM's committed phase-2 figure (#
         value: -1,
       });
       expect(JSON.stringify(row.canonicalLifecycle ?? {})).not.toContain("supersededGmFigure");
-      // Marked through the existing notes -> Details path, in the row's own words.
-      expect(row.notes).toContain(`${SUPERSEDED_GM_FIGURE_NOTE_MARKER}DB/Parry -1%; review again`);
+      // #931 comment 21255: the fact lives only in `supersededGmFigure`, which no player receives.
+      // `notes` is on the player allowlist, so nothing about the supersession is written there and
+      // the row's text is exactly what the rule writer produced.
+      expect(row.notes).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+      expect(row.notes).not.toMatch(/supersed/i);
+      expect(row.notes).not.toContain("review again");
     }
     // The phase-2 context the declaration carries agrees with the combat context.
     expect(
@@ -404,22 +414,35 @@ describe("a Double Attack cancel supersedes the GM's committed phase-2 figure (#
     const wrongPhase = clearSupersededGmFigureMarks({ combatContext: marked, phase: "phase1" });
     expect(phase2Rows(wrongPhase).every((row) => row.supersededGmFigure !== undefined)).toBe(true);
 
-    // A client that round-tripped the notes but dropped the retained field.
-    const fieldDropped = scenarioParticipantCombatContextSchema.parse({
+    // A row written before #931 comment 21255 moved the signal to the task label: the marker text
+    // in `notes`, round-tripped by a client that dropped the retained field. That text is
+    // player-visible, so the clear must remove it even with nothing structured left to key on.
+    // Driven from an explicitly constructed legacy row, because the writer no longer produces one.
+    const legacy = scenarioParticipantCombatContextSchema.parse({
       ...marked,
       modifierBuckets: {
         ...marked.modifierBuckets,
         situationDb: marked.modifierBuckets.situationDb.map(
           ({ supersededGmFigure: _drop, ...row }) => {
             void _drop;
-            return row;
+            return row.sourcePhase === "phase2"
+              ? {
+                  ...row,
+                  notes: `${row.notes ?? ""}${SUPERSEDED_GM_FIGURE_NOTE_MARKER}DB/Parry -1%; review again`,
+                }
+              : row;
           },
         ),
       },
     });
-    const cleared = clearSupersededGmFigureMarks({ combatContext: fieldDropped, phase: "phase2" });
+    // The instrument is alive: the legacy text really is there before the clear.
+    expect(
+      phase2Rows(legacy).every((row) => row.notes?.includes(SUPERSEDED_GM_FIGURE_NOTE_MARKER)),
+    ).toBe(true);
+    const cleared = clearSupersededGmFigureMarks({ combatContext: legacy, phase: "phase2" });
     for (const row of phase2Rows(cleared)) {
       expect(row.notes).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+      expect(row.notes).not.toContain("review again");
       expect(row.value).toBe(-2);
     }
     expect(

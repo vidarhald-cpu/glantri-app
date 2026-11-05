@@ -33545,9 +33545,10 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
           ...phase2Rows(participantContext(walk)),
         ]) {
           expect(row.supersededGmFigure).toEqual({ text: expect.any(String), value: -1 });
-          expect(row.notes).toContain(
-            `${SUPERSEDED_GM_FIGURE_NOTE_MARKER}DB/Parry -1%; review again`,
-          );
+          // #931 comment 21255: the fact is GM-only, so it lives in the structured field and
+          // nowhere in `notes`, which is on the player-facing allowlist.
+          expect(row.notes).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
+          expect(row.notes).not.toMatch(/supersed/i);
         }
         expect(modifierReviewOwners(walk)).toContain(OWNER);
 
