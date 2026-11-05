@@ -12,6 +12,7 @@ import {
 import { movementIntentSchema } from "../encounter/combatMovementIntent";
 import { combatDeclarationIntentSchema } from "../encounter/combatDeclarationIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
+import { withoutSupersededGmFigure } from "../encounter/supersededGmFigureAudience";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -899,6 +900,19 @@ export function buildScenarioPlayerVisibleParticipants(input: {
     );
 }
 
+/**
+ * The controlled participant's combat context as this projection hands it to its viewer.
+ *
+ * This names the fields it removes and lets the rest of every entry through, so a field added to
+ * `scenarioCombatModifierEntrySchema` is carried here by default — unlike the allowlist sibling
+ * `playerFacingCombatContextSchema`, which carries only what it names. That shape is a general
+ * defect, it is filed separately, and replacing it is not #931's work.
+ *
+ * `withoutSupersededGmFigure` is applied because #931 introduced `supersededGmFigure` and a
+ * measured player read found it arriving here. A lane does not widen a bucket that already fails
+ * open with a field of its own (Product Owner disposition, #931 comment 21269). It removes only
+ * that field and changes nothing else this projection carries.
+ */
 function stripPrivateModifierLifecycleFromPlayerCombatContext(
   combatContext: ScenarioParticipantCombatContext | undefined,
 ): ScenarioParticipantCombatContext | undefined {
@@ -909,7 +923,7 @@ function stripPrivateModifierLifecycleFromPlayerCombatContext(
       canonicalTransitions: _transitions,
       ...safe
     } = entry;
-    return safe;
+    return withoutSupersededGmFigure(safe);
   };
   return {
     ...combatContext,

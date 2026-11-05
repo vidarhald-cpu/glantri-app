@@ -81,6 +81,7 @@ export * from "./encounter/combatObservation";
 export * from "./encounter/combatGenericAction";
 export * from "./encounter/combatPlayerVisibility";
 export * from "./encounter/combatActionModifiers";
+export * from "./encounter/supersededGmFigureAudience";
 export * from "./encounter/combatAttackPhasePenalty";
 export * from "./encounter/combatDeclarationValidation";
 export * from "./encounter/combatDeclarationCompatibility";

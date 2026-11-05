@@ -313,12 +313,19 @@ export function applyAttackPhaseDefensivePenaltyModifiers(input: {
  * superseded row; callers decide only whether a rule event has happened and whether a review
  * boundary is open to return it to.
  *
- * **The fact is GM-only and lives in `supersededGmFigure`, never in `notes`.** A rendered reading
- * at 768, 1024 and 1440 CSS px measured the note suffix clipped before the mark on the surface the
- * GM reviews, and the Product Owner then ruled (comment 21255) that the re-offered task label is
- * the signal and that the supersession is GM workflow rather than table-visible state. `notes` is
- * on the player allowlist (`playerFacingCombatModifierEntrySchema`) and `supersededGmFigure` is
- * not, so the structured field is audience-restricted by the projection itself.
+ * **The fact lives in `supersededGmFigure` and never in `notes`.** A rendered reading at 768, 1024
+ * and 1440 CSS px measured the note suffix clipped before the mark on the surface the GM reviews,
+ * and the Product Owner then ruled (comment 21255) that the re-offered task label is the signal
+ * and that the supersession is GM workflow rather than table-visible state. `notes` is on the
+ * player allowlist (`playerFacingCombatModifierEntrySchema`) and `supersededGmFigure` is not.
+ *
+ * **That allowlist is not by itself enough, and this comment used to say it was.** A by-response-
+ * key sweep of real player reads found the field arriving at the controlling player on two paths
+ * that do not go through it — the scenario player projection's denylist-sanitised combat context,
+ * and a declaration event's whole `phaseContexts` inside an open combat-history fact bucket. Both
+ * now remove it explicitly; see `supersededGmFigureAudience.ts`, which is where the audience
+ * restriction is actually enforced and why. Do not restate the restriction as a property of this
+ * module: it is a property of those read paths, and it is held there by measurement.
  */
 /**
  * The suffix the superseded figure used to be written into `notes` as, before the ruling on
@@ -380,7 +387,8 @@ export function supersedeGmCommittedAttackPhasePenaltyRows(input: {
     if (committed.value === entry.value) return entry;
     supersededRowIds.push(entry.id);
     // The row's own text is untouched apart from removing a marker an earlier build may have
-    // written: the fact goes only into `supersededGmFigure`, which no player receives.
+    // written: the fact goes only into `supersededGmFigure`. Keeping that field away from players
+    // is the read paths' job, not this writer's — see `supersededGmFigureAudience.ts`.
     const { notes: previousNotes, ...rest } = entry;
     const notes = stripSupersededGmFigureNote(previousNotes);
     return notes === undefined

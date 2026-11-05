@@ -275,9 +275,10 @@ describe("a Double Attack cancel supersedes the GM's committed phase-2 figure (#
         value: -1,
       });
       expect(JSON.stringify(row.canonicalLifecycle ?? {})).not.toContain("supersededGmFigure");
-      // #931 comment 21255: the fact lives only in `supersededGmFigure`, which no player receives.
-      // `notes` is on the player allowlist, so nothing about the supersession is written there and
-      // the row's text is exactly what the rule writer produced.
+      // #931 comment 21255: the fact lives only in `supersededGmFigure`. `notes` is on the player
+      // allowlist, so nothing about the supersession is written there and the row's text is
+      // exactly what the rule writer produced. Whether that field reaches a player is decided by
+      // the read paths, and is bound in `supersededGmFigureAudience.test.ts` and at each of them.
       expect(row.notes).not.toContain(SUPERSEDED_GM_FIGURE_NOTE_MARKER);
       expect(row.notes).not.toMatch(/supersed/i);
       expect(row.notes).not.toContain("review again");

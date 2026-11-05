@@ -124,10 +124,15 @@ export interface BuildCurrentActionPresentationInput {
    * superseded (#931). Every caller derives it from its own round state with
    * `getSupersededModifierReviewKeys`; nothing here keys on the viewer.
    *
-   * That is what keeps the signal off the player side. `supersededGmFigure` is absent from
-   * `playerFacingCombatModifierEntrySchema`, so a player's round state carries no such row and the
-   * set is empty on a player read — the player-facing projection enforces the restriction, not a
-   * flag this view-model could get wrong (Product Owner ruling, #931 comment 21255).
+   * That is what keeps the signal off the player side. The round state this page is served comes
+   * through `playerFacingCombatContextSchema`, an allowlist that does not carry
+   * `supersededGmFigure`, so a player's round state holds no such row, the set is empty and the
+   * wording cannot be composed — the projection enforces it, not a flag this view-model could get
+   * wrong (Product Owner ruling, #931 comment 21255). Measured on a real player read.
+   *
+   * The claim is about *this* round state. Two other player reads do not go through that allowlist
+   * and are sanitised explicitly instead; see `supersededGmFigureAudience.ts`. Do not generalise
+   * the allowlist's protection to a read nobody has measured.
    */
   readonly supersededModifierReviewKeys?: ReadonlySet<string>;
   readonly viewer: CurrentActionViewerContext;

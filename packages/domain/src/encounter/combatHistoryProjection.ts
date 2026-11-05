@@ -47,6 +47,7 @@ import {
   ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS,
   withoutAttackResultWorkbookImportProvenance,
 } from "./playerFacingCombatRoundParticipant";
+import { withoutSupersededGmFigure } from "./supersededGmFigureAudience";
 
 export type CombatHistoryViewer =
   | { kind: "gm" }
@@ -631,17 +632,32 @@ function hasFacts(facts: Record<string, unknown>): boolean {
  * `weaponModeSourceMetadata` and the missile `weaponDmbRoll`), which are not player-facing (#517,
  * ruling E2). The GM's facts keep them.
  */
+/*
+ * It also removes `supersededGmFigure` at any depth (#931, Product Owner ruling on comment 21255,
+ * narrowly authorized on comment 21269). A declaration event records `phaseContexts` whole into
+ * `involvedOutcome`, and a by-response-key sweep measured the field reaching the controlling
+ * player four levels inside it. Keeping an open bucket from carrying a field this lane introduced
+ * is not the same as narrowing the bucket: nothing else it carries changes, and the general
+ * question of open fact buckets stays where it is recorded, with #528.
+ *
+ * The removal sits in this function rather than at the one measured path because this is what
+ * every player-reachable bucket passes through — `involvedOutcome`, `rollerPrivate` and
+ * `publicOutcome` — so a writer that later records a combat context into any of them inherits it
+ * instead of slipping past a list nobody updated. A GM's facts are returned untouched.
+ */
 function playerFacingEventFacts<Facts extends Record<string, unknown>>(
   facts: Facts,
   viewer: CombatHistoryViewer,
 ): Facts {
-  if (
-    viewer.kind === "gm" ||
-    !ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS.some((field) => Object.hasOwn(facts, field))
-  ) {
+  if (viewer.kind === "gm") {
     return facts;
   }
-  return withoutAttackResultWorkbookImportProvenance(facts) as Facts;
+  const withoutProvenance = ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS.some((field) =>
+    Object.hasOwn(facts, field),
+  )
+    ? (withoutAttackResultWorkbookImportProvenance(facts) as Facts)
+    : facts;
+  return withoutSupersededGmFigure(withoutProvenance);
 }
 
 function isVisible(input: { participantId: string; viewer: CombatHistoryViewer }): boolean {
