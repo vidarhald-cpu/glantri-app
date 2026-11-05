@@ -207,30 +207,37 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
               : declarations
                 ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
                 : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
-  const completion = result.stepComplete
-    ? distance
-      ? "Completed distance rolls."
-      : continuedContact
-        ? "Completed Continued Contact maintenance."
-        : observation
-          ? "Completed Observe work."
-          : health
-            ? "Completed Health/Bleed work."
-            : combatExperience
-              ? "Completed Combat Experience."
-              : result.identity.startingStep === "initiative_phase_1"
-                ? "Completed Phase 1 initiative."
-                : result.identity.startingStep === "initiative_phase_2"
-                  ? "Completed Phase 2 initiative."
-                  : result.identity.startingStep === "review_action_modifiers"
-                    ? "Completed M1."
-                    : result.identity.startingStep === "select_actions"
-                      ? "Completed DE."
-                      : result.identity.startingStep === "review_phase_2_modifiers"
-                        ? "Completed M2."
-                        : "Completed the step."
-    : undefined;
   const skippedCount = result.skippedTasks.length;
+  /**
+   * #948. A run that passed over a check has not completed that work, so it makes no completion
+   * claim. In practice the run also reports `stepComplete: false` while a set-aside Observe task is
+   * still projected, so this is the second of two reasons the GM never reads "Completed Observe
+   * work." over an unresolved one — and the one that does not depend on the projection's shape.
+   */
+  const completion =
+    result.stepComplete && skippedCount === 0
+      ? distance
+        ? "Completed distance rolls."
+        : continuedContact
+          ? "Completed Continued Contact maintenance."
+          : observation
+            ? "Completed Observe work."
+            : health
+              ? "Completed Health/Bleed work."
+              : combatExperience
+                ? "Completed Combat Experience."
+                : result.identity.startingStep === "initiative_phase_1"
+                  ? "Completed Phase 1 initiative."
+                  : result.identity.startingStep === "initiative_phase_2"
+                    ? "Completed Phase 2 initiative."
+                    : result.identity.startingStep === "review_action_modifiers"
+                      ? "Completed M1."
+                      : result.identity.startingStep === "select_actions"
+                        ? "Completed DE."
+                        : result.identity.startingStep === "review_phase_2_modifiers"
+                          ? "Completed M2."
+                          : "Completed the step."
+      : undefined;
   return {
     completion,
     operationLabel: operationLabel(result),

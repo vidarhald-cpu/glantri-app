@@ -1,5 +1,6 @@
 import {
   combatRoundStateSchema,
+  getCombatObservationManualReviews,
   getPendingCombatObservationAttempts,
   getCombatRoundEndDistanceProposalLifecycle,
   sortCombatRoundEndDistanceProposals,
@@ -363,12 +364,24 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
     state: normalized,
   }).map((participant) => participant.participantId);
   const pendingObservationAttempts = getPendingCombatObservationAttempts(normalized);
+  /**
+   * #948. The attempts the round has set aside for manual review. They stay in
+   * `pendingObservationAttempts` — they are not resolved and not completed Observations — but the
+   * round's progression stops treating them as blocking, which is what lets the NPC batch continue
+   * past the participant that owns one.
+   */
+  const markedObservationAttemptIds = new Set(
+    getCombatObservationManualReviews(normalized).map((review) => review.attemptId),
+  );
+  const isMarkedForManualReview = (attemptId: string) => markedObservationAttemptIds.has(attemptId);
   const completedParticipantIds = new Set(
     participantIds.filter(
       (participantId) =>
         validReview.participantReviews[participantId]?.status === "complete" &&
         !pendingObservationAttempts.some(
-          (attempt) => attempt.observerParticipantId === participantId,
+          (attempt) =>
+            attempt.observerParticipantId === participantId &&
+            !isMarkedForManualReview(attempt.attemptId),
         ),
     ),
   );
@@ -469,21 +482,43 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
   const participantReviewsComplete =
     !distancePending && completedParticipantIds.size === participantIds.length;
   const observationProcessId = processId(roundNumber, "observation");
-  const observationTasks = !distancePending && activeParticipantId
-    ? pendingObservationAttempts
-        .filter((attempt) => attempt.observerParticipantId === activeParticipantId)
-        .map((attempt) => ({
-        expectedCommand: "roll_observation" as const,
-        key: attempt.attemptId,
-        kind: "observation_roll" as const,
-        observationAttemptId: attempt.attemptId,
-        opponentParticipantId: attempt.targetParticipantId,
-        ownerParticipantId: attempt.observerParticipantId,
-        ownerRole: "participant" as const,
-        relationshipId: attempt.relationshipId,
-        trackerParticipantId: attempt.observerParticipantId,
-      }))
-    : [];
+  const observationTask = (
+    attempt: (typeof pendingObservationAttempts)[number],
+  ): CombatRoundEndProcessTaskPlan => ({
+    expectedCommand: "roll_observation" as const,
+    key: attempt.attemptId,
+    kind: "observation_roll" as const,
+    observationAttemptId: attempt.attemptId,
+    opponentParticipantId: attempt.targetParticipantId,
+    ownerParticipantId: attempt.observerParticipantId,
+    ownerRole: "participant" as const,
+    relationshipId: attempt.relationshipId,
+    trackerParticipantId: attempt.observerParticipantId,
+  });
+  const observationTasks =
+    !distancePending && activeParticipantId
+      ? pendingObservationAttempts
+          .filter(
+            (attempt) =>
+              attempt.observerParticipantId === activeParticipantId &&
+              !isMarkedForManualReview(attempt.attemptId),
+          )
+          .map(observationTask)
+      : [];
+  /**
+   * #948. A marked attempt keeps a projected task, in its own stage, for as long as it is pending.
+   * It has to: the manual `roll_observation` command authorizes against a projected task, so an
+   * attempt with no task would be visible and *not* resolvable, which the ruling forbids. The
+   * stage is `parallel_all` rather than `ordered_all` because set-aside work is deliberately out
+   * of the round's order — and because two executable tasks in one ordered stage raise the
+   * `multiple_executable_tasks` diagnostic, which `authorizeCombatProgressionTask` treats as a
+   * refusal, so an ordered stage carrying both would have blocked every Observe roll in the round.
+   */
+  const observationManualReviewTasks = distancePending
+    ? []
+    : pendingObservationAttempts
+        .filter((attempt) => isMarkedForManualReview(attempt.attemptId))
+        .map(observationTask);
   processes.push({
     id: observationProcessId,
     kind: "observation",
@@ -500,9 +535,24 @@ export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatR
               : "pending",
         tasks: observationTasks,
       }),
+      stage({
+        executionStrategy: "parallel_all",
+        key: "manual_review",
+        kind: "review",
+        processId: observationProcessId,
+        state: observationManualReviewTasks.length > 0 ? "active" : "complete",
+        tasks: observationManualReviewTasks,
+      }),
     ],
   });
 
+  /**
+   * #948. The round boundary waits on Observe work the round can still resolve by itself. A marked
+   * attempt is not such work: it needs data the round does not have, so holding the boundary on it
+   * would leave the round unadvanceable for good. It stays listed, unresolved and uncompleted, and
+   * the GM crosses the boundary deliberately — automation never does, because
+   * `gm_advance_boundary`/`complete_round` is classified as a GM decision and stops the run.
+   */
   const complete = participantReviewsComplete && observationTasks.length === 0;
   const boundaryProcessId = processId(roundNumber, "round_end");
   processes.push({

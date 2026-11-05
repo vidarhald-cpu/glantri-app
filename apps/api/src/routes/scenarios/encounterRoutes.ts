@@ -219,6 +219,7 @@ import {
   recordCombatRoundNoEligibleParrySource,
   recordCombatRoundParryResult,
   recordCombatRoundOffensiveParryBrawlingRoll,
+  markCombatObservationManualReviewRequired,
   recordCombatObservationRoll,
   recordContinuedContactMaintenanceRoll,
   reviewCombatRoundDamageResult,
@@ -5232,7 +5233,12 @@ function classifyApiCombatStepAutomationTask(input: {
   task: CombatProgressionTask;
 }):
   | { kind: "execute"; countsTowardProcessed: boolean }
-  | { kind: "skip"; missingData: readonly string[]; reason: CombatStepAutomationSkipReason }
+  | {
+      kind: "skip";
+      key?: string;
+      missingData: readonly string[];
+      reason: CombatStepAutomationSkipReason;
+    }
   | { kind: "stop"; reason: CombatStepAutomationStopReason } {
   const { operationFamily, task } = input;
   if (task.kind === "gm_advance_boundary" && task.expectedCommand === "complete_round") {
@@ -5407,7 +5413,14 @@ function classifyApiCombatStepAutomationTask(input: {
         targetParticipantId,
       });
       if (context.kind === "not_derivable") {
-        return { kind: "skip", missingData: context.missingData, reason: context.reason };
+        // #948. The Observe attempt id is the skip's durable identity: the projected task id
+        // carries the boundary and the stage, and both move while the rest of the batch runs.
+        return {
+          kind: "skip",
+          key: observationAttemptId,
+          missingData: context.missingData,
+          reason: context.reason,
+        };
       }
     }
     if (task.kind === "continued_contact_maintenance_roll") {
@@ -6882,6 +6895,10 @@ function buildPlayerFacingCombatRoundStateForUser(input: {
       controlledParticipantIds: controlledEncounterParticipantIds,
       relationships: roundState.observationRelationships,
     }),
+    // #948: a manual-review marker names an observer and a target and says which required datum of
+    // theirs is absent, so no player receives one. The player-facing schema declares the field as a
+    // list only an empty value parses into, so this override is what the player reads.
+    observationManualReviews: [],
     observationRelationships: buildPlayerSafeCombatObservationRelationships({
       controlledParticipantIds: controlledEncounterParticipantIds,
       relationships: roundState.observationRelationships,
@@ -15115,6 +15132,49 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             scopeProcessFamily: identity.startProcessFamily,
             task,
           }),
+        // #948 (Product Owner ruling of 2026-11-05). Persists the narrow "manual review required"
+        // marker for the Observe attempt this run set aside, then returns the projection that
+        // follows it. Writing it is what unpins the observer's round-end progression, so the
+        // participants after it become executable and the batch continues; the attempt itself
+        // stays listed, unresolved and manually resolvable, and nothing is manufactured for it.
+        recordSkip: async ({ missingData, projection, reason, task }) => {
+          const apiProjection = projection as ApiCombatStepAutomationProjection;
+          const attemptId = task.identity.observationAttemptId;
+          if (task.kind !== "observation_roll" || !attemptId) return apiProjection;
+          const priorRevisionTime = Date.parse(workingEncounter!.updatedAt);
+          const markedAt = new Date(
+            Math.max(Date.now(), Number.isFinite(priorRevisionTime) ? priorRevisionTime + 1 : 0),
+          ).toISOString();
+          try {
+            const marked = markCombatObservationManualReviewRequired({
+              attemptId,
+              markedAt,
+              markedByUserId: user.id,
+              missingData,
+              reason,
+              state: apiProjection.state,
+            });
+            if (!marked.changed) return apiProjection;
+            workingEncounter = await encounterService.updateCombatEncounter({
+              campaignId: access.campaignId,
+              encounterId,
+              expectedRevision: workingEncounter!.updatedAt,
+              scenarioId,
+              session: {
+                ...workingEncounter!,
+                combatRoundState: marked.state,
+                currentRound: marked.state.roundNumber,
+                updatedAt: markedAt,
+              },
+            });
+            return project();
+          } catch {
+            // Fail closed. With no persisted marker the attempt keeps blocking its observer, which
+            // is the behaviour before this state existed: the run stops at this participant rather
+            // than continuing on a skip no round state records.
+            return apiProjection;
+          }
+        },
         execute: async ({ commandId, projection, task }) => {
           const apiProjection = projection as ApiCombatStepAutomationProjection;
           const countsTowardProcessed =

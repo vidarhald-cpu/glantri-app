@@ -44,6 +44,8 @@ import {
   getCombatRoundAttackResultId,
   getLatestCombatEventSummary,
   getCurrentExecutableCombatTasks,
+  getBlockingCombatObservationAttempts,
+  getPendingCombatObservationAttempts,
   getCombatRoundPhaseAttackCandidates,
   getCanonicalAttackOpportunityIdentity,
   getCombatRoundParticipantPhaseStepStatus,
@@ -21600,14 +21602,17 @@ describe("scenarios route contract", () => {
    * task is left unresolved for manual adjudication, and the skip is carried back to the GM with
    * the participant and the reason.
    *
-   * What this change does **not** achieve is measured by the test named for it below. The
-   * round-end progression exposes only the active participant's tasks, and a participant counts as
-   * complete only when its review is complete **and** it has no pending Observation attempt
-   * (`packages/domain/src/encounter/combatRoundEndProcesses.ts`, `completedParticipantIds`). An
-   * attempt left unresolved therefore pins the cursor on its observer, so the participants after
-   * it never become executable. Continuing the batch past an unresolved attempt needs round-end
-   * state that does not exist, which is outside this change and is reported for a control-plane
-   * decision rather than invented here.
+   * The Product Owner ruling of 2026-11-05 added the half the first attempt could not reach: the
+   * skip is **persisted** as a narrow round-scoped "manual review required" marker, and the
+   * round's progression stops treating a marked attempt as blocking. That is what lets the
+   * remaining NPCs run. `getPendingCombatObservationAttempts` keeps listing the attempt, the
+   * relationship's `completedAttempts` is untouched and no attempt record is written, so a marked
+   * task is still an uncompleted Observation that the GM can resolve by hand.
+   *
+   * The run stops at `gm_decision_required` rather than reporting the step complete: the last
+   * thing the batch reaches is the GM's own round boundary. It is deliberately **not**
+   * `end_of_step`, because a run that passed over an Observe check has not completed the Observe
+   * work, and `stepComplete` is what the GM report turns into "Completed Observe work.".
    *
    * `avoidTargetIndex` keeps the underivable participant out of every relationship's target slot.
    * When an actor with no Intelligence value is someone's target, that observer's contest is
@@ -21684,10 +21689,12 @@ describe("scenarios route contract", () => {
           reason: "observation_basis_data_missing",
           task: { kind: "observation_roll" },
         });
-        // The run ends having run out of tasks it can do, not at a review stop.
+        // The other four of five are rolled, whichever position the skipped one holds. The run
+        // ends at the GM's round boundary, not at a claim that the Observe work is complete.
         expect(response.json().workflow).toMatchObject({
+          processedCount: 4,
           stepComplete: false,
-          stopReason: "end_of_step",
+          stopReason: "gm_decision_required",
         });
 
         const state = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
@@ -21703,20 +21710,57 @@ describe("scenarios route contract", () => {
               command.type === "roll_observation" && command.participantId === skippedParticipantId,
           ),
         ).toHaveLength(0);
+        expect(state.observationAttempts).toHaveLength(4);
+
+        // The narrow persisted state: one marker, this round, naming the attempt, the reason and
+        // the missing datum. Nothing else acquired a record.
+        expect(state.observationManualReviews).toHaveLength(1);
+        expect(state.observationManualReviews[0]).toMatchObject({
+          missingData: ["intelligence_characteristic"],
+          observerParticipantId: skippedParticipantId,
+          reason: "observation_basis_data_missing",
+          roundNumber: state.roundNumber,
+        });
+
+        // Still a pending, uncompleted Observation — and no longer a blocking one. These are the
+        // two different questions the repair keeps apart.
+        const markedAttemptId = state.observationManualReviews[0]!.attemptId;
+        expect(
+          getPendingCombatObservationAttempts(state).map((attempt) => attempt.attemptId),
+        ).toContain(markedAttemptId);
+        expect(
+          getBlockingCombatObservationAttempts(state).map((attempt) => attempt.attemptId),
+        ).not.toContain(markedAttemptId);
+        expect(
+          state.observationRelationships.find(
+            (relationship) => relationship.observerParticipantId === skippedParticipantId,
+          )?.completedAttempts ?? 0,
+        ).toBe(0);
+
         // The task is still open, so the GM can still adjudicate it.
         expect(
-          executableTasksFor(fixture).map((task) => [task.kind, task.identity.participantId]),
+          executableTasksFor(fixture)
+            .filter((task) => task.kind === "observation_roll")
+            .map((task) => [task.kind, task.identity.participantId]),
         ).toEqual([["observation_roll", skippedParticipantId]]);
       },
     );
 
     /**
-     * The ruling's "continue processing the remaining NPCs" is **not** met: only the participants
-     * ahead of the underivable one are rolled, because its unresolved attempt pins the round-end
-     * cursor. Measured here so the gap is a recorded number rather than an impression, and so a
-     * later change that lifts the pin has to come back to this assertion.
+     * The ruling's "continue processing the remaining NPCs", measured as counts rather than as the
+     * absence of an error, and measured in all three positions because this process is ordered.
+     *
+     * This test previously recorded the requirement as **unmet**: with the underivable participant
+     * first, nothing rolled at all, and the measured table read
+     * `[{0, 0}, {2, 2}, {4, 4}]` — its unresolved attempt pinned the round-end cursor on its
+     * observer, so the participants after it never became executable. That is the gap the
+     * persisted marker closes, and the table is the record of what changed.
+     *
+     * The `last` row alone would be a false pass: there every check rolls and the run reads as a
+     * complete success whether or not the pin was ever lifted. Only the `first` row can tell the
+     * difference, which is why one position is not a test of an ordered process.
      */
-    it("records the unmet requirement — participants after the skipped one are never reached", async () => {
+    it("continues the batch whatever position the skipped participant holds", async () => {
       const measured: Array<{ badIndex: number; processedCount: number; attempts: number }> = [];
       for (const badIndex of [0, 2, 4]) {
         const { app, fixture, response } = await runObservationBatch({
@@ -21733,10 +21777,11 @@ describe("scenarios route contract", () => {
         });
       }
 
-      // Of five participants, only the ones before the skipped index are processed.
+      // Four of five processed in every position: the skipped participant is passed over and the
+      // rest of the batch runs, whether it comes first, in the middle, or last.
       expect(measured).toEqual([
-        { attempts: 0, badIndex: 0, processedCount: 0 },
-        { attempts: 2, badIndex: 2, processedCount: 2 },
+        { attempts: 4, badIndex: 0, processedCount: 4 },
+        { attempts: 4, badIndex: 2, processedCount: 4 },
         { attempts: 4, badIndex: 4, processedCount: 4 },
       ]);
     });
@@ -21784,9 +21829,10 @@ describe("scenarios route contract", () => {
         url: "/encounters/encounter-1/combat-round/roll-observation",
       });
       expect(refused.statusCode, refused.body).toBe(409);
-      expect(
-        combatRoundStateSchema.parse(fixture.encounter.combatRoundState).observationAttempts,
-      ).toHaveLength(2);
+      const refusedState = combatRoundStateSchema.parse(fixture.encounter.combatRoundState);
+      // The other four resolved; the refusal recorded nothing and left the marker in place.
+      expect(refusedState.observationAttempts).toHaveLength(4);
+      expect(refusedState.observationManualReviews).toHaveLength(1);
 
       // Once the participant carries the required data, the same task resolves manually.
       const repaired = fixture.participants.map((participant) =>
@@ -21818,6 +21864,9 @@ describe("scenarios route contract", () => {
           attempt.id.startsWith("observation:encounter-participant-3:"),
         ),
       ).toHaveLength(1);
+      // Resolved by hand, so it is no longer awaiting manual review: a resolved Observation must
+      // never also be reported as set aside.
+      expect(finalState.observationManualReviews).toEqual([]);
     });
 
     it("negative control — a batch with no missing data skips nothing and completes", async () => {
@@ -21859,10 +21908,18 @@ describe("scenarios route contract", () => {
    * shape as the record of the behaviour it used to pin.
    *
    * The fixture's relationships form a ring, so participant 3's absent Intelligence value makes
-   * two contests underivable: its own, and participant 2's, which observes it. Only participant
-   * 2's skip is recorded, because its unresolved attempt then pins the round-end cursor and
-   * participant 3's task never becomes executable — the gap measured in the #948 block above.
-   * Participant 1 observes participant 2 and resolves first.
+   * two contests underivable: its own (`observation_basis_data_missing`), and participant 2's,
+   * which observes it (`observation_observed_basis_data_missing`). Both are now reported: once the
+   * marker is persisted the cursor no longer stops on participant 2, so participant 3's task
+   * becomes executable and is classified in the same run. Participant 1 observes participant 2 and
+   * resolves, which is the one basis in this fixture that can be derived.
+   *
+   * What the original assertion protected is the thing this still has to pin: a participant whose
+   * Observe basis cannot be derived is **never rolled**. Breaking that — making
+   * `findMissingCombatObservationBasisData` report nothing missing — makes
+   * `processedCount` 3 and `observationAttempts` 3 here, because the two underivable contests are
+   * then rolled from a substituted zero Intelligence, which is the measured −3 recorded on #948.
+   * The counts below are what fails when it breaks.
    *
    * The `target_invalid` half below is now a skip as well: an observed participant who is no
    * longer active is another contest that cannot be derived.
@@ -21892,7 +21949,7 @@ describe("scenarios route contract", () => {
     expect(ambiguousResponse.json().workflow).toMatchObject({
       processedCount: 1,
       stepComplete: false,
-      stopReason: "end_of_step",
+      stopReason: "gm_decision_required",
     });
     expect(
       ambiguousResponse
@@ -21901,10 +21958,19 @@ describe("scenarios route contract", () => {
           skipped.participantId,
           skipped.reason,
         ]),
-    ).toEqual([["encounter-participant-2", "observation_observed_basis_data_missing"]]);
+    ).toEqual([
+      ["encounter-participant-2", "observation_observed_basis_data_missing"],
+      ["encounter-participant-3", "observation_basis_data_missing"],
+    ]);
+    const ambiguousState = combatRoundStateSchema.parse(
+      ambiguousFixture.encounter.combatRoundState,
+    );
+    // The one derivable contest rolled. Neither underivable one was rolled from a substituted
+    // value, and both are recorded as awaiting manual review instead.
+    expect(ambiguousState.observationAttempts).toHaveLength(1);
     expect(
-      combatRoundStateSchema.parse(ambiguousFixture.encounter.combatRoundState).observationAttempts,
-    ).toHaveLength(1);
+      ambiguousState.observationManualReviews.map((review) => review.observerParticipantId).sort(),
+    ).toEqual(["encounter-participant-2", "encounter-participant-3"]);
     await ambiguousApp.close();
 
     vi.clearAllMocks();
@@ -21932,7 +21998,7 @@ describe("scenarios route contract", () => {
     expect(invalidTargetResponse.statusCode, invalidTargetResponse.body).toBe(200);
     expect(invalidTargetResponse.json().workflow).toMatchObject({
       processedCount: 0,
-      stopReason: "end_of_step",
+      stopReason: "gm_decision_required",
     });
     expect(invalidTargetResponse.json().workflow.skippedTasks).toHaveLength(1);
     expect(invalidTargetResponse.json().workflow.skippedTasks[0]).toMatchObject({

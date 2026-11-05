@@ -67,6 +67,7 @@ const internalRoundStateShape = (
   | "gmBacktrackHold"
   | "missileReadiness"
   | "observationAttempts"
+  | "observationManualReviews"
   | "observationRelationships"
   | "offensiveParryContests"
   | "participants"
@@ -111,6 +112,12 @@ const neverPlayerFacing = z.array(z.never()).default([]);
  * participant's cursor) are withheld; these schemas decide which fields can carry them.
  *
  * Not player-facing:
+ * - `observationManualReviews` — the round's Observe attempts set aside for manual review (#948).
+ *   A marker names an observer and a target and says which required datum of theirs is missing, so
+ *   it is GM-only, like every other Observe outcome. Named here as `neverPlayerFacing` rather than
+ *   left out, for the same reason as `committedInitiativeOrders` below: `activeStateFromEncounter`
+ *   re-parses the projected state with the internal schema, whose `.default([])` would otherwise
+ *   put the key back as an empty array on every `active-v1` response;
  * - `gmBacktrackHold` — the GM's clear-current-step hold; the projection always removed it, and the
  *   internal schema declares it optional with no default, so nothing re-adds the key;
  * - `committedInitiativeOrders` — the committed initiative order records (#875). The records name
@@ -151,6 +158,7 @@ export const playerFacingCombatRoundStateSchema = playerFacingObject(
     missileReadiness: z.array(playerFacingCombatMissileReadinessSchema).default([]),
     offensiveParryContests: z.array(playerFacingOffensiveParryContestSchema).default([]),
     observationAttempts: z.array(playerFacingCombatObservationAttemptSchema).default([]),
+    observationManualReviews: neverPlayerFacing,
     observationRelationships: z.array(playerFacingCombatObservationRelationshipSchema).default([]),
     phaseResolutionCursor: playerFacingCombatRoundPhaseResolutionCursorSchema.optional(),
     phaseResolutionResults: z.array(playerFacingCombatRoundPhaseResolutionResultSchema).default([]),

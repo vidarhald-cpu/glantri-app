@@ -423,5 +423,28 @@ describe("GM combat Workflow Status presentation", () => {
       expect(presentation.skippedSummary).toBeUndefined();
       expect(presentation.skippedReports).toEqual([]);
     });
+
+    /**
+     * #948 (Product Owner ruling of 2026-11-05). A set-aside Observe check must never be counted
+     * as a completed Observation, and this is the reader that reports Observation completeness to
+     * the GM. The run itself also reports `stepComplete: false` while a set-aside task is still
+     * projected; this assertion does not depend on that, so the claim holds whatever shape the
+     * projection takes.
+     */
+    it("makes no completion claim over a check it passed over", () => {
+      const completed = (skippedTasks: CombatStepAutomationRunResult["skippedTasks"]) =>
+        buildCombatStepWorkflowStatusPresentation({
+          participantLabelsById: new Map([["npc-3", "Scyrian cavalry guy"]]),
+          result: { ...observationResult(skippedTasks), stepComplete: true },
+        });
+
+      expect(
+        completed([skipped({ participantId: "npc-3", reason: "observation_basis_data_missing" })])
+          .completion,
+      ).toBeUndefined();
+      // The disabled twin: the same completed run with nothing skipped does claim it, so the
+      // condition above is a condition and not a line that can never appear.
+      expect(completed([]).completion).toBe("Completed Observe work.");
+    });
   });
 });

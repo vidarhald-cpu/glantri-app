@@ -1,6 +1,6 @@
 import {
   type CombatRoundInitiativeExecutionGroup,
-  getPendingCombatObservationAttempts,
+  getBlockingCombatObservationAttempts,
   isCombatRoundEndReviewComplete,
   type CombatRoundCursorStep,
   type CombatRoundPhase,
@@ -358,8 +358,11 @@ export function boundaryForStep(
   if (step === "phase_2_actions" || step === "review_phase_2_damage" || step === "phase_2_damage") {
     return "phase2_resolution";
   }
+  // #948. A marked Observe attempt is still pending and still manually resolvable, but it no
+  // longer holds the round open: without this, marking one would make the round permanently
+  // unadvanceable, which is a worse block than the batch halt the ruling replaced.
   return isCombatRoundEndReviewComplete(state) &&
-    getPendingCombatObservationAttempts(state).length === 0
+    getBlockingCombatObservationAttempts(state).length === 0
     ? "round_boundary"
     : "round_end";
 }
