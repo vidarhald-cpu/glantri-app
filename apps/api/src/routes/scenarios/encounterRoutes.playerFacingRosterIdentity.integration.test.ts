@@ -396,6 +396,7 @@ if (!hasTaskApplicationDatabase) {
           `/encounters/${input.encounterId}/combat-round/item-interactions/options`,
         ),
         revision: await read(`/encounters/${input.encounterId}/revision`),
+        playerCampaignHome: await read("/campaigns/player-home"),
         scenarioPlayerProjection: await read(`/scenarios/${input.scenarioId}/player-projection`),
       };
     }
@@ -729,8 +730,16 @@ if (!hasTaskApplicationDatabase) {
         ] as const) {
           expect(readings[route].statusCode, `${viewer} ${route}`).not.toBe(200);
         }
-        // The summaries list and the player projection answer, and carry nothing of it.
-        for (const route of ["encounterSummaries", "scenarioPlayerProjection"] as const) {
+        // The summaries list, the player projection and the Campaign landing's own record
+        // answer, and carry nothing of it. `playerCampaignHome` is the reader independent QA
+        // found open at 892e79ec: it takes a bare authenticated user, resolves Encounter
+        // membership itself inside `buildPlayerCampaignHomeRecord`, and returned the Encounter's
+        // id and title plus a `resume.encounterId` that linked into a read this change made 404.
+        for (const route of [
+          "encounterSummaries",
+          "playerCampaignHome",
+          "scenarioPlayerProjection",
+        ] as const) {
           expect(readings[route].statusCode, `${viewer} ${route}`).toBe(200);
           expect(
             disclosedLeaves({

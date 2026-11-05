@@ -5,6 +5,7 @@ import type {
   PlayerCampaignHomeRecord,
 } from "../api/campaigns";
 import type { Campaign, Scenario, ScenarioParticipant } from "./scenario";
+import { unreadablePlayerFacingEncounterIds } from "../encounter/playerFacingEncounterRosterIdentity";
 import { isUserAssignedToEncounterMembership, type EncounterSession } from "../encounter/session";
 
 export function buildPlayerAccessibleCampaign(campaign: Campaign): PlayerAccessibleCampaign {
@@ -148,8 +149,20 @@ export function buildPlayerCampaignHomeRecord(input: {
         campaignCharactersById.set(character.id, character);
       }
 
+      // Forgejo #963. This record is player-facing by construction — it is built only for the
+      // requesting player, and no GM read reaches it — and it resolves Encounter membership here
+      // rather than through the player read gate, so the roster-identity condition would not
+      // otherwise be asked of it. Independent QA found it open at 892e79ec: the Encounter's id
+      // and title reached three player viewers, and `resume.encounterId` below linked the
+      // Campaign landing's "Continue combat" control into a read that now refuses. An Encounter
+      // whose roster no longer holds a coherent identity for every row is one no player resumes.
+      const unreadableEncounterIds = unreadablePlayerFacingEncounterIds({
+        encounters,
+        scenarioParticipants: participants,
+      });
       const encounter = encounters
         .filter((candidate) => candidate.status === "active" || candidate.status === "paused")
+        .filter((candidate) => !unreadableEncounterIds.has(candidate.id))
         .filter((candidate) =>
           isUserAssignedToEncounterMembership({
             encounter: candidate,
