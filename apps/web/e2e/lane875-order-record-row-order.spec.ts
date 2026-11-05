@@ -17,6 +17,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * #875 — the rendered proof: the GM tracker's top-to-bottom row order is the order the GM's
@@ -39,8 +40,6 @@ import { characterPayload } from "./character-fixture";
  * **both ways round** — the same assertion is made with the initiative numbers swapped, so a
  * result that holds whichever participant is first is excluded.
  */
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:4000";
 
 async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
   if (!response.ok()) throw new Error(`${response.status()} ${await response.text()}`);

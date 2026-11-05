@@ -9,6 +9,7 @@ import {
 
 import { characterPayload } from "./character-fixture";
 import { LANE690_STORAGE_STATE } from "./lane690-global-setup";
+import { API_URL } from "./targets";
 
 /**
  * #690 — an attack against the **shipped seeded** *"Training Bandit"* must resolve rather than be
@@ -47,7 +48,6 @@ import { LANE690_STORAGE_STATE } from "./lane690-global-setup";
  * These tests need a seeded database, so they run under `playwright.lane690.config.ts` rather than
  * in the ordinary suite, whose account bootstrap is incompatible with a seeded game master.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:4000";
 
 const PUNCH_SOURCE_ID = "unarmed:virtual-weapon-template-punch";
 

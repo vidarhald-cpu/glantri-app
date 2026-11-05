@@ -1,8 +1,7 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { setScenarioParticipantVisibilityForTest } from "@glantri/database/testing/scenarioPrivacy";
 import { createCharacterForE2e } from "./character-fixture";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+import { API_URL } from "./targets";
 
 async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
   if (!response.ok()) {

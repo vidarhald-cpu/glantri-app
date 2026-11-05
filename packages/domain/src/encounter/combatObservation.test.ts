@@ -7,13 +7,17 @@ import {
   buildCombatObservationModifierContributions,
   buildCombatObservationSkillContestContribution,
   buildCombatProgressionProjection,
+  buildCombatRoundEndProcessPlan,
   buildPlayerSafeCombatObservationAttempts,
   buildPlayerSafeCombatObservationRelationships,
   commitCombatRoundEndParticipantReview,
   combatRoundStateSchema,
+  getBlockingCombatObservationAttempts,
+  getCombatObservationManualReviews,
   getPendingCombatObservationAttempts,
   getCombatObservationRequiredRounds,
   getNextCombatRoundEndTask,
+  markCombatObservationManualReviewRequired,
   recordCombatObservationRoll,
   projectCombatProgressionPresentation,
   resolveCombatModifierContributions,
@@ -1093,5 +1097,403 @@ describe("Observe Opponent — Pass or Parry", () => {
     expect(strongRelationship.bestBonus).toBe(3);
     expect(afterWeakAttempt.lastAttempt?.candidateBonus).toBe(0);
     expect(afterWeakAttempt.bestBonus).toBe(3);
+  });
+});
+
+/**
+ * #948 (Product Owner ruling of 2026-11-05) — the narrow persisted "manual review required"
+ * state for an Observe task whose required inputs cannot be derived.
+ *
+ * Two questions about the same attempt, kept apart. The round's **progression** stops treating a
+ * marked attempt as blocking, so the participants after its observer become executable and the NPC
+ * batch continues. The **Observation** is not resolved and not completed: it stays listed, the
+ * relationship's `completedAttempts` is untouched, no attempt record exists, and the GM can still
+ * resolve it by hand once the data is there.
+ *
+ * Every assertion that depends on the marker has its disabled twin here: the same drive with no
+ * marker written, which is the behaviour before this state existed.
+ */
+describe("Observe Opponent set aside for manual review (#948)", () => {
+  const markedAt = "2026-01-02T00:00:00.000Z";
+  const atThreshold = (observerParticipantId: string, targetParticipantId: string) => ({
+    bestBonus: 0,
+    completedAttempts: 0,
+    id: `observation:${observerParticipantId}:${targetParticipantId}`,
+    observerParticipantId,
+    roundsTowardNextAttempt: 2,
+    targetParticipantId,
+  });
+  const owners = (attempts: readonly { observerParticipantId: string }[]) =>
+    attempts.map((attempt) => attempt.observerParticipantId);
+
+  /** Three participants; `a` and `c` both observe `b`, and both reach their first attempt now. */
+  function twoObserverRound(input: { roundNumber?: number } = {}): CombatRoundState {
+    const roundNumber = input.roundNumber ?? 1;
+    const observer = (participantId: string) => {
+      const base = participant(participantId, "b");
+      return { ...base, declaration: { ...base.declaration, roundNumber } };
+    };
+    return combatRoundStateSchema.parse({
+      currentCursor: { participantId: "a", roundNumber, step: "SU" },
+      currentStep: "round_summary",
+      observationRelationships: [atThreshold("a", "b"), atThreshold("c", "b")],
+      participants: [observer("a"), { label: "b", participantId: "b" }, observer("c")],
+      roundEndReview: {
+        participantReviews: {
+          a: { participantId: "a", status: "complete" },
+          b: { participantId: "b", status: "complete" },
+          c: { participantId: "c", status: "complete" },
+        },
+        roundNumber,
+      },
+      roundNumber,
+    });
+  }
+
+  function mark(current: CombatRoundState, observerParticipantId: string): CombatRoundState {
+    const pending = getPendingCombatObservationAttempts(current).find(
+      (attempt) => attempt.observerParticipantId === observerParticipantId,
+    );
+    expect(pending).toBeDefined();
+    return markCombatObservationManualReviewRequired({
+      attemptId: pending!.attemptId,
+      markedAt,
+      markedByUserId: "user-gm",
+      missingData: ["intelligence_characteristic"],
+      reason: "observation_basis_data_missing",
+      state: current,
+    }).state;
+  }
+
+  const observationTaskOwners = (current: CombatRoundState, stageKind: "contest" | "review") =>
+    buildCombatRoundEndProcessPlan(current)
+      .processes.filter((process) => process.kind === "observation")
+      .flatMap((process) => process.stages)
+      .filter((stage) => stage.kind === stageKind)
+      .flatMap((stage) => stage.tasks)
+      .map((task) => task.ownerParticipantId);
+
+  it("is still a pending Observe attempt, and is no longer a blocking one", () => {
+    const unmarked = twoObserverRound();
+    // The disabled twin: with no marker, both attempts block.
+    expect(owners(getBlockingCombatObservationAttempts(unmarked))).toEqual(["a", "c"]);
+
+    const marked = mark(unmarked, "a");
+    expect(owners(getPendingCombatObservationAttempts(marked))).toEqual(["a", "c"]);
+    expect(owners(getBlockingCombatObservationAttempts(marked))).toEqual(["c"]);
+    expect(getCombatObservationManualReviews(marked)).toEqual([
+      {
+        attemptId: "observation:a:b:attempt:1",
+        markedAt,
+        markedByUserId: "user-gm",
+        missingData: ["intelligence_characteristic"],
+        observerParticipantId: "a",
+        reason: "observation_basis_data_missing",
+        relationshipId: "observation:a:b",
+        roundNumber: 1,
+        targetParticipantId: "b",
+      },
+    ]);
+  });
+
+  it("unpins the round-end cursor, so the next observer becomes executable", () => {
+    const unmarked = twoObserverRound();
+    // The disabled twin, and the measured defect this closes: `a`'s unresolved attempt pins the
+    // active participant on `a`, so `c`'s Observe task never becomes executable.
+    expect(buildCombatRoundEndProcessPlan(unmarked).activeParticipantId).toBe("a");
+    expect(observationTaskOwners(unmarked, "contest")).toEqual(["a"]);
+    expect(observationTaskOwners(unmarked, "review")).toEqual([]);
+    expect(getNextCombatRoundEndTask({ state: unmarked })).toMatchObject({
+      kind: "observation_roll",
+      participantId: "a",
+    });
+
+    const marked = mark(unmarked, "a");
+    expect(buildCombatRoundEndProcessPlan(marked).activeParticipantId).toBe("c");
+    expect(observationTaskOwners(marked, "contest")).toEqual(["c"]);
+    expect(getNextCombatRoundEndTask({ state: marked })).toMatchObject({
+      kind: "observation_roll",
+      participantId: "c",
+    });
+  });
+
+  it("keeps a projected task for the marked attempt, so the GM can still resolve it", () => {
+    const marked = mark(twoObserverRound(), "a");
+    expect(observationTaskOwners(marked, "review")).toEqual(["a"]);
+
+    // The manual roll authorizes against a projected task, so a task is what makes it resolvable.
+    // Disabled twin: the same authorization with the attempt it does not name.
+    const projection = buildCombatProgressionProjection(marked);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "roll_observation",
+        observationAttemptId: "observation:a:b:attempt:1",
+        participantId: "a",
+        projection,
+      }).ok,
+    ).toBe(true);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "roll_observation",
+        observationAttemptId: "observation:a:b:attempt:4",
+        participantId: "a",
+        projection,
+      }).ok,
+    ).toBe(false);
+  });
+
+  it("does not count as a completed or resolved Observation anywhere that counts them", () => {
+    const marked = mark(mark(twoObserverRound(), "a"), "c");
+    const plan = buildCombatRoundEndProcessPlan(marked);
+
+    // 1. No attempt record, and 2. no completed attempt or bonus on either relationship.
+    expect(marked.observationAttempts).toEqual([]);
+    expect(
+      marked.observationRelationships.map((relationship) => relationship.completedAttempts),
+    ).toEqual([0, 0]);
+    expect(marked.observationRelationships.map((relationship) => relationship.bestBonus)).toEqual([
+      0, 0,
+    ]);
+    // 3. Still listed as pending, so nothing reads either one as resolved.
+    expect(getPendingCombatObservationAttempts(marked)).toHaveLength(2);
+    // 4. The ordered contest stage has no remaining ordered work, and the review stage is the one
+    // that stays active: the round does not report the Observe contests as held.
+    expect(observationTaskOwners(marked, "contest")).toEqual([]);
+    expect(observationTaskOwners(marked, "review")).toEqual(["a", "c"]);
+    const observation = plan.processes.find((process) => process.kind === "observation")!;
+    expect(observation.stages.map((stage) => [stage.kind, stage.state])).toEqual([
+      ["contest", "complete"],
+      ["review", "active"],
+    ]);
+    // 5. The round's progression is free: the boundary is reachable by the GM's own action.
+    // Automation never crosses it, because `complete_round` is classified as a GM decision.
+    expect(plan.complete).toBe(true);
+    expect(getNextCombatRoundEndTask({ state: marked })).toEqual({ kind: "round_boundary" });
+  });
+
+  /**
+   * #948 repair cycle 1. This state — **every** pending attempt marked, so nothing blocks — is the
+   * one the sibling case above constructs, and that case asserts only *counts*. Counts were all
+   * satisfied while both Observe rolls were refused `task_not_ready` and `complete_round` was
+   * refused `boundary_closed`: a marked attempt kept a projected **task** and that task was not
+   * **authorizable**, which is the opposite of what ruling 21059 item 4 requires.
+   *
+   * The cause was the projection disagreeing with itself. `boundaryForStep` reads the blocking set
+   * and answers `round_boundary` once the last blocking attempt is marked, while a stored cursor
+   * still naming the marked observer makes `boundaryForCursorStep` answer `round_end`; that pushes
+   * `cursor_disagrees_with_process` scoped to the boundary id, and `hasRelevantDiagnostic` seeds
+   * its match set with `projection.boundary.id`, so one boundary-scoped diagnostic refuses every
+   * command in the boundary. Marking now re-derives the cursor from the round-end task the state
+   * has, exactly as every other round-end mutation does, so the two answers agree.
+   */
+  it("is authorizable, not merely projected, once no blocking Observe work remains", () => {
+    const marked = mark(mark(twoObserverRound(), "a"), "c");
+
+    // The cursor followed the marker onto the round boundary, so both readings of the boundary
+    // agree and the projection raises no diagnostic.
+    expect(getBlockingCombatObservationAttempts(marked)).toEqual([]);
+    expect(marked.currentCursor).toEqual({ roundNumber: 1, step: "SU" });
+    const projection = buildCombatProgressionProjection(marked);
+    expect(projection.boundary.kind).toBe("round_boundary");
+    expect(projection.diagnostics).toEqual([]);
+
+    // Both marked attempts are authorizable, and the GM can cross the boundary.
+    for (const observerParticipantId of ["a", "c"]) {
+      expect(
+        authorizeCombatProgressionTask({
+          actor: { kind: "gm" },
+          commandType: "roll_observation",
+          observationAttemptId: `observation:${observerParticipantId}:b:attempt:1`,
+          participantId: observerParticipantId,
+          projection,
+        }),
+      ).toMatchObject({ ok: true });
+    }
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "complete_round",
+        projection,
+      }),
+    ).toMatchObject({ ok: true });
+
+    // The disabled twin, and the pre-repair shape, one field apart: a stored cursor left naming a
+    // marked observer. The diagnostic keeps its full boundary scope and still refuses the work, so
+    // the repair is cursor/boundary agreement and not a blinded gate.
+    const disagreeing = combatRoundStateSchema.parse({
+      ...marked,
+      currentCursor: { participantId: "a", roundNumber: 1, step: "SU" },
+    });
+    const disagreeingProjection = buildCombatProgressionProjection(disagreeing);
+    expect(disagreeingProjection.boundary.kind).toBe("round_end");
+    expect(disagreeingProjection.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "cursor_disagrees_with_process",
+    ]);
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "roll_observation",
+        observationAttemptId: "observation:a:b:attempt:1",
+        participantId: "a",
+        projection: disagreeingProjection,
+      }),
+    ).toMatchObject({ code: "task_not_ready", ok: false });
+    expect(
+      authorizeCombatProgressionTask({
+        actor: { kind: "gm" },
+        commandType: "complete_round",
+        projection: disagreeingProjection,
+      }),
+    ).toMatchObject({ code: "boundary_closed", ok: false });
+  });
+
+  /**
+   * #948 repair cycle 1. The cursor refresh is the canonical round-end derivation, not a special
+   * case for the stranded shape: with one attempt marked and another still blocking, the cursor
+   * moves to the blocking observer — the participant `getNextCombatRoundEndTask` names.
+   */
+  it("moves the round-end cursor to the work that is still blocking", () => {
+    const unmarked = twoObserverRound();
+    expect(unmarked.currentCursor?.participantId).toBe("a");
+
+    const marked = mark(unmarked, "a");
+    expect(getNextCombatRoundEndTask({ state: marked })).toMatchObject({
+      kind: "observation_roll",
+      participantId: "c",
+    });
+    expect(marked.currentCursor?.participantId).toBe("c");
+    // Still at `round_end`, because `c`'s attempt genuinely blocks: the boundary is not released
+    // by marking, only by the blocking set emptying.
+    expect(buildCombatProgressionProjection(marked).boundary.kind).toBe("round_end");
+    expect(buildCombatProgressionProjection(marked).diagnostics).toEqual([]);
+  });
+
+  it("re-presents the unresolved attempt in the next round rather than consuming it", () => {
+    const marked = mark(twoObserverRound(), "a");
+    const boundary = resolveCombatObservationRoundBoundary({ state: marked });
+    const observerRelationship = boundary.state.observationRelationships.find(
+      (relationship) => relationship.id === "observation:a:b",
+    );
+
+    // Crossing the boundary adds no progress and completes no attempt, so the relationship is
+    // still at its threshold and the attempt is due again.
+    expect(observerRelationship).toMatchObject({
+      completedAttempts: 0,
+      roundsTowardNextAttempt: 2,
+    });
+    const second = nextRound(boundary.state);
+    expect(getPendingCombatObservationAttempts(second).map((entry) => entry.attemptId)).toContain(
+      "observation:a:b:attempt:1",
+    );
+  });
+
+  it("is round-scoped: a marker from another round is not read", () => {
+    const marked = mark(twoObserverRound(), "a");
+    const otherRound = combatRoundStateSchema.parse({
+      ...marked,
+      observationManualReviews: marked.observationManualReviews.map((review) => ({
+        ...review,
+        roundNumber: 7,
+      })),
+    });
+
+    expect(getCombatObservationManualReviews(otherRound)).toEqual([]);
+    expect(owners(getBlockingCombatObservationAttempts(otherRound))).toEqual(["a", "c"]);
+    expect(buildCombatRoundEndProcessPlan(otherRound).activeParticipantId).toBe("a");
+  });
+
+  it("fails closed for a stored round that carries no marker list at all", () => {
+    const stored = { ...twoObserverRound() } as Record<string, unknown>;
+    delete stored.observationManualReviews;
+    expect("observationManualReviews" in stored).toBe(false);
+
+    // No migration and no backfill: the absent key reads as no markers, so every pending attempt
+    // blocks exactly as it did before this state existed.
+    const parsed = combatRoundStateSchema.parse(stored);
+    expect(parsed.observationManualReviews).toEqual([]);
+    expect(owners(getBlockingCombatObservationAttempts(parsed))).toEqual(["a", "c"]);
+    expect(buildCombatRoundEndProcessPlan(parsed).activeParticipantId).toBe("a");
+  });
+
+  it("refuses to mark anything but an attempt the round actually has pending", () => {
+    const current = twoObserverRound();
+    expect(() =>
+      markCombatObservationManualReviewRequired({
+        attemptId: "observation:a:b:attempt:9",
+        markedAt,
+        reason: "observation_basis_data_missing",
+        state: current,
+      }),
+    ).toThrow(RangeError);
+
+    // The observer, target and relationship come from the pending attempt, never from the caller,
+    // so a marker cannot name a contest the round does not have.
+    const marked = markCombatObservationManualReviewRequired({
+      attemptId: "observation:c:b:attempt:1",
+      markedAt,
+      reason: "observation_contest_unavailable",
+      state: current,
+    });
+    expect(marked.review).toMatchObject({
+      observerParticipantId: "c",
+      relationshipId: "observation:c:b",
+      targetParticipantId: "b",
+    });
+  });
+
+  it("marks once: the same reason and missing data again changes nothing", () => {
+    const first = mark(twoObserverRound(), "a");
+    const again = markCombatObservationManualReviewRequired({
+      attemptId: "observation:a:b:attempt:1",
+      markedAt: "2026-01-03T00:00:00.000Z",
+      missingData: ["intelligence_characteristic"],
+      reason: "observation_basis_data_missing",
+      state: first,
+    });
+    expect(again.changed).toBe(false);
+    expect(again.state.observationManualReviews).toHaveLength(1);
+    expect(again.state.observationManualReviews[0]!.markedAt).toBe(markedAt);
+
+    // A different reason replaces the marker rather than adding a second one, so the GM report
+    // states the reason the run actually found.
+    const rereason = markCombatObservationManualReviewRequired({
+      attemptId: "observation:a:b:attempt:1",
+      markedAt: "2026-01-03T00:00:00.000Z",
+      reason: "observation_basis_not_derivable",
+      state: first,
+    });
+    expect(rereason.changed).toBe(true);
+    expect(rereason.state.observationManualReviews).toHaveLength(1);
+    expect(rereason.state.observationManualReviews[0]).toMatchObject({
+      missingData: [],
+      reason: "observation_basis_not_derivable",
+    });
+  });
+
+  it("drops the marker when the attempt is resolved by hand", () => {
+    const marked = mark(twoObserverRound(), "a");
+    const resolved = recordCombatObservationRoll({
+      command: { createdAt: at },
+      completedAtRevision: at,
+      executionGroupId: "observation:1",
+      observerBasis: { baseValue: 15, skillId: "dodge", skillLabel: "Dodge" },
+      observerParticipantId: "a",
+      observationAttemptId: "observation:a:b:attempt:1",
+      relationshipId: "observation:a:b",
+      rng: () => 0.5,
+      state: marked,
+      targetBasis: { baseValue: 10, skillId: "sword", skillLabel: "Sword" },
+      targetParticipantId: "b",
+    }).state;
+
+    expect(resolved.observationManualReviews).toEqual([]);
+    expect(resolved.observationAttempts).toHaveLength(1);
+    expect(
+      resolved.observationRelationships.find(
+        (relationship) => relationship.id === "observation:a:b",
+      )?.completedAttempts,
+    ).toBe(1);
   });
 });

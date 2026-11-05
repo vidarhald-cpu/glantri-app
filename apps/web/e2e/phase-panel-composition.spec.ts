@@ -7,6 +7,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * Forgejo #771 — rendered evidence for the Product Owner's phase-panel composition refinement, on
@@ -42,7 +43,6 @@ import { characterPayload } from "./character-fixture";
  * evaluate. `stretch` is what the browser resolves `normal` to on these grid containers, so the
  * `before` numbers are the pre-change layout of this very DOM rather than a separate build.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 const PRIMARY_WEAPON_TEMPLATE = "weapon-template-longsword";
 const SHIELD_TEMPLATE = "shield-template-medium-metal-shield";

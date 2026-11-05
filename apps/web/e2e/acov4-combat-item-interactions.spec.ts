@@ -1,7 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { createCharacterForE2e } from "./character-fixture";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+import { API_URL } from "./targets";
 
 async function postJson<T>(
   request: APIRequestContext,

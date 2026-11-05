@@ -24,6 +24,7 @@ function result(patch: Partial<CombatStepAutomationRunResult> = {}): CombatStepA
       startTaskId: "task-1",
     },
     processedCount: 3,
+    skippedTasks: [],
     stepComplete: false,
     stopParticipantId: "player-1",
     stopReason: "player_action_required",
@@ -42,6 +43,8 @@ describe("GM combat Workflow Status presentation", () => {
       completion: undefined,
       operationLabel: "Roll remaining GM Phase 1 initiative",
       processedSummary: "Rolled 3 NPC initiatives.",
+      skippedReports: [],
+      skippedSummary: undefined,
       stopMessage: "Player action required.",
       stopParticipantLabel: "The Gladiator",
     });
@@ -327,5 +330,121 @@ describe("GM combat Workflow Status presentation", () => {
     expect(presentation.stopMessage).toBe(
       "Previous target is no longer valid. GM declaration required.",
     );
+  });
+
+  /**
+   * #948. A skip the GM cannot see does not satisfy the ruling, so the Workflow Status line the GM
+   * already reads carries the skipped participant and the reason.
+   */
+  describe("#948 skipped Observe participants", () => {
+    function observationResult(
+      skippedTasks: CombatStepAutomationRunResult["skippedTasks"],
+    ): CombatStepAutomationRunResult {
+      return result({
+        identity: { ...result().identity, startProcessFamily: "observation" },
+        processedCount: 4,
+        skippedTasks,
+        stepComplete: false,
+        stopParticipantId: undefined,
+        stopReason: "end_of_step",
+      });
+    }
+
+    function skipped(input: {
+      missingData?: string[];
+      participantId: string;
+      reason: CombatStepAutomationRunResult["skippedTasks"][number]["reason"];
+    }): CombatStepAutomationRunResult["skippedTasks"][number] {
+      return {
+        missingData: input.missingData ?? [],
+        participantId: input.participantId,
+        reason: input.reason,
+        task: {
+          executionGroupId: `group:${input.participantId}`,
+          kind: "observation_roll",
+          participantId: input.participantId,
+          taskId: `task:${input.participantId}`,
+        },
+      };
+    }
+
+    it("names the participant, the reason, and the missing datum", () => {
+      const presentation = buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([["npc-3", "Scyrian cavalry guy"]]),
+        result: observationResult([
+          skipped({
+            missingData: ["intelligence_characteristic"],
+            participantId: "npc-3",
+            reason: "observation_basis_data_missing",
+          }),
+        ]),
+      });
+
+      expect(presentation.skippedSummary).toBe(
+        "Skipped 1 NPC Observe check, left unresolved for manual resolution.",
+      );
+      expect(presentation.skippedReports).toEqual([
+        "Skipped Scyrian cavalry guy: required Observation data is missing for this participant (Intelligence).",
+      ]);
+      // The run is not reported as a completed step while a task is still unresolved.
+      expect(presentation.completion).toBeUndefined();
+    });
+
+    it("reports each skipped participant and distinguishes the reasons", () => {
+      const presentation = buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map([
+          ["npc-2", "Orc Captain"],
+          ["npc-5", "Bandit"],
+        ]),
+        result: observationResult([
+          skipped({
+            participantId: "npc-2",
+            reason: "observation_observed_basis_data_missing",
+          }),
+          skipped({ participantId: "npc-5", reason: "observation_target_invalid" }),
+        ]),
+      });
+
+      expect(presentation.skippedSummary).toBe(
+        "Skipped 2 NPC Observe checks, left unresolved for manual resolution.",
+      );
+      expect(presentation.skippedReports).toEqual([
+        "Skipped Orc Captain: required Observation data is missing for the observed participant.",
+        "Skipped Bandit: the observed participant is no longer active.",
+      ]);
+    });
+
+    it("negative control — a run with no skips reports none", () => {
+      const presentation = buildCombatStepWorkflowStatusPresentation({
+        participantLabelsById: new Map(),
+        result: observationResult([]),
+      });
+
+      expect(presentation.skippedSummary).toBeUndefined();
+      expect(presentation.skippedReports).toEqual([]);
+    });
+
+    /**
+     * #948 (Product Owner ruling of 2026-11-05). A set-aside Observe check must never be counted
+     * as a completed Observation, and this is the reader that reports Observation completeness to
+     * the GM. The run itself also reports `stepComplete: false` while a set-aside task is still
+     * projected; this assertion does not depend on that, so the claim holds whatever shape the
+     * projection takes.
+     */
+    it("makes no completion claim over a check it passed over", () => {
+      const completed = (skippedTasks: CombatStepAutomationRunResult["skippedTasks"]) =>
+        buildCombatStepWorkflowStatusPresentation({
+          participantLabelsById: new Map([["npc-3", "Scyrian cavalry guy"]]),
+          result: { ...observationResult(skippedTasks), stepComplete: true },
+        });
+
+      expect(
+        completed([skipped({ participantId: "npc-3", reason: "observation_basis_data_missing" })])
+          .completion,
+      ).toBeUndefined();
+      // The disabled twin: the same completed run with nothing skipped does claim it, so the
+      // condition above is a condition and not a line that can never appear.
+      expect(completed([]).completion).toBe("Completed Observe work.");
+    });
   });
 });

@@ -81,17 +81,68 @@ export const combatObservationRelationshipSchema = z.object({
   roundsTowardNextAttempt: z.number().int().nonnegative().default(0),
   targetParticipantId: idSchema,
 });
-export type CombatObservationRelationship = z.infer<
-  typeof combatObservationRelationshipSchema
->;
+export type CombatObservationRelationship = z.infer<typeof combatObservationRelationshipSchema>;
 
 export const combatObservationRoundUndoFactSchema = z.object({
   previousRelationship: combatObservationRelationshipSchema.optional(),
   relationshipId: idSchema,
 });
-export type CombatObservationRoundUndoFact = z.infer<
-  typeof combatObservationRoundUndoFactSchema
+export type CombatObservationRoundUndoFact = z.infer<typeof combatObservationRoundUndoFactSchema>;
+
+/**
+ * #948. Why one Observe Opponent attempt's required inputs could not be derived. One canonical
+ * vocabulary: `combatStepAutomation.ts` reports a skip with these members and
+ * `combatObservationManualReviewSchema` persists the same member, so the reason the GM is shown
+ * and the reason the round carries can never drift apart.
+ */
+export const combatObservationManualReviewReasonSchema = z.enum([
+  /** The acting participant's own required Observation data is absent. */
+  "observation_basis_data_missing",
+  /** The observed participant's required Observation data is absent. */
+  "observation_observed_basis_data_missing",
+  /** The observed participant is no longer an active participant. */
+  "observation_target_invalid",
+  /** The pending attempt, relationship, or observer could not be identified. */
+  "observation_contest_unavailable",
+  /** Every required datum is present, but the basis still could not be computed. */
+  "observation_basis_not_derivable",
+]);
+export type CombatObservationManualReviewReason = z.infer<
+  typeof combatObservationManualReviewReasonSchema
 >;
+
+/**
+ * #948 (Product Owner ruling of 2026-11-05). One Observe Opponent attempt the automation set
+ * aside because its required inputs could not be derived.
+ *
+ * It is **round-scoped and per attempt**: `roundNumber` is the round the marker was written in,
+ * and a marker from another round is never read. It records why, and which required datum was
+ * absent, so the GM report can state the reason rather than only that there was one.
+ *
+ * What it is not: it resolves nothing, it manufactures nothing, and it is not a completed
+ * Observation. The attempt stays listed by `getPendingCombatObservationAttempts`, the
+ * relationship's `completedAttempts` is untouched, and no `CombatObservationAttempt` is recorded.
+ * Only the round's *progression* stops treating the attempt as blocking, so the remaining NPC
+ * batch runs; the Observation itself remains uncompleted and manually resolvable.
+ *
+ * A stored round that carries no marker list reads as no markers at all, so every pending attempt
+ * blocks exactly as it did before this state existed. That is the fail-closed direction and no
+ * migration or backfill exists: all current application data is development data.
+ */
+export const combatObservationManualReviewSchema = z
+  .object({
+    attemptId: idSchema,
+    markedAt: z.string().datetime(),
+    markedByUserId: idSchema.optional(),
+    missingData: z.array(z.string().min(1)).default([]),
+    observerParticipantId: idSchema,
+    reason: combatObservationManualReviewReasonSchema,
+    relationshipId: idSchema,
+    roundNumber: z.number().int().positive(),
+    targetParticipantId: idSchema,
+  })
+  .strict();
+export type CombatObservationManualReview = z.infer<typeof combatObservationManualReviewSchema>;
 
 export function buildCombatObservationRelationshipId(input: {
   observerParticipantId: string;
@@ -164,10 +215,7 @@ export function resolveCombatObservationAttempt(input: {
   const requiredQualifyingRounds = getCombatObservationRequiredRounds(
     relationship.completedAttempts,
   );
-  const observerRoll = toObservationRoll(
-    input.observerBasis,
-    rollOpenEndedD20(input.rng),
-  );
+  const observerRoll = toObservationRoll(input.observerBasis, rollOpenEndedD20(input.rng));
   const targetRoll = toObservationRoll(input.targetBasis, rollOpenEndedD20(input.rng));
   const difference = observerRoll.finalTotal - targetRoll.finalTotal;
   const candidateBonus = resolveCombatObservationCandidateBonus(difference);
@@ -229,10 +277,13 @@ export function buildCombatObservationModifierContributions(input: {
       : []
     )
       .flatMap((projection) => (projection.effect ? [projection.effect] : []))
-      .map((effect) => [
-        effect.payload.kind === "numeric" ? effect.payload.category : undefined,
-        effect,
-      ] as const),
+      .map(
+        (effect) =>
+          [
+            effect.payload.kind === "numeric" ? effect.payload.category : undefined,
+            effect,
+          ] as const,
+      ),
   );
 
   const makeContribution = (

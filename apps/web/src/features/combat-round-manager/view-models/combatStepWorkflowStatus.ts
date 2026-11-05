@@ -1,9 +1,15 @@
-import type { CombatStepAutomationRunResult } from "@glantri/domain";
+import type {
+  CombatStepAutomationRunResult,
+  CombatStepAutomationSkipReason,
+} from "@glantri/domain";
 
 export interface CombatStepWorkflowStatusPresentation {
   completion?: string;
   operationLabel: string;
   processedSummary: string;
+  /** #948. One line per participant the run passed over, naming the participant and the reason. */
+  skippedReports: readonly string[];
+  skippedSummary?: string;
   stopMessage?: string;
   stopParticipantLabel?: string;
 }
@@ -133,6 +139,45 @@ function stopMessage(result: CombatStepAutomationRunResult): string | undefined 
   }
 }
 
+const MISSING_BASIS_DATUM_LABELS: Record<string, string> = {
+  intelligence_characteristic: "Intelligence",
+};
+
+function skipReasonMessage(reason: CombatStepAutomationSkipReason): string {
+  switch (reason) {
+    case "observation_basis_data_missing":
+      return "required Observation data is missing for this participant";
+    case "observation_observed_basis_data_missing":
+      return "required Observation data is missing for the observed participant";
+    case "observation_target_invalid":
+      return "the observed participant is no longer active";
+    case "observation_contest_unavailable":
+      return "the Observe attempt could not be identified";
+    case "observation_basis_not_derivable":
+      return "the Observe basis could not be derived";
+  }
+}
+
+function skippedCheckNoun(result: CombatStepAutomationRunResult): string {
+  return isObservationRun(result) ? "NPC Observe check" : "task";
+}
+
+function buildSkippedReports(input: {
+  participantLabelsById: ReadonlyMap<string, string>;
+  result: CombatStepAutomationRunResult;
+}): readonly string[] {
+  return input.result.skippedTasks.map((skipped) => {
+    const label = skipped.participantId
+      ? (input.participantLabelsById.get(skipped.participantId) ?? "Participant")
+      : "Participant";
+    const missing = skipped.missingData
+      .map((datum) => MISSING_BASIS_DATUM_LABELS[datum] ?? datum)
+      .join(", ");
+    const detail = missing ? ` (${missing})` : "";
+    return `Skipped ${label}: ${skipReasonMessage(skipped.reason)}${detail}.`;
+  });
+}
+
 export function buildCombatStepWorkflowStatusPresentation(input: {
   participantLabelsById: ReadonlyMap<string, string>;
   result: CombatStepAutomationRunResult;
@@ -162,33 +207,49 @@ export function buildCombatStepWorkflowStatusPresentation(input: {
               : declarations
                 ? `Accepted ${result.processedCount} NPC declaration${result.processedCount === 1 ? "" : "s"}.`
                 : `Accepted ${result.processedCount} NPC review${result.processedCount === 1 ? "" : "s"}.`;
-  const completion = result.stepComplete
-    ? distance
-      ? "Completed distance rolls."
-      : continuedContact
-        ? "Completed Continued Contact maintenance."
-        : observation
-          ? "Completed Observe work."
-          : health
-            ? "Completed Health/Bleed work."
-            : combatExperience
-              ? "Completed Combat Experience."
-              : result.identity.startingStep === "initiative_phase_1"
-                ? "Completed Phase 1 initiative."
-                : result.identity.startingStep === "initiative_phase_2"
-                  ? "Completed Phase 2 initiative."
-                  : result.identity.startingStep === "review_action_modifiers"
-                    ? "Completed M1."
-                    : result.identity.startingStep === "select_actions"
-                      ? "Completed DE."
-                      : result.identity.startingStep === "review_phase_2_modifiers"
-                        ? "Completed M2."
-                        : "Completed the step."
-    : undefined;
+  const skippedCount = result.skippedTasks.length;
+  /**
+   * #948. A run that passed over a check has not completed that work, so it makes no completion
+   * claim. In practice the run also reports `stepComplete: false` while a set-aside Observe task is
+   * still projected, so this is the second of two reasons the GM never reads "Completed Observe
+   * work." over an unresolved one — and the one that does not depend on the projection's shape.
+   */
+  const completion =
+    result.stepComplete && skippedCount === 0
+      ? distance
+        ? "Completed distance rolls."
+        : continuedContact
+          ? "Completed Continued Contact maintenance."
+          : observation
+            ? "Completed Observe work."
+            : health
+              ? "Completed Health/Bleed work."
+              : combatExperience
+                ? "Completed Combat Experience."
+                : result.identity.startingStep === "initiative_phase_1"
+                  ? "Completed Phase 1 initiative."
+                  : result.identity.startingStep === "initiative_phase_2"
+                    ? "Completed Phase 2 initiative."
+                    : result.identity.startingStep === "review_action_modifiers"
+                      ? "Completed M1."
+                      : result.identity.startingStep === "select_actions"
+                        ? "Completed DE."
+                        : result.identity.startingStep === "review_phase_2_modifiers"
+                          ? "Completed M2."
+                          : "Completed the step."
+      : undefined;
   return {
     completion,
     operationLabel: operationLabel(result),
     processedSummary,
+    skippedReports: buildSkippedReports({
+      participantLabelsById: input.participantLabelsById,
+      result,
+    }),
+    skippedSummary:
+      skippedCount > 0
+        ? `Skipped ${skippedCount} ${skippedCheckNoun(result)}${skippedCount === 1 ? "" : "s"}, left unresolved for manual resolution.`
+        : undefined,
     stopMessage: stopMessage(result),
     stopParticipantLabel: result.stopParticipantId
       ? (input.participantLabelsById.get(result.stopParticipantId) ?? "Participant")

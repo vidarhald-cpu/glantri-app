@@ -10,6 +10,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * Forgejo #835 — rendered evidence that the player declaration surface carries one compact
@@ -44,7 +45,6 @@ import { characterPayload } from "./character-fixture";
  * run can only pass against the compacted one. The two modes are mutually exclusive on purpose —
  * neither can silently pass against the other's code.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const CAPTURE_BASELINE = process.env.GLANTRI_835_CAPTURE_BASELINE === "1";
 const CAPTURE_DIR = resolve(
   process.env.POSITION_CAPTURE_DIR ?? "test-results/position-and-movement",

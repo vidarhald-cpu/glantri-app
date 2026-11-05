@@ -265,7 +265,11 @@ const COMMAND_TASK_RULES: Partial<Record<CombatProgressionExpectedCommand, Comma
     boundary: ["round_end", "round_boundary"],
     kind: "observation_roll",
     process: "observation",
-    stage: "contest",
+    // #948. An attempt the automation set aside for manual review is projected in the process's
+    // `review` stage rather than its ordered `contest` stage. Both are authorized here, because
+    // resolving a set-aside attempt by hand once its data exists is the whole point of leaving it
+    // unresolved — an attempt the GM can see and cannot roll would not satisfy the ruling.
+    stage: ["contest", "review"],
   },
   roll_hit_location: {
     boundary: resolutionBoundary,

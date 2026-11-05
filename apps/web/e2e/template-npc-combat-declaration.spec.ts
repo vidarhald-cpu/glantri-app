@@ -8,6 +8,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * #666 — A temporary actor instantiated from a campaign Template must be able to act in combat, and
@@ -51,7 +52,6 @@ import { characterPayload } from "./character-fixture";
  * about the seeded Template, not about this code path. What it must no longer do is instruct the GM
  * to use a control that does not exist, and that is what the second case binds.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 const PUNCH_SOURCE_ID = "unarmed:virtual-weapon-template-punch";
 const KICK_SOURCE_ID = "unarmed:virtual-weapon-template-kick";

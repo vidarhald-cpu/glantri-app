@@ -12,6 +12,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * #863 V2 — the three rows of the board-game visibility ruling, measured on the real route and on
@@ -47,7 +48,6 @@ import { characterPayload } from "./character-fixture";
  * the **projection and the rendering** of that bucket through the real HTTP route and the real
  * page, not its authoring.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 /** The exact critical the fixture commits, taken from the `sharp|arm|05` catalogue row. */
 const CRITICAL_TITLE = "Forearm gash; hand unusable";
