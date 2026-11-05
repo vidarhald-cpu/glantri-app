@@ -11954,7 +11954,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const completed = measureCombatPerformanceStage("domain_command_execution", () =>
+        const completedStep = measureCombatPerformanceStage("domain_command_execution", () =>
           completeRemainingCombatRoundStep({
             command: {
               createdAt: submittedAt,
@@ -11965,6 +11965,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             state: roundState,
           }),
         );
+        // #951: bulk completion can move the step, so it records the step it leaves.
+        const completed = {
+          ...completedStep,
+          state: withServerDerivedCombatStepSnapshots({
+            committedAt: submittedAt,
+            encounter,
+            nextState: completedStep.state,
+            previousState: roundState,
+            scenarioParticipants,
+          }),
+        };
         const participantMutations =
           roundState.currentStep === "review_action_modifiers" ||
           roundState.currentStep === "review_phase_2_modifiers"
@@ -12102,13 +12113,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const nextRoundState = skipCombatRoundCurrentPhaseAction({
-          command: { createdAt: submittedAt, createdByUserId: user.id },
-          participantId,
-          phase,
-          state: roundState,
-          submittedBy: "gm",
-          updatedAt: submittedAt,
+        // #951: a skipped phase action can move the step, so it records the step it leaves.
+        const nextRoundState = withServerDerivedCombatStepSnapshots({
+          committedAt: submittedAt,
+          encounter,
+          nextState: skipCombatRoundCurrentPhaseAction({
+            command: { createdAt: submittedAt, createdByUserId: user.id },
+            participantId,
+            phase,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt: submittedAt,
+          }),
+          previousState: roundState,
+          scenarioParticipants,
         });
         const savedEncounter = await encounterService.updateCombatEncounter({
           expectedRevision: encounter.updatedAt,
@@ -14744,13 +14762,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     : [],
                 ),
               );
-              const committed = commitCombatRoundPhaseInitiativeResolution({
+              // #951: the initiative commit moves the step without going through a boundary
+              // advance, so it records the step it leaves itself.
+              const committedResolution = commitCombatRoundPhaseInitiativeResolution({
                 command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
                 nonParticipatingParticipantIds,
                 phase: task.identity.phase,
                 state,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
+              const committed = {
+                ...committedResolution,
+                state: withServerDerivedCombatStepSnapshots({
+                  committedAt: submittedAt,
+                  encounter: workingEncounter!,
+                  nextState: committedResolution.state,
+                  previousState: state,
+                  scenarioParticipants: workingParticipants,
+                }),
+              };
               workingEncounter = await encounterService.updateCombatEncounter({
                 expectedRevision: workingEncounter!.updatedAt,
                 campaignId: access.campaignId,
@@ -16094,13 +16124,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     : [],
                 ),
               );
-              const committed = commitCombatRoundPhaseInitiativeResolution({
+              // #951: the initiative commit moves the step without going through a boundary
+              // advance, so it records the step it leaves itself.
+              const committedResolution = commitCombatRoundPhaseInitiativeResolution({
                 command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
                 nonParticipatingParticipantIds,
                 phase: task.identity.phase,
                 state: apiProjection.state,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
+              const committed = {
+                ...committedResolution,
+                state: withServerDerivedCombatStepSnapshots({
+                  committedAt: submittedAt,
+                  encounter: workingEncounter!,
+                  nextState: committedResolution.state,
+                  previousState: apiProjection.state,
+                  scenarioParticipants: workingParticipants,
+                }),
+              };
               const nextState = attachCombatStepAutomationCommandLink({
                 commandId,
                 countsTowardProcessed: false,
@@ -16988,7 +17030,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const committed = commitCombatRoundPhaseInitiativeResolution({
+        // #951: the initiative commit moves the step without going through a boundary advance, so
+        // it records the step it leaves itself.
+        const committedResolution = commitCombatRoundPhaseInitiativeResolution({
           command: {
             createdAt: submittedAt,
             createdByUserId: user.id,
@@ -16998,6 +17042,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           visibility: encounter.roleplayState?.visibility,
         });
+        const committed = {
+          ...committedResolution,
+          state: withServerDerivedCombatStepSnapshots({
+            committedAt: submittedAt,
+            encounter,
+            nextState: committedResolution.state,
+            previousState: roundState,
+            scenarioParticipants,
+          }),
+        };
         const participantMutations = Object.entries(
           committed.combatContextsByParticipantId,
         ).flatMap(([encounterParticipantId, combatContext]) => {

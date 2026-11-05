@@ -789,6 +789,68 @@ describe("#951 / #889 — the server derives and persists each committed step's 
   });
 
   /**
+   * The route-level coverage census, measured rather than assumed.
+   *
+   * It drives round 1 as far as the GM's own controls take it with no attack declared, and reports
+   * which of the 13 steps carry a record and which do not. `phase_1_actions`,
+   * `review_phase_2_actions` and `phase_1_damage` are left behind by the
+   * `phase1_resolution:phase2_modifier_review` boundary jump rather than by a route of their own,
+   * so their record is derived at that boundary; the per-step facts (attack result, resolution
+   * result, action-result status) are still keyed on the step inside the deriver.
+   */
+  it("route-level census — reports the recorded step set reached through the real routes", async () => {
+    const world = await openWorld();
+    try {
+      await dischargeCombatExperience(world);
+      const steps: string[] = [world.roundState().currentStep];
+      for (let guard = 0; guard < 40; guard += 1) {
+        await declareEveryParticipant(world);
+        await commitModifierReviews(world);
+        const current = world.roundState();
+        const boundary = findBoundaryTask(current);
+        if (!boundary?.transition) break;
+        const advanced = await world.app.inject({
+          method: "POST",
+          payload: {
+            commandType: boundary.expectedCommand,
+            executionGroupId: boundary.executionGroupId,
+            expectedBoundary: boundary.transition.currentBoundary,
+            expectedRevision: world.revision(),
+            targetBoundary: boundary.transition.targetBoundary,
+            taskId: boundary.id,
+          },
+          url: "/encounters/encounter-1/combat-round/advance-current-step",
+        });
+        if (advanced.statusCode !== 200) break;
+        const next = world.roundState().currentStep;
+        if (next !== steps.at(-1)) steps.push(next);
+        if (world.roundState().roundNumber > 1) break;
+      }
+
+      const recorded = new Set(
+        world
+          .roundState()
+          .stepSnapshots.concat(world.roundState().rounds.flatMap((round) => round.stepSnapshots))
+          .map((snapshot) => snapshot.step),
+      );
+      const census = COMBAT_ROUND_STEPS.map(
+        (step) => `${step}:${recorded.has(step) ? "RECORDED" : "NO RECORD"}`,
+      );
+      // Printed so the exact set reached by this driving is evidence, not a claim.
+      console.log(`#951 route-level census: ${JSON.stringify({ census, walked: steps })}`);
+
+      // Every step the walk *left* carries a record. The last step in the walk is the one the
+      // round is still standing on, so it has not been committed yet and must not have one.
+      for (const step of steps.slice(0, -1)) {
+        expect([...recorded], `walked step ${step} has no record`).toContain(step);
+      }
+      expect([...recorded].sort()).toEqual([...steps.slice(0, -1)].sort());
+    } finally {
+      await world.app.close();
+    }
+  });
+
+  /**
    * Acceptance item 5 — an omitted, malformed or hostile client snapshot cannot alter the
    * authoritative stored one.
    *
