@@ -12,6 +12,7 @@ import {
 import { movementIntentSchema } from "../encounter/combatMovementIntent";
 import { combatDeclarationIntentSchema } from "../encounter/combatDeclarationIntent";
 import { hitLocationTargetSchema } from "../encounter/hitLocation";
+import { withoutSupersededGmFigure } from "../encounter/supersededGmFigureAudience";
 
 const idSchema = z.string().min(1);
 const timestampSchema = z.string().min(1);
@@ -204,6 +205,14 @@ export const scenarioCombatModifierEntrySchema = z.object({
   sourceRoundNumber: z.number().int().positive().optional(),
   sourceRule: z.string().optional(),
   sourceType: scenarioCombatModifierSourceTypeSchema.optional(),
+  /**
+   * The figure the GM had committed for this row when a rule event replaced it (#931). Both halves
+   * are kept: `value` is the number, `text` the row's own note as the GM left it. It is a row
+   * field rather than part of `canonicalLifecycle.payload`, because resolution reads the payload
+   * and a retained figure stored there would be read as the row's current value. Absent on every
+   * row no rule event has superseded, and absent means exactly that: nothing is inferred.
+   */
+  supersededGmFigure: z.object({ text: z.string(), value: z.number() }).optional(),
   provisional: z.boolean().optional(),
   value: z.number().default(0),
 });
@@ -891,6 +900,19 @@ export function buildScenarioPlayerVisibleParticipants(input: {
     );
 }
 
+/**
+ * The controlled participant's combat context as this projection hands it to its viewer.
+ *
+ * This names the fields it removes and lets the rest of every entry through, so a field added to
+ * `scenarioCombatModifierEntrySchema` is carried here by default — unlike the allowlist sibling
+ * `playerFacingCombatContextSchema`, which carries only what it names. That shape is a general
+ * defect, it is filed separately, and replacing it is not #931's work.
+ *
+ * `withoutSupersededGmFigure` is applied because #931 introduced `supersededGmFigure` and a
+ * measured player read found it arriving here. A lane does not widen a bucket that already fails
+ * open with a field of its own (Product Owner disposition, #931 comment 21269). It removes only
+ * that field and changes nothing else this projection carries.
+ */
 function stripPrivateModifierLifecycleFromPlayerCombatContext(
   combatContext: ScenarioParticipantCombatContext | undefined,
 ): ScenarioParticipantCombatContext | undefined {
@@ -901,7 +923,7 @@ function stripPrivateModifierLifecycleFromPlayerCombatContext(
       canonicalTransitions: _transitions,
       ...safe
     } = entry;
-    return safe;
+    return withoutSupersededGmFigure(safe);
   };
   return {
     ...combatContext,

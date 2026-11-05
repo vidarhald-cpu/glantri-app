@@ -1,3 +1,4 @@
+import { combatContextHasSupersededGmFigure } from "@glantri/domain";
 import type {
   CombatProgressionBoundaryKind,
   CombatProgressionExpectedCommand,
@@ -5,6 +6,7 @@ import type {
   CombatProgressionPresentationTask,
   CombatProgressionTaskKind,
   CombatRoundPhase,
+  CombatRoundState,
   OffensiveParryRollPurpose,
 } from "@glantri/domain";
 
@@ -117,7 +119,53 @@ export interface BuildCurrentActionPresentationInput {
   readonly encounterId: string;
   readonly encounterRevision?: string;
   readonly progression?: CombatProgressionPresentationProjection;
+  /**
+   * The `participantId:phase` keys whose attack-phase modifier rows carry a figure a rule event
+   * superseded (#931). Every caller derives it from its own round state with
+   * `getSupersededModifierReviewKeys`; nothing here keys on the viewer.
+   *
+   * That is what keeps the signal off the player side. The round state this page is served comes
+   * through `playerFacingCombatContextSchema`, an allowlist that does not carry
+   * `supersededGmFigure`, so a player's round state holds no such row, the set is empty and the
+   * wording cannot be composed — the projection enforces it, not a flag this view-model could get
+   * wrong (Product Owner ruling, #931 comment 21255). Measured on a real player read.
+   *
+   * The claim is about *this* round state. Two other player reads do not go through that allowlist
+   * and are sanitised explicitly instead; see `supersededGmFigureAudience.ts`. Do not generalise
+   * the allowlist's protection to a read nobody has measured.
+   */
+  readonly supersededModifierReviewKeys?: ReadonlySet<string>;
   readonly viewer: CurrentActionViewerContext;
+}
+
+/** The key a superseded attack-phase review is held under: one participant, one phase. */
+export function supersededModifierReviewKey(
+  participantId: string,
+  phase: "phase1" | "phase2",
+): string {
+  return `${participantId}:${phase}`;
+}
+
+/**
+ * Collects the superseded-review keys from a round state. Run it on the state the surface already
+ * holds: the GM panel's stored round state carries `supersededGmFigure`, the player page's
+ * player-facing round state cannot, so the same code yields an empty set there.
+ */
+export function getSupersededModifierReviewKeys(
+  state?: Pick<CombatRoundState, "participants"> | null,
+): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const participant of state?.participants ?? []) {
+    const declaration = participant.declaration;
+    if (!declaration) continue;
+    for (const phase of ["phase1", "phase2"] as const) {
+      const superseded = [declaration.combatContext, declaration.phaseContexts?.[phase]].some(
+        (context) => context !== undefined && combatContextHasSupersededGmFigure(context, phase),
+      );
+      if (superseded) keys.add(supersededModifierReviewKey(participant.participantId, phase));
+    }
+  }
+  return keys;
 }
 
 /**
@@ -399,9 +447,19 @@ function requiredActor(task: CombatProgressionPresentationTask): CombatPresentat
   return subject(responder ?? owner ?? task.trackerFacet.owner, "another combatant")!;
 }
 
+/**
+ * The Product Owner's wording for a review re-offered because a rule event replaced the GM's
+ * committed figure (#931 comment 21255, recorded verbatim there). It leads the summary rather than
+ * trailing it: a rendered reading at 768, 1024 and 1440 CSS px measured the previous suffix-shaped
+ * signal clipped before a GM could read it, and a suffix is the shape that failed.
+ */
+const SUPERSEDED_MODIFIER_REVIEW_SUMMARY =
+  "Rule changed the committed DB/Parry value — review again.";
+
 function summaryFor(input: {
   action: string;
   actor?: CombatPresentationSubject;
+  supersededModifierReviewKeys?: ReadonlySet<string>;
   target?: CombatPresentationSubject;
   task: CombatProgressionPresentationTask;
 }): string {
@@ -468,11 +526,19 @@ function summaryFor(input: {
       return "Initiative is complete.";
     case "roll_initiative":
       return `Initiative is open for ${actor}.`;
-    case "modifier_review":
-      return `${phaseLabel(
+    case "modifier_review": {
+      const phase = input.task.trackerFacet.step === "M2" ? "phase2" : "phase1";
+      const ready = `${phaseLabel(
         input.task.identity.phase,
-        input.task.trackerFacet.step === "M2" ? "phase2_modifier_review" : "phase1_modifier_review",
+        phase === "phase2" ? "phase2_modifier_review" : "phase1_modifier_review",
       )} modifiers are ready for review.`;
+      const owner =
+        input.task.owner?.kind === "combatant" ? input.task.owner.participantId : undefined;
+      const superseded =
+        owner !== undefined &&
+        input.supersededModifierReviewKeys?.has(supersededModifierReviewKey(owner, phase)) === true;
+      return superseded ? `${SUPERSEDED_MODIFIER_REVIEW_SUMMARY} ${ready}` : ready;
+    }
     case "health_review":
       return `${actor} needs a Health roll.`;
     case "combat_experience":
@@ -1022,7 +1088,13 @@ export function buildCurrentActionPresentation(
           (input.viewer.controlledParticipantIds ?? new Set()).has(actor.id));
   const summary = waitingForParallelParticipantRoll
     ? `Your ${task.kind.startsWith("break_off_") ? "Dodge" : "Brawling"} roll is recorded. Waiting for ${required.label}.`
-    : summaryFor({ action, actor, target, task });
+    : summaryFor({
+        action,
+        actor,
+        supersededModifierReviewKeys: input.supersededModifierReviewKeys,
+        target,
+        task,
+      });
   const requiredNow = waitingForParallelParticipantRoll
     ? `Waiting for ${required.label}.`
     : requiredNowFor(task, status, required.label);
