@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { ScenarioParticipant } from "../campaign/scenario";
 import { glantriCharacteristicKeySchema } from "../character/profiles";
+import { getCombatDistanceParticipantAliases } from "./combatDistance";
 import { combatRoundStateSchema, type CombatRoundState } from "./combatRoundManager";
 import type { EncounterParticipantReadSource } from "./combatReadModels";
 
@@ -331,6 +332,56 @@ export const encounterParticipantSchema = z.object({
 });
 
 /**
+ * The identity-bearing fields of a roster row — the only fields the identity
+ * conditions below read, so a caller holding a persisted row, a submitted row or
+ * a resolved one can be asked the same question.
+ */
+export interface EncounterParticipantIdentityLike {
+  characterId?: string | null;
+  id?: string | null;
+  scenarioParticipantId?: string | null;
+}
+
+/**
+ * An identity two rows can claim is not an identity.
+ *
+ * Every reader that answers a question about a combatant answers it against an
+ * identity the roster carries, and it finds that row through the alias set
+ * `getCombatDistanceParticipantAliases` derives — the row's own `id`, its
+ * Scenario-participant mapping in both its bare and `scenario-` prefixed forms,
+ * and its `characterId`. Those readers disagree about what to do when two rows
+ * answer for one alias, because the question has no answer: there is no way to
+ * tell whose state the GM's entry for that alias was meant to express, or whose
+ * combatant a viewer who controls it controls.
+ *
+ * So the roster refuses the state rather than asking each reader to cope with
+ * it. The condition is stated over the same alias helper the readers use, so a
+ * form added there is covered here without a second enumeration.
+ *
+ * Returns the refusal message, or `undefined` when every row holds a distinct
+ * identity.
+ */
+export function encounterRosterIdentityRefusal(
+  participants: readonly EncounterParticipantIdentityLike[],
+): string | undefined {
+  const claimedBy = new Map<string, number>();
+
+  for (const [index, participant] of participants.entries()) {
+    for (const alias of getCombatDistanceParticipantAliases(participant)) {
+      const firstClaimant = claimedBy.get(alias);
+
+      if (firstClaimant !== undefined && firstClaimant !== index) {
+        return `Two Encounter participants claim the identity ${alias}. Give every combatant a distinct identity.`;
+      }
+
+      claimedBy.set(alias, index);
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * A reference from one Encounter to an existing Campaign Item. The Item keeps
  * its canonical identity and ownership in the equipment aggregate; Encounter
  * state records only presence and audience.
@@ -340,7 +391,14 @@ export const encounterItemReferenceSchema = z.object({
   visibility: z.enum(["players", "gm_only"]),
 });
 
-export const encounterSessionSchema = z.object({
+/**
+ * The Encounter session's field shape, before the roster identity condition below.
+ *
+ * Exported for the player-facing projection only, which needs the object's `shape`
+ * to prove that every field a stored Encounter carries is named by a player-facing
+ * schema. Nothing parses through this: `encounterSessionSchema` is the parse.
+ */
+export const encounterSessionObjectSchema = z.object({
   actionLog: z.array(encounterAttackResolutionSchema).default([]),
   campaignId: idSchema.optional(),
   combatRoundState: encounterCombatRoundStateSchema.optional(),
@@ -377,6 +435,45 @@ export const encounterSessionSchema = z.object({
   turnOrderMode: encounterTurnOrderModeSchema.default("manual"),
   updatedAt: z.string().min(1),
 });
+
+/**
+ * The roster identity condition is stated here rather than on a route, because the
+ * schema is the one place every writer passes through: the roster `PATCH`, the
+ * whole-session `PUT`, create, status change, pending-roster withdrawal, the
+ * round-boundary commit that promotes `pendingParticipants`, the repository write
+ * paths, and the offline local store all parse through this object. A condition on
+ * one route is only a condition on that route.
+ *
+ * The in-force roster and the held roster are separate rosters and are each
+ * required to be internally coherent; a held roster is a whole future roster, so a
+ * collision placed there would become the roster in force at the next round
+ * boundary.
+ *
+ * No tolerant read branch is owed. A roster that violates this could not be
+ * written again, so a stored one is a state the readers have no reading for, and
+ * failing the parse is the fail-closed direction.
+ */
+export const encounterSessionSchema = encounterSessionObjectSchema.superRefine(
+  (session, context) => {
+    const inForce = encounterRosterIdentityRefusal(session.participants);
+
+    if (inForce) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: inForce, path: ["participants"] });
+    }
+
+    const held = session.pendingParticipants
+      ? encounterRosterIdentityRefusal(session.pendingParticipants)
+      : undefined;
+
+    if (held) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: held,
+        path: ["pendingParticipants"],
+      });
+    }
+  },
+);
 
 export const encounterSessionSummarySchema = z
   .object({
@@ -486,9 +583,17 @@ export interface ResolvedEncounterParticipantForViewer {
 
 export type EncounterParticipantViewer = { kind: "gm" } | { kind: "player"; userId: string };
 
-function encounterParticipantMatchesScenarioParticipant(input: {
-  encounterParticipant: EncounterParticipant;
-  scenarioParticipant: ScenarioParticipant;
+/**
+ * The canonical correspondence between a roster row and a Scenario participant.
+ *
+ * It is stated over the identity-bearing fields only, so the roster identity
+ * condition at the write boundary can ask exactly the question the readers ask
+ * rather than keeping an enumeration of its own. A form added here is therefore
+ * covered there too.
+ */
+export function encounterParticipantMatchesScenarioParticipant(input: {
+  encounterParticipant: EncounterParticipantIdentityLike;
+  scenarioParticipant: { characterId?: string | null; id: string };
 }): boolean {
   return (
     input.encounterParticipant.scenarioParticipantId === input.scenarioParticipant.id ||
@@ -499,6 +604,55 @@ function encounterParticipantMatchesScenarioParticipant(input: {
       input.encounterParticipant.characterId === input.scenarioParticipant.characterId,
     )
   );
+}
+
+/**
+ * A row's identity must describe the person its mapping describes.
+ *
+ * Roster uniqueness is a property of the roster alone, so the schema can state it.
+ * This condition is not: a row's `id` can borrow the identity of a Scenario
+ * participant who is not on the roster at all, and the document the schema sees
+ * does not contain that participant. Driven on #947: a row carrying its own
+ * `scenarioParticipantId` and another participant's `id` passes every roster-local
+ * condition, passes the repository presence check, and makes that other
+ * participant control the row.
+ *
+ * So it is asked where the Scenario participants are known — the write boundary,
+ * next to the presence check that already refuses an incoherent roster there.
+ *
+ * The condition: the Scenario participants a row corresponds to must be no more
+ * than the one it declares. A row that declares a mapping must correspond to that
+ * participant and no other; a row that declares none — an ad-hoc combatant — must
+ * correspond to at most one, because a second correspondence is the same ambiguity
+ * without a declared answer.
+ *
+ * Returns the refusal message, or `undefined` when every row's identity describes
+ * its own mapping.
+ */
+export function encounterRosterScenarioIdentityRefusal(input: {
+  participants: readonly EncounterParticipantIdentityLike[];
+  scenarioParticipants: readonly { characterId?: string | null; id: string }[];
+}): string | undefined {
+  for (const participant of input.participants) {
+    const corresponding = input.scenarioParticipants.filter((scenarioParticipant) =>
+      encounterParticipantMatchesScenarioParticipant({
+        encounterParticipant: participant,
+        scenarioParticipant,
+      }),
+    );
+    const declared = participant.scenarioParticipantId;
+    const foreign = declared
+      ? corresponding.filter((scenarioParticipant) => scenarioParticipant.id !== declared)
+      : corresponding.slice(1);
+
+    if (foreign.length > 0) {
+      return declared
+        ? `Encounter participant ${participant.id} carries an identity belonging to Scenario participant ${foreign[0]!.id} rather than to its own ${declared}. Give every combatant its own identity.`
+        : `Encounter participant ${participant.id} carries identities belonging to more than one Scenario participant. Give every combatant its own identity.`;
+    }
+  }
+
+  return undefined;
 }
 
 /**
