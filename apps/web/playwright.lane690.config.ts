@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { WEB_URL } from "./e2e/targets";
+
 /**
  * Lane-scoped configuration for the #690 rendered proof. It runs only that spec, and uses the
  * lane's own seeded-game-master setup instead of the suite's account bootstrap, which is
@@ -14,7 +16,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: /lane690-.*\.spec\.ts/,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000",
+    baseURL: WEB_URL,
     trace: "retain-on-failure",
   },
   workers: 1,

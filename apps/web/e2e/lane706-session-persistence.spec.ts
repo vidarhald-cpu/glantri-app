@@ -12,9 +12,8 @@
  * container stack; see `playwright.lane706.config.ts`.
  */
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { WEB_URL, API_URL } from "./targets";
 
-const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const SEEDED_EMAIL = process.env.LANE706_SEED_EMAIL ?? "local-gm@example.com";
 const SEEDED_PASSWORD = process.env.LANE706_SEED_PASSWORD ?? "devpassword123";
 

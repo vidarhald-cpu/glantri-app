@@ -16,6 +16,7 @@ import {
 } from "@glantri/domain";
 
 import { characterPayload } from "./character-fixture";
+import { API_URL } from "./targets";
 
 /**
  * Forgejo #832 — rendered GM evidence that the defense review is asked for only when there is
@@ -46,7 +47,6 @@ import { characterPayload } from "./character-fixture";
  * after mount, so a read split across `await` boundaries straddles that scroll; `scrollY` is
  * quoted in every failure message so a garbage read is recognisable as one.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 
 const PRIMARY_WEAPON_TEMPLATE = "weapon-template-longsword";
 const SHIELD_TEMPLATE = "shield-template-medium-metal-shield";

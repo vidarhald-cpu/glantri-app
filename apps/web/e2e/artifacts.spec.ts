@@ -2,9 +2,8 @@ import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import { createCharacterForE2e } from "./character-fixture";
+import { API_URL, WEB_URL } from "./targets";
 
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
-const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 const ARTIFACT_MUTATION_HEADERS = {
   origin: WEB_URL,
   "x-glantri-artifact-mutation": "1",

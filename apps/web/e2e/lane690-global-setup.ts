@@ -9,9 +9,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://127.0.0.1:4000";
-const WEB_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
+import { API_URL, WEB_URL } from "./targets";
 
 export const LANE690_STORAGE_STATE = "e2e/.auth/lane690-gm.json";
 

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { WEB_URL } from "./e2e/targets";
+
 /**
  * Lane-scoped configuration for the #706 session-cookie proof. It follows the convention #690's
  * lane introduced, and the ordinary `playwright.config.ts` excludes the spec through its
@@ -21,7 +23,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: /lane706-.*\.spec\.ts/,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+    baseURL: WEB_URL,
     trace: "retain-on-failure",
   },
   workers: 1,

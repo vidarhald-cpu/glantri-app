@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import { API_URL as API } from "./targets";
 
-const API = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 test.describe("GM Item lifecycle", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
   test("discovers 100 Items, creates three, retains a failed draft and resolves two-session conflict", async ({

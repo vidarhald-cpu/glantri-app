@@ -5,6 +5,7 @@ import {
   forEachChargenStep,
   gotoChargenStep,
 } from "./chargen-step-navigation";
+import { API_URL } from "./targets";
 
 /**
  * Overlapping Learning Group training, in the browser.
@@ -26,7 +27,6 @@ import {
  * and the arithmetic at
  * `packages/rules-engine/src/chargen/overlappingLearningGroupPricing.test.ts`.
  */
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const SCHOOLING = "Instruction and schooling practice";
 const SPEECH = "Speech and memory practice";
 

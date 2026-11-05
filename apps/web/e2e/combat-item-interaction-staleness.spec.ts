@@ -1,7 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { createCharacterForE2e } from "./character-fixture";
-
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
+import { API_URL } from "./targets";
 
 /**
  * Forgejo issue #599 — the trigger the existing ACoV4 Item spec steps over.

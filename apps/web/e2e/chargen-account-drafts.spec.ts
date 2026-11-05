@@ -2,8 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { getApprovedV2RuntimeContent } from "@glantri/content";
 
 import { expandChargenChooser, gotoChargenStep } from "./chargen-step-navigation";
+import { API_URL } from "./targets";
 
-const API_URL = process.env.PLAYWRIGHT_API_URL ?? "http://localhost:4000";
 const PASSWORD = "Disposable-Chargen-230";
 
 async function register(page: Page, email: string, displayName: string) {
