@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 import {
   advanceCombatRoundStep,
   initializeCombatRoundState,
@@ -68,6 +68,29 @@ const PRIVATE_FIELD_NAMES = [
   "privateCalculation",
   "gmReview",
 ] as const;
+
+/*
+ * Forgejo #987. `CombatRoundManagerPanel` renders one `h3` per arm of a single
+ * `{inspector.participant ? (` ternary, and both arms begin with the same seven words:
+ *
+ * - the participant arm: `Combat inspector — {inspector.participant.label} · Round {n} · {step}`;
+ * - the phase-wide arm:  `Combat inspector — Round {n} · {step}`, which names no participant.
+ *
+ * The narrowed matcher requires the ` · Round <n> · ` that can only follow a label, so the
+ * phase-wide text — whose `Round <n>` is its first segment — cannot satisfy it. The loose
+ * pattern is kept for diagnosis only, to report which arm is actually on screen.
+ */
+const GM_INSPECTOR_ANY_HEADING = /^Combat inspector — /;
+const GM_INSPECTOR_PARTICIPANT_HEADING = /^Combat inspector — .+ · Round \d+ · /;
+/**
+ * Every read of and click on the participant arm carries this. `innerText()` and `click()` are
+ * unbounded by default — `playwright.config.ts` sets no `actionTimeout` — so on the phase-wide
+ * arm, where these locators never resolve, the only ceiling is `test.setTimeout(240_000)`: the
+ * 240-second timeout naming nothing that #987 exists to remove.
+ */
+const GM_INSPECTOR_CONTROL_TIMEOUT_MS = 2_000;
+/** The participant arm can take a beat to mount after a `goto`; its own controls cannot. */
+const GM_INSPECTOR_SETTLE_TIMEOUT_MS = 15_000;
 
 async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
   if (!response.ok()) {
@@ -415,17 +438,72 @@ test.describe("Player Combat visibility V1 — declaration wording and blank-cel
     await gmPage.goto(
       `/campaigns/${campaignId}?scenarioId=${scenarioId}&encounterId=${encounterId}&tab=combat`,
     );
-    const inspectorHeading = gmPage.getByRole("heading", { name: /^Combat inspector — / });
-    await expect(inspectorHeading).toBeVisible();
+    /*
+     * Forgejo #987. `/^Combat inspector — /` also matched the phase-wide heading, so the
+     * precondition that is supposed to establish "the inspector is on a participant" passed in
+     * exactly the state it exists to exclude; this block then read the inspected label out of
+     * that heading (it returned `Round`) and clicked `Previous step`, a control the phase-wide arm
+     * does not render. The narrowed matcher below discriminates the two arms, and every later read
+     * and click on the arm carries its own bound, so the phase-wide arm is named here rather than
+     * waiting out the test timeout on a locator that will never resolve.
+     */
+    const anyInspectorHeading = gmPage
+      .getByRole("heading", { name: GM_INSPECTOR_ANY_HEADING })
+      .first();
+    const inspectorHeading = gmPage.getByRole("heading", {
+      name: GM_INSPECTOR_PARTICIPANT_HEADING,
+    });
+    /** Which arm is on screen, for the failure message only. Bounded, and never a subject here. */
+    const renderedInspectorHeading = async () =>
+      (
+        (await anyInspectorHeading
+          .innerText({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS })
+          .catch(() => undefined)) ?? "<no Combat inspector heading>"
+      ).replace(/\s+/g, " ");
+    const visibleWithin = async (locator: Locator, timeout: number) =>
+      locator
+        .waitFor({ state: "visible", timeout })
+        .then(() => true)
+        .catch(() => false);
+    /*
+     * The precondition is re-established at each later point that needs the participant arm,
+     * because the step walk between them moves the selection and `buildCombatRoundInspector`
+     * returns `participant: undefined` for any cell carrying no `participantId`. So the arm can be
+     * a participant here and phase-wide by the label read below.
+     */
+    const phaseWideArm = async (what: string): Promise<never> => {
+      throw new Error(
+        `GM: ${what} needs the inspector's participant arm, but the inspector is on its ` +
+          `phase-wide row, which names no participant and renders no tracker inspection ` +
+          `navigation. The rendered heading is ${JSON.stringify(await renderedInspectorHeading())}.`,
+      );
+    };
+    await expect(
+      inspectorHeading,
+      "the GM inspector is on a participant, not on its phase-wide row",
+    ).toBeVisible({ timeout: GM_INSPECTOR_SETTLE_TIMEOUT_MS });
     await expect(gmPage.locator('[aria-label="Combat round timeline grid"]')).toBeVisible();
 
     // Walk the GM cursor back to the Declaration column, whichever step it opened on.
+    const previousStep = gmPage.getByRole("button", { exact: true, name: "Previous step" });
     await expect
       .poll(
         async () => {
           const reading = await readTracker(gmPage);
           if (selectedAbbreviations(reading)[0] === "DE") return "DE";
-          await gmPage.getByRole("button", { exact: true, name: "Previous step" }).click();
+          /*
+           * `Previous step` is inside the same `inspector.participant` ternary as the heading
+           * above (`CombatRoundManagerPanel.tsx:12941`) and carries no `disabled` prop at any
+           * state, so an absent control is the phase-wide arm rather than a slow page. Existence
+           * with its own bound, then a bounded click. The un-timed click was not unbounded —
+           * `pollAgainstDeadline` races the generator against this poll's own deadline, measured
+           * at 30 001 ms — but it reported only `Timeout 30000ms exceeded while waiting on the
+           * predicate`, naming neither the control nor the arm (#987).
+           */
+          if (!(await visibleWithin(previousStep, GM_INSPECTOR_CONTROL_TIMEOUT_MS))) {
+            await phaseWideArm("the step walk back to the Declaration cell");
+          }
+          await previousStep.click({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS });
           return selectedAbbreviations(await readTracker(gmPage))[0];
         },
         { message: "GM: reach the Declaration cell", timeout: 30_000 },
@@ -441,7 +519,18 @@ test.describe("Player Combat visibility V1 — declaration wording and blank-cel
       gmDeclaration.resultPanelTitle,
       "GM: the historical result panel must be the one rendered",
     ).toContain("Declare action");
-    const gmInspectedLabel = (await inspectorHeading.innerText())
+    /*
+     * The read that #987's QA failed this candidate on. Narrowing the matcher without bounding the
+     * read moved the hang rather than removing it: on the phase-wide arm the narrowed locator
+     * resolves to nothing, and an un-timed `innerText()` waits for it until the 240-second test
+     * timeout. Bounded, and the arm is named instead of the locator.
+     */
+    const inspectedHeadingText = await inspectorHeading
+      .innerText({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS })
+      .catch(() => undefined);
+    const gmInspectedLabel = (
+      inspectedHeadingText ?? (await phaseWideArm("reading the inspected participant label"))
+    )
       .replace(/^Combat inspector — /, "")
       .split(" · ")[0]!;
     const gmOpponentLabel = gmInspectedLabel === firstLabel ? secondLabel : firstLabel;
