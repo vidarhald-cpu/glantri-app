@@ -1,3 +1,4 @@
+import type { AuthRole } from "@glantri/auth";
 import type {
   Campaign,
   CampaignRosterEntry,
@@ -81,6 +82,15 @@ export function createCharacterRecord(input: {
 
 export function createScenarioRepositoryStub() {
   const campaigns: Campaign[] = [];
+  /**
+   * Stored application roles per user id, as `listUserAuthRoles` reports them.
+   *
+   * A user with no entry has no roles, which is also what the Prisma implementation returns for
+   * a user id that cannot be read. The GM predicate in `scenarioParticipantSupport.ts` fails
+   * closed on that, so a fixture that forgets to grant `game_master` measures a refusal rather
+   * than silently measuring an exemption.
+   */
+  const userRolesByUserId = new Map<string, AuthRole[]>();
   const scenario: Scenario = {
     campaignId: "campaign-1",
     createdAt: "2026-04-21T00:00:00.000Z",
@@ -132,6 +142,7 @@ export function createScenarioRepositoryStub() {
       return campaigns.filter((campaign) => campaignIds.has(campaign.id));
     },
     listCampaignsByPlayerAccess: async () => campaigns,
+    listUserAuthRoles: async (userId) => userRolesByUserId.get(userId) ?? [],
     createScenario: async (input) => {
       const now = "2026-04-21T00:00:00.000Z";
 
@@ -467,5 +478,6 @@ export function createScenarioRepositoryStub() {
     rosterEntries,
     scenario,
     scenarioRelationships,
+    userRolesByUserId,
   };
 }

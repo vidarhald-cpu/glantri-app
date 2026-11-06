@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
     scenario: {
       findMany: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 
@@ -184,5 +187,41 @@ describe("scenarioRepository campaign activation transitions", () => {
       null,
     );
     expect(mocks.prisma.campaign.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Forgejo issue #977. The GM predicate in `scenarioParticipantSupport.ts` reads the role of an
+ * arbitrary candidate user through this method, so it must report the same normalized names the
+ * session path reports — otherwise a legacy stored `gm` row would silently strip a real GM of
+ * the exemption the ruling preserved for them.
+ */
+describe("scenarioRepository listUserAuthRoles (#977)", () => {
+  it("normalizes the legacy stored gm role name to game_master", async () => {
+    mocks.prisma.user.findUnique.mockResolvedValue({
+      roles: [{ role: { name: "gm" } }, { role: { name: "player" } }],
+    });
+    const repository = createPrismaScenarioRepository();
+
+    await expect(repository.listUserAuthRoles("user-1")).resolves.toEqual([
+      "game_master",
+      "player",
+    ]);
+  });
+
+  it("drops a stored role name that is not an application role", async () => {
+    mocks.prisma.user.findUnique.mockResolvedValue({
+      roles: [{ role: { name: "game_master" } }, { role: { name: "observer" } }],
+    });
+    const repository = createPrismaScenarioRepository();
+
+    await expect(repository.listUserAuthRoles("user-1")).resolves.toEqual(["game_master"]);
+  });
+
+  it("reports no roles for a user that cannot be read, so predicates over it fail closed", async () => {
+    mocks.prisma.user.findUnique.mockResolvedValue(null);
+    const repository = createPrismaScenarioRepository();
+
+    await expect(repository.listUserAuthRoles("missing-user")).resolves.toEqual([]);
   });
 });

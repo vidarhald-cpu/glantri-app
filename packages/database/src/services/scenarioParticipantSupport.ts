@@ -1,3 +1,4 @@
+import { isCampaignGameMaster } from "@glantri/auth";
 import type { ReusableEntity, ScenarioParticipantRole } from "@glantri/domain";
 
 import type { ScenarioRepository } from "../repositories/scenarioRepository";
@@ -9,8 +10,8 @@ import { CharacterService } from "./characterService";
  * This answers only "is this an active, controlled `player_character` assignment". It does
  * **not** answer "is the controller a player": nothing synchronous can, because that needs the
  * Scenario's Campaign. The GM question is asked separately by
- * {@link resolveScenarioGameMasterUserId}, so this predicate is deliberately named for the
- * narrow property it actually tests.
+ * {@link isScenarioGameMaster}, so this predicate is deliberately named for the narrow property
+ * it actually tests.
  */
 function isControlledPlayerCharacterAssignment(
   role: ScenarioParticipantRole,
@@ -21,39 +22,73 @@ function isControlledPlayerCharacterAssignment(
 }
 
 /**
- * The single definition of "the GM" for the controller-conflict rule.
+ * Is this user the GM of this Scenario, for the controller-conflict rule?
  *
- * Product Owner ruling, Forgejo issue #786 comment 18040, verbatim:
+ * Product Owner ruling, Forgejo issue #977, 2026-11-06, verbatim:
+ *
+ * > use the same GM predicate everywhere — Campaign.gmUserId and current game_master role. A
+ * > demoted account loses GM exemptions.
+ *
+ * Both halves are required, so the subject set of the exemption is exactly the set the Scenario
+ * workspace gate (`apps/api/src/routes/scenarios/access.ts`) already treats as GMs. Both sites
+ * evaluate the one pure predicate `isCampaignGameMaster`; only the source of the role set
+ * differs, because the gate asks about its own caller while this asks about whichever user is
+ * being assigned as controller.
+ *
+ * This **replaces** `resolveScenarioGameMasterUserId`, which resolved the exemption from
+ * `Campaign.gmUserId` alone and carried a doc comment stating that "application roles are
+ * deliberately not consulted". That earlier decision is superseded by the ruling above. Its
+ * stated justification — that consulting roles is unnecessary because the add path already
+ * answers `404` when `campaign.gmUserId !== user.id` — was measured to be incomplete: the
+ * **player self-add branch** of `POST /scenarios/:id/participants/character` never reaches that
+ * check, because the check is itself guarded by the caller's role. A Campaign owner demoted to
+ * `player` therefore self-added three controlled Characters for `[200, 200, 200]` (issue #977).
+ *
+ * The half of the #786 ruling that still stands, and is load-bearing for the Alpha session:
  *
  * > The one-controlled-Character invariant applies only to player-controlled PC assignments.
  * > It does not limit GM authority: the GM may control multiple Characters/participants in the
  * > same Scenario.
  *
- * A user is the GM of a Scenario when, and only when, they are `Campaign.gmUserId` on the
- * Campaign that owns that Scenario. Application roles are deliberately **not** consulted:
- * Scenario authority in this product is per-Campaign, so an `admin` or `game_master` role
- * holder who is not this Campaign's GM holds no GM authority here — the API add path already
- * answers `404` for exactly that case (`participantRoutes.ts`, `campaign.gmUserId !== user.id`).
+ * A Campaign GM who holds `game_master` keeps that authority unchanged. What narrowed is only
+ * who counts as that GM.
  *
- * The resolution **fails closed**: a Scenario or Campaign that cannot be read returns `null`,
- * no exemption is granted, and the invariant applies as before.
+ * The resolution **fails closed** at every step: an unreadable Scenario, Campaign or user
+ * yields `false`, no exemption is granted, and the invariant applies as it does to a player.
  *
  * Exported so that every evaluation of the invariant consumes this one definition rather than
  * carrying its own predicate.
  */
-export async function resolveScenarioGameMasterUserId(
+export async function isScenarioGameMaster(
   repository: ScenarioRepository,
-  scenarioId: string,
-): Promise<string | null> {
-  const scenario = await repository.getScenarioById(scenarioId);
+  input: {
+    scenarioId: string;
+    userId: string;
+  },
+): Promise<boolean> {
+  const scenario = await repository.getScenarioById(input.scenarioId);
 
   if (!scenario) {
-    return null;
+    return false;
   }
 
   const campaign = await repository.getCampaignById(scenario.campaignId);
 
-  return campaign?.gmUserId ?? null;
+  if (!campaign) {
+    return false;
+  }
+
+  // Neither half of the predicate is decided here. `isCampaignGameMaster` owns both, so the
+  // role read happens even for a candidate who is plainly not the Campaign owner: one indexed
+  // lookup on a path that is already in the refusal branch of a conflict, in exchange for
+  // there being exactly one place where the two halves are combined.
+  const userRoles = await repository.listUserAuthRoles(input.userId);
+
+  return isCampaignGameMaster({
+    campaignGmUserId: campaign.gmUserId,
+    userId: input.userId,
+    userRoles,
+  });
 }
 
 export async function assertControllerAssignmentAvailable(
@@ -93,9 +128,13 @@ export async function assertControllerAssignmentAvailable(
   // to the path that goes on to write. This ordering is load-bearing for the non-transactional
   // check-then-write window recorded as Forgejo #805: the gap between this check and the
   // caller's insert is unchanged by this repair.
-  const gameMasterUserId = await resolveScenarioGameMasterUserId(repository, input.scenarioId);
-
-  if (gameMasterUserId != null && input.controlledByUserId === gameMasterUserId) {
+  if (
+    input.controlledByUserId != null &&
+    (await isScenarioGameMaster(repository, {
+      scenarioId: input.scenarioId,
+      userId: input.controlledByUserId,
+    }))
+  ) {
     return;
   }
 
