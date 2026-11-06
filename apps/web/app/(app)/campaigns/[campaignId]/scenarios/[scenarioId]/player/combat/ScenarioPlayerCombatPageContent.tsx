@@ -234,6 +234,11 @@ import {
   buildTargetAwareEncounterLiveCombatModifierSummary,
   resolveEncounterLiveCombatModifierContext,
 } from "@/lib/campaigns/liveCombatModifiers";
+import {
+  COMBAT_EXTRAPOLATION_MARKER_BADGE_STYLE,
+  COMBAT_EXTRAPOLATION_MARKER_DETAIL_STYLE,
+  buildCombatExtrapolationMarker,
+} from "@/lib/campaigns/combatExtrapolationPresentation";
 import { buildPlayerCombatAttackModifierRequest } from "@/lib/campaigns/playerCombatAttackRequest";
 import { projectPlayerCombatAttackContextAvailability } from "@/lib/campaigns/playerCombatAttackContext";
 import { buildCombatParryModifierRequest } from "@/lib/campaigns/combatParryModifierRequest";
@@ -4574,6 +4579,17 @@ export default function ScenarioPlayerCombatPageContent({
       }),
     [combatLoadoutSummary.passiveInitiative, currentModifierPhase, projectedCombatContextDraft],
   );
+  /**
+   * #940 Tier A: the player's sibling of the GM's initiative marker, through the same helper so the
+   * two readings cannot drift.
+   *
+   * **No payload widens for this.** The flag is derived in the browser from the calculation this
+   * page already builds above, whose two inputs — the passive initiative and the merged raw
+   * modifier total — are the very numbers rendered as "Base initiative" and "Initiative modifiers"
+   * on this same panel. So the marker is a function of figures this player can already read, and
+   * nothing new crosses the wire to compute it.
+   */
+  const initiativeExtrapolationMarker = buildCombatExtrapolationMarker(initiativeCalculation);
 
   const phaseCards = useMemo(() => {
     return [
@@ -6024,7 +6040,23 @@ export default function ScenarioPlayerCombatPageContent({
                       {initiativeCalculation.modifierAdjustment !== 0
                         ? ` (${initiativeCalculation.modifierAdjustment >= 0 ? "+" : ""}${initiativeCalculation.modifierAdjustment})`
                         : ""}
+                      {initiativeExtrapolationMarker ? (
+                        <span
+                          data-testid="player-initiative-extrapolation-marker"
+                          style={COMBAT_EXTRAPOLATION_MARKER_BADGE_STYLE}
+                        >
+                          {initiativeExtrapolationMarker.label}
+                        </span>
+                      ) : null}
                     </div>
+                    {initiativeExtrapolationMarker ? (
+                      <div
+                        data-testid="player-initiative-extrapolation-detail"
+                        style={COMBAT_EXTRAPOLATION_MARKER_DETAIL_STYLE}
+                      >
+                        {initiativeExtrapolationMarker.detail}
+                      </div>
+                    ) : null}
                     {currentInitiativeRollCounts ? (
                       <div>
                         Pending rolls: {currentInitiativeRollCounts.pending} of{" "}

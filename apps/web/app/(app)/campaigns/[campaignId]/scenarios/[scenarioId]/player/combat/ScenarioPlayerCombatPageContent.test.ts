@@ -806,3 +806,40 @@ describe("ScenarioPlayerCombatPageContent", () => {
     }
   });
 });
+
+describe("#940 Tier A the player panel draws the same marker from data it already holds", () => {
+  it("derives the marker from the calculation this page builds in the browser", () => {
+    const source = readSource();
+
+    expect(source).toContain("buildCombatExtrapolationMarker");
+    expect(source).toContain(
+      "const initiativeExtrapolationMarker = buildCombatExtrapolationMarker(initiativeCalculation)",
+    );
+    expect(source).toContain('data-testid="player-initiative-extrapolation-marker"');
+    expect(source).toContain('data-testid="player-initiative-extrapolation-detail"');
+    expect(source).toContain("{initiativeExtrapolationMarker.label}");
+    expect(source).toContain("{initiativeExtrapolationMarker.detail}");
+  });
+
+  /**
+   * The marker must cost the player nothing new. `initiativeCalculation` is a local `useMemo` over
+   * the passive initiative and the merged raw modifier total — the two numbers already rendered as
+   * "Base initiative" and "Initiative modifiers" on this same panel — so the flag is a function of
+   * figures this player can already read. Nothing is fetched and no payload widens for it.
+   */
+  it("reads no new server field to decide whether to mark the figure", () => {
+    const source = readSource();
+    const markerCall = "buildCombatExtrapolationMarker(initiativeCalculation)";
+
+    expect(source).toContain(markerCall);
+    // The only input is the locally built calculation.
+    expect(source).not.toContain("buildCombatExtrapolationMarker({");
+    expect(source).toContain("const initiativeCalculation = useMemo(");
+    expect(source).toContain("baseInitiative: combatLoadoutSummary.passiveInitiative");
+    expect(source).toContain(
+      "combatContext: sanitizePlayerCombatModifierContext(projectedCombatContextDraft)",
+    );
+    // The GM-only committed flag is not read on the player page at all.
+    expect(source).not.toContain("extrapolatedWorkbookAdjustments");
+  });
+});
