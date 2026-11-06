@@ -243,10 +243,12 @@ import {
 } from "@/lib/campaigns/combatRefusalPresentation";
 import { projectCombatActionGeneratedModifiers } from "@/features/combat-round-manager/combatDistanceModifierProjection";
 import {
+  adoptCoherentPlayerCombatSnapshot,
   createPlayerCombatHistoryRequestCoordinator,
   createPlayerCombatRefreshRequestCoordinator,
   getPlayerCombatProjectionCacheKey,
   isMatchingPlayerCombatHistory,
+  isPlayerCombatHistoryRevisionMismatch,
   loadPlayerCombatSlowContext,
   pollPlayerCombatSnapshot,
   shouldAcceptPlayerCombatEncounter,
@@ -1182,6 +1184,13 @@ export default function ScenarioPlayerCombatPageContent({
   const [combatItemOptionsError, setCombatItemOptionsError] = useState<string>();
   const [attackContextFailure, setAttackContextFailure] = useState<string>();
   const [loading, setLoading] = useState(true);
+  /*
+   * Forgejo #1011 — the error branch had no way out. Its own effect's dependencies never change
+   * while the error is on screen, so the surface stayed dead until the player knew to reload the
+   * browser by hand. Bumping this re-runs the load effect below, which is the one place that
+   * re-reads every source the surface needs.
+   */
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   const [slowContextReady, setSlowContextReady] = useState(false);
   const [revisionRefreshPending, setRevisionRefreshPending] = useState(false);
   const [projection, setProjection] = useState<ScenarioPlayerProjection>();
@@ -1353,13 +1362,28 @@ export default function ScenarioPlayerCombatPageContent({
         acceptedHistoryRef.current = candidate;
         setRevisionBoundHistory(candidate);
         return true;
-      } catch {
+      } catch (caughtError) {
+        /*
+         * Forgejo #1011 — a revision mismatch here is the transient coherence race, and the right
+         * response is to keep showing the accepted revision and ask again. The five-second
+         * refresh calls this function on its next tick, with the history identity derived from
+         * whatever revision is current then, so nothing is lost by saying nothing now.
+         *
+         * The sentence this branch used to set claimed the latest confirmed state was on screen.
+         * It was rendered by the page-level error branch, which replaces the whole surface with
+         * that one sentence — so it promised the player their confirmed state while showing them
+         * nothing. Returning here is what actually keeps the confirmed state on screen.
+         */
+        if (isPlayerCombatHistoryRevisionMismatch(caughtError)) {
+          return false;
+        }
         const acceptedEncounter = acceptedEncounterRef.current;
         if (
           acceptedEncounter?.id === identity.encounterId &&
           acceptedEncounter.updatedAt === identity.revision
         ) {
-          setError("Combat view could not refresh. Showing the latest confirmed state.");
+          // Accurate about what the error branch renders: the sentence and a retry control.
+          setError("Combat view could not refresh.");
         }
         return false;
       }
@@ -1468,7 +1492,8 @@ export default function ScenarioPlayerCombatPageContent({
     return () => {
       cancelled = true;
     };
-  }, [currentUser, historyCoordinator, isGameMaster, scenarioId, sessionLoading]);
+    // `recoveryAttempt` is the error surface's retry control: bumping it re-runs this load (#1011).
+  }, [currentUser, historyCoordinator, isGameMaster, recoveryAttempt, scenarioId, sessionLoading]);
 
   useEffect(() => {
     if (!currentUser || !encounterId || !slowContextReady || !historyPerspectiveKey) {
@@ -1511,12 +1536,18 @@ export default function ScenarioPlayerCombatPageContent({
           loadProjection: () => loadScenarioPlayerProjection(scenarioId),
           loadRevision: loadEncounterRevision,
         });
-      const first = await loadSnapshot();
-      const result = first.kind === "stale" ? await loadSnapshot() : first;
-      if (result.kind !== "updated") {
-        throw new Error("Unable to adopt one coherent player combat revision.");
-      }
-      return result;
+      /*
+       * Forgejo #1011 — retry, not terminate.
+       *
+       * This used to be one immediate retry with no backoff, and the writer it races is a single
+       * POST issuing a chain of writes over a measured 1233 ms, so both attempts landed inside
+       * the same chain and the mount gave up while the five-second refresh beside it tolerated
+       * the identical race. The schedule and its measurement live with the helper.
+       */
+      return adoptCoherentPlayerCombatSnapshot({
+        isAbandoned: () => cancelled || encounterRequestIdRef.current !== requestId,
+        loadSnapshot,
+      });
     };
 
     loadInitialCombatSnapshot()
@@ -5274,10 +5305,30 @@ export default function ScenarioPlayerCombatPageContent({
   }
 
   if (error) {
+    /*
+     * Forgejo #1011 — this surface is reachable from a transient revision race, so it must offer a
+     * way out. Before this it rendered a heading and one sentence, and its effect's dependencies
+     * never changed, so a player who hit the race had a dead page until they reloaded the browser
+     * themselves. The control re-runs the load rather than reloading the document.
+     */
     return (
       <section style={{ display: "grid", gap: "1rem", maxWidth: 1200 }}>
         <h1 style={{ marginBottom: "0.5rem" }}>Player combat screen</h1>
-        <div style={panelStyle}>{error}</div>
+        <div style={panelStyle}>
+          <div>{error}</div>
+          <div>
+            <button
+              onClick={() => {
+                setError(undefined);
+                setLoading(true);
+                setRecoveryAttempt((current) => current + 1);
+              }}
+              type="button"
+            >
+              Try again
+            </button>
+          </div>
+        </div>
       </section>
     );
   }
