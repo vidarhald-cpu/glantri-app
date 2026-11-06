@@ -90,12 +90,34 @@ async function readRoundState(input: {
   return encounter.combatRoundState;
 }
 
+/**
+ * Forgejo #987. `/^Combat inspector — /` also matches `CombatRoundManagerPanel`'s phase-wide
+ * heading — `Combat inspector — Round {n} · {step}`, naming no participant — which is the state
+ * this precondition exists to exclude. The `Next participant` button it then clicks is rendered
+ * only inside the participant arm and never carries `disabled`, so an absent control used to be
+ * waited out to the test timeout instead of reported. The matcher now requires the
+ * ` · Round <n> · ` that only follows a label, and every read and click carries its own timeout.
+ */
+const GM_INSPECTOR_PARTICIPANT_HEADING = /^Combat inspector — .+ · Round \d+ · /;
+const GM_INSPECTOR_CONTROL_TIMEOUT_MS = 5_000;
+/** The panel can take a beat to mount after a `goto`; its controls cannot. */
+const GM_INSPECTOR_MOUNT_TIMEOUT_MS = 15_000;
+
 async function selectGmInspectorParticipant(input: { label: string; page: Page }): Promise<void> {
-  const heading = input.page.getByRole("heading", { name: /^Combat inspector — / });
-  await expect(heading).toBeVisible();
+  const heading = input.page.getByRole("heading", { name: GM_INSPECTOR_PARTICIPANT_HEADING });
+  await expect(
+    heading,
+    "the GM inspector is on a participant, not on its phase-wide row",
+  ).toBeVisible({ timeout: GM_INSPECTOR_MOUNT_TIMEOUT_MS });
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    if ((await heading.innerText()).includes(input.label)) return;
-    await input.page.getByRole("button", { name: "Next participant" }).click();
+    if (
+      (await heading.innerText({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS })).includes(input.label)
+    ) {
+      return;
+    }
+    await input.page
+      .getByRole("button", { name: "Next participant" })
+      .click({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS });
   }
   throw new Error(`The GM inspector never reached ${input.label}.`);
 }

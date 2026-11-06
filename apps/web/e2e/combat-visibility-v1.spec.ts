@@ -415,8 +415,21 @@ test.describe("Player Combat visibility V1 — declaration wording and blank-cel
     await gmPage.goto(
       `/campaigns/${campaignId}?scenarioId=${scenarioId}&encounterId=${encounterId}&tab=combat`,
     );
-    const inspectorHeading = gmPage.getByRole("heading", { name: /^Combat inspector — / });
-    await expect(inspectorHeading).toBeVisible();
+    /*
+     * Forgejo #987. The matcher requires the ` · Round <n> · ` that only follows a participant
+     * label: `/^Combat inspector — /` also matched `CombatRoundManagerPanel`'s phase-wide heading
+     * (`Combat inspector — Round {n} · {step}`, naming no participant), and this block then reads
+     * the inspected label out of that heading and clicks `Previous step`, a control the phase-wide
+     * arm does not render. On that arm the label read returned `Round` and the step walk had
+     * nothing to press, so the state is named here instead of being discovered downstream.
+     */
+    const inspectorHeading = gmPage.getByRole("heading", {
+      name: /^Combat inspector — .+ · Round \d+ · /,
+    });
+    await expect(
+      inspectorHeading,
+      "the GM inspector is on a participant, not on its phase-wide row",
+    ).toBeVisible({ timeout: 15_000 });
     await expect(gmPage.locator('[aria-label="Combat round timeline grid"]')).toBeVisible();
 
     // Walk the GM cursor back to the Declaration column, whichever step it opened on.
