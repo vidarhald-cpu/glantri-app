@@ -323,8 +323,11 @@ assertion that fails:
 | A **product assertion** failing with the environment satisfied: `apps/web/e2e/artifacts.spec.ts:130` (a player's Artifact card button count) or `apps/web/e2e/artifactImports.spec.ts:146` (the `Excluded` text in the review step)    | A **known local failure** of the two cases listed below. The environment is fine: in the measuring run the `blackboard` case and the other environment-sensitive `artifactImports` cases passed in the same run. | [The two cases that fail locally](#the-two-artifact-cases-that-currently-fail-locally--recorded-2026-11-06), below |
 
 Line numbers are those at `dev` `416636aa478961882b4040b456267ea1393419fe`; locate by the
-assertion text if they have moved. A failure whose assertion matches neither row is not covered by
-this section at all and is a new failure.
+assertion text if they have moved. The only other known failure in this document is in a different
+project: the two `apps/web/browser-tests` `skill-reference.spec.mts` cases at `:97-98`, described
+[below](#the-appwebbrowser-tests-project-currently-has-two-failures--recorded-2026-11-06) and
+tracked in #999. A failure whose assertion matches none of these is not covered by this section at
+all and is a new failure.
 
 #### Why the gate does not show them
 
@@ -376,8 +379,30 @@ player and is being measured under #996.
 - Do not edit either case's assertion to make a local run green. The repair of the first belongs
   to #892 and of the second to #996.
 
-**The `apps/web/browser-tests/playwright.config.ts` project has zero known failures.** Any
-`apps/web/browser-tests` failure is a real regression and must be treated as one.
+#### The `apps/web/browser-tests` project currently has two failures — recorded 2026-11-06
+
+**This project is not clean.** Independent QA measured two failures on clean `dev`
+`416636aa478961882b4040b456267ea1393419fe`, in a separate worktree, and the same two at a
+candidate head: `skill-reference.spec.mts` "Skill reference stays usable at 1440px" and the same
+case at 390px, both failing at `apps/web/browser-tests/skill-reference.spec.mts:97-98` on
+`getByText(/A full description of this training practice has not been published/)` being expected
+visible. The other six cases in the project pass, including both `combat-tracker.spec.mts` cases.
+The cause and the introducing commit (`c8557c0d`, #396) are pinned in **#999**; read it for the
+detail. The earlier statement here that this project had zero failures was true when written and
+is no longer true.
+
+This is a live condition expected to **go away when #999 is repaired**. It is not a baseline and
+not an exemption, and the repair is #999's, not this document's.
+
+- The project is still one whose failures count. A lane is accountable for any failure here that
+  is **not** those two cases at that assertion, and must treat it as a real regression it caused
+  or must explain.
+- Meeting these two is not a reason to dismiss any other failure in the project, including a
+  different failure inside `skill-reference.spec.mts`. Tell them apart by the assertion text
+  above, not by the spec file name.
+- Do not edit the assertion to make a run green; that is #999's repair.
+- When #999 is repaired, delete this subsection and restore the statement that the project has no
+  failures.
 
 #### History: the succession of recorded baselines
 
