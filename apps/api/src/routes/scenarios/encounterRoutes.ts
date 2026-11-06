@@ -294,12 +294,14 @@ import {
   type CombatNpcDeclarationProposal,
   type CombatNpcDeclarationSourceStatus,
   type ParticipantCombatExperienceSkillTotalLookup,
+  assertPlayerFacingEncounterRosterReadable,
   buildPlayerFacing,
   buildPlayerFacingCombatRoundCommand,
   buildPlayerFacingCombatRoundParticipant,
   buildPlayerFacingEncounterSession,
   buildPlayerFacingScenarioParticipant,
   combatTaskCommandUndoFactsSchema,
+  playerFacingEncounterRosterRefusal,
   playerFacingCombatAdjustDistanceProposalSchema,
   playerFacingCombatBreakOffProposalSchema,
   playerFacingCombatDisarmAttemptSchema,
@@ -7046,6 +7048,20 @@ export function buildPlayerFacingEncounterForUser(input: {
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): PlayerFacingEncounterSession {
+  // Forgejo #963. The roster-identity condition, asked here because the player-facing schema
+  // cannot carry it: `playerFacingEncounterSessionSchema` is derived from the *unrefined*
+  // `encounterSessionObjectSchema`, since `playerFacingObject` reads a Zod object's `shape` and
+  // the `superRefine` that holds the condition returns an effects wrapper without one. So the one
+  // reader this disclosure is about was exempt by construction. It is asked in the projection
+  // itself rather than in the ~40 call sites that build it, so a player-facing read added later
+  // cannot omit it, and it is asked nowhere a GM diagnostic read passes through: every caller
+  // reaches this function only on its player branch, and the GM branch returns the stored
+  // Encounter. Repair and write semantics are #968 and are not settled here.
+  assertPlayerFacingEncounterRosterReadable({
+    encounter: input.encounter,
+    scenarioParticipants: input.scenarioParticipants,
+  });
+
   return buildPlayerFacingEncounterSession({
     combatRoundState: buildPlayerFacingCombatRoundStateForUser(input),
     encounter: input.encounter,
@@ -7064,11 +7080,29 @@ export function buildPlayerFacingEncounterForUser(input: {
   });
 }
 
+/**
+ * Forgejo #963. The player read gate also asks the roster-identity condition, because four
+ * player-facing readers consult this gate and then build their response without going through
+ * `buildPlayerFacingEncounterForUser`: the Encounter summaries list, the Encounter read, the
+ * Encounter's Item references and the combat history. The projection's own refusal cannot reach
+ * them, and an Encounter whose roster no longer holds a coherent identity for every row is one a
+ * player has no read of — so they are refused here, with the same `404` a player with no relation
+ * to the Encounter already receives. Nothing a GM reads passes through this gate.
+ */
 function hasPlayerEncounterReadAccess(input: {
   encounter: EncounterParticipantReadSource;
   scenarioParticipants: ScenarioParticipant[];
   userId: string;
 }): boolean {
+  if (
+    playerFacingEncounterRosterRefusal({
+      encounter: input.encounter,
+      scenarioParticipants: input.scenarioParticipants,
+    })
+  ) {
+    return false;
+  }
+
   if (input.encounter.status !== "archived") {
     return isUserAssignedToEncounterMembership(input);
   }
@@ -8383,6 +8417,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         ]);
         if (
           !fullEncounter ||
+          // #963: the revision of an Encounter whose roster is unresolved is not a player's to
+          // poll either, and this reader resolves membership itself rather than through the gate.
+          playerFacingEncounterRosterRefusal({ encounter: fullEncounter, scenarioParticipants }) ||
           !isUserAssignedToEncounterMembership({
             encounter: fullEncounter,
             scenarioParticipants,

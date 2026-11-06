@@ -259,6 +259,91 @@ describe("player Campaign Home projection", () => {
     expect(JSON.stringify(projection)).not.toContain("Secret");
   });
 
+  /**
+   * Forgejo #963. This record resolves Encounter membership itself rather than through the player
+   * read gate, so the roster-identity condition has to be asked here. Independent QA found the
+   * route open at `892e79ec`: the Encounter's id and title reached three player viewers and
+   * `resume.encounterId` linked the Campaign landing's "Continue combat" control into a read the
+   * same change had already made refuse.
+   */
+  it("withholds an Encounter whose roster no longer resolves, and the resume into it (#963)", () => {
+    const bridge = scenario({ id: "scenario-1", name: "Bridge" });
+    const ari = participant({
+      characterId: "character-1",
+      controlledByUserId: "player-1",
+      id: "participant-1",
+      name: "Ari",
+      scenarioId: bridge.id,
+    });
+    /** The Character the GM prepared a row for before its player had joined the Scenario. */
+    const latecomer = participant({
+      characterId: "character-latecomer",
+      controlledByUserId: "player-3",
+      id: "participant-latecomer",
+      name: "Dag",
+      scenarioId: bridge.id,
+    });
+    const live = encounter({
+      id: "encounter-1",
+      kind: "combat",
+      participant: ari,
+      scenarioId: bridge.id,
+      status: "active",
+      title: "Hold the gate",
+    });
+    /** Ari's own row, carrying the latecomer's Character — accepted before the join. */
+    const unresolved: EncounterSession = {
+      ...live,
+      participants: [{ ...live.participants[0]!, characterId: latecomer.characterId }],
+    };
+    const scenarios = (encounters: EncounterSession[]) => [
+      { encounters, participants: [ari, latecomer], scenario: bridge },
+    ];
+
+    // Before the latecomer joins, the same rows resolve and the record carries the Encounter.
+    const beforeTheJoin = buildPlayerCampaignHomeRecord({
+      campaign,
+      rosterCharacters: [{ id: "character-1", name: "Ari" }],
+      scenarios: [{ encounters: [unresolved], participants: [ari], scenario: bridge }],
+      userId: "player-1",
+    });
+    expect(beforeTheJoin.scenarios[0]?.encounter?.id).toBe("encounter-1");
+    expect(beforeTheJoin.resume).toEqual({
+      encounterId: "encounter-1",
+      scenarioId: bridge.id,
+      tab: "player-combat",
+    });
+
+    // With the latecomer on the Scenario, nothing of that Encounter reaches any player — the
+    // controlling player included — and the resume falls back to the Scenario.
+    for (const userId of ["player-1", "player-3"]) {
+      const projection = buildPlayerCampaignHomeRecord({
+        campaign,
+        rosterCharacters: [
+          { id: "character-1", name: "Ari" },
+          { id: "character-latecomer", name: "Dag" },
+        ],
+        scenarios: scenarios([unresolved]),
+        userId,
+      });
+
+      expect(projection.scenarios[0]?.encounter, userId).toBeUndefined();
+      expect(projection.resume, userId).toEqual({ scenarioId: bridge.id, tab: "scenario" });
+      expect(JSON.stringify(projection), userId).not.toContain("encounter-1");
+      expect(JSON.stringify(projection), userId).not.toContain("Hold the gate");
+    }
+
+    // A resolvable roster in the same arrangement is unaffected, so the refusal is the state's.
+    expect(
+      buildPlayerCampaignHomeRecord({
+        campaign,
+        rosterCharacters: [{ id: "character-1", name: "Ari" }],
+        scenarios: scenarios([live]),
+        userId: "player-1",
+      }).scenarios[0]?.encounter?.id,
+    ).toBe("encounter-1");
+  });
+
   it("keeps a roster Campaign useful when there is no live Scenario", () => {
     const projection = buildPlayerCampaignHomeRecord({
       campaign,
