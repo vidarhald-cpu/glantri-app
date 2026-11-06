@@ -3,12 +3,57 @@ import type { ReusableEntity, ScenarioParticipantRole } from "@glantri/domain";
 import type { ScenarioRepository } from "../repositories/scenarioRepository";
 import { CharacterService } from "./characterService";
 
-function isPlayerControlledParticipant(
+/**
+ * Does this assignment fall inside the one-controlled-Character invariant's subject set?
+ *
+ * This answers only "is this an active, controlled `player_character` assignment". It does
+ * **not** answer "is the controller a player": nothing synchronous can, because that needs the
+ * Scenario's Campaign. The GM question is asked separately by
+ * {@link resolveScenarioGameMasterUserId}, so this predicate is deliberately named for the
+ * narrow property it actually tests.
+ */
+function isControlledPlayerCharacterAssignment(
   role: ScenarioParticipantRole,
   controlledByUserId?: string | null,
   isActive = true,
 ): boolean {
   return role === "player_character" && Boolean(controlledByUserId) && isActive;
+}
+
+/**
+ * The single definition of "the GM" for the controller-conflict rule.
+ *
+ * Product Owner ruling, Forgejo issue #786 comment 18040, verbatim:
+ *
+ * > The one-controlled-Character invariant applies only to player-controlled PC assignments.
+ * > It does not limit GM authority: the GM may control multiple Characters/participants in the
+ * > same Scenario.
+ *
+ * A user is the GM of a Scenario when, and only when, they are `Campaign.gmUserId` on the
+ * Campaign that owns that Scenario. Application roles are deliberately **not** consulted:
+ * Scenario authority in this product is per-Campaign, so an `admin` or `game_master` role
+ * holder who is not this Campaign's GM holds no GM authority here — the API add path already
+ * answers `404` for exactly that case (`participantRoutes.ts`, `campaign.gmUserId !== user.id`).
+ *
+ * The resolution **fails closed**: a Scenario or Campaign that cannot be read returns `null`,
+ * no exemption is granted, and the invariant applies as before.
+ *
+ * Exported so that every evaluation of the invariant consumes this one definition rather than
+ * carrying its own predicate.
+ */
+export async function resolveScenarioGameMasterUserId(
+  repository: ScenarioRepository,
+  scenarioId: string,
+): Promise<string | null> {
+  const scenario = await repository.getScenarioById(scenarioId);
+
+  if (!scenario) {
+    return null;
+  }
+
+  const campaign = await repository.getCampaignById(scenario.campaignId);
+
+  return campaign?.gmUserId ?? null;
 }
 
 export async function assertControllerAssignmentAvailable(
@@ -22,7 +67,7 @@ export async function assertControllerAssignmentAvailable(
   },
 ): Promise<void> {
   if (
-    !isPlayerControlledParticipant(
+    !isControlledPlayerCharacterAssignment(
       input.role,
       input.controlledByUserId ?? null,
       input.isActive ?? true,
@@ -40,11 +85,23 @@ export async function assertControllerAssignmentAvailable(
       participant.controlledByUserId === input.controlledByUserId,
   );
 
-  if (conflictingParticipant) {
-    throw new Error(
-      `${conflictingParticipant.snapshot.displayName} is already the active controlled character for this player in the scenario.`,
-    );
+  if (!conflictingParticipant) {
+    return;
   }
+
+  // Only the refusal branch needs to know who the GM is, so the exemption adds no round trip
+  // to the path that goes on to write. This ordering is load-bearing for the non-transactional
+  // check-then-write window recorded as Forgejo #805: the gap between this check and the
+  // caller's insert is unchanged by this repair.
+  const gameMasterUserId = await resolveScenarioGameMasterUserId(repository, input.scenarioId);
+
+  if (gameMasterUserId != null && input.controlledByUserId === gameMasterUserId) {
+    return;
+  }
+
+  throw new Error(
+    `${conflictingParticipant.snapshot.displayName} is already the active controlled character for this player in the scenario. A player may control only one Character per Scenario.`,
+  );
 }
 
 export async function userHasPlayerScenarioAccess(
