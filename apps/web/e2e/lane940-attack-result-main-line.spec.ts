@@ -41,8 +41,9 @@ import { API_URL } from "./targets";
  *
  * 1. `buildCombatAttackResultPanel` puts it in `interpretedResult` — and in the same object puts a
  *    one-entry `sections` array holding the `To hit` section.
- * 2. `buildCombatActionResultLines` puts it in `attackLine`, which `buildHistoricalCombatActionResult`
- *    returns as `rankLabel` — alongside a four- or five-entry `sections` array.
+ * 2. `formatCombatPhaseResolutionResultLines` puts it in `attackLine`, which
+ *    `buildHistoricalCombatActionResult` returns as `rankLabel` — alongside a four- or five-entry
+ *    `sections` array.
  * 3. `buildCombatRoundStepSnapshots` puts it in the snapshot's `actionResultSummary`, on the arm
  *    where the participant has an `attackResult` and no `phaseResolutionResult`.
  *
