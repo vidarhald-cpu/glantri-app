@@ -7,6 +7,7 @@ import {
   finishCombatGenericAction,
   getCombatRoundLiveItemInteractionForParticipant,
   initializeCombatRoundState,
+  playerFacingEncounterRosterRefusal,
   resolveEncounterParticipantByRollParticipantId,
   resolveEncounterParticipantMembership,
   reviewCombatGenericAction,
@@ -212,6 +213,15 @@ export function createCombatItemInteractionRoutes(
       const scenarioParticipants = await current.scenarioService.listScenarioParticipants(
         encounter.scenarioId,
       );
+      // #963: both routes in this file resolve the roster themselves, and the options read does
+      // not reach the player-facing Encounter projection at all. An unresolved roster is not a
+      // player's to read through either of them; the GM path is untouched.
+      if (
+        access.mode !== "gm" &&
+        playerFacingEncounterRosterRefusal({ encounter, scenarioParticipants })
+      ) {
+        return null;
+      }
       const participants = participantContexts({ encounter, scenarioParticipants });
       const controlledParticipantIds = new Set(
         participants
