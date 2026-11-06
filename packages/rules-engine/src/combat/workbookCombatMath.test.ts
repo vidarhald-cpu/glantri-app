@@ -882,8 +882,9 @@ describe("#922 the percentage-adjustment lookup is open-ended and flags every ex
 
     // The 15 cells the rule does not reproduce are the whole base-0 row, which `Prosent!B5:P5`
     // authors as literal zeroes and which this lookup overrode by hand long before #922 — a
-    // deliberate deviation from the source, not a bad transcription, and an open Product Owner
-    // question. The rule predicts that override exactly, so there is no authored cell the lookup
+    // deliberate deviation from the source, not a bad transcription, and a settled one: Product
+    // Owner question 15, ruled on #922 comment 20880 (2026-11-04), supersedes the workbook's frozen
+    // zero row. The rule predicts that override exactly, so there is no authored cell the lookup
     // trusts that it fails to reproduce.
     expect(disagreements.map(({ base, step }) => `${base}/${step}`)).toEqual(
       Array.from({ length: AUTHORED_MAX_STEP }, (_unused, index) => `0/${index + 1}`),
@@ -1027,8 +1028,10 @@ describe("#922 the percentage-adjustment lookup is open-ended and flags every ex
       expect(lowBase.value).toBe(belowZero.value);
 
       // The flag is where they differ: bases 0 and 1 have authored rows, a base below zero has
-      // none. Whether the zero row should keep deviating from its authored zeroes is Product Owner
-      // question 15 and is open; this asserts the current behaviour, not a preference.
+      // none. The zero row's departure from its authored zeroes is settled, not open: Product Owner
+      // question 15 was ruled on #922, comment 20880, 2026-11-04, which keeps the override and
+      // supersedes the workbook's frozen zero row. This asserts that ruled behaviour (decision
+      // record docs/decisions/rules/0013-workbook-zero-base-percentage-adjustment.md).
       expect(belowZero.extrapolatedAxes).toEqual(["base_below_zero"]);
       expect(atZero.extrapolatedAxes).toEqual([]);
       expect(lowBase.extrapolatedAxes).toEqual([]);
