@@ -219,6 +219,7 @@ describe("ScenarioService controller assignment", () => {
     await repository.updateScenarioParticipantMetadata({
       controlledByUserId: "controller-1",
       participantId: participant.id,
+      scenarioId: "scenario-1",
     });
 
     await expect(
@@ -269,6 +270,7 @@ describe("ScenarioService controller assignment", () => {
     await repository.updateScenarioParticipantMetadata({
       controlledByUserId: "controller-1",
       participantId: participant.id,
+      scenarioId: "scenario-1",
     });
 
     await expect(
