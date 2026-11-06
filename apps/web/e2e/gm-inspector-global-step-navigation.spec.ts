@@ -116,6 +116,8 @@ interface NavReading {
   readonly title: { readonly left: number; readonly top: number };
   /** Document-coordinate box of the step controller, the other occupant of the header row. */
   readonly stepController: { readonly left: number; readonly top: number; readonly width: number };
+  /** Where the page's own autoscroll left it, before this reading brought the row into view. */
+  readonly settledScrollY: number;
   readonly scrollY: number;
   /** What the browser actually gave the document, not what `setViewportSize` asked for. */
   readonly usableWidth: number;
@@ -128,6 +130,13 @@ interface NavReading {
  */
 async function readNav(page: Page): Promise<NavReading> {
   return page.evaluate((navSelector) => {
+    const settledScrollY = Math.round(window.scrollY);
+    // The Combat page autoscrolls to the current task after mount, and at 768 that put this
+    // header row above the viewport: `elementFromPoint` then reported every nav button occluded
+    // when it was simply off screen. The row is brought into view here, inside the same evaluate
+    // as every rectangle and probe below, so one scroll position holds for all of them. Both
+    // positions are reported.
+    document.querySelector(navSelector)?.scrollIntoView({ block: "center" });
     const scrollY = Math.round(window.scrollY);
     const scrollX = Math.round(window.scrollX);
     const box = (node: Element | null | undefined) => {
@@ -189,6 +198,7 @@ async function readNav(page: Page): Promise<NavReading> {
           )
         : false,
       scrollY,
+      settledScrollY,
       stepController: {
         left: box(stepController)?.left ?? -1,
         top: box(stepController)?.top ?? -1,
@@ -382,7 +392,7 @@ test.describe("#988 — the GM inspector offers participant selection on a round
     const assertRoundWideArm = (label: string, readings: NavReading[]) => {
       expect(readings.map((reading) => reading.viewportWidth)).toEqual([...WIDTHS]);
       for (const reading of readings) {
-        const context = `${label} width ${reading.viewportWidth} (usable ${reading.usableWidth}, scrollY ${reading.scrollY}): ${JSON.stringify(reading)}`;
+        const context = `${label} width ${reading.viewportWidth} (usable ${reading.usableWidth}, settled scrollY ${reading.settledScrollY}, measured at scrollY ${reading.scrollY}): ${JSON.stringify(reading)}`;
         // The state under test really is the participant-less arm: the heading carries no label
         // segment, and the arm's own `Phase-wide` subheading is on screen.
         expect(reading.heading, context).toMatch(ANY_INSPECTOR_HEADING);
