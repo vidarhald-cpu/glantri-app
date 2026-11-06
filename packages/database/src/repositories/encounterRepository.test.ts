@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
     scenarioEventLog: { create: vi.fn() },
     scenario: { findUnique: vi.fn() },
@@ -220,7 +221,9 @@ describe("encounterRepository trusted identifiers", () => {
       status: "draft",
       updatedAt: new Date(baseSession.updatedAt),
     });
-    mocks.prisma.scenarioParticipant.findMany.mockResolvedValue([{ id: "participant-a" }]);
+    mocks.prisma.scenarioParticipant.findMany.mockResolvedValue([
+      { id: "participant-a", isActive: true, snapshotJson: { displayName: "Alder" } },
+    ]);
     mocks.prisma.encounter.findMany.mockResolvedValue([
       {
         id: "encounter-2",
@@ -244,5 +247,182 @@ describe("encounterRepository trusted identifiers", () => {
     );
     expect(mocks.prisma.encounter.update).not.toHaveBeenCalled();
     expect(mocks.prisma.scenarioEventLog.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("an Encounter roster holding an inactive Scenario participant (#845)", () => {
+  const active = encounterSessionSchema.parse({
+    ...baseSession,
+    participantMembershipMode: "explicit",
+    participants: [
+      {
+        id: "encounter-participant-a",
+        label: "Player A",
+        participantType: "scenario",
+        scenarioParticipantId: "participant-a",
+      },
+    ],
+    scenarioId: "scenario-1",
+    status: "active",
+  });
+
+  function stubStoredEncounter(): void {
+    mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
+      activeCombatState: null,
+      archivedCombatRounds: [],
+      campaignId: "campaign-1",
+      combatArchiveCount: 0,
+      combatStorageMode: "legacy",
+      createdAt: new Date(active.createdAt),
+      id: active.id,
+      name: active.title,
+      scenarioId: "scenario-1",
+      sessionJson: active,
+      status: "active",
+      updatedAt: new Date(active.updatedAt),
+    });
+    mocks.prisma.encounter.update.mockImplementation(async ({ data }) => ({
+      campaignId: "campaign-1",
+      createdAt: new Date(active.createdAt),
+      id: active.id,
+      name: data.name ?? active.title,
+      scenarioId: "scenario-1",
+      sessionJson: data.sessionJson ?? active,
+      status: data.status ?? "active",
+      updatedAt: new Date(data.updatedAt ?? active.updatedAt),
+    }));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.prisma.$transaction.mockImplementation(async (callback) => callback(mocks.prisma));
+    mocks.prisma.scenario.findUnique.mockResolvedValue({ status: "live" });
+    mocks.prisma.encounter.findMany.mockResolvedValue([]);
+    mocks.prisma.scenarioParticipant.findMany.mockResolvedValue([
+      { id: "participant-a", isActive: false, snapshotJson: { displayName: "Glim Fairwater" } },
+    ]);
+    stubStoredEncounter();
+  });
+
+  it("refuses an ordinary combat write, naming the combatant and both remedies", async () => {
+    const repository = createPrismaEncounterRepository();
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        scenarioId: "scenario-1",
+        session: active,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<EncounterPresenceError>>({ code: "inactive_participant" }),
+    );
+    expect(mocks.prisma.encounter.update).not.toHaveBeenCalled();
+  });
+
+  it("does not tell the GM to refresh, which cannot help", async () => {
+    const repository = createPrismaEncounterRepository();
+    const error = await repository
+      .updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        scenarioId: "scenario-1",
+        session: active,
+      })
+      .then(
+        () => undefined,
+        (caught: unknown) => caught as Error,
+      );
+
+    expect(error?.message).toContain("Glim Fairwater");
+    expect(error?.message.toLowerCase()).not.toContain("refresh");
+    expect(error?.message.toLowerCase()).not.toContain("before starting the encounter");
+  });
+
+  it("lets the recovery control past the activity condition when it asks for that allowance", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.encounter.updateMany.mockResolvedValue({ count: 1 });
+    const error = await repository
+      .updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        permitInactiveRosterParticipants: true,
+        scenarioId: "scenario-1",
+        session: active,
+      })
+      .then(() => undefined)
+      .catch((caught: unknown) => caught as EncounterPresenceError);
+
+    // The write reaches persistence, which this prisma double does not fully stand in for. What is
+    // asserted is that the activity condition no longer stopped it: the refusal that blocked this
+    // control on #845 is gone, and the end-to-end `200` is measured against a real database.
+    expect(error?.code).not.toBe("inactive_participant");
+    expect(mocks.prisma.encounter.updateMany).toHaveBeenCalled();
+  });
+
+  it("keeps every other presence condition even with that allowance", async () => {
+    const repository = createPrismaEncounterRepository();
+    // The same participant is already a combatant in another running Encounter. That condition is
+    // nothing to do with activity, so the allowance must not reach it.
+    mocks.prisma.encounter.findMany.mockResolvedValue([
+      {
+        id: "encounter-2",
+        name: "Courtyard",
+        sessionJson: { ...active, id: "encounter-2", title: "Courtyard" },
+        status: "active",
+      },
+    ]);
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        permitInactiveRosterParticipants: true,
+        scenarioId: "scenario-1",
+        session: active,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<EncounterPresenceError>>({
+        code: "participant_already_active",
+      }),
+    );
+    expect(mocks.prisma.encounter.update).not.toHaveBeenCalled();
+  });
+
+  it("still refuses the allowance when the parent Scenario is not live", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.scenario.findUnique.mockResolvedValue({ status: "completed" });
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        permitInactiveRosterParticipants: true,
+        scenarioId: "scenario-1",
+        session: active,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<EncounterPresenceError>>({
+        code: "parent_scenario_not_active",
+      }),
+    );
+  });
+
+  it("refuses a roster row whose Scenario participant has gone, allowance or not", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.scenarioParticipant.findMany.mockResolvedValue([]);
+
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        permitInactiveRosterParticipants: true,
+        scenarioId: "scenario-1",
+        session: active,
+      }),
+    ).rejects.toEqual(
+      expect.objectContaining<Partial<EncounterPresenceError>>({ code: "inactive_participant" }),
+    );
+    expect(mocks.prisma.encounter.update).not.toHaveBeenCalled();
   });
 });

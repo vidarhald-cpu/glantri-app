@@ -94,6 +94,24 @@ export interface EncounterRepository {
     campaignId?: string | null;
     encounterId: string;
     expectedRevision: string;
+    /**
+     * Let this one write through although a roster participant is an inactive Scenario participant.
+     *
+     * **Only** that sub-check of the presence check is skipped. The explicit-membership,
+     * roster-identity, live-parent-Scenario and already-active-in-another-Encounter conditions all
+     * still hold, and the presence check still runs.
+     *
+     * It exists for `clear-current-step` — the control the product offers a GM for leaving a step
+     * that will not finish — and nothing else sets it. On #845 that control was refused by the very
+     * condition it was the remedy for, so the one state a GM could not get out of was the one they
+     * most needed to. Deactivation is now refused at its own write, but an Encounter stored in that
+     * state before this change still exists and must stay recoverable.
+     *
+     * Clearing a step removes recorded work. It never advances the round and resolves nothing
+     * against the inactive combatant, so it is not the mid-round participant change #850 declines
+     * to support.
+     */
+    permitInactiveRosterParticipants?: boolean;
     scenarioId?: string | null;
     session: EncounterSession;
     objectiveEvents?: CombatStepEvent[];
@@ -192,6 +210,8 @@ async function assertEncounterRosterIdentity(input: {
 
 async function assertActiveEncounterPresence(input: {
   encounter: EncounterSession;
+  /** See `permitInactiveRosterParticipants` on `EncounterRepository.updateCombatEncounter`. */
+  permitInactiveRosterParticipants?: boolean;
   scenarioId: string;
   transaction: Prisma.TransactionClient;
 }): Promise<string[]> {
@@ -211,18 +231,44 @@ async function assertActiveEncounterPresence(input: {
       "The parent Scenario must be active before this Encounter can be active.",
     );
   }
-  const activeParticipants = await input.transaction.scenarioParticipant.findMany({
-    select: { id: true },
-    where: {
-      id: { in: participantIds },
-      isActive: true,
-      scenarioId: input.scenarioId,
-    },
+  // Read every roster participant's activity and name rather than counting the active ones, so the
+  // refusal can say who is inactive. The row set is the roster, so this is the same single indexed
+  // read it was before.
+  const rosterParticipants = await input.transaction.scenarioParticipant.findMany({
+    select: { id: true, isActive: true, snapshotJson: true },
+    where: { id: { in: participantIds }, scenarioId: input.scenarioId },
   });
-  if (activeParticipants.length !== participantIds.length) {
+  const inactiveParticipants = rosterParticipants.filter((participant) => !participant.isActive);
+  const missingParticipantCount = participantIds.length - rosterParticipants.length;
+
+  if (missingParticipantCount > 0) {
     throw new EncounterPresenceError(
       "inactive_participant",
-      "Refresh the Scenario and choose active participants before starting the Encounter.",
+      "This Encounter's roster names a participant who is no longer in this Scenario. Take them " +
+        "out of the Encounter roster.",
+    );
+  }
+
+  if (inactiveParticipants.length > 0 && !input.permitInactiveRosterParticipants) {
+    // #845: the message this replaces told the GM to refresh, which never helps — the Scenario they
+    // are looking at is already correct — and spoke of "starting the Encounter" even when the
+    // refused write was a step in a round already under way. It names the combatants and the
+    // remedies instead.
+    const names = inactiveParticipants.map((participant) => {
+      const snapshot = participant.snapshotJson as { displayName?: unknown } | null | undefined;
+      return typeof snapshot?.displayName === "string" && snapshot.displayName.trim().length > 0
+        ? snapshot.displayName
+        : participant.id;
+    });
+    const subject =
+      names.length === 1
+        ? `${names[0]} is not an active participant`
+        : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} are not active participants`;
+
+    throw new EncounterPresenceError(
+      "inactive_participant",
+      `${subject} in this Scenario, so this Encounter cannot run with them on its roster. Either ` +
+        "make them active in the Scenario again, or take them out of the Encounter roster.",
     );
   }
 
@@ -393,8 +439,9 @@ export function createPrismaEncounterRepository(
       });
     },
     async updateCombatEncounter(input) {
+      const { permitInactiveRosterParticipants, ...persistenceInput } = input;
       return combatPersistenceRepository.updateCombatEncounter({
-        ...input,
+        ...persistenceInput,
         afterPersist: async (transaction, encounter) => {
           if (!encounter.scenarioId) return;
           for (const event of input.objectiveEvents ?? []) {
@@ -462,6 +509,7 @@ export function createPrismaEncounterRepository(
           });
           await assertActiveEncounterPresence({
             encounter,
+            permitInactiveRosterParticipants,
             scenarioId: encounter.scenarioId,
             transaction,
           });

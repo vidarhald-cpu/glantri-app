@@ -57,6 +57,26 @@ Two things follow from that shape and are worth holding on to:
 The round ends on the round summary, which is also where declared distance preferences are
 resolved — see [section 6](#6-distance).
 
+### 1.1 Who is in the fight is settled for the whole round
+
+Combatants enter and leave an Encounter only between rounds: before the first round starts, and
+after a round has been committed but before the next one begins. A round runs against the set of
+combatants it opened with.
+
+The GM still changes the roster whenever they like; the change simply waits. Clearing or ticking a
+combatant's box for an Encounter part-way through a round records the GM's intention and applies it
+at the next round boundary, and until then the fight carries on with the combatants it has. A round
+that has recorded nothing of its own is still inside the between-rounds window, so a change made
+there takes effect immediately.
+
+Making a combatant **inactive in the Scenario** is a different thing, and while an Encounter they
+are in is under way the application refuses it. Scenario activity decides who is in the Scenario at
+all; it is not a way to take one combatant out of a fight that has started, and treating it as one
+would leave the round with a participant the Encounter cannot resolve. The refusal names the
+combatant, the Encounter and the two ways forward: take them out of that Encounter's roster, which
+applies at the next round boundary, or commit round end first and set them inactive then. Once the
+Encounter is paused, closed or not yet started, Scenario activity is unconstrained again.
+
 ## 2. Declaring your round
 
 Player Combat and the GM's Combat inspector use the same declaration form. Anything below that a

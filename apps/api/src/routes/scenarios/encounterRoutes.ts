@@ -20232,6 +20232,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             expectedRevision: encounter.updatedAt,
             campaignId: access.campaignId,
             encounterId,
+            // #845: this route is the control a GM reaches for to leave a step that will not
+            // finish, and it must not be refused because a combatant on the roster is an inactive
+            // Scenario participant — the condition it is the remedy for. See the flag's own
+            // documentation on `EncounterRepository.updateCombatEncounter`.
+            permitInactiveRosterParticipants: true,
             scenarioId,
             session: {
               ...encounter,
@@ -20684,6 +20689,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   encounterId,
                   expectedEncounterRevision: encounter.updatedAt,
                   participants: restorations,
+                  // #845: see the first persist in this route.
+                  permitInactiveRosterParticipants: true,
                   scenarioId,
                   session,
                 });
@@ -21031,6 +21038,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 encounterId,
                 expectedEncounterRevision: encounter.updatedAt,
                 participants: participantMutations,
+                // #845: see the first persist in this route.
+                permitInactiveRosterParticipants: true,
                 scenarioId,
                 session: nextEncounterSession,
               })
@@ -21039,6 +21048,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   expectedRevision: encounter.updatedAt,
                   campaignId: access.campaignId,
                   encounterId,
+                  // #845: see the first persist in this route.
+                  permitInactiveRosterParticipants: true,
                   scenarioId,
                   session: nextEncounterSession,
                 }),

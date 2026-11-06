@@ -296,6 +296,12 @@ import {
   type PlayerCombatPhaseKey,
 } from "@/features/player-combat/playerCombatPhaseModel";
 import {
+  COMBAT_EXTRAPOLATION_INLINE_MARKER,
+  COMBAT_EXTRAPOLATION_MARKER_BADGE_STYLE,
+  COMBAT_EXTRAPOLATION_MARKER_DETAIL_STYLE,
+  buildCombatExtrapolationMarker,
+} from "@/lib/campaigns/combatExtrapolationPresentation";
+import {
   getCombatRefusalSentence,
   readCombatRefusalPayload,
 } from "@/lib/campaigns/combatRefusalPresentation";
@@ -1010,14 +1016,40 @@ function formatSnapshotInitiativeRankLabel(rank?: CombatRoundInitiativeRank): st
   return `Rank: ${rank.rank} of ${rank.rankTotal}${tieLabel}`;
 }
 
+/**
+ * The committed figure's own marker, for the main line's `OB` and `DB` (#940 Tier A).
+ *
+ * The committed attack names which of the two figures was extrapolated, so the marker goes beside
+ * that figure rather than on the line as a whole: a single "this attack is extrapolated" note would
+ * not say which number to review, and the two are flagged independently.
+ *
+ * This line is GM-only. `extrapolatedWorkbookAdjustments` is withheld from the player projection by
+ * an allowlist pinned by its own regression test, and that allowlist is not widened here.
+ *
+ * An absent or empty list draws nothing, and that is all it is read to mean. It is **not** read as
+ * "this figure was in the grid": the collector is passed only the opponent-specific trace, so the
+ * attacker's own base may be extrapolated with no trace behind it. The marker states what the flag
+ * states and nothing more.
+ */
+function formatCombatResultFigureExtrapolationSuffix(
+  result: CombatRoundAttackRollResult,
+  figure: "attacker_ob" | "defender_db",
+): string {
+  return result.extrapolatedWorkbookAdjustments?.includes(figure)
+    ? ` ${COMBAT_EXTRAPOLATION_INLINE_MARKER}`
+    : "";
+}
+
 function formatCombatAttackResultMainLine(result: CombatRoundAttackRollResult): string {
   const rollText = formatOpenEndedD20RollBreakdown({
     dieResult: result.rollTotal,
     openEndedD10s: result.openEndedD10s,
     rollD20: result.rollD20,
   });
+  const obMarker = formatCombatResultFigureExtrapolationSuffix(result, "attacker_ob");
+  const dbMarker = formatCombatResultFigureExtrapolationSuffix(result, "defender_db");
 
-  return `Main: ${result.weaponName} OB ${result.ob} - DB ${result.defenderDb} + roll ${rollText} = ${result.lookupTotal}`;
+  return `Main: ${result.weaponName} OB ${result.ob}${obMarker} - DB ${result.defenderDb}${dbMarker} + roll ${rollText} = ${result.lookupTotal}`;
 }
 
 function formatCombatDefenseResultMainLine(result: CombatRoundAttackRollResult): string {
@@ -1026,8 +1058,10 @@ function formatCombatDefenseResultMainLine(result: CombatRoundAttackRollResult):
     openEndedD10s: result.openEndedD10s,
     rollD20: result.rollD20,
   });
+  const obMarker = formatCombatResultFigureExtrapolationSuffix(result, "attacker_ob");
+  const dbMarker = formatCombatResultFigureExtrapolationSuffix(result, "defender_db");
 
-  return `Defense: DB ${result.defenderDb} vs ${result.weaponName} OB ${result.ob} + roll ${rollText} = ${result.lookupTotal}`;
+  return `Defense: DB ${result.defenderDb}${dbMarker} vs ${result.weaponName} OB ${result.ob}${obMarker} + roll ${rollText} = ${result.lookupTotal}`;
 }
 
 function formatCombatAttackResultLine(input: {
@@ -8714,6 +8748,10 @@ export default function CombatRoundManagerPanel({
         combatContext: inspectorGeneratedCombatContext,
         phaseKey: inspectorModifierPhase,
       });
+  // #940 Tier A: the flag already rides on this calculation; only the drawing was missing.
+  const inspectorInitiativeExtrapolationMarker = buildCombatExtrapolationMarker(
+    inspectorInitiativeCalculation,
+  );
   useEffect(() => {
     const encounterChanged = encounterScopeRef.current !== encounter.id;
 
@@ -13679,7 +13717,23 @@ export default function CombatRoundManagerPanel({
                               {inspectorInitiativeCalculation.modifierAdjustment !== 0
                                 ? ` (${inspectorInitiativeCalculation.modifierAdjustment >= 0 ? "+" : ""}${inspectorInitiativeCalculation.modifierAdjustment})`
                                 : ""}
+                              {inspectorInitiativeExtrapolationMarker ? (
+                                <span
+                                  data-testid="gm-initiative-extrapolation-marker"
+                                  style={COMBAT_EXTRAPOLATION_MARKER_BADGE_STYLE}
+                                >
+                                  {inspectorInitiativeExtrapolationMarker.label}
+                                </span>
+                              ) : null}
                             </div>
+                            {inspectorInitiativeExtrapolationMarker ? (
+                              <div
+                                data-testid="gm-initiative-extrapolation-detail"
+                                style={COMBAT_EXTRAPOLATION_MARKER_DETAIL_STYLE}
+                              >
+                                {inspectorInitiativeExtrapolationMarker.detail}
+                              </div>
+                            ) : null}
                             {inspectorInitiativeRollCounts ? (
                               <div>
                                 Pending rolls: {inspectorInitiativeRollCounts.pending} of{" "}

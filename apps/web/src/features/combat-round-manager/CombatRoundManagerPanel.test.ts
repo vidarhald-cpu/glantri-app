@@ -1473,3 +1473,45 @@ describe("CombatRoundManagerPanel", () => {
     expect(panelSource).not.toContain("Bleed reduced");
   });
 });
+
+describe("#940 Tier A the GM panel draws the extrapolation flag it already receives", () => {
+  it("marks the effective initiative figure and names the edge below it", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("buildCombatExtrapolationMarker");
+    expect(source).toContain(
+      "const inspectorInitiativeExtrapolationMarker = buildCombatExtrapolationMarker(",
+    );
+    expect(source).toContain('data-testid="gm-initiative-extrapolation-marker"');
+    expect(source).toContain('data-testid="gm-initiative-extrapolation-detail"');
+    expect(source).toContain("{inspectorInitiativeExtrapolationMarker.label}");
+    expect(source).toContain("{inspectorInitiativeExtrapolationMarker.detail}");
+    // The marker is drawn beside the figure the adjustment produced, not the unadjusted base.
+    expect(source).toContain('Effective before roll{" "}');
+  });
+
+  it("marks the committed OB and DB separately on the result main line", () => {
+    const source = readPanelSource();
+
+    expect(source).toContain("function formatCombatResultFigureExtrapolationSuffix");
+    expect(source).toContain('formatCombatResultFigureExtrapolationSuffix(result, "attacker_ob")');
+    expect(source).toContain('formatCombatResultFigureExtrapolationSuffix(result, "defender_db")');
+    expect(source).toContain(
+      "`Main: ${result.weaponName} OB ${result.ob}${obMarker} - DB ${result.defenderDb}${dbMarker}",
+    );
+    expect(source).toContain(
+      "`Defense: DB ${result.defenderDb}${dbMarker} vs ${result.weaponName} OB ${result.ob}${obMarker}",
+    );
+  });
+
+  /**
+   * The GM-only allowlist that withholds this flag from players is not widened by Tier A. The
+   * panel reads the committed flag; it never sends it anywhere.
+   */
+  it("does not widen the player projection to carry the committed flag", () => {
+    const source = readPanelSource();
+
+    expect(source).not.toContain("playerFacingExtrapolated");
+    expect(source).not.toContain("extrapolatedWorkbookAdjustments:");
+  });
+});

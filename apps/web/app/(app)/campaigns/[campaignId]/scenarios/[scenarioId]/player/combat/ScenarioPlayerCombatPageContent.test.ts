@@ -805,4 +805,93 @@ describe("ScenarioPlayerCombatPageContent", () => {
       );
     }
   });
+
+  /**
+   * Forgejo #1011 — the mount-time revision race.
+   *
+   * The retry policy itself is measured where it lives, in
+   * `src/lib/campaigns/playerCombatRefresh.test.ts`, and the surfaces are measured by the forced
+   * race against a running stack. What these three cases pin is this file's half: that the mount
+   * no longer carries its own immediate single retry, that the error surface carries a way out,
+   * and that the refresh copy says only what the branch renders.
+   */
+  it("retries a mount-time revision race instead of terminating on it", () => {
+    const source = readSource();
+
+    expect(source).toContain("adoptCoherentPlayerCombatSnapshot({");
+    expect(source).toContain("isAbandoned: () => cancelled || encounterRequestIdRef.current !==");
+    // The immediate single retry this replaced. The writer holds a 1233 ms chain of writes, so one
+    // extra attempt with no backoff lands inside the same chain.
+    expect(source).not.toContain('first.kind === "stale" ? await loadSnapshot() : first');
+  });
+
+  it("keeps the player's confirmed state on screen through a history revision race", () => {
+    const source = readSource();
+    const ensureHistory = source.slice(
+      source.indexOf("const ensureCombatHistory = useCallback("),
+      source.indexOf("const acceptEncounterSession = useCallback("),
+    );
+
+    expect(ensureHistory).toContain("if (isPlayerCombatHistoryRevisionMismatch(caughtError)) {");
+    // The copy promised a degraded display the branch never rendered: it told the player the
+    // latest confirmed state was on screen while the error branch rendered only that sentence.
+    expect(source).not.toContain("Showing the latest confirmed state");
+    expect(ensureHistory).toContain('setError("Combat view could not refresh.")');
+  });
+
+  it("gives the error surface a retry control that re-runs the load", () => {
+    const source = readSource();
+    // Anchored on the line start: the unanchored forms also match nested branches further up.
+    const errorBranch = source.slice(
+      source.indexOf("\n  if (error) {"),
+      source.indexOf("\n  if (!projection) {"),
+    );
+
+    expect(errorBranch).toContain("Try again");
+    expect(errorBranch).toContain("setRecoveryAttempt((current) => current + 1)");
+    expect(errorBranch).toContain("setError(undefined)");
+    // Without the dependency the control would render and change nothing. Read from the dependency
+    // array of the slow-context effect itself rather than from a formatted spelling of it.
+    const afterSlowContext = source.slice(source.indexOf("async function loadSlowContext()"));
+    const slowContextDependencies = afterSlowContext.slice(0, afterSlowContext.indexOf("]);") + 3);
+
+    expect(slowContextDependencies).toContain("recoveryAttempt");
+  });
+});
+
+describe("#940 Tier A the player panel draws the same marker from data it already holds", () => {
+  it("derives the marker from the calculation this page builds in the browser", () => {
+    const source = readSource();
+
+    expect(source).toContain("buildCombatExtrapolationMarker");
+    expect(source).toContain(
+      "const initiativeExtrapolationMarker = buildCombatExtrapolationMarker(initiativeCalculation)",
+    );
+    expect(source).toContain('data-testid="player-initiative-extrapolation-marker"');
+    expect(source).toContain('data-testid="player-initiative-extrapolation-detail"');
+    expect(source).toContain("{initiativeExtrapolationMarker.label}");
+    expect(source).toContain("{initiativeExtrapolationMarker.detail}");
+  });
+
+  /**
+   * The marker must cost the player nothing new. `initiativeCalculation` is a local `useMemo` over
+   * the passive initiative and the merged raw modifier total — the two numbers already rendered as
+   * "Base initiative" and "Initiative modifiers" on this same panel — so the flag is a function of
+   * figures this player can already read. Nothing is fetched and no payload widens for it.
+   */
+  it("reads no new server field to decide whether to mark the figure", () => {
+    const source = readSource();
+    const markerCall = "buildCombatExtrapolationMarker(initiativeCalculation)";
+
+    expect(source).toContain(markerCall);
+    // The only input is the locally built calculation.
+    expect(source).not.toContain("buildCombatExtrapolationMarker({");
+    expect(source).toContain("const initiativeCalculation = useMemo(");
+    expect(source).toContain("baseInitiative: combatLoadoutSummary.passiveInitiative");
+    expect(source).toContain(
+      "combatContext: sanitizePlayerCombatModifierContext(projectedCombatContextDraft)",
+    );
+    // The GM-only committed flag is not read on the player page at all.
+    expect(source).not.toContain("extrapolatedWorkbookAdjustments");
+  });
 });
