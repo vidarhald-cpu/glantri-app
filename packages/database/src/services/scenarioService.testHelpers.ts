@@ -118,7 +118,8 @@ export function createScenarioRepositoryStub() {
       campaigns[index] = updatedCampaign;
       return updatedCampaign;
     },
-    getCampaignById: async () => null,
+    getCampaignById: async (campaignId) =>
+      campaigns.find((campaign) => campaign.id === campaignId) ?? null,
     listCampaignsByGameMaster: async () => [],
     listCampaignsAllowingPlayerSelfJoin: async () => [],
     listCampaignsByCharacterRosterAccess: async (characterId) => {
