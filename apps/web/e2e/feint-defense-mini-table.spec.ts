@@ -130,42 +130,124 @@ const PLAYER_COMBAT_REFUSALS = [
   "Scenario combat projection unavailable.",
 ] as const;
 
-async function describePlayerCombatSurface(page: Page): Promise<string> {
-  for (const refusal of PLAYER_COMBAT_REFUSALS) {
-    if (
-      await page
-        .getByText(refusal, { exact: true })
-        .isVisible()
-        .catch(() => false)
-    ) {
-      return refusal;
-    }
-  }
-  const heading = await page
-    .getByRole("heading", { name: "Player combat screen" })
+/** One line of text, collapsed and bounded, or `""` when the locator matches nothing. */
+async function readBoundedText(locator: Locator, limit: number): Promise<string> {
+  if ((await locator.count()) === 0) return "";
+  const text = await locator
     .first()
-    .isVisible()
-    .catch(() => false);
-  return heading
-    ? "the page-level 'Player combat screen' fallback, so its own error slot is rendered"
-    : `neither a refusal nor a phase panel; body begins ${JSON.stringify(
-        (
-          await page
-            .locator("body")
-            .innerText({ timeout: 2_000 })
-            .catch(() => "")
-        )
-          .replace(/\s+/g, " ")
-          .slice(0, 400),
-      )}`;
+    .innerText({ timeout: 2_000 })
+    .catch(() => "");
+  return text.replace(/\s+/g, " ").trim().slice(0, limit);
+}
+
+/**
+ * Forgejo #1004 — the error branch's own text, printed.
+ *
+ * All three of the page's settled refusals render the same shape: an `h1` reading
+ * `Player combat screen` followed by one panel `div`
+ * (`ScenarioPlayerCombatPageContent.tsx:5268-5292`). For `!currentUser` and `!projection` that
+ * panel carries a fixed sentence; for `error` it carries whatever was thrown while loading, which
+ * is the one settled state that can explain a real failure and the one the previous message left
+ * out. Reading the panel rather than probing for each fixed sentence also removes a conflation:
+ * `isVisible().catch(() => false)` on a `getByText` reports a strict-mode violation and a genuine
+ * absence as the same value.
+ */
+async function describePlayerCombatSurface(page: Page): Promise<string> {
+  const heading = page.getByRole("heading", { name: "Player combat screen" }).first();
+  if (await heading.isVisible().catch(() => false)) {
+    const panel = await readBoundedText(heading.locator("xpath=following-sibling::div[1]"), 400);
+    if (!panel) {
+      return "the page-level 'Player combat screen' fallback with an empty panel beside its heading";
+    }
+    const branch = (PLAYER_COMBAT_REFUSALS as readonly string[]).includes(panel)
+      ? "fixed refusal"
+      : "error branch, carrying the message the load threw";
+    return (
+      `the page-level 'Player combat screen' fallback, whose panel (${branch}) reads ` +
+      JSON.stringify(panel)
+    );
+  }
+  return `neither a refusal nor a phase panel; body begins ${JSON.stringify(
+    await readBoundedText(page.locator("body"), 400),
+  )}`;
+}
+
+/**
+ * Forgejo #1004 — what the current document reported while it loaded.
+ *
+ * The `error` branch's text names the rejection but not its cause, and the retained trace never
+ * leaves this Forgejo's runner: `trace: "retain-on-failure"` is configured, but artifact upload
+ * fails with `GHESNotSupportedError`, so the job log is the only evidence that survives. These
+ * listeners put the failing request, its status and any console error into that log. Buffers are
+ * cleared on every main-frame navigation, so a failure after `reload()` reports that load only,
+ * and each is capped so a noisy page cannot flood the message.
+ */
+const PLAYER_SURFACE_DIAGNOSTIC_CAP = 12;
+
+interface PlayerSurfaceDiagnostics {
+  consoleErrors: string[];
+  requestFailures: string[];
+}
+
+function recordPlayerSurfaceDiagnostics(page: Page): PlayerSurfaceDiagnostics {
+  const consoleErrors: string[] = [];
+  const requestFailures: string[] = [];
+  const add = (into: string[], line: string) => {
+    if (into.length < PLAYER_SURFACE_DIAGNOSTIC_CAP) {
+      into.push(line.replace(/\s+/g, " ").trim().slice(0, 300));
+    }
+  };
+  const pathOf = (url: string) => {
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return url;
+    }
+  };
+  page.on("framenavigated", (frame) => {
+    if (frame !== page.mainFrame()) return;
+    consoleErrors.length = 0;
+    requestFailures.length = 0;
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") add(consoleErrors, message.text());
+  });
+  page.on("pageerror", (caught) => add(consoleErrors, `pageerror: ${caught.message}`));
+  page.on("requestfailed", (request) =>
+    add(
+      requestFailures,
+      `${request.method()} ${pathOf(request.url())} failed: ${
+        request.failure()?.errorText ?? "unknown"
+      }`,
+    ),
+  );
+  page.on("response", (response) => {
+    if (response.status() < 400) return;
+    add(
+      requestFailures,
+      `${response.request().method()} ${pathOf(response.url())} -> ${response.status()}`,
+    );
+  });
+  return { consoleErrors, requestFailures };
+}
+
+function formatPlayerSurfaceDiagnostics(diagnostics?: PlayerSurfaceDiagnostics): string {
+  if (!diagnostics) return "";
+  const describe = (label: string, lines: string[]) =>
+    ` ${label}: ${lines.length === 0 ? "none" : JSON.stringify(lines)}.`;
+  return (
+    describe("Requests this document failed on", diagnostics.requestFailures) +
+    describe("Console errors", diagnostics.consoleErrors)
+  );
 }
 
 /** Waits for the player surface to settle, then asserts its Phase 1 panel. Returns the settle ms. */
 async function expectPlayerPhasePanelsReady(input: {
   context: string;
+  diagnostics?: PlayerSurfaceDiagnostics;
   page: Page;
 }): Promise<number> {
-  const { context, page } = input;
+  const { context, diagnostics, page } = input;
   const startedAt = Date.now();
   const loading = page.getByText(PLAYER_COMBAT_LOADING_SENTENCE);
   /*
@@ -189,7 +271,8 @@ async function expectPlayerPhasePanelsReady(input: {
     throw new Error(
       `${context}: the player combat surface settled after ${settledAfterMs} ms (loading sentence ` +
         `observed: ${loadingObserved}) and then rendered no Phase 1 panel. It is showing ` +
-        `${await describePlayerCombatSurface(page)}.`,
+        `${await describePlayerCombatSurface(page)}. The page is at ${page.url()}.` +
+        formatPlayerSurfaceDiagnostics(diagnostics),
     );
   }
   console.log(
@@ -587,6 +670,7 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
 
     // ================= PLAYER SURFACE (the feinter's own panel) =================
     const playerPage = await playerContext.newPage();
+    const playerDiagnostics = recordPlayerSurfaceDiagnostics(playerPage);
     await playerPage.setViewportSize({ height: 900, width: 1440 });
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
     const playerAction = playerPage.getByRole("combobox", { name: "Action" }).first();
@@ -855,6 +939,7 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
         await playerPage.reload();
         await expectPlayerPhasePanelsReady({
           context: "player at the feinter's P1 parry step",
+          diagnostics: playerDiagnostics,
           page: playerPage,
         });
         await playerPage.waitForTimeout(1000);
@@ -900,6 +985,7 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
     await playerPage.reload();
     await expectPlayerPhasePanelsReady({
       context: "player after feint commit",
+      diagnostics: playerDiagnostics,
       page: playerPage,
     });
     await playerPage.waitForTimeout(1000);
