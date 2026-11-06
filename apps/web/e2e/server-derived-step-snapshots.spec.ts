@@ -42,8 +42,6 @@ import { API_URL } from "./targets";
 
 const PRIMARY_WEAPON_TEMPLATE = "weapon-template-longsword";
 const WIDTHS = [768, 1024, 1440] as const;
-/** The GM's situational DB edit, matching #889's own measured arm. */
-const REVIEW_SITUATION_DB = -7;
 
 async function json<T>(response: Awaited<ReturnType<APIRequestContext["get"]>>): Promise<T> {
   if (!response.ok()) {
@@ -424,21 +422,6 @@ test.describe("#951 / #889 — server-derived step snapshots, rendered", () => {
             combatantId === fighterCombatantId
               ? {
                   actionId: "attack_parry",
-                  combatContext: {
-                    modifierBuckets: {
-                      general: [],
-                      situationDb: [
-                        {
-                          id: `review-951-${suffix}`,
-                          notes: "GM review edit",
-                          scope: "until",
-                          value: REVIEW_SITUATION_DB,
-                        },
-                      ],
-                      situationInitiative: [],
-                      situationObSkill: [],
-                    },
-                  },
                   executionGroupId: task!.executionGroupId,
                   expectedRevision: await revision(),
                   phaseAttackSources: {
@@ -638,6 +621,52 @@ test.describe("#951 / #889 — server-derived step snapshots, rendered", () => {
     // Both label their own step, and the labels differ.
     expect(declarationReadings[0]!.heading).toContain("Declaration");
     expect(reviewReadings[0]!.heading).toContain("Review phase 1 modifiers");
+
+    // ===== READING 3: #889's edited-row clause — why the arm is not reachable here (D8) =====
+    //
+    // #889 requires the restored tables to show "the post-review state **including any row the GM
+    // added, edited or removed**". The readings above vary nothing at the review, so that clause
+    // was an inference from one arm; independent QA tried to supply the missing arm, sent a bare
+    // row with no `canonicalLifecycle` in a single review cycle, and withdrew the finding.
+    //
+    // The shape the arm needs is the panel's own: the **listed** row's `value` and its
+    // `canonicalLifecycle.payload.value` changed together, which presupposes a row already
+    // committed through a review. Driven here: once the review commits, the projection
+    // **withdraws the task**. There is no second `review_modifiers_phase1` offer at the same step
+    // for the same participant, so there is no state this route can reach in which the GM edits
+    // the row they just committed. Reaching it needs a re-offered review — the supersession path
+    // #931 added — or a `clear-current-step` rewind, both outside this task's bound.
+    const reofferedReview = (await tasks()).find(
+      (task) =>
+        ["review_modifiers_phase1", "review_modifiers_phase2"].includes(task.expectedCommand) &&
+        task.participantId === fighterCombatantId,
+    );
+    const persistedSituationDb = await json<{
+      participants: { id: string; state: { combat: { combatContext: unknown } } }[];
+    }>(await gmPage.request.get(`${API_URL}/scenarios/${scenarioId}/participants`)).then(
+      (listed) =>
+        (
+          listed.participants.find((row) => row.id === participant.participant.id)?.state.combat
+            .combatContext as { modifierBuckets?: { situationDb?: unknown[] } } | undefined
+        )?.modifierBuckets?.situationDb ?? [],
+    );
+    console.log(
+      `#951/#889 D8 reachability: ${JSON.stringify({
+        postReviewDb: reviewReadings.map((reading) => reading.defenceCells[0]),
+        reofferedReviewAfterCommit: reofferedReview?.id ?? null,
+        persistedSituationDbRows: persistedSituationDb.length,
+      })}`,
+    );
+    // Recorded as a measurement, not as a desirable property: if a later change re-offers the
+    // review, this fails and says that the edited-row arm has become reachable and wants driving.
+    expect(
+      reofferedReview,
+      "a review is re-offered after commit: #889's edited-row arm is now reachable and should be driven",
+    ).toBeUndefined();
+    // And the GM's situational row submitted with the **declaration** does not reach the
+    // participant's committed context at all, which is why the earlier head's claim that "the
+    // committed figure moves with it" could not have been about a review-time edit.
+    expect(persistedSituationDb).toEqual([]);
 
     // The three widths are genuinely different layouts, not one layout measured three times.
     expect(declarationReadings.map((reading) => reading.viewportWidth)).toEqual([...WIDTHS]);

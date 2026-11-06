@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import Fastify from "fastify";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +18,7 @@ import {
   setCombatRoundCombatExperienceDifficulty,
   deriveCombatRoundStepSnapshots,
   getCurrentExecutableCombatTasks,
+  isCombatStartExperienceRollRequired,
   withDerivedCombatRoundStepSnapshots,
   getCommittedCombatRoundSteps,
   initializeCombatRoundState,
@@ -107,6 +111,11 @@ import {
 } from "./combatStepSnapshotFigures";
 
 const PARTICIPANT_IDS = ["gladiator", "guard"] as const;
+/**
+ * The `committedAt` the hostile client payload in item 5 sets. It is a named constant so the
+ * test's own timestamp normalisation can exclude exactly this value and nothing else.
+ */
+const HOSTILE_COMMITTED_AT = "1999-01-01T00:00:00.000Z";
 const CONTROLLER_BY_PARTICIPANT: Record<string, string> = {
   gladiator: "player-1",
   guard: "player-2",
@@ -158,6 +167,11 @@ function scenarioParticipant(id: string): ScenarioParticipant {
     isActive: true,
     role: "player_character",
     scenarioId: "scenario-1",
+    // The Combat Experience skill total the routes read, at the top level where
+    // `getParticipantCombatExperienceSkillTotalLookup` looks for it. Without it the lookup
+    // returns a warning and the GM bulk workflow's `combat_experience` branch refuses rather
+    // than discharging the check, so finding C1's second write site is unreachable.
+    sheetSummary: { skills: [{ skillId: "combat_experience", totalSkill: 26 }] },
     snapshot: { displayName: id },
     sourceType: "character",
     state: {
@@ -478,6 +492,80 @@ async function commitModifierReviews(world: RouteWorld): Promise<void> {
   }
 }
 
+/**
+ * Walks the engine forward from round 1 until it puts the round in `pre_declaration` with two or
+ * more participants whose Combat Experience check has become due by the engine's own schedule.
+ * Nothing is hand-written: the due markers are the ones
+ * `applyCombatExperienceScheduleAfterRoll` wrote from each roll's `durationRounds`.
+ */
+function combatWithTwoDueChecks(): { dueParticipantIds: string[]; state: CombatRoundState } {
+  let state: CombatRoundState = initializeCombatRoundState({ encounter: baseEncounter() });
+  state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
+  for (const participant of state.participants) {
+    state = rollCombatRoundCombatExperience({
+      command: { createdAt: "2026-01-01T00:01:00.000Z", createdByUserId: "gm-1" },
+      participantId: participant.participantId,
+      rng: () => 0.5,
+      skillTotal: 0,
+      state,
+    }).state;
+  }
+
+  for (let guard = 0; guard < 200; guard += 1) {
+    if (state.currentStep === "select_actions") {
+      for (const participant of state.participants) {
+        if (participant.declaration?.actionId) continue;
+        state = recordCombatRoundDeclaration({
+          declaration: {
+            actionId: "pass",
+            roundNumber: state.roundNumber,
+            submittedAt: "2026-01-01T00:02:00.000Z",
+            submittedByUserId: "gm-1",
+          },
+          participantId: participant.participantId,
+          state,
+          submittedBy: "gm",
+        });
+      }
+    }
+    if (state.currentStep === "round_summary") {
+      const reviewed = prepareCombatRoundEndReview({
+        command: { createdAt: "2026-01-01T00:09:00.000Z", createdByUserId: "gm-1" },
+        state,
+      });
+      state = reviewed.participants.reduce<CombatRoundState>(
+        (current, participant, index) =>
+          current.roundEndReview?.participantReviews[participant.participantId]?.status ===
+          "complete"
+            ? current
+            : commitCombatRoundEndParticipantReview({
+                command: {
+                  createdAt: `2026-01-01T00:09:${String(index + 1).padStart(2, "0")}.000Z`,
+                  createdByUserId: "gm-1",
+                },
+                participantId: participant.participantId,
+                scenarioParticipantId: `scenario-${participant.participantId}`,
+                state: current,
+              }).state,
+        reviewed,
+      );
+    }
+    state = advanceCombatRoundStep(state, {
+      command: { createdAt: "2026-01-01T00:05:00.000Z", createdByUserId: "gm-1" },
+    });
+    if (state.currentStep !== "pre_declaration") continue;
+
+    const due = state.participants
+      .filter((participant) =>
+        isCombatStartExperienceRollRequired({ participantId: participant.participantId, state }),
+      )
+      .map((participant) => participant.participantId);
+    if (due.length >= 2) return { dueParticipantIds: due, state };
+  }
+
+  throw new Error("The engine never made two Combat Experience checks due at pre-declaration.");
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -491,9 +579,12 @@ describe("#951 / #889 — the server derives and persists each committed step's 
    */
   it("item 1 — all 13 steps are recorded for every participant, with the round's own walk", () => {
     // The census is 13 and all 13 are in scope: a round passes through, or jumps over, every one
-    // of them, and the inspector can select any of them. The walk below is the engine's own
-    // (`advanceCombatRoundStep`), with the server-side derivation applied at each commit exactly
-    // as the three transition routes apply it.
+    // of them, and the inspector can select all but one of them — `pre_declaration` is
+    // deliberately excluded from `VISIBLE_COMBAT_ROUND_TRACKER_STEPS`, so it has a record and no
+    // cell (#951 repair cycle 1, finding E2: the earlier wording claimed every step was
+    // selectable). The walk below is the engine's own (`advanceCombatRoundStep`), with the
+    // server-side derivation applied at each commit exactly as the three transition routes apply
+    // it.
     expect(COMBAT_ROUND_STEPS).toHaveLength(13);
     let state = initializeCombatRoundState({ encounter: baseEncounter() });
     state = setCombatRoundCombatExperienceDifficulty({ difficulty: 26, state });
@@ -665,10 +756,14 @@ describe("#951 / #889 — the server derives and persists each committed step's 
   it("item 2b — the deterministic auto-advance records the step it leaves", async () => {
     const world = await openWorld();
     try {
+      // Empty before anything is driven. The Combat Experience discharge itself commits content
+      // at `select_actions` and now records it (repair cycle 1, finding C1), so the baseline for
+      // this path is taken before that rather than after it.
+      expect(world.snapshotKeys()).toEqual([]);
       await dischargeCombatExperience(world);
       await declareEveryParticipant(world);
       const before = world.roundState();
-      expect(world.snapshotKeys()).toEqual([]);
+      expect(world.snapshotKeys()).toEqual(["select_actions:gladiator", "select_actions:guard"]);
       const task = projectedTasks(before).find(
         (candidate) => candidate.kind === "gm_advance_boundary",
       );
@@ -707,10 +802,14 @@ describe("#951 / #889 — the server derives and persists each committed step's 
   it("item 2c — the GM step workflow records the step it leaves", async () => {
     const world = await openWorld();
     try {
+      // Empty before anything is driven. The Combat Experience discharge itself commits content
+      // at `select_actions` and now records it (repair cycle 1, finding C1), so the baseline for
+      // this path is taken before that rather than after it.
+      expect(world.snapshotKeys()).toEqual([]);
       await dischargeCombatExperience(world);
       await declareEveryParticipant(world);
       const before = world.roundState();
-      expect(world.snapshotKeys()).toEqual([]);
+      expect(world.snapshotKeys()).toEqual(["select_actions:gladiator", "select_actions:guard"]);
       const executable = getCurrentExecutableCombatTasks(
         buildCombatProgressionProjection(before),
       )[0];
@@ -789,6 +888,163 @@ describe("#951 / #889 — the server derives and persists each committed step's 
   });
 
   /**
+   * Repair cycle 1, finding C1 — the Combat Experience discharge commits `pre_declaration`.
+   *
+   * Independent QA drove this and got `pre_declaration: NO SNAPSHOT` for both participants at a
+   * round that opened with a Combat Experience check due. The mover is
+   * `moveCombatRoundAfterCombatExperienceResult`, whose no-phase branch sets
+   * `currentStep: "select_actions"` on the final discharge, and two write sites carried it with
+   * no derivation: this route, and the `combat_experience` branch of `run-gm-step-workflow`.
+   *
+   * The condition is ordinary. `applyCombatExperienceScheduleAfterRoll` writes a `scheduled` due
+   * marker after every Combat Experience roll, so a later round opens with the check due and the
+   * roll itself makes the transition the GM's boundary control would otherwise make. The state
+   * below is reached by walking the engine until its own schedule makes two checks due — nothing
+   * is hand-written, not even the due marker QA had to supply to reach it.
+   */
+  it("item 2e — the Combat Experience discharge records the pre-declaration step it commits", async () => {
+    const { dueParticipantIds, state } = combatWithTwoDueChecks();
+    expect(dueParticipantIds.length, "the engine never made two checks due").toBeGreaterThanOrEqual(
+      2,
+    );
+    expect(state.currentStep).toBe("pre_declaration");
+    expect(state.roundNumber).toBeGreaterThan(1);
+
+    const world = await openWorld(state);
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    try {
+      // A round opens with an empty live `stepSnapshots`: the previous round's records went to
+      // its archive. So anything found below was written by the Combat Experience route.
+      expect(world.snapshotKeys()).toEqual([]);
+
+      const difficulty = projectedTasks(world.roundState()).find(
+        (task) => task.expectedCommand === "set_combat_experience_difficulty",
+      );
+      if (difficulty) {
+        const opened = await world.app.inject({
+          method: "POST",
+          payload: {
+            difficulty: 26,
+            executionGroupId: difficulty.executionGroupId,
+            expectedRevision: world.revision(),
+            taskId: difficulty.id,
+          },
+          url: "/encounters/encounter-1/combat-round/combat-experience-difficulty",
+        });
+        expect(opened.statusCode, opened.body).toBe(200);
+      }
+
+      const transitions: string[] = [];
+      for (let guard = 0; guard < 8; guard += 1) {
+        const before = world.roundState().currentStep;
+        const roll = projectedTasks(world.roundState()).find(
+          (task) => task.expectedCommand === "roll_combat_experience" && task.blockerCount === 0,
+        );
+        if (!roll) break;
+        const response = await world.app.inject({
+          method: "POST",
+          payload: {
+            executionGroupId: roll.executionGroupId,
+            expectedRevision: world.revision(),
+            scenarioParticipantId: roll.scenarioParticipantId,
+            taskId: roll.id,
+          },
+          url: "/encounters/encounter-1/combat-round/roll-combat-experience",
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        transitions.push(`${before} -> ${world.roundState().currentStep}`);
+      }
+
+      // The discharge is what moved the step out of `pre_declaration`, so this route committed it.
+      expect(transitions.at(-1), JSON.stringify(transitions)).toBe(
+        "pre_declaration -> select_actions",
+      );
+      console.log(`#951 C1 transitions: ${JSON.stringify(transitions)}`);
+      console.log(`#951 C1 records: ${JSON.stringify(world.snapshotKeys())}`);
+
+      // Both participants have a record of the step the round opened at, where the roll happened.
+      expect(
+        world
+          .roundState()
+          .stepSnapshots.filter((snapshot) => snapshot.step === "pre_declaration")
+          .map((snapshot) => snapshot.participantId)
+          .sort(),
+      ).toEqual([...PARTICIPANT_IDS].sort());
+      // And the at-or-before resolver reports EXACT for it rather than nothing: `pre_declaration`
+      // is the round's first step, so nothing precedes it that the fallback could supply.
+      for (const participantId of PARTICIPANT_IDS) {
+        const resolved = world
+          .roundState()
+          .stepSnapshots.filter(
+            (snapshot) =>
+              snapshot.participantId === participantId &&
+              COMBAT_ROUND_STEPS.indexOf(snapshot.step) <=
+                COMBAT_ROUND_STEPS.indexOf("pre_declaration"),
+          )
+          .sort(
+            (left, right) =>
+              COMBAT_ROUND_STEPS.indexOf(right.step) - COMBAT_ROUND_STEPS.indexOf(left.step),
+          )[0];
+        expect(resolved?.step, `${participantId} pre_declaration`).toBe("pre_declaration");
+      }
+    } finally {
+      randomSpy.mockRestore();
+      await world.app.close();
+    }
+  });
+
+  /**
+   * Finding C1's second write site — a coverage census over the mover, not a drive.
+   *
+   * QA named two unwrapped Combat Experience write sites: the dedicated route, driven red then
+   * green in item 2e above, and the `combat_experience` branch of `run-gm-step-workflow`. **I
+   * could not drive the second one in this harness.** Its three documented guards all pass in the
+   * fixture — `isCombatRoundCombatExperienceWindowOpen` true, trigger `combat_start`, difficulty
+   * 26, and the executable order is `["combat_experience|roll_combat_experience", …]` — and the
+   * branch still refuses before reaching its write site, which leaves the GM-bulk skill-lookup
+   * prefill as the remaining cause. Satisfying that needs a `CharacterService` mock this harness
+   * does not have. Rather than claim a proof I do not have, this asserts the property that was
+   * actually wrong: **every** call site of the mover persists a derived state.
+   *
+   * It is a source census over `rollCombatRoundCombatExperience`, the function whose no-phase
+   * branch moves the step, not a name match on the derivation helper — and it fails if a new
+   * call site is added, which is the failure mode that produced C1.
+   */
+  it("item 2f — every Combat Experience write site persists a server-derived state", () => {
+    // Resolved by search rather than from `import.meta`, which this package's tsconfig module
+    // setting forbids. The candidates cover both the package-local and repository-root runners,
+    // and a missing file fails here rather than leaving the census to pass over nothing.
+    const candidates = [
+      join(process.cwd(), "src/routes/scenarios/encounterRoutes.ts"),
+      join(process.cwd(), "apps/api/src/routes/scenarios/encounterRoutes.ts"),
+    ];
+    const routeFile = candidates.find((candidate) => existsSync(candidate));
+    expect(routeFile, `encounterRoutes.ts not found at ${candidates.join(" or ")}`).toBeTruthy();
+    const source = readFileSync(routeFile!, "utf8");
+    const callSites = [...source.matchAll(/rollCombatRoundCombatExperience\(\{/g)].map(
+      (match) => match.index!,
+    );
+    // Two, and exactly two: the dedicated route and the GM bulk workflow branch. A third would
+    // fail here rather than silently inheriting C1.
+    expect(callSites).toHaveLength(2);
+
+    for (const [index, offset] of callSites.entries()) {
+      const region = source.slice(offset, offset + 4000);
+      // The state this site persists.
+      const persisted = /combatRoundState:\s*([A-Za-z0-9_.!]+)\s*,/.exec(region)?.[1];
+      expect(persisted, `call site ${index} persists nothing recognisable`).toBeTruthy();
+      // The identifier it persists must be produced by the derivation, in this same region.
+      const derivedBinding = new RegExp(
+        `const ${persisted!.replace(/[.!]/g, "\\$&")}\\s*=\\s*withServerDerivedCombatStepSnapshots\\(`,
+      );
+      expect(
+        derivedBinding.test(region),
+        `Combat Experience call site ${index} persists \`${persisted}\`, which is not a withServerDerivedCombatStepSnapshots result`,
+      ).toBe(true);
+    }
+  });
+
+  /**
    * The route-level coverage census, measured rather than assumed.
    *
    * It drives round 1 as far as the GM's own controls take it with no attack declared, and reports
@@ -854,10 +1110,20 @@ describe("#951 / #889 — the server derives and persists each committed step's 
    * Acceptance item 5 — an omitted, malformed or hostile client snapshot cannot alter the
    * authoritative stored one.
    *
-   * Three payloads to the same route from the same state. The stored record is compared field for
-   * field across all three with only the server clock excluded, so a client payload that
-   * disagrees with the server's derivation cannot win, cannot corrupt, and cannot be detected in
-   * the record at all.
+   * Four payloads to the same route from the same state, compared field for field.
+   *
+   * **Repair cycle 1.** The first version of this test normalised every ISO-8601 timestamp in the
+   * stored record, so that each world's own Combat Experience clock would not make the four
+   * strings differ for an irrelevant reason. Independent QA showed that the normalisation also
+   * rewrote the hostile payload's own `committedAt`, and a mutant that copied just that one field
+   * from the client survived. Two changes close it:
+   *
+   * 1. the sentinel the hostile payload sets is **excluded** from the normalisation, so a stored
+   *    record carrying it no longer matches the other three;
+   * 2. `committedAt` is checked **positively** against a clock read before the request, which
+   *    kills the same mutant on its own without depending on cross-world inequality.
+   *
+   * The raw, un-normalised record is also searched for every value the hostile payload sets.
    */
   it("item 5 — omitted, malformed and hostile client snapshots leave an identical stored record", async () => {
     const hostileSnapshot: CombatRoundStepSnapshot = {
@@ -869,7 +1135,7 @@ describe("#951 / #889 — the server derives and persists each committed step's 
         ob: "999",
         weaponName: "Hostile blade",
       },
-      committedAt: "1999-01-01T00:00:00.000Z",
+      committedAt: HOSTILE_COMMITTED_AT,
       defenseSummary: { db: "999", dm: "99", parry: "999", sourceName: "Hostile shield" },
       id: "hostile",
       participantId: "gladiator",
@@ -884,10 +1150,13 @@ describe("#951 / #889 — the server derives and persists each committed step's 
       { stepSnapshots: [hostileSnapshot] },
     ];
     const stored: string[] = [];
+    const rawStored: string[] = [];
     // The Combat Experience roll is the only unseeded input in this fixture, and its result lands
     // in the recorded modifier rows. Seeding it makes the four worlds differ in the client payload
     // and in nothing else.
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.5);
+    // Every `committedAt` the server writes must be at or after this.
+    const startedAt = Date.now();
 
     for (const extra of payloads) {
       const world = await openWorld();
@@ -909,13 +1178,23 @@ describe("#951 / #889 — the server derives and persists each committed step's 
           url: "/encounters/encounter-1/combat-round/advance-current-step",
         });
         expect(response.statusCode, JSON.stringify(extra)).toBe(200);
-        // Every server-authored timestamp is normalised, because each payload runs in its own
-        // world and the Combat Experience effect carries its own real clock. Nothing a client
-        // can influence is normalised, so a payload that reached the record would still differ.
+        const snapshots = world.roundState().stepSnapshots;
+        // The positive check: each record's `committedAt` is the server's own clock, read at or
+        // after the moment this test started. A client-supplied 1999 value fails here directly.
+        for (const snapshot of snapshots) {
+          expect(
+            Date.parse(snapshot.committedAt),
+            `${snapshot.step}:${snapshot.participantId} committedAt ${snapshot.committedAt} is not a server clock`,
+          ).toBeGreaterThanOrEqual(startedAt);
+        }
+        const raw = JSON.stringify(snapshots);
+        rawStored.push(raw);
+        // Server-authored timestamps are normalised so that four separate worlds do not differ
+        // for an irrelevant reason — but the hostile sentinel is deliberately left alone, so a
+        // record that carried it would no longer match the other three.
         stored.push(
-          JSON.stringify(world.roundState().stepSnapshots).replace(
-            /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g,
-            "<server clock>",
+          raw.replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/g, (match) =>
+            match === HOSTILE_COMMITTED_AT ? match : "<server clock>",
           ),
         );
       } finally {
@@ -929,11 +1208,22 @@ describe("#951 / #889 — the server derives and persists each committed step's 
       new Set(stored).size,
       `a client payload changed the stored record:\n${stored.join("\n---\n")}`,
     ).toBe(1);
-    for (const record of stored) {
-      expect(record).not.toContain("Hostile");
-      expect(record).not.toContain("Impostor");
-      expect(record).not.toContain('"dmb":"999"');
-      expect(record).not.toContain('"id":"hostile"');
+    // Searched on the raw record, so no normalisation of this test's own can hide a value.
+    for (const record of rawStored) {
+      for (const hostileValue of [
+        "Hostile blade",
+        "Hostile shield",
+        "Impostor",
+        HOSTILE_COMMITTED_AT,
+        '"dmb":"999"',
+        '"db":"999"',
+        '"id":"hostile"',
+        '"step":"pre_declaration"',
+      ]) {
+        expect(record, `the stored record carries the client's ${hostileValue}`).not.toContain(
+          hostileValue,
+        );
+      }
       expect(record).toContain('"step":"select_actions"');
     }
   });

@@ -149,8 +149,11 @@ export function getCombatModifierRowsVisibleAtStep(
 }
 
 /**
- * The phase key a step's recorded modifier rows are read under. `round_summary` and the two
- * pre-resolution steps carry no phase, exactly as the panels read them.
+ * The phase key a step's recorded modifier rows are read under: `phase2` for the five phase-2
+ * steps, no phase for `round_summary`, and `phase1` for everything else — which includes
+ * `pre_declaration` and `select_actions`, exactly as the panels read them. (Corrected in #951
+ * repair cycle 1, finding E1: this comment used to claim the two pre-resolution steps carried no
+ * phase, which the code has never done.)
  */
 export function getCombatModifierRowPhaseKeyForStep(
   step: CombatRoundStep,

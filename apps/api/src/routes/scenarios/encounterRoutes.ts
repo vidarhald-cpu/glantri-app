@@ -12728,6 +12728,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           trigger: combatExperienceTrigger,
           visibility: encounter.roleplayState?.visibility,
         });
+        const rolledParticipantState = {
+          ...scenarioParticipant.state,
+          combat: {
+            ...scenarioParticipant.state.combat,
+            combatContext: rolled.combatContext,
+          },
+          combatEffects: rolled.combatEffects,
+        };
+        // #951 repair cycle 1, finding C1. The final Combat Experience discharge is what moves the
+        // round out of `pre_declaration` — `moveCombatRoundAfterCombatExperienceResult`'s no-phase
+        // branch sets `currentStep: "select_actions"` — so this route commits that step and must
+        // record it. When no check is due the GM's boundary control makes the same transition and
+        // records it there, which is why the hole was conditional on an ordinary schedule.
+        const rolledState = withServerDerivedCombatStepSnapshots({
+          committedAt: submittedAt,
+          encounter,
+          nextState: rolled.state,
+          previousState: roundState,
+          scenarioParticipants: scenarioParticipants.map((participant) =>
+            participant.id === scenarioParticipant.id
+              ? { ...participant, state: rolledParticipantState }
+              : participant,
+          ),
+        });
         const saved = await encounterService.commitCombatParticipantStateMutation({
           campaignId: access.campaignId,
           encounterId,
@@ -12736,18 +12760,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           scenarioId,
           session: {
             ...encounter,
-            combatRoundState: rolled.state,
-            currentRound: rolled.state.roundNumber,
+            combatRoundState: rolledState,
+            currentRound: rolledState.roundNumber,
             updatedAt: submittedAt,
           },
-          state: {
-            ...scenarioParticipant.state,
-            combat: {
-              ...scenarioParticipant.state.combat,
-              combatContext: rolled.combatContext,
-            },
-            combatEffects: rolled.combatEffects,
-          },
+          state: rolledParticipantState,
         });
 
         return {
@@ -15848,13 +15865,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 trigger,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
-              const nextState = attachCombatStepAutomationCommandLink({
-                commandId,
-                countsTowardProcessed,
-                executionGroupId: task.executionGroupId,
-                identity,
-                state: rolled.state,
-                taskId: task.id,
+              const rolledParticipantState = {
+                ...owner.participant.state,
+                combat: {
+                  ...owner.participant.state.combat,
+                  combatContext: rolled.combatContext,
+                },
+                combatEffects: rolled.combatEffects,
+              };
+              // #951 repair cycle 1, finding C1. The GM bulk control discharges Combat Experience
+              // too, and the discharge moves the round out of `pre_declaration`, so this branch
+              // records that step exactly as the dedicated route now does.
+              const nextState = withServerDerivedCombatStepSnapshots({
+                committedAt: submittedAt,
+                encounter: workingEncounter!,
+                nextState: attachCombatStepAutomationCommandLink({
+                  commandId,
+                  countsTowardProcessed,
+                  executionGroupId: task.executionGroupId,
+                  identity,
+                  state: rolled.state,
+                  taskId: task.id,
+                }),
+                previousState: apiProjection.state,
+                scenarioParticipants: workingParticipants.map((participant) =>
+                  participant.id === owner.participant.id
+                    ? { ...participant, state: rolledParticipantState }
+                    : participant,
+                ),
               });
               const saved = await encounterService.commitCombatParticipantStateMutation({
                 campaignId: access.campaignId,
@@ -15868,14 +15906,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   currentRound: nextState.roundNumber,
                   updatedAt: submittedAt,
                 },
-                state: {
-                  ...owner.participant.state,
-                  combat: {
-                    ...owner.participant.state.combat,
-                    combatContext: rolled.combatContext,
-                  },
-                  combatEffects: rolled.combatEffects,
-                },
+                state: rolledParticipantState,
               });
               workingEncounter = saved.encounter;
               workingParticipants = workingParticipants.map((participant) =>
