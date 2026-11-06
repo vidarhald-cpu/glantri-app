@@ -52,8 +52,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("getOrCreateCombatModifierReviewInputSnapshot({");
     expect(source).toContain("modifierReviewInputSnapshot!.combatContext");
     expect(source).toContain("modifierReviewInputSnapshot?.expectedParticipantRevision");
-    expect(source).toContain("const reviewStepSnapshot = isModifierReview");
-    expect(source).toContain("reviewStepSnapshot,");
+    // #951 / #889: the panel no longer authors the review step's snapshot. Product Owner ruling
+    // of 2026-11-06 — the server derives and persists it from the state it is committing, for
+    // every participant, so the client sends the review input and nothing else.
+    expect(source).not.toContain("reviewStepSnapshot");
     expect(source).toContain("modifierReviewInputSnapshotsRef.current.clear()");
     expect(source).not.toContain("onChange={submitCombatDeclarationOnServer}");
   });
@@ -416,7 +418,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("distanceModifierDetail");
     expect(source).not.toContain('title: "Distance"');
     expect(source).toContain("playerCombatTopPanelRowStyle");
-    expect(source).toContain("buildPlayerCombatPhasePanelModel");
     expect(source).toContain("buildPlayerCombatLoadoutSummary");
     expect(source).toContain("resolveScenarioCombatEquipmentState");
     expect(source).toContain("visibleAtStep: inspector.step");
@@ -441,7 +442,6 @@ describe("CombatRoundManagerPanel", () => {
       "phase2: inspectorPhaseLoadoutSummaries.phase2.attackStats?.weaponName",
     );
     expect(source).toContain("participants ?? []");
-    expect(source).toContain("getCombatRoundModifierPhaseForStep");
     expect(source).toContain("getPlayerCombatModifierDisplayPhase");
     expect(source).toContain(
       "const inspectorModifierPhase = getPlayerCombatModifierDisplayPhase({",
@@ -708,7 +708,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("modifierValidationTaskId: modifierRequest.modifierValidationTaskId");
     expect(source).toContain("resolveCurrentCombatPhaseDamageOnServer");
     expect(source).not.toContain("completeInspectorPhaseResolution");
-    expect(source).toContain("getCombatRoundInitiativeRanks");
     expect(source).toContain("getCombatRoundInitiativeTotal");
     expect(source).toContain("formatCombatInitiativeFormula");
     expect(source).toContain("formatCombatAttackResultMainLine");
@@ -768,7 +767,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("${phaseLabel} attack roll");
     expect(source).toContain("${phaseLabel} parry review");
     expect(source).toContain("phaseResolutionResult");
-    expect(source).toContain("phaseResolutionStatus");
+    // #951: `phaseResolutionStatus` is a server-derived snapshot field now, not a panel output.
     expect(source).toContain("Resolution review pending.");
     expect(source).toContain("getCombatRoundParticipantPhaseStepStatus");
     expect(source).toContain("formatSelectedCombatParrySourceName");
@@ -913,7 +912,6 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("scenarioParticipantId: controlledByContinuedContact");
     expect(source).toContain("roundEndDistanceOverrideDrafts");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer({");
-    expect(source).toContain("stepSnapshots,");
     expect(source).toContain(
       "const inspectorActionButtonDisabled = saving || Boolean(inspectorActionValidationMessage)",
     );
@@ -982,10 +980,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("phaseDefenseStats: inspectorIsHistorical ? null : phaseDefenseStats");
     expect(source).toContain("archivedInspectorPresentation?.modifierRows ??");
     expect(source).toContain("inspectorPanelSnapshot?.modifierSummary?.rows");
-    expect(source).toContain("const recordedModifierRows = buildRecordedCombatModifierRows({");
-    expect(source).toContain(
-      "Phase filtering belongs to calculation totals, not historical visibility.",
-    );
+    // #951: the recorded-row projection the historical panel reads is the server's own record.
+    // The panel's live rows still carry `visibleAtStep`, asserted above.
+    expect(source).not.toContain("buildRecordedCombatModifierRows");
     expect(source).toContain(": inspectorModifierRows;");
     /*
      * #771 R2-12 reversed this guard deliberately. It used to pin the presence of the
@@ -1000,9 +997,9 @@ describe("CombatRoundManagerPanel", () => {
     );
     expect(source).toContain("resolveCombatHistoryPanelSnapshot");
     expect(source).toContain("inspectorHistoricalSelectorFactsComplete");
-    expect(source).toContain("movementPreferenceTargets");
-    expect(source).toContain('phase1: buildPhasePanelSnapshot("phase1")');
-    expect(source).toContain('phase2: buildPhasePanelSnapshot("phase2")');
+    // #951: `movementPreferenceTargets` and the two phase panel snapshots are now server-derived
+    // record fields, not panel outputs. The panel reads them back off the stored snapshot.
+    expect(source).toContain("historicalPhasePanel");
     expect(source).not.toContain("History · Current reference");
     expect(source).not.toContain("...inspectorDraft,\n        actionId:");
   });
@@ -1092,14 +1089,15 @@ describe("CombatRoundManagerPanel", () => {
     const source = readSource();
 
     expect(source).not.toContain("updateEncounterOnServer");
-    expect(source).toContain("buildCombatRoundStepSnapshots");
+    // #951: the boundary advance carries no client-built snapshots.
+    expect(source).not.toContain("buildCombatRoundStepSnapshots");
     expect(source).toContain("advanceCombatRoundCurrentStepOnServer");
     expect(source).toContain("advanceDeterministicCombatOnServer");
     expect(source).toContain("projectedDeterministicTask");
     expect(source).toContain("await advanceCombatRoundCurrentStepOnServer({");
     expect(source).toContain("commandType: boundaryTransitionAction.commandType");
     expect(source).toContain("executionGroupId: boundaryTransitionAction.executionGroupId");
-    expect(source).toContain("stepSnapshots,");
+    expect(source).not.toContain("stepSnapshots,\n        targetBoundary");
     expect(source).toContain("getCombatRoundManagerStateFromCommandEnvelope({");
     expect(source).not.toContain("advanceCombatRoundStep(");
     expect(source).toContain("attackResult");

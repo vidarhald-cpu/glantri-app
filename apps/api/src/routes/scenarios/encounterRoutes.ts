@@ -30,6 +30,7 @@ import {
   applyCommittedCombatFeintModifiers,
   applyCombatActionGeneratedModifiers,
   advanceCombatProgressionBoundary,
+  withDerivedCombatRoundStepSnapshots,
   acceptedCombatDefenseCalculationSchema,
   authorizeCombatProgressionTask,
   advanceCombatTaskAtOpportunity,
@@ -113,7 +114,6 @@ import {
   combatAttackSourceRefSchema,
   combatDistanceSchema,
   combatRoundStepSchema,
-  combatRoundStepSnapshotSchema,
   combatStepAutomationStartRequestSchema,
   combatStepAutomationCommandLinkSchema,
   combatNpcDeclarationProposalProvenanceSchema,
@@ -275,7 +275,6 @@ import {
   validateCombatDeclarationCompatibility,
   validateCombatDeclarationTargets,
   validateCombatNpcDeclarationProposal,
-  upsertCombatRoundStepSnapshots,
   type CanonicalCombatModifierEffect,
   type ActiveCombatDeterministicAdvanceDescriptor,
   type ScenarioParticipantState,
@@ -416,6 +415,10 @@ import { combatRoundStatesDiffer } from "./combatRoundPersistence";
 import { parseBodyObject, parseId, parseOptionalString } from "./parsing";
 import { resolveScenarioWorkspaceAccess } from "./access";
 import { selectCurrentCombatModifierValidationTask } from "./combatModifierValidationTaskSelection";
+import {
+  buildCombatStepSnapshotFiguresResolver,
+  buildCombatStepSnapshotSources,
+} from "./combatStepSnapshotFigures";
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
 import {
   buildCanonicalCombatDefenseSnapshot,
@@ -1650,7 +1653,6 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
   phaseContexts?: ReturnType<typeof combatRoundPhaseContextsSchema.parse>;
   phaseAttackSources?: ReturnType<typeof parseCombatDeclarationPhaseAttackSources>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
-  reviewStepSnapshot?: CombatRoundStepSnapshot;
   scenarioParticipantId: string;
   secondaryActionContext?: ReturnType<typeof scenarioParticipantSecondaryActionContextSchema.parse>;
   secondaryActionId?: string;
@@ -1705,10 +1707,6 @@ function parseCombatDeclarationBody(body: unknown): ParsedCombatTaskCommandIdent
         : combatRoundPhaseContextsSchema.parse(value.phaseContexts),
     phaseAttackSources: parseCombatDeclarationPhaseAttackSources(value.phaseAttackSources),
     phaseWeaponNames: parseCombatDeclarationPhaseWeaponNames(value.phaseWeaponNames),
-    reviewStepSnapshot:
-      value.reviewStepSnapshot === undefined
-        ? undefined
-        : combatRoundStepSnapshotSchema.parse(value.reviewStepSnapshot),
     scenarioParticipantId,
     secondaryActionContext:
       value.secondaryActionContext === undefined
@@ -2758,7 +2756,6 @@ function parseCombatRoundAdvanceBody(body: unknown): ParsedCombatTaskCommandIden
     "advance_combat_boundary" | "complete_round"
   >;
   expectedBoundary: CombatProgressionBoundaryKind;
-  stepSnapshots?: CombatRoundStepSnapshot[];
   targetBoundary: CombatProgressionBoundaryKind;
 } {
   const value = parseBodyObject(body, "Combat round advance payload");
@@ -2801,25 +2798,11 @@ function parseCombatRoundAdvanceBody(body: unknown): ParsedCombatTaskCommandIden
     );
   }
   const targetBoundary = parseBoundary("targetBoundary");
-  const stepSnapshotsValue = value.stepSnapshots;
 
-  if (stepSnapshotsValue === undefined) {
-    return { ...identity, commandType, expectedBoundary, targetBoundary };
-  }
-
-  if (!Array.isArray(stepSnapshotsValue)) {
-    throw new Error("stepSnapshots must be an array.");
-  }
-
-  return {
-    ...identity,
-    commandType,
-    expectedBoundary,
-    stepSnapshots: stepSnapshotsValue.map((snapshot) =>
-      combatRoundStepSnapshotSchema.parse(snapshot),
-    ),
-    targetBoundary,
-  };
+  // #951: `stepSnapshots` on this payload is read by nothing. The server derives the committed
+  // step's snapshot from the state it is committing, so an omitted, malformed or hostile client
+  // snapshot cannot reach the stored record at all — it is never parsed and never persisted.
+  return { ...identity, commandType, expectedBoundary, targetBoundary };
 }
 
 function parsePhaseAttackBackOutBody(body: unknown): ParsedCombatTaskCommandIdentity & {
@@ -3422,6 +3405,40 @@ function clearScenarioParticipantCombatDeclaration(
       lastDeclarationNotes: undefined,
     },
   };
+}
+
+/**
+ * #951 / #889 — the server derives and persists each committed step's authoritative snapshot.
+ *
+ * Product Owner ruling of 2026-11-06: a client may send action and draft inputs, but it does not
+ * author the persisted historical snapshot. Every boundary transition and every modifier-review
+ * commit routes through here, so a step is recorded because the server committed it rather than
+ * because a client remembered to attach a payload.
+ *
+ * `previousState` is the state being committed and is the only state any figure is read from.
+ */
+function withServerDerivedCombatStepSnapshots(input: {
+  committedAt: string;
+  encounter: EncounterSession;
+  nextState: CombatRoundState;
+  previousState: CombatRoundState;
+  scenarioParticipants: readonly ScenarioParticipant[];
+}): CombatRoundState {
+  return withDerivedCombatRoundStepSnapshots({
+    committedAt: input.committedAt,
+    encounterId: input.encounter.id,
+    nextState: input.nextState,
+    previousState: input.previousState,
+    resolveParticipantFigures: buildCombatStepSnapshotFiguresResolver({
+      encounter: input.encounter,
+      scenarioParticipants: input.scenarioParticipants,
+    }),
+    sourceByParticipantId: buildCombatStepSnapshotSources({
+      encounter: input.encounter,
+      scenarioParticipants: input.scenarioParticipants,
+      state: input.previousState,
+    }),
+  });
 }
 
 function parseCombatSummaryInteger(value: string | undefined, label: string): number | undefined {
@@ -9470,25 +9487,21 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           submittedBy: "gm",
           suppressNoChangeResult: suppressBacktrackNoChangeResult,
         });
-        if (
-          body.reviewStepSnapshot &&
-          (body.reviewStepSnapshot.participantId !== encounterParticipant.id ||
-            body.reviewStepSnapshot.roundNumber !== roundState.roundNumber ||
-            body.reviewStepSnapshot.step !== roundState.currentStep ||
-            body.reviewStepSnapshot.phase !==
-              (commandType === "review_modifiers_phase1" ? "phase1" : "phase2"))
-        ) {
-          return reply.code(409).send({
-            code: "identity_mismatch",
-            error: "The modifier-review combat summary belongs to another task.",
-          });
-        }
-        const nextRoundState = body.reviewStepSnapshot
-          ? upsertCombatRoundStepSnapshots({
-              snapshots: [body.reviewStepSnapshot],
-              state: reviewedRoundState,
-            })
-          : reviewedRoundState;
+        // #951 / #889. The review step's snapshot is a server write on every path, derived from
+        // the post-review state for every participant in the round. The client no longer sends
+        // one, and the earlier `.find()` down to the single acted participant — which left every
+        // other combatant with no record even on the good path — is gone with it.
+        const nextRoundState = withServerDerivedCombatStepSnapshots({
+          committedAt: submittedAt,
+          encounter,
+          nextState: reviewedRoundState,
+          previousState: reviewedRoundState,
+          scenarioParticipants: scenarioParticipants.map((participant) =>
+            participant.id === scenarioParticipant.id
+              ? { ...participant, state: nextParticipantState }
+              : participant,
+          ),
+        });
         const saved = await encounterService.commitCombatModifierReview({
           campaignId: access.campaignId,
           encounterId,
@@ -12008,7 +12021,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const completed = measureCombatPerformanceStage("domain_command_execution", () =>
+        const completedStep = measureCombatPerformanceStage("domain_command_execution", () =>
           completeRemainingCombatRoundStep({
             command: {
               createdAt: submittedAt,
@@ -12019,6 +12032,17 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             state: roundState,
           }),
         );
+        // #951: bulk completion can move the step, so it records the step it leaves.
+        const completed = {
+          ...completedStep,
+          state: withServerDerivedCombatStepSnapshots({
+            committedAt: submittedAt,
+            encounter,
+            nextState: completedStep.state,
+            previousState: roundState,
+            scenarioParticipants,
+          }),
+        };
         const participantMutations =
           roundState.currentStep === "review_action_modifiers" ||
           roundState.currentStep === "review_phase_2_modifiers"
@@ -12156,13 +12180,20 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const nextRoundState = skipCombatRoundCurrentPhaseAction({
-          command: { createdAt: submittedAt, createdByUserId: user.id },
-          participantId,
-          phase,
-          state: roundState,
-          submittedBy: "gm",
-          updatedAt: submittedAt,
+        // #951: a skipped phase action can move the step, so it records the step it leaves.
+        const nextRoundState = withServerDerivedCombatStepSnapshots({
+          committedAt: submittedAt,
+          encounter,
+          nextState: skipCombatRoundCurrentPhaseAction({
+            command: { createdAt: submittedAt, createdByUserId: user.id },
+            participantId,
+            phase,
+            state: roundState,
+            submittedBy: "gm",
+            updatedAt: submittedAt,
+          }),
+          previousState: roundState,
+          scenarioParticipants,
         });
         const savedEncounter = await encounterService.updateCombatEncounter({
           expectedRevision: encounter.updatedAt,
@@ -12734,6 +12765,30 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           trigger: combatExperienceTrigger,
           visibility: encounter.roleplayState?.visibility,
         });
+        const rolledParticipantState = {
+          ...scenarioParticipant.state,
+          combat: {
+            ...scenarioParticipant.state.combat,
+            combatContext: rolled.combatContext,
+          },
+          combatEffects: rolled.combatEffects,
+        };
+        // #951 repair cycle 1, finding C1. The final Combat Experience discharge is what moves the
+        // round out of `pre_declaration` — `moveCombatRoundAfterCombatExperienceResult`'s no-phase
+        // branch sets `currentStep: "select_actions"` — so this route commits that step and must
+        // record it. When no check is due the GM's boundary control makes the same transition and
+        // records it there, which is why the hole was conditional on an ordinary schedule.
+        const rolledState = withServerDerivedCombatStepSnapshots({
+          committedAt: submittedAt,
+          encounter,
+          nextState: rolled.state,
+          previousState: roundState,
+          scenarioParticipants: scenarioParticipants.map((participant) =>
+            participant.id === scenarioParticipant.id
+              ? { ...participant, state: rolledParticipantState }
+              : participant,
+          ),
+        });
         const saved = await encounterService.commitCombatParticipantStateMutation({
           campaignId: access.campaignId,
           encounterId,
@@ -12742,18 +12797,11 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           scenarioId,
           session: {
             ...encounter,
-            combatRoundState: rolled.state,
-            currentRound: rolled.state.roundNumber,
+            combatRoundState: rolledState,
+            currentRound: rolledState.roundNumber,
             updatedAt: submittedAt,
           },
-          state: {
-            ...scenarioParticipant.state,
-            combat: {
-              ...scenarioParticipant.state.combat,
-              combatContext: rolled.combatContext,
-            },
-            combatEffects: rolled.combatEffects,
-          },
+          state: rolledParticipantState,
         });
 
         return {
@@ -14752,6 +14800,18 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 step: state.currentStep,
                 submittedBy: "gm",
               });
+              // #951 / #889: the deterministic runner's review commit records the step too.
+              const nextStateWithSnapshots = withServerDerivedCombatStepSnapshots({
+                committedAt: submittedAt,
+                encounter: workingEncounter!,
+                nextState,
+                previousState: nextState,
+                scenarioParticipants: workingParticipants.map((participant) =>
+                  participant.id === scenarioParticipant.id
+                    ? { ...participant, state: nextParticipantState }
+                    : participant,
+                ),
+              });
               const saved = await encounterService.commitCombatModifierReview({
                 campaignId: access.campaignId,
                 encounterId,
@@ -14760,8 +14820,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 scenarioId,
                 session: {
                   ...workingEncounter!,
-                  combatRoundState: nextState,
-                  currentRound: nextState.roundNumber,
+                  combatRoundState: nextStateWithSnapshots,
+                  currentRound: nextStateWithSnapshots.roundNumber,
                   updatedAt: submittedAt,
                 },
                 state: nextParticipantState,
@@ -14770,7 +14830,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
               workingParticipants = workingParticipants.map((participant) =>
                 participant.id === saved.participant.id ? saved.participant : participant,
               );
-              return { revision: workingEncounter.updatedAt, state: nextState };
+              return { revision: workingEncounter.updatedAt, state: nextStateWithSnapshots };
             }
 
             if (task.kind === "commit_initiative" && task.identity.phase) {
@@ -14786,13 +14846,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     : [],
                 ),
               );
-              const committed = commitCombatRoundPhaseInitiativeResolution({
+              // #951: the initiative commit moves the step without going through a boundary
+              // advance, so it records the step it leaves itself.
+              const committedResolution = commitCombatRoundPhaseInitiativeResolution({
                 command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
                 nonParticipatingParticipantIds,
                 phase: task.identity.phase,
                 state,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
+              const committed = {
+                ...committedResolution,
+                state: withServerDerivedCombatStepSnapshots({
+                  committedAt: submittedAt,
+                  encounter: workingEncounter!,
+                  nextState: committedResolution.state,
+                  previousState: state,
+                  scenarioParticipants: workingParticipants,
+                }),
+              };
               workingEncounter = await encounterService.updateCombatEncounter({
                 expectedRevision: workingEncounter!.updatedAt,
                 campaignId: access.campaignId,
@@ -14809,19 +14881,27 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             }
 
             if (task.kind === "gm_advance_boundary" && task.transition) {
-              const nextState = advanceCombatProgressionBoundary({
-                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
-                expectedBoundary: task.transition.currentBoundary,
-                expectedCommandType:
-                  task.expectedCommand === "complete_round"
-                    ? "complete_round"
-                    : "advance_combat_boundary",
-                expectedExecutionGroupId: task.executionGroupId,
-                expectedTaskId: task.id,
-                participation: projection.participation,
-                state,
-                targetBoundary: task.transition.targetBoundary,
-                visibility: workingEncounter!.roleplayState?.visibility,
+              // #951: the deterministic runner sends no snapshots and never could. The server
+              // derives this step's record from `state`, the state it is committing.
+              const nextState = withServerDerivedCombatStepSnapshots({
+                committedAt: submittedAt,
+                encounter: workingEncounter!,
+                nextState: advanceCombatProgressionBoundary({
+                  command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                  expectedBoundary: task.transition.currentBoundary,
+                  expectedCommandType:
+                    task.expectedCommand === "complete_round"
+                      ? "complete_round"
+                      : "advance_combat_boundary",
+                  expectedExecutionGroupId: task.executionGroupId,
+                  expectedTaskId: task.id,
+                  participation: projection.participation,
+                  state,
+                  targetBoundary: task.transition.targetBoundary,
+                  visibility: workingEncounter!.roleplayState?.visibility,
+                }),
+                previousState: state,
+                scenarioParticipants: workingParticipants,
               });
               // The round-end commit is the boundary, and a roster change the GM held during the
               // round takes effect here. `nextState` was produced from the roster that was in play,
@@ -15822,13 +15902,34 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 trigger,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
-              const nextState = attachCombatStepAutomationCommandLink({
-                commandId,
-                countsTowardProcessed,
-                executionGroupId: task.executionGroupId,
-                identity,
-                state: rolled.state,
-                taskId: task.id,
+              const rolledParticipantState = {
+                ...owner.participant.state,
+                combat: {
+                  ...owner.participant.state.combat,
+                  combatContext: rolled.combatContext,
+                },
+                combatEffects: rolled.combatEffects,
+              };
+              // #951 repair cycle 1, finding C1. The GM bulk control discharges Combat Experience
+              // too, and the discharge moves the round out of `pre_declaration`, so this branch
+              // records that step exactly as the dedicated route now does.
+              const nextState = withServerDerivedCombatStepSnapshots({
+                committedAt: submittedAt,
+                encounter: workingEncounter!,
+                nextState: attachCombatStepAutomationCommandLink({
+                  commandId,
+                  countsTowardProcessed,
+                  executionGroupId: task.executionGroupId,
+                  identity,
+                  state: rolled.state,
+                  taskId: task.id,
+                }),
+                previousState: apiProjection.state,
+                scenarioParticipants: workingParticipants.map((participant) =>
+                  participant.id === owner.participant.id
+                    ? { ...participant, state: rolledParticipantState }
+                    : participant,
+                ),
               });
               const saved = await encounterService.commitCombatParticipantStateMutation({
                 campaignId: access.campaignId,
@@ -15842,14 +15943,7 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                   currentRound: nextState.roundNumber,
                   updatedAt: submittedAt,
                 },
-                state: {
-                  ...owner.participant.state,
-                  combat: {
-                    ...owner.participant.state.combat,
-                    combatContext: rolled.combatContext,
-                  },
-                  combatEffects: rolled.combatEffects,
-                },
+                state: rolledParticipantState,
               });
               workingEncounter = saved.encounter;
               workingParticipants = workingParticipants.map((participant) =>
@@ -16074,13 +16168,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 step: apiProjection.state.currentStep,
                 submittedBy: "gm",
               });
-              const nextState = attachCombatStepAutomationCommandLink({
-                commandId,
-                countsTowardProcessed,
-                executionGroupId: task.executionGroupId,
-                identity,
-                state: recorded,
-                taskId: task.id,
+              // #951 / #889: the GM bulk control's review commit records the step for every
+              // participant, derived from the post-review state.
+              const nextState = withServerDerivedCombatStepSnapshots({
+                committedAt: submittedAt,
+                encounter: workingEncounter!,
+                nextState: attachCombatStepAutomationCommandLink({
+                  commandId,
+                  countsTowardProcessed,
+                  executionGroupId: task.executionGroupId,
+                  identity,
+                  state: recorded,
+                  taskId: task.id,
+                }),
+                previousState: recorded,
+                scenarioParticipants: workingParticipants.map((participant) =>
+                  participant.id === owner.participant.id
+                    ? { ...participant, state: nextParticipantState }
+                    : participant,
+                ),
               });
               const saved = await encounterService.commitCombatModifierReview({
                 campaignId: access.campaignId,
@@ -16116,13 +16222,25 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                     : [],
                 ),
               );
-              const committed = commitCombatRoundPhaseInitiativeResolution({
+              // #951: the initiative commit moves the step without going through a boundary
+              // advance, so it records the step it leaves itself.
+              const committedResolution = commitCombatRoundPhaseInitiativeResolution({
                 command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
                 nonParticipatingParticipantIds,
                 phase: task.identity.phase,
                 state: apiProjection.state,
                 visibility: workingEncounter!.roleplayState?.visibility,
               });
+              const committed = {
+                ...committedResolution,
+                state: withServerDerivedCombatStepSnapshots({
+                  committedAt: submittedAt,
+                  encounter: workingEncounter!,
+                  nextState: committedResolution.state,
+                  previousState: apiProjection.state,
+                  scenarioParticipants: workingParticipants,
+                }),
+              };
               const nextState = attachCombatStepAutomationCommandLink({
                 commandId,
                 countsTowardProcessed: false,
@@ -16147,16 +16265,24 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
             }
 
             if (task.kind === "gm_advance_boundary" && task.transition) {
-              const advanced = advanceCombatProgressionBoundary({
-                command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
-                expectedBoundary: task.transition.currentBoundary,
-                expectedCommandType: "advance_combat_boundary",
-                expectedExecutionGroupId: task.executionGroupId,
-                expectedTaskId: task.id,
-                participation: apiProjection.participation,
-                state: apiProjection.state,
-                targetBoundary: task.transition.targetBoundary,
-                visibility: workingEncounter!.roleplayState?.visibility,
+              // #951 / #889: the GM's accept/roll-remaining control loses snapshots exactly as the
+              // unattended runner did. The server derives this step's record here too.
+              const advanced = withServerDerivedCombatStepSnapshots({
+                committedAt: submittedAt,
+                encounter: workingEncounter!,
+                nextState: advanceCombatProgressionBoundary({
+                  command: { commandId, createdAt: submittedAt, createdByUserId: user.id },
+                  expectedBoundary: task.transition.currentBoundary,
+                  expectedCommandType: "advance_combat_boundary",
+                  expectedExecutionGroupId: task.executionGroupId,
+                  expectedTaskId: task.id,
+                  participation: apiProjection.participation,
+                  state: apiProjection.state,
+                  targetBoundary: task.transition.targetBoundary,
+                  visibility: workingEncounter!.roleplayState?.visibility,
+                }),
+                previousState: apiProjection.state,
+                scenarioParticipants: workingParticipants,
               });
               const nextState = attachCombatStepAutomationCommandLink({
                 commandId,
@@ -16325,20 +16451,28 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         state: roundState,
       });
       const submittedAt = new Date().toISOString();
-      const nextRoundState = advanceCombatProgressionBoundary({
-        command: {
-          createdAt: submittedAt,
-          createdByUserId: user.id,
-        },
-        expectedBoundary: body.expectedBoundary,
-        expectedCommandType: body.commandType,
-        expectedExecutionGroupId: body.executionGroupId,
-        expectedTaskId: body.taskId,
-        participation,
-        state: roundState,
-        stepSnapshots: body.stepSnapshots,
-        targetBoundary: body.targetBoundary,
-        visibility: encounter.roleplayState?.visibility,
+      // #951: the GM's manual boundary advance used to persist `body.stepSnapshots`, built by the
+      // client. The server now derives the committed step's record from `roundState`, the state it
+      // is committing, and the payload field is read by nothing.
+      const nextRoundState = withServerDerivedCombatStepSnapshots({
+        committedAt: submittedAt,
+        encounter,
+        nextState: advanceCombatProgressionBoundary({
+          command: {
+            createdAt: submittedAt,
+            createdByUserId: user.id,
+          },
+          expectedBoundary: body.expectedBoundary,
+          expectedCommandType: body.commandType,
+          expectedExecutionGroupId: body.executionGroupId,
+          expectedTaskId: body.taskId,
+          participation,
+          state: roundState,
+          targetBoundary: body.targetBoundary,
+          visibility: encounter.roleplayState?.visibility,
+        }),
+        previousState: roundState,
+        scenarioParticipants,
       });
       // The round-end commit is the boundary, and a roster change the GM held during the round
       // takes effect here. `nextRoundState` was produced from the roster that was in play, so the
@@ -16994,7 +17128,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
         }
 
         const submittedAt = new Date().toISOString();
-        const committed = commitCombatRoundPhaseInitiativeResolution({
+        // #951: the initiative commit moves the step without going through a boundary advance, so
+        // it records the step it leaves itself.
+        const committedResolution = commitCombatRoundPhaseInitiativeResolution({
           command: {
             createdAt: submittedAt,
             createdByUserId: user.id,
@@ -17004,6 +17140,16 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           state: roundState,
           visibility: encounter.roleplayState?.visibility,
         });
+        const committed = {
+          ...committedResolution,
+          state: withServerDerivedCombatStepSnapshots({
+            committedAt: submittedAt,
+            encounter,
+            nextState: committedResolution.state,
+            previousState: roundState,
+            scenarioParticipants,
+          }),
+        };
         const participantMutations = Object.entries(
           committed.combatContextsByParticipantId,
         ).flatMap(([encounterParticipantId, combatContext]) => {
