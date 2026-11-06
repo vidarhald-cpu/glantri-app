@@ -332,7 +332,9 @@ if (!hasTaskApplicationDatabase) {
         inherited?.characterId,
       );
 
-      // And the GM action gate now refuses them, because it reads the same pair.
+      // This 403 does not come from the shared predicate: the route's first statement,
+      // requireAdminUser, refuses a player-only account before the predicate is reached.
+      // With the ownership-only predicate restored this assertion still passes.
       const gmOnlyRoute = await app.inject({
         headers: { cookie: fixture.ownerCookie, origin },
         method: "PUT",

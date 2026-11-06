@@ -71,6 +71,9 @@ owners who are not GMs. The predicate is `isCampaignGameMaster` in
 an exemption granted on either half alone is a defect rather than a variant.
 Creation remaining open to an `admin`-only account is issue #992 and is not
 settled by this.
+The enumeration of sites that decide GM authority is open rather than closed: at
+least the Artifact, Artifact-import and Campaign Map surfaces decide it from
+`Campaign.gmUserId` alone, as recorded in issue #1018.
 
 Reusable templates and concrete Campaign objects also have separate
 projections. Template-library authority may expose a reusable source without
