@@ -228,6 +228,12 @@ export class EncounterService {
     campaignId?: string | null;
     encounterId: string;
     expectedRevision: string;
+    /**
+     * Carried straight through to the repository, where it is documented. Set only by
+     * `clear-current-step`, which must stay usable on an Encounter already holding an inactive
+     * combatant (#845); every other combat write leaves it unset and is refused as before.
+     */
+    permitInactiveRosterParticipants?: boolean;
     scenarioId?: string | null;
     session: EncounterSession;
     participantStateUpdates?: Array<{
@@ -342,6 +348,8 @@ export class EncounterService {
     encounterId: string;
     expectedEncounterRevision: string;
     participants: Array<{ participant: ScenarioParticipant; state: ScenarioParticipantState }>;
+    /** See `updateCombatEncounter`: `clear-current-step` reaches the write through here too. */
+    permitInactiveRosterParticipants?: boolean;
     scenarioId: string;
     session: EncounterSession;
   }): Promise<{ encounter: EncounterSession; participants: ScenarioParticipant[] }> {
@@ -356,6 +364,7 @@ export class EncounterService {
       encounterId: input.encounterId,
       expectedRevision: input.expectedEncounterRevision,
       participantStateUpdates,
+      permitInactiveRosterParticipants: input.permitInactiveRosterParticipants,
       scenarioId: input.scenarioId,
       session: input.session,
     });

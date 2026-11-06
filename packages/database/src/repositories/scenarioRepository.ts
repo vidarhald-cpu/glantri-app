@@ -10,7 +10,9 @@ import {
   scenarioSchema,
   scenarioSessionStateSchema,
   createScenarioLiveState,
+  encountersBlockingScenarioParticipantDeactivation,
   getStorageAssignmentForLocation,
+  scenarioParticipantDeactivationRefusal,
   type CanonicalEquipmentItem,
   type Campaign,
   type CampaignAsset,
@@ -35,6 +37,7 @@ import { createDefaultEquipmentLocations } from "@glantri/content";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
+import { ScenarioParticipationFrozenError } from "../scenarioParticipationFrozen";
 import { createPrismaCharacterEquipmentRepository } from "./characterEquipmentRepository";
 import { reconcileScenarioEquipmentForCharacters } from "../services/scenarioEquipmentReconciliation";
 
@@ -61,6 +64,96 @@ export class CampaignRosterPersistenceConflictError extends Error {
     super("Character already belongs to another active Campaign.");
     this.name = "CampaignRosterPersistenceConflictError";
   }
+}
+
+/**
+ * Refuse to make a Scenario participant inactive while a running Encounter holds them on a roster.
+ *
+ * This is the half of #845 that the presence check in `encounterRepository` cannot do. That check
+ * refuses the *Encounter* write, which is correct and stays; what it cannot do is stop the Scenario
+ * write that creates the condition, so the round became unwritable one request after a `200`. Per
+ * the #850 ruling the participant set of a running round is frozen, and the answer is to refuse
+ * the change with a usable message rather than to make the mid-round path work.
+ *
+ * The check runs inside the caller's transaction, behind the same `SELECT … FOR UPDATE` on the
+ * Scenario row that `assertActiveEncounterPresence` takes. That is what makes it a boundary rather
+ * than a hint: without the lock an Encounter could be activated between this read and the write,
+ * and the pair would interleave into exactly the state being prevented. With it, one of two orders
+ * happens — this write first, and the activation's own presence check refuses it; or the activation
+ * first, and this check sees it.
+ */
+async function assertScenarioParticipantDeactivationAllowed(input: {
+  participantId: string;
+  scenarioId: string;
+  transaction: Prisma.TransactionClient;
+}): Promise<void> {
+  await input.transaction.$queryRaw(
+    Prisma.sql`SELECT "id" FROM "Scenario" WHERE "id" = ${input.scenarioId} FOR UPDATE`,
+  );
+  // The Encounters read below are this Scenario's, so the participant must be this Scenario's too,
+  // or the question asked and the row written would be about two different Scenarios. The service
+  // establishes this already; it is re-established here because this is the boundary, and the
+  // `update` that follows can only key on the row id.
+  const participant = await input.transaction.scenarioParticipant.findUnique({
+    select: { scenarioId: true, snapshotJson: true },
+    where: { id: input.participantId },
+  });
+
+  if (!participant) {
+    throw new Error("Scenario participant not found.");
+  }
+
+  if (participant.scenarioId !== input.scenarioId) {
+    throw new Error("Scenario participant does not belong to this Scenario.");
+  }
+
+  const records = await input.transaction.encounter.findMany({
+    select: { id: true, name: true, sessionJson: true, status: true },
+    where: { scenarioId: input.scenarioId, status: "active" },
+  });
+  // Read with two narrow field reads rather than `encounterSessionSchema.parse`: the question is
+  // only which Scenario participants two rosters name, and a full parse would make an unrelated
+  // stored-session defect refuse an ordinary participation edit.
+  const encounters = records.flatMap((record) => {
+    const session = record.sessionJson;
+    if (!session || typeof session !== "object" || Array.isArray(session)) return [];
+    const parsed = session as {
+      participants?: { scenarioParticipantId?: string }[];
+      pendingParticipants?: { scenarioParticipantId?: string }[];
+    };
+    return [
+      {
+        id: record.id,
+        participants: Array.isArray(parsed.participants) ? parsed.participants : [],
+        pendingParticipants: Array.isArray(parsed.pendingParticipants)
+          ? parsed.pendingParticipants
+          : undefined,
+        status: "active" as const,
+        title: record.name,
+      },
+    ];
+  });
+  const blocking = encountersBlockingScenarioParticipantDeactivation({
+    encounters,
+    scenarioParticipantId: input.participantId,
+  });
+
+  if (blocking.length === 0) return;
+
+  const snapshot = participant.snapshotJson as { displayName?: unknown } | null | undefined;
+  const refusal = scenarioParticipantDeactivationRefusal({
+    encounterTitles: blocking.map((encounter) => encounter.title),
+    participantDisplayName:
+      typeof snapshot?.displayName === "string" && snapshot.displayName.trim().length > 0
+        ? snapshot.displayName
+        : "This participant",
+  });
+
+  throw new ScenarioParticipationFrozenError(
+    "encounter_participant_set_frozen",
+    refusal ?? "This participant is a combatant in an Encounter that is under way.",
+    blocking.map((encounter) => encounter.id),
+  );
 }
 
 function isCampaignRosterIdentityConflict(
@@ -439,6 +532,8 @@ export interface ScenarioRepository {
     isActive?: boolean;
     participantId: string;
     roleTag?: string | null;
+    /** Required: a deactivation is decided against this Scenario's running Encounters (#845). */
+    scenarioId: string;
     tacticalGroupId?: string | null;
   }): Promise<ScenarioParticipant>;
   /**
@@ -1307,17 +1402,34 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       return mapScenarioParticipant(record);
     },
     async updateScenarioParticipantMetadata(input) {
-      const record = await prisma.scenarioParticipant.update({
-        data: {
-          controlledByUserId:
-            input.controlledByUserId === undefined ? undefined : input.controlledByUserId,
-          displayOrder: input.displayOrder === undefined ? undefined : input.displayOrder,
-          factionId: input.factionId === undefined ? undefined : input.factionId,
-          isActive: input.isActive === undefined ? undefined : input.isActive,
-          roleTag: input.roleTag === undefined ? undefined : input.roleTag,
-          tacticalGroupId: input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId,
-        },
-        where: { id: input.participantId },
+      const data = {
+        controlledByUserId:
+          input.controlledByUserId === undefined ? undefined : input.controlledByUserId,
+        displayOrder: input.displayOrder === undefined ? undefined : input.displayOrder,
+        factionId: input.factionId === undefined ? undefined : input.factionId,
+        isActive: input.isActive === undefined ? undefined : input.isActive,
+        roleTag: input.roleTag === undefined ? undefined : input.roleTag,
+        tacticalGroupId: input.tacticalGroupId === undefined ? undefined : input.tacticalGroupId,
+      };
+
+      // Only a deactivation is constrained, and only then does this cost a transaction: the other
+      // metadata fields, and reactivation, change nothing a running Encounter depends on.
+      // Reactivation in particular stays open at every status, because it is the one move that
+      // repairs a round already in the state #845 reported.
+      if (input.isActive !== false) {
+        return mapScenarioParticipant(
+          await prisma.scenarioParticipant.update({ data, where: { id: input.participantId } }),
+        );
+      }
+
+      const record = await prisma.$transaction(async (transaction) => {
+        await assertScenarioParticipantDeactivationAllowed({
+          participantId: input.participantId,
+          scenarioId: input.scenarioId,
+          transaction,
+        });
+
+        return transaction.scenarioParticipant.update({ data, where: { id: input.participantId } });
       });
 
       return mapScenarioParticipant(record);
