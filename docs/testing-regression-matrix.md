@@ -189,12 +189,15 @@ Three traps, each of which has already been misreported as a product defect:
   `setScenarioParticipantVisibilityForTest`. With only the two `PLAYWRIGHT_*`
   variables exported they fail; with the full `.env.task` exported and a
   recycled database they pass. **Neither is a pre-existing failure.**
-- **`ARTIFACT_LOCAL_ROOT` must be set**, or three specs fail on a
-  missing-environment assertion rather than on product behaviour — see
-  `apps/web/e2e/blackboard.spec.ts:121-122` and
-  `apps/web/e2e/artifactImports.spec.ts:231`. Setting it for the Playwright
-  process alone is **not enough**; see
+- **`ARTIFACT_LOCAL_ROOT` must be set**, or specs fail on a
+  missing-environment assertion (`apps/web/e2e/blackboard.spec.ts:121-122`) or,
+  where the guard at `apps/web/e2e/artifactImports.spec.ts:231` fires, skip
+  rather than run. Setting it for the Playwright process alone is **not
+  enough**; see
   [further environment traps](#further-environment-traps--recorded-2026-09-26).
+  **This is a different failure from the two Artifact cases that fail locally on
+  product assertions**; to tell which you have, read
+  [which one you are looking at](#two-artifact-failure-modes-one-set-of-specs--tell-which-one-you-are-looking-at).
 - **`apps/web/e2e/global-setup.ts` is not idempotent.** A second run against the
   same database fails with `409 CHARACTER_ALREADY_IN_ACTIVE_CAMPAIGN`, so
   **every full e2e run needs a fresh, unseeded disposable database.**
@@ -293,37 +296,114 @@ an unattributed full-suite result. Two lanes did exactly that on 2026-09-26 and
 were right to; an unattributed local failure count is what produced the stale
 baseline corrected below.
 
-### Pre-existing Playwright failure baseline — recorded 2026-09-26
+### Known local Playwright failures and CI-skipped Artifact specs — recorded 2026-09-26, rewritten 2026-11-06
 
-**Corrected 2026-09-26 against `2a18d1bf0525a0f9bc6a887ef61aad3e8cdc872b`. The baseline is two
-failures, not four.** This is the third baseline this section has recorded — six, then four, now
-two. It supersedes the four-failure baseline this section previously recorded, which itself
-superseded the original six-failure baseline. What was believed at each stage, and why it
-stopped being true, is kept below because that succession is itself the durable lesson.
+**Rewritten 2026-11-06 (#964).** This section was headed "Pre-existing Playwright failure
+baseline" and ended with a sentence telling a lane it was "not accountable" for two named cases.
+That sentence is removed. The Product Owner ruled (#964, 2026-11-05, restated 2026-11-06) that no
+process document may license specific red gate failures as an allowed baseline; an
+environment-specific skip belongs in test configuration, and a required protected gate must be
+green. Nothing below is an allowance. It records facts and says where the remedy is tracked.
+
+**What the old sentence hid.** One of the two cases it excused is a player-facing exposure test,
+and it was failing on `dev` because a player's Artifact card carries a button the case asserts is
+absent. Whether that button is a GM control reaching a player is unmeasured and is tracked as
+#996. A document that tells lanes not to look at a red is how that stayed unexamined.
+
+#### Two Artifact failure modes, one set of specs — tell which one you are looking at
+
+This document describes the same Artifact specs in two places because they fail in two different
+ways. A reader who finds one description has **not** found the other, and quoting either as the
+answer to "why did this fail" is wrong half the time. The distinguishing evidence is the
+assertion that fails:
+
+| You see                                                                                                                                                                                                                                | It is                                                                                                                                                                                                            | Read                                                                                                               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `expect(artifactRoot).toBeTruthy()` at `apps/web/e2e/blackboard.spec.ts:122`, or a failure (or, where the guard at `apps/web/e2e/artifactImports.spec.ts:231` fires, a skip) in the recovery case at `artifactImports.spec.ts:227-231` | An **unsatisfied environment**: `ARTIFACT_LOCAL_ROOT` is not set, or reached Playwright but not the application stack. It says nothing about the product.                                                        | [The environment traps](#further-environment-traps--recorded-2026-09-26) earlier in this document                  |
+| A **product assertion** failing with the environment satisfied: `apps/web/e2e/artifacts.spec.ts:130` (a player's Artifact card button count) or `apps/web/e2e/artifactImports.spec.ts:146` (the `Excluded` text in the review step)    | A **known local failure** of the two cases listed below. The environment is fine: in the measuring run the `blackboard` case and the other environment-sensitive `artifactImports` cases passed in the same run. | [The two cases that fail locally](#the-two-artifact-cases-that-currently-fail-locally--recorded-2026-11-06), below |
+
+Line numbers are those at `dev` `416636aa478961882b4040b456267ea1393419fe`; locate by the
+assertion text if they have moved. A failure whose assertion matches neither row is not covered by
+this section at all and is a new failure.
+
+#### Why the gate does not show them
+
+`application-docker-test` runs `playwright test` with no `--grep`, no `--project` and no path
+filter, so its selection is the whole configuration. The two cases below, and two further
+`artifactImports.spec.ts` cases, open with a guard:
+
+```ts
+test.skip(
+  process.env.CI === "true" && process.env.ARTIFACT_E2E_STORAGE_ENABLED !== "1",
+  ...
+);
+```
+
+`ARTIFACT_E2E_STORAGE_ENABLED` is listed in `turbo.json` as a passed-through variable but is
+**set nowhere in this repository**, including the workflow, so in CI the guards always fire. The
+CI gate is green **because it did not run these cases**, not because they passed, and nothing in
+it can tell a reader whether they would. The skip is an intentional, environment-specific skip:
+CI has no Artifact-storage substrate for them. It is enforced in the specs, not in this document.
+Moving it into test configuration is tracked in #892. Giving the cases a dedicated
+Artifact-enabled CI job, if they protect behaviour worth protecting, is a recorded direction and
+is not authorized here.
+
+#### The two Artifact cases that currently fail locally — recorded 2026-11-06
+
+They run locally, where `CI` is unset, and **two of them currently fail there**. Measured by
+independent QA on an unrelated candidate at `331d7599c56c5ba586c727e20d7c72d66ffd850e`
+(73 collected, 68 passed, 3 skipped, 2 failed) and reproduced with a controlled second worktree at
+`dev` `416636aa`, with `ARTIFACT_LOCAL_ROOT` exported before the stack started:
+
+| Spec                                      | Case                                                                              | Failing assertion                                               | Remedy tracked in |
+| ----------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------- |
+| `apps/web/e2e/artifactImports.spec.ts:10` | creates, reuses, revises, retires and imports through review at narrow width      | `artifactImports.spec.ts:146`, the `Excluded` text in review    | #892              |
+| `apps/web/e2e/artifacts.spec.ts:16`       | publishes a safe visual Artifact to entitled players without exposing GM controls | `artifacts.spec.ts:130`, `getByRole("button")` receives 1 not 0 | #892, #996        |
+
+**Why they fail is not established**, and this document does not say. Nobody has measured whether
+either is a stale assertion or a product defect; the second is a possible control exposure to a
+player and is being measured under #996.
+
+**This is a live condition, not a baseline, and not an exemption.** What a lane does:
+
+- A lane's obligation is to add **no new failure**. Run these specs locally when the change could
+  affect them, and report their result as it is.
+- Meeting one of these two failing locally is **expected and already known**. It is not a reason
+  to dismiss any other failure, and it is not a reason to call a gate result green: the gate did
+  not run them.
+- Any failure in a required protected gate is a real failure. Nothing here changes that, and
+  nothing here may be extended to name a further case.
+- Do not edit either case's assertion to make a local run green. The repair of the first belongs
+  to #892 and of the second to #996.
+
+**The `apps/web/browser-tests/playwright.config.ts` project has zero known failures.** Any
+`apps/web/browser-tests` failure is a real regression and must be treated as one.
+
+#### History: the succession of recorded baselines
+
+This section kept a failure count, and the count was wrong at every stage. That is kept below
+because the succession is itself the durable lesson, and because it is why the sentence above is
+no longer written as a count. The current text replaces the third entry; it does not add a fourth.
+
+**Corrected 2026-09-26 against `2a18d1bf0525a0f9bc6a887ef61aad3e8cdc872b`: the baseline was
+two failures, not four.** This was the third baseline this section recorded — six, then four, then
+two. It superseded the four-failure baseline, which itself superseded the original six-failure
+baseline. What was believed at each stage, and why it stopped being true, follows.
 
 The four-failure baseline was established by an independent floor-class QA lane using a
 **controlled base-versus-head comparison**: a second worktree at `5c34b1f0`, its own disposable
 database, and its own stack on its own derived ports, running the contested specs on both sides.
 
-The current two-failure baseline was confirmed by the independent floor-class QA lane that
+The two-failure baseline was confirmed by the independent floor-class QA lane that
 verified #363 (merged as PR #378). That change fixed the two
 `apps/web/browser-tests/skill-reference.spec.mts` viewport-case failures the four-failure
 baseline listed below. **Those two cases were stale assertions, not product failures**, and must
 no longer be presented as a baseline a lane may ignore.
 
-Two failures, both driven by `apps/web/playwright.config.ts`, in specs under `apps/web/e2e`:
-
-| Spec                                      | Case                                                                              |
-| ----------------------------------------- | --------------------------------------------------------------------------------- |
-| `apps/web/e2e/artifactImports.spec.ts:10` | creates, reuses, revises, retires and imports through review at narrow width      |
-| `apps/web/e2e/artifacts.spec.ts:16`       | publishes a safe visual Artifact to entitled players without exposing GM controls |
-
-**The `apps/web/browser-tests/playwright.config.ts` project has zero pre-existing failures.**
-Because it has none, any `apps/web/browser-tests` failure is a real regression and must be
-treated as one.
-
-**A lane is not accountable for these two; it is accountable for not adding a
-third.**
+**That sentence was then followed by the same mistake.** This section listed a different pair,
+the two Artifact cases above, under the same heading, and told lanes they were not accountable
+for them. It was removed on 2026-11-06 (#964) after one of the two turned out to be a
+player-facing exposure test that had been failing unexamined (#996).
 
 #### What was superseded, and why it went stale
 

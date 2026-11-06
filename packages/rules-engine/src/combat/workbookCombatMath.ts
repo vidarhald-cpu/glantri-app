@@ -442,15 +442,20 @@ export function resolveWorkbookPercentageAdjustment(
     // The ruling makes those two the same rule rather than two branches with the same arithmetic.
     //
     // `Prosent!B5:P5` is authored as literal zeroes in the source workbook, so the zero row is a
-    // deliberate deviation from the source rather than a repair of a bad transcription. Whether
-    // the zero row should keep deviating is Product Owner question 15 on #934 and is open; this
-    // change neither settles it nor changes what the zero row returns.
+    // deliberate deviation from the source rather than a repair of a bad transcription. That
+    // deviation is settled, not open: Product Owner question 15 (asked on #934) was ruled on #922,
+    // comment 20880, 2026-11-04 — keep the zero override, base 0 follows the same one-point-per-step
+    // rule as bases 1 to 10 and below zero, and the workbook's isolated frozen zero row is
+    // superseded. The behaviour itself dates from 0f3682335bdeca4312ab096398eb24286092b177
+    // (2026-05-19). Zero is a valid numerical base here, not "ability absent"; an ability that
+    // genuinely cannot be used has to be represented explicitly, never through numeric zero. See
+    // docs/decisions/rules/0013-workbook-zero-base-percentage-adjustment.md.
     const belowZeroAxes: WorkbookPercentageAdjustmentAxis[] = [];
     if (rawOb < 0) {
       // The grid's first authored row is base 0, so a base below zero is outside it on a third
       // edge and the figure is an extrapolation under the standing ruling (comment 20326). Base 0
-      // has an authored row and is not flagged on this edge, whatever the open question decides
-      // about the figure it returns.
+      // has an authored row and is not flagged on this edge, though the figure it returns is the
+      // superseding one-point-per-step rule rather than the authored zeroes.
       belowZeroAxes.push("base_below_zero");
     }
     if (pastModifierEdge) {
