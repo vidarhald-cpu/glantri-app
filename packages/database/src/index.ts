@@ -19,4 +19,5 @@ export * from "./services/combatStateReadService";
 export * from "./services/combatItemInteractionService";
 export * from "./services/encounterService";
 export * from "./services/scenarioService";
+export { ScenarioParticipationFrozenError } from "./scenarioParticipationFrozen";
 export { ArtifactImportService } from "./services/artifactImportService";

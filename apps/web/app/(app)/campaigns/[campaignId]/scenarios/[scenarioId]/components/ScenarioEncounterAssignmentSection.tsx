@@ -263,6 +263,17 @@ export function ScenarioEncounterAssignmentSection({
                   const joinedEncounters = nonArchivedEncounters.filter((encounter) =>
                     isParticipantInEncounter(encounter, participant),
                   );
+                  // Combatants enter and leave only between rounds (#850), so while an Encounter
+                  // this participant is in is under way, making them inactive in the Scenario is a
+                  // mid-round removal by another name. The server refuses it; this says so before
+                  // the GM clicks, next to the Encounter control that does work.
+                  const runningEncounters = joinedEncounters.filter(
+                    (encounter) => encounter.status === "active",
+                  );
+                  const activityFrozen = participant.isActive && runningEncounters.length > 0;
+                  const runningEncounterTitles = runningEncounters
+                    .map((encounter) => encounter.title)
+                    .join(", ");
 
                   return (
                     <Fragment key={participant.id}>
@@ -349,10 +360,16 @@ export function ScenarioEncounterAssignmentSection({
                               >
                                 <label
                                   style={{ alignItems: "center", display: "flex", gap: "0.35rem" }}
+                                  title={
+                                    activityFrozen
+                                      ? `${participant.snapshot.displayName} is a combatant in ${runningEncounterTitles}, which is under way.`
+                                      : undefined
+                                  }
                                 >
                                   <input
                                     aria-label={`Toggle ${participant.snapshot.displayName} active scenario status`}
                                     checked={participant.isActive}
+                                    disabled={activityFrozen}
                                     onChange={(event) =>
                                       onParticipantActiveToggle(participant, event.target.checked)
                                     }
@@ -378,6 +395,24 @@ export function ScenarioEncounterAssignmentSection({
                                   </button>
                                 ) : null}
                               </div>
+                              {activityFrozen ? (
+                                <div
+                                  data-testid={`participation-frozen-${participant.id}`}
+                                  role="note"
+                                  // The assignment table carries its own `minWidth: 780` and
+                                  // scrolls horizontally at the narrowest GM width, so a line of
+                                  // this length is cut off by the section edge at 768 unless it is
+                                  // held narrower than the table.
+                                  style={{ color: "#6b4a12", maxWidth: "40rem" }}
+                                >
+                                  Combatants enter and leave only between rounds, so{" "}
+                                  {participant.snapshot.displayName} cannot be made inactive while{" "}
+                                  <strong>{runningEncounterTitles}</strong> is under way. Clear
+                                  their Encounter checkbox above to take them out of the fight — the
+                                  change applies at the next round boundary — or commit round end
+                                  first and make them inactive in the Scenario then.
+                                </div>
+                              ) : null}
                               {equipmentRefreshResult?.participantId === participant.id ? (
                                 <div
                                   role={

@@ -7,13 +7,17 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  adoptCoherentPlayerCombatSnapshot,
   createPlayerCombatHistoryRequestCoordinator,
   createPlayerCombatRefreshRequestCoordinator,
   getPlayerCombatProjectionCacheKey,
   isMatchingPlayerCombatHistory,
+  isPlayerCombatHistoryRevisionMismatch,
   loadPlayerCombatSlowContext,
   pollPlayerCombatSnapshot,
   shouldAcceptPlayerCombatEncounter,
+  PLAYER_COMBAT_SNAPSHOT_RETRY_DELAYS_MS,
+  type PlayerCombatSnapshotPollResult,
 } from "./playerCombatRefresh";
 
 function history(input: {
@@ -358,5 +362,164 @@ describe("player combat refresh coordination", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  /**
+   * Forgejo #1011 — the mount-time revision race.
+   *
+   * The cases below pin the two sentences the investigation found unpinned, and the schedule's
+   * relation to the writer it exists to survive. Neither sentence had an assertion anywhere in the
+   * repository before this.
+   */
+  describe("mount-time revision race (#1011)", () => {
+    const RACED_ENCOUNTER = {
+      ...encounter("encounter-1", "2026-01-01T00:02:00.000Z"),
+      scenarioId: "scenario-1",
+    };
+
+    function racedPoll(input: {
+      loadHistory: (candidate: EncounterSession) => Promise<never> | Promise<unknown>;
+    }) {
+      return pollPlayerCombatSnapshot({
+        encounterId: "encounter-1",
+        loadEncounter: async () => RACED_ENCOUNTER,
+        loadHistory: input.loadHistory as never,
+        loadParticipants: async () => [],
+        loadProjection: async () => ({ scenario: { id: "scenario-1" } }) as never,
+        loadRevision: async () => ({
+          encounterId: "encounter-1",
+          revision: RACED_ENCOUNTER.updatedAt,
+          status: "active",
+          updatedAt: RACED_ENCOUNTER.updatedAt,
+        }),
+      });
+    }
+
+    it("routes a history revision mismatch into the retryable stale path instead of rejecting", async () => {
+      // The real coordinator, so the rejection under test is the product's own, not a stand-in.
+      const coordinator = createPlayerCombatHistoryRequestCoordinator({
+        loadHistory: async (encounterId) =>
+          history({ encounterId, revision: "2026-01-01T00:03:00.000Z" }),
+      });
+
+      await expect(
+        racedPoll({
+          loadHistory: (candidate) =>
+            coordinator.request({
+              encounterId: candidate.id,
+              revision: candidate.updatedAt,
+            }) as never,
+        }),
+      ).resolves.toEqual({ kind: "stale" });
+    });
+
+    it("keeps the coordinator's own rejection typed and worded as it was", async () => {
+      const coordinator = createPlayerCombatHistoryRequestCoordinator({
+        loadHistory: async (encounterId) =>
+          history({ encounterId, revision: "2026-01-01T00:03:00.000Z" }),
+      });
+      const caught = await coordinator
+        .request({ encounterId: "encounter-1", revision: "2026-01-01T00:02:00.000Z" })
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+
+      expect(isPlayerCombatHistoryRevisionMismatch(caught)).toBe(true);
+      expect((caught as Error).message).toBe(
+        "Combat history did not match the accepted encounter revision.",
+      );
+    });
+
+    it("still rejects a history failure that is not a revision race", async () => {
+      await expect(
+        racedPoll({
+          loadHistory: async () => {
+            throw new Error("Encounter not found.");
+          },
+        }),
+      ).rejects.toThrow("Encounter not found.");
+    });
+
+    const coherent = {
+      encounter: RACED_ENCOUNTER,
+      history: {
+        history: history({ encounterId: "encounter-1", revision: RACED_ENCOUNTER.updatedAt }),
+        identity: { encounterId: "encounter-1", revision: RACED_ENCOUNTER.updatedAt },
+      },
+      kind: "updated",
+      participants: [],
+      projection: { scenario: { id: "scenario-1" } },
+    } as unknown as PlayerCombatSnapshotPollResult;
+
+    it("retries a revision race and adopts the first coherent attempt", async () => {
+      const results: PlayerCombatSnapshotPollResult[] = [
+        { kind: "stale" },
+        { kind: "stale" },
+        coherent,
+      ];
+      const loadSnapshot = vi.fn(async () => results.shift() ?? { kind: "stale" as const });
+      const slept: number[] = [];
+
+      await expect(
+        adoptCoherentPlayerCombatSnapshot({
+          loadSnapshot,
+          sleep: async (ms) => {
+            slept.push(ms);
+          },
+        }),
+      ).resolves.toBe(coherent);
+      expect(loadSnapshot).toHaveBeenCalledTimes(3);
+      expect(slept).toEqual([150, 300]);
+    });
+
+    /**
+     * The number this schedule answers to. The GM's autonomous round advance held a chain of
+     * writes open for 1233 ms (#1004 comment 22644), and an immediate single retry with no
+     * backoff is what that chain defeated. A schedule whose total span fell back under the
+     * measured writer would restore the defect while still looking like a retry.
+     */
+    it("spans more than the measured 1233 ms GM write chain", () => {
+      const totalBackoffMs = PLAYER_COMBAT_SNAPSHOT_RETRY_DELAYS_MS.reduce(
+        (total, delay) => total + delay,
+        0,
+      );
+
+      expect(PLAYER_COMBAT_SNAPSHOT_RETRY_DELAYS_MS.length).toBeGreaterThan(1);
+      expect(totalBackoffMs).toBeGreaterThan(1_233);
+    });
+
+    it("gives up with one named sentence only after the whole schedule is spent", async () => {
+      const loadSnapshot = vi.fn(async () => ({ kind: "stale" }) as PlayerCombatSnapshotPollResult);
+
+      await expect(
+        adoptCoherentPlayerCombatSnapshot({ loadSnapshot, sleep: async () => {} }),
+      ).rejects.toThrow("Unable to adopt one coherent player combat revision.");
+      expect(loadSnapshot).toHaveBeenCalledTimes(PLAYER_COMBAT_SNAPSHOT_RETRY_DELAYS_MS.length + 1);
+    });
+
+    it("stops retrying as soon as the mount is abandoned", async () => {
+      const loadSnapshot = vi.fn(async () => ({ kind: "stale" }) as PlayerCombatSnapshotPollResult);
+
+      await expect(
+        adoptCoherentPlayerCombatSnapshot({
+          isAbandoned: () => true,
+          loadSnapshot,
+          sleep: async () => {},
+        }),
+      ).rejects.toThrow("Unable to adopt one coherent player combat revision.");
+      expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not retry a rejection, so a refusal still reaches the surface at once", async () => {
+      const loadSnapshot = vi.fn(async () => {
+        throw new Error("Encounter not found.");
+      });
+
+      await expect(
+        adoptCoherentPlayerCombatSnapshot({ loadSnapshot, sleep: async () => {} }),
+      ).rejects.toThrow("Encounter not found.");
+      expect(loadSnapshot).toHaveBeenCalledTimes(1);
+    });
   });
 });

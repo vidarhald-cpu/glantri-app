@@ -776,7 +776,20 @@ export class ScenarioService {
       scenarioId: input.scenarioId,
     });
 
-    const participant = await this.repository.updateScenarioParticipantMetadata(input);
+    // A deactivation runs Serializable against this Scenario's running Encounters (#845), so it can
+    // exhaust its bounded retry and come back as a serialization conflict. Converted to the same
+    // conflict error the Scenario's other Serializable writes already raise, so the route can answer
+    // it `409` instead of flattening it into "Unable to update participant metadata."
+    const participant = await (async () => {
+      try {
+        return await this.repository.updateScenarioParticipantMetadata(input);
+      } catch (error) {
+        if (error instanceof ScenarioPersistenceError) {
+          throw new ScenarioMutationConflictError(error.code, error.message, error);
+        }
+        throw error;
+      }
+    })();
 
     await this.repository.createScenarioEventLog({
       eventType:

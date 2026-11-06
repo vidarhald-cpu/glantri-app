@@ -109,6 +109,180 @@ function phaseSection(page: Page, label: "Phase 1" | "Phase 2"): Locator {
 }
 
 /**
+ * Forgejo #987 — what the player surface is actually waiting for after a reload.
+ *
+ * `ScenarioPlayerCombatPageContent` returns `Loading player combat screen...` on its own while
+ * `sessionLoading || loading` holds, and the phase panels exist only further down, inside the
+ * `displayedParticipant` branch that the session and projection fetches populate. Asserting the
+ * Phase 1 panel straight after `reload()` therefore read a page that had not mounted yet, and
+ * against the default 5 s expect budget it reported `element(s) not found` and named no state.
+ *
+ * The page's own loading sentence is the barrier, so the Phase 1 assertion that follows is taken
+ * on a mounted surface and keeps its ordinary budget. It is not widened and nothing is retried:
+ * a settled surface with no Phase 1 panel still fails, and now says which of the page's four
+ * settled states it is in instead of leaving that to be guessed.
+ */
+const PLAYER_COMBAT_LOADING_SENTENCE = "Loading player combat screen...";
+const PLAYER_COMBAT_SETTLE_TIMEOUT_MS = 30_000;
+/** The sentences `ScenarioPlayerCombatPageContent` returns instead of the combat surface. */
+const PLAYER_COMBAT_REFUSALS = [
+  "Sign in to open the player combat screen.",
+  "Scenario combat projection unavailable.",
+] as const;
+
+/** One line of text, collapsed and bounded, or `""` when the locator matches nothing. */
+async function readBoundedText(locator: Locator, limit: number): Promise<string> {
+  if ((await locator.count()) === 0) return "";
+  const text = await locator
+    .first()
+    .innerText({ timeout: 2_000 })
+    .catch(() => "");
+  return text.replace(/\s+/g, " ").trim().slice(0, limit);
+}
+
+/**
+ * Forgejo #1004 — the error branch's own text, printed.
+ *
+ * All three of the page's settled refusals render the same shape: an `h1` reading
+ * `Player combat screen` followed by one panel `div`
+ * (`ScenarioPlayerCombatPageContent.tsx:5268-5292`). For `!currentUser` and `!projection` that
+ * panel carries a fixed sentence; for `error` it carries whatever was thrown while loading, which
+ * is the one settled state that can explain a real failure and the one the previous message left
+ * out. Reading the panel rather than probing for each fixed sentence also removes a conflation:
+ * `isVisible().catch(() => false)` on a `getByText` reports a strict-mode violation and a genuine
+ * absence as the same value.
+ */
+async function describePlayerCombatSurface(page: Page): Promise<string> {
+  const heading = page.getByRole("heading", { name: "Player combat screen" }).first();
+  if (await heading.isVisible().catch(() => false)) {
+    const panel = await readBoundedText(heading.locator("xpath=following-sibling::div[1]"), 400);
+    if (!panel) {
+      return "the page-level 'Player combat screen' fallback with an empty panel beside its heading";
+    }
+    const branch = (PLAYER_COMBAT_REFUSALS as readonly string[]).includes(panel)
+      ? "fixed refusal"
+      : "error branch, carrying the message the load threw";
+    return (
+      `the page-level 'Player combat screen' fallback, whose panel (${branch}) reads ` +
+      JSON.stringify(panel)
+    );
+  }
+  return `neither a refusal nor a phase panel; body begins ${JSON.stringify(
+    await readBoundedText(page.locator("body"), 400),
+  )}`;
+}
+
+/**
+ * Forgejo #1004 — what the current document reported while it loaded.
+ *
+ * The `error` branch's text names the rejection but not its cause, and the retained trace never
+ * leaves this Forgejo's runner: `trace: "retain-on-failure"` is configured, but artifact upload
+ * fails with `GHESNotSupportedError`, so the job log is the only evidence that survives. These
+ * listeners put the failing request, its status and any console error into that log. Buffers are
+ * cleared on every main-frame navigation, so a failure after `reload()` reports that load only,
+ * and each is capped so a noisy page cannot flood the message.
+ */
+const PLAYER_SURFACE_DIAGNOSTIC_CAP = 12;
+
+interface PlayerSurfaceDiagnostics {
+  consoleErrors: string[];
+  requestFailures: string[];
+}
+
+function recordPlayerSurfaceDiagnostics(page: Page): PlayerSurfaceDiagnostics {
+  const consoleErrors: string[] = [];
+  const requestFailures: string[] = [];
+  const add = (into: string[], line: string) => {
+    if (into.length < PLAYER_SURFACE_DIAGNOSTIC_CAP) {
+      into.push(line.replace(/\s+/g, " ").trim().slice(0, 300));
+    }
+  };
+  const pathOf = (url: string) => {
+    try {
+      return new URL(url).pathname;
+    } catch {
+      return url;
+    }
+  };
+  page.on("framenavigated", (frame) => {
+    if (frame !== page.mainFrame()) return;
+    consoleErrors.length = 0;
+    requestFailures.length = 0;
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") add(consoleErrors, message.text());
+  });
+  page.on("pageerror", (caught) => add(consoleErrors, `pageerror: ${caught.message}`));
+  page.on("requestfailed", (request) =>
+    add(
+      requestFailures,
+      `${request.method()} ${pathOf(request.url())} failed: ${
+        request.failure()?.errorText ?? "unknown"
+      }`,
+    ),
+  );
+  page.on("response", (response) => {
+    if (response.status() < 400) return;
+    add(
+      requestFailures,
+      `${response.request().method()} ${pathOf(response.url())} -> ${response.status()}`,
+    );
+  });
+  return { consoleErrors, requestFailures };
+}
+
+function formatPlayerSurfaceDiagnostics(diagnostics?: PlayerSurfaceDiagnostics): string {
+  if (!diagnostics) return "";
+  const describe = (label: string, lines: string[]) =>
+    ` ${label}: ${lines.length === 0 ? "none" : JSON.stringify(lines)}.`;
+  return (
+    describe("Requests this document failed on", diagnostics.requestFailures) +
+    describe("Console errors", diagnostics.consoleErrors)
+  );
+}
+
+/** Waits for the player surface to settle, then asserts its Phase 1 panel. Returns the settle ms. */
+async function expectPlayerPhasePanelsReady(input: {
+  context: string;
+  diagnostics?: PlayerSurfaceDiagnostics;
+  page: Page;
+}): Promise<number> {
+  const { context, diagnostics, page } = input;
+  const startedAt = Date.now();
+  const loading = page.getByText(PLAYER_COMBAT_LOADING_SENTENCE);
+  /*
+   * Whether the barrier below had anything to wait for is recorded rather than assumed.
+   * `sessionLoading` and `loading` both start `true`, so the loading branch is what the page
+   * renders first — but `toBeHidden` also passes against a document that has rendered nothing
+   * yet, and a barrier that cannot tell those two apart reads as a wait while measuring nothing.
+   * The reading is reported on every call and in the failure, so the instrument is checked by the
+   * same runs that rely on it.
+   */
+  const loadingObserved = await loading.isVisible().catch(() => false);
+  await expect(loading, `${context}: the player combat surface never finished loading`).toBeHidden({
+    timeout: PLAYER_COMBAT_SETTLE_TIMEOUT_MS,
+  });
+  const settledAfterMs = Date.now() - startedAt;
+  // The Phase 1 assertion keeps its ordinary budget: the barrier above buys the page its mount,
+  // and a settled surface with no Phase 1 panel still fails — now naming the state it is in.
+  try {
+    await expect(phaseSection(page, "Phase 1")).toBeVisible();
+  } catch {
+    throw new Error(
+      `${context}: the player combat surface settled after ${settledAfterMs} ms (loading sentence ` +
+        `observed: ${loadingObserved}) and then rendered no Phase 1 panel. It is showing ` +
+        `${await describePlayerCombatSurface(page)}. The page is at ${page.url()}.` +
+        formatPlayerSurfaceDiagnostics(diagnostics),
+    );
+  }
+  console.log(
+    `#987 player surface settled in ${settledAfterMs} ms, loading sentence observed: ` +
+      `${loadingObserved} (${context})`,
+  );
+  return settledAfterMs;
+}
+
+/**
  * Reads the Defense / Parry mini-table of one phase panel in a single evaluate. The table is the
  * one whose header row carries `DB`, `DM` and `P`; the Attack mini-table carries `OB` / `DMB`.
  */
@@ -163,20 +337,103 @@ async function readPhasePanel(
   }, label);
 }
 
+/**
+ * Forgejo #987 — the GM inspector's two headings.
+ *
+ * `CombatRoundManagerPanel.tsx` renders one `h3` per arm of a single `{inspector.participant ? (`
+ * ternary, and both arms begin with the same seven words:
+ *
+ * - the participant arm: `Combat inspector — {inspector.participant.label} · Round {n} · {step}`;
+ * - the phase-wide arm:  `Combat inspector — Round {n} · {step}`, naming no participant at all.
+ *
+ * So `/^Combat inspector — /` is satisfied in exactly the state a participant precondition exists
+ * to exclude, and the walk below then has nothing to press: the `Tracker inspection navigation`
+ * section lives inside the participant arm, and no participant button carries `disabled` at any
+ * state, so the absent control is an unresolvable locator rather than a disabled one.
+ *
+ * `GM_INSPECTOR_PARTICIPANT_HEADING` requires the ` · Round <n> · ` that only follows a label, so
+ * the phase-wide text — whose `Round <n>` is its first segment — cannot match it. The loose
+ * pattern is kept for diagnosis only, to report which arm is on screen.
+ * `template-npc-combat-declaration.spec.ts:412` already discriminates the same way.
+ */
+const GM_INSPECTOR_ANY_HEADING = /^Combat inspector — /;
+const GM_INSPECTOR_PARTICIPANT_HEADING = /^Combat inspector — .+ · Round \d+ · /;
+/** The product's own `inspector.participant` gate: this section renders only inside that arm. */
+const GM_INSPECTOR_NAV_SECTION = 'section[aria-label="Tracker inspection navigation"]';
+/** The participant arm can take a beat to mount after a GM command; its controls cannot. */
+const GM_INSPECTOR_SETTLE_TIMEOUT_MS = 15_000;
+const GM_INSPECTOR_CONTROL_TIMEOUT_MS = 2_000;
+/** One re-render after a click, so an immediate re-read cannot walk straight past the target. */
+const GM_INSPECTOR_STEP_SETTLE_MS = 500;
+
+function escapeForRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function selectGmInspectorParticipant(input: { label: string; page: Page }): Promise<void> {
-  const heading = input.page.getByRole("heading", { name: /^Combat inspector — / });
-  await expect(heading).toBeVisible();
+  const { label, page } = input;
+  const anyHeading = page.getByRole("heading", { name: GM_INSPECTOR_ANY_HEADING }).first();
+  const participantHeading = page.getByRole("heading", { name: GM_INSPECTOR_PARTICIPANT_HEADING });
+  const targetHeading = page.getByRole("heading", {
+    name: new RegExp(`^Combat inspector — ${escapeForRegExp(label)} · `),
+  });
+  // Every read here carries its own timeout. `innerText()` on an absent locator waits for it, and
+  // with no timeout that wait is bounded by nothing but the test timeout — the same defect in a
+  // different method (#987).
+  const renderedHeading = async () =>
+    (
+      (await anyHeading
+        .innerText({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS })
+        .catch(() => undefined)) ?? "<no Combat inspector heading>"
+    ).replace(/\s+/g, " ");
+  const visibleWithin = async (locator: Locator, timeout: number) =>
+    locator
+      .waitFor({ state: "visible", timeout })
+      .then(() => true)
+      .catch(() => false);
+  const reached = async () => visibleWithin(targetHeading, GM_INSPECTOR_STEP_SETTLE_MS);
+  const giveUp = async (why: string): Promise<never> => {
+    throw new Error(
+      `The GM inspector never reached ${label}: ${why}. The rendered heading is ` +
+        `${JSON.stringify(await renderedHeading())}.`,
+    );
+  };
+
+  if (await reached()) return;
+  console.log(`#987 inspector walk to ${label} from ${JSON.stringify(await renderedHeading())}`);
+  // The panel may still be mounting after a `goto`. That wait is deliberately taken on the loose
+  // matcher, which either arm satisfies, so the generous mount budget is spent only on a panel
+  // that has rendered no inspector at all — a phase-wide inspector is recognised at once rather
+  // than absorbing it.
+  if (!(await visibleWithin(anyHeading, GM_INSPECTOR_SETTLE_TIMEOUT_MS))) {
+    await giveUp("the combat panel rendered no inspector heading at all");
+  }
+  // The precondition the loose matcher was meant to carry, split into the two facts the walk
+  // actually needs: some participant is selected, and the navigation that moves that selection is
+  // on screen. On the phase-wide arm neither holds and there is no walk to attempt.
+  if (
+    !(await visibleWithin(participantHeading, GM_INSPECTOR_CONTROL_TIMEOUT_MS)) ||
+    !(await visibleWithin(page.locator(GM_INSPECTOR_NAV_SECTION), GM_INSPECTOR_CONTROL_TIMEOUT_MS))
+  ) {
+    await giveUp(
+      "the inspector is on its phase-wide row, which selects no participant and renders no " +
+        "participant navigation",
+    );
+  }
   // The inspector does not wrap, so walk forward and then back; bounded either way.
   for (const direction of ["Next participant", "Previous participant"]) {
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      if ((await heading.innerText()).includes(input.label)) return;
-      const button = input.page.getByRole("button", { name: direction, exact: true });
-      if (!(await button.isEnabled())) break;
-      await button.click();
+      if (await reached()) return;
+      const button = page.getByRole("button", { name: direction, exact: true });
+      // Existence with its own short timeout, never `isEnabled()`: there is no
+      // rendered-but-disabled boundary for `isEnabled()` to report here, only an unresolvable
+      // locator whose wait was bounded by nothing but the 240 s test timeout (#987).
+      if (!(await visibleWithin(button, GM_INSPECTOR_CONTROL_TIMEOUT_MS))) break;
+      await button.click({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS });
     }
   }
-  if ((await heading.innerText()).includes(input.label)) return;
-  throw new Error(`The GM inspector never reached ${input.label}.`);
+  if (await reached()) return;
+  await giveUp("the walk exhausted both participant directions");
 }
 
 async function readRoundState(input: {
@@ -413,6 +670,7 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
 
     // ================= PLAYER SURFACE (the feinter's own panel) =================
     const playerPage = await playerContext.newPage();
+    const playerDiagnostics = recordPlayerSurfaceDiagnostics(playerPage);
     await playerPage.setViewportSize({ height: 900, width: 1440 });
     await playerPage.goto(`/campaigns/${campaignId}/scenarios/${scenarioId}/player/combat`);
     const playerAction = playerPage.getByRole("combobox", { name: "Action" }).first();
@@ -515,8 +773,13 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
       await gmPage.waitForTimeout(1000);
     }
 
+    // Deliberately the loose matcher: this one reads whichever arm is on screen, including the
+    // phase-wide one. It carries a timeout so an unmounted panel reports instead of waiting out
+    // the test (#987); it is never used as a participant precondition.
     const inspectorHeading = () =>
-      gmPage.getByRole("heading", { name: /^Combat inspector — / }).innerText();
+      gmPage
+        .getByRole("heading", { name: GM_INSPECTOR_ANY_HEADING })
+        .innerText({ timeout: GM_INSPECTOR_SETTLE_TIMEOUT_MS });
     const measureBoth = async (label: string) => {
       const startHeading = await inspectorHeading();
       const out: Record<string, unknown> = {};
@@ -674,7 +937,11 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
 
         // The same step, on the player's own surface.
         await playerPage.reload();
-        await expect(phaseSection(playerPage, "Phase 1")).toBeVisible();
+        await expectPlayerPhasePanelsReady({
+          context: "player at the feinter's P1 parry step",
+          diagnostics: playerDiagnostics,
+          page: playerPage,
+        });
         await playerPage.waitForTimeout(1000);
         const playerStep = {
           phase1: await readPhasePanel(playerPage, "Phase 1"),
@@ -716,7 +983,11 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
 
     // The player's own panel after the commit.
     await playerPage.reload();
-    await expect(phaseSection(playerPage, "Phase 1")).toBeVisible();
+    await expectPlayerPhasePanelsReady({
+      context: "player after feint commit",
+      diagnostics: playerDiagnostics,
+      page: playerPage,
+    });
     await playerPage.waitForTimeout(1000);
     const playerAfter = {
       phase1: await readPhasePanel(playerPage, "Phase 1"),
