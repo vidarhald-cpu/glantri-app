@@ -12557,6 +12557,30 @@ export default function CombatRoundManagerPanel({
     }
   }
 
+  /*
+   * Forgejo #988. The participant rows `Previous participant` / `Next participant` can move to,
+   * read from the same producer `moveSelection` uses so the rendered control and the move it
+   * performs cannot disagree about which rows exist.
+   *
+   * The navigation section used to render only inside the `inspector.participant` arm. On a
+   * round-wide step the canonical task is ownerless — measured for all seven members of
+   * `isGlobalCombatRoundStep` — so `currentTaskSelection` carries no participant, the inspector
+   * renders its phase-wide arm, and the one control that selects a participant was absent; with
+   * nothing to press, the state sustained itself. Gating the section on the rows it moves between
+   * adds that control to the phase-wide arm and changes nothing else: it is not disabled, because
+   * `getAdjacentCombatRoundTimelineParticipantSelection` reads an absent participant as index 0,
+   * so `Previous participant` selects the first row and `Next participant` the second.
+   *
+   * This deliberately does not make a round-wide step select a participant. The phase-wide arm
+   * still shows exactly the figures it showed before — whether the selection should persist across
+   * a round-wide step is the separate question recorded on #988 and is not decided here.
+   */
+  const inspectorNavigationParticipantIds = getParticipantIdsForTimelineRound({
+    fallbackParticipantIds: displayParticipants.map((participant) => participant.participantId),
+    roundNumber: selectedRoundNumber,
+    timelineRoundStates: [...timelineRoundStates],
+  });
+
   recordCombatPerformanceStage(
     "combat_panel_view_model",
     combatPerformanceNow() - panelViewModelStartedAt,
@@ -12589,7 +12613,7 @@ export default function CombatRoundManagerPanel({
           <div style={{ marginRight: "auto" }}>
             <h2 style={{ margin: 0 }}>Combat Round Manager</h2>
           </div>
-          {inspector.participant ? (
+          {inspectorNavigationParticipantIds.length > 0 ? (
             <section aria-label="Tracker inspection navigation" style={inspectorNavStyle}>
               <button
                 aria-label="Previous participant"

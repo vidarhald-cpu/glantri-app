@@ -1514,4 +1514,28 @@ describe("#940 Tier A the GM panel draws the extrapolation flag it already recei
     expect(source).not.toContain("playerFacingExtrapolated");
     expect(source).not.toContain("extrapolatedWorkbookAdjustments:");
   });
+
+  /**
+   * Forgejo #988. The participant navigation must not be gated on a participant already being
+   * selected. On a round-wide step the canonical task is ownerless — measured for all seven
+   * members of `isGlobalCombatRoundStep` — so the inspector selects no participant, and the only
+   * control that selects one used to be unrendered, which made that state sustain itself.
+   *
+   * This is a placement guard, not the behavioural proof: source text cannot show that pressing
+   * the arrows reaches a participant. `apps/web/e2e/gm-inspector-global-step-navigation.spec.ts`
+   * drives the rendered control on a real stack and is what fails if the repair is removed.
+   */
+  it("renders the participant navigation from the rows it can move between, not from a selection", () => {
+    const source = readPanelSource();
+    const navSection = source.indexOf('<section aria-label="Tracker inspection navigation"');
+
+    expect(navSection).toBeGreaterThan(0);
+    expect(source).toContain(
+      "const inspectorNavigationParticipantIds = getParticipantIdsForTimelineRound({",
+    );
+    // The gate immediately above the section is the one that matters, so read that line rather
+    // than the whole file: `inspector.participant ?` legitimately gates other arms further down.
+    const gateLine = source.slice(0, navSection).split("\n").at(-2)?.trim();
+    expect(gateLine).toBe("{inspectorNavigationParticipantIds.length > 0 ? (");
+  });
 });
