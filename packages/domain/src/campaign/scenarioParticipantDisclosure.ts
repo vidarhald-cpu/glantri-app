@@ -1,5 +1,6 @@
 import { getCombatDistanceParticipantAliases } from "../encounter/combatDistance";
 import { buildPlayerSafeCombatScopeForUser } from "../encounter/combatPlayerVisibility";
+import { unreadablePlayerFacingEncounterIds } from "../encounter/playerFacingEncounterRosterIdentity";
 import {
   isUserAssignedToEncounterMembership,
   isUserEntitledToTerminalEncounterHistory,
@@ -137,6 +138,26 @@ export function resolveScenarioParticipantDisclosure(input: {
   }
 
   /**
+   * Forgejo #963. An Encounter whose roster no longer holds a coherent identity for every row
+   * relates a player viewer to nothing. This reader bypasses
+   * `buildPlayerFacingEncounterForUser` — it resolves the stored Encounters itself — so the
+   * refusal the projection raises would never reach it, and the measured disclosure is here:
+   * relation is what makes another participant's name player-visible below.
+   *
+   * It is subtracted from the viewer's relation set only, never from
+   * `membershipsByParticipantId`. That set is what says a participant belongs to *some*
+   * Encounter, and shrinking it would unsuppress participants the cross-Encounter boundary
+   * currently hides. Removing an Encounter from the relation set can only shrink
+   * `sharedEncounterIds`, so it can only suppress more — which is the fail-closed direction.
+   *
+   * The GM path has already returned above, so no GM diagnostic read passes through this.
+   */
+  const unreadableEncounterIds = unreadablePlayerFacingEncounterIds({
+    encounters: input.encounters,
+    scenarioParticipants: input.participants,
+  });
+
+  /**
    * Encounters this viewer is related to: assigned to the membership of a
    * non-archived Encounter, or entitled to the terminal history of a
    * completed/archived one. Status is otherwise irrelevant, which is what
@@ -144,6 +165,7 @@ export function resolveScenarioParticipantDisclosure(input: {
    */
   const viewerEncounterIds = new Set(
     input.encounters
+      .filter((encounter) => !unreadableEncounterIds.has(encounter.id))
       .filter(
         (encounter) =>
           isUserAssignedToEncounterMembership({
