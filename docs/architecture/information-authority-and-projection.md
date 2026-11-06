@@ -54,6 +54,24 @@ Encounter participation, Artifact entitlement, or another explicitly accepted
 viewer relationship. Do not use a global role as a shortcut around those
 relationships.
 
+The relationship is not a shortcut around the role either. Product Owner
+ruling, Forgejo issue #977, 2026-11-06, verbatim:
+
+> use the same GM predicate everywhere — Campaign.gmUserId and current
+> game_master role. A demoted account loses GM exemptions.
+
+So Campaign GM authority requires **both** `Campaign.gmUserId` on the Campaign
+and the account currently holding the `game_master` role, and the role is read
+at the time of the check rather than inherited from having once held it. A
+Campaign owner demoted through `POST /auth/users/:id/role`, and an `admin`-only
+account that created a Campaign and became its `gmUserId`, are both Campaign
+owners who are not GMs. The predicate is `isCampaignGameMaster` in
+`packages/auth/src/session.ts`; `apps/api/src/routes/scenarios/access.ts` and
+`packages/database/src/services/scenarioParticipantSupport.ts` both call it, so
+an exemption granted on either half alone is a defect rather than a variant.
+Creation remaining open to an `admin`-only account is issue #992 and is not
+settled by this.
+
 Reusable templates and concrete Campaign objects also have separate
 projections. Template-library authority may expose a reusable source without
 exposing an NPC, Item, Artifact, Blackboard entry, Scenario, Encounter, note,
