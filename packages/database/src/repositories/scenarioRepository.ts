@@ -67,6 +67,32 @@ export class CampaignRosterPersistenceConflictError extends Error {
 }
 
 /**
+ * A PostgreSQL serialization failure, in either shape Prisma reports it (#845).
+ *
+ * `P2034` is Prisma's own code for it. `P2010` with `40001` in the message is the shape a raw query
+ * inside the transaction produces, which matters here because the deactivation boundary takes its
+ * row lock with `$queryRaw`. The same two-shape test is already applied to the Serializable Scenario
+ * update in this file; it is named here because the deactivation path needs it as a retry predicate
+ * rather than as a terminal conversion.
+ */
+function isSerializationFailure(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code === "P2034") return true;
+  return (
+    error.code === "P2010" &&
+    error.message.toLowerCase().includes("could not serialize access due to")
+  );
+}
+
+/** Attempts for the deactivation boundary, matching `DEFAULT_COMBAT_TRANSACTION_ATTEMPTS` (#845). */
+const DEACTIVATION_TRANSACTION_ATTEMPTS = 3;
+
+async function deactivationRetryDelay(attempt: number): Promise<void> {
+  const delayMs = attempt * 5 + Math.floor(Math.random() * 5);
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+/**
  * Refuse to make a Scenario participant inactive while a running Encounter holds them on a roster.
  *
  * This is the half of #845 that the presence check in `encounterRepository` cannot do. That check
@@ -76,11 +102,33 @@ export class CampaignRosterPersistenceConflictError extends Error {
  * the change with a usable message rather than to make the mid-round path work.
  *
  * The check runs inside the caller's transaction, behind the same `SELECT … FOR UPDATE` on the
- * Scenario row that `assertActiveEncounterPresence` takes. That is what makes it a boundary rather
- * than a hint: without the lock an Encounter could be activated between this read and the write,
- * and the pair would interleave into exactly the state being prevented. With it, one of two orders
- * happens — this write first, and the activation's own presence check refuses it; or the activation
- * first, and this check sees it.
+ * Scenario row that `assertActiveEncounterPresence` takes.
+ *
+ * **Corrected, #845 QA cycle 1.** An earlier version of this comment claimed the lock alone made the
+ * pair serialise — "one of two orders happens — this write first, and the activation's own presence
+ * check refuses it; or the activation first, and this check sees it." **That was false**, and it was
+ * measured false: independent QA raced the pair 30 times and reached the forbidden state (an `active`
+ * Encounter whose roster names an `isActive = false` participant) 19 times, against 1 in 30 at the
+ * baseline this guard replaced; the repair cycle's own probe reproduced it 28 times in 30 against
+ * the same reverted file, and 0 in 60 here.
+ *
+ * A row lock does not refresh a snapshot. The Encounter write runs at
+ * SERIALIZABLE (`combatStatePersistenceRepository`, both `updateEncounterPreservingSplitCombat` and
+ * the combat path), so while this transaction ran at READ COMMITTED the activation could take its
+ * snapshot first, let this transaction take the lock, write and commit, then acquire the *same* lock
+ * afterwards and still read the pre-commit `isActive = true` out of its own snapshot — with no
+ * serialization error, because SSI sees a read/write conflict only when **both** sides are
+ * SERIALIZABLE, and because the locked row is the `Scenario`, which the Encounter write never
+ * modifies. Being slower, the transaction and this lock opened the window rather than closing it.
+ *
+ * What makes it a boundary is therefore the **isolation level**, set at the call site below, and not
+ * this lock. With both sides SERIALIZABLE the pair is a read/write cycle — the activation reads the
+ * roster's `ScenarioParticipant` rows this transaction writes, and this transaction reads the
+ * `Encounter` rows the activation writes — so PostgreSQL aborts one of the two. Whichever is aborted
+ * is retried on a fresh snapshot and then refuses with its own message: this side with
+ * `encounter_participant_set_frozen`, the activation with the presence check's `inactive_participant`.
+ * The lock is kept because it makes the common case block rather than abort, which costs one fewer
+ * retry. It is an optimisation, not the guarantee.
  */
 async function assertScenarioParticipantDeactivationAllowed(input: {
   participantId: string;
@@ -1422,15 +1470,51 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         );
       }
 
-      const record = await prisma.$transaction(async (transaction) => {
-        await assertScenarioParticipantDeactivationAllowed({
-          participantId: input.participantId,
-          scenarioId: input.scenarioId,
-          transaction,
-        });
+      // SERIALIZABLE, and not the row lock inside the check, is what holds the #850 boundary against
+      // a concurrent Encounter activation. The activation's own transaction is SERIALIZABLE, and a
+      // `FOR UPDATE` taken after it has its snapshot leaves it reading pre-commit `isActive` with no
+      // error at all. Measured while this ran at READ COMMITTED: independent QA reached the
+      // forbidden state in 19 of 30 races, and this repair cycle's own probe in 28 of 30 against
+      // the same reverted file. Matched here, the pair is a read/write cycle PostgreSQL must break.
+      //
+      // The retry exists to re-decide, not to re-attempt: the abort means the other side of the
+      // cycle committed, so the next attempt's fresh snapshot sees the Encounter it could not see
+      // and refuses with `encounter_participant_set_frozen`. A refusal is therefore raised through
+      // the retry rather than caught by it, and only a serialization failure is retried.
+      const record = await (async () => {
+        for (let attempt = 1; ; attempt += 1) {
+          try {
+            return await prisma.$transaction(
+              async (transaction) => {
+                await assertScenarioParticipantDeactivationAllowed({
+                  participantId: input.participantId,
+                  scenarioId: input.scenarioId,
+                  transaction,
+                });
 
-        return transaction.scenarioParticipant.update({ data, where: { id: input.participantId } });
-      });
+                return transaction.scenarioParticipant.update({
+                  data,
+                  where: { id: input.participantId },
+                });
+              },
+              { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            );
+          } catch (error) {
+            if (!isSerializationFailure(error)) throw error;
+            if (attempt >= DEACTIVATION_TRANSACTION_ATTEMPTS) {
+              // Every attempt lost its cycle. Nothing is known about the Encounters, so this does
+              // not claim the set is frozen; it is the conflict the Scenario's other Serializable
+              // writes already report, and the route answers it `409` rather than `400`.
+              throw new ScenarioPersistenceError(
+                "transaction_conflict",
+                "This Scenario's Encounters changed while saving. Try the change again.",
+                error,
+              );
+            }
+            await deactivationRetryDelay(attempt);
+          }
+        }
+      })();
 
       return mapScenarioParticipant(record);
     },

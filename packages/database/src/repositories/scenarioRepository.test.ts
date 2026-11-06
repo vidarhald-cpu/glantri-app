@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -309,7 +310,10 @@ describe("scenarioRepository participant deactivation against a running Encounte
     ).rejects.toEqual(expect.objectContaining({ code: "encounter_participant_set_frozen" }));
   });
 
-  it("takes the Scenario row lock before reading the Encounters, so the pair cannot interleave", async () => {
+  // Corrected in the #845 QA cycle-1 repair. This case was titled "… so the pair cannot interleave".
+  // The lock does not achieve that, and QA measured it false — 19 interleavings in 30 races. It pins
+  // the statement order only. The boundary is pinned by the two isolation/retry cases below.
+  it("takes the Scenario row lock before reading the Encounters", async () => {
     mocks.prisma.encounter.findMany.mockResolvedValue([
       runningEncounter({ inForce: ["participant-1"] }),
     ]);
@@ -327,6 +331,97 @@ describe("scenarioRepository participant deactivation against a running Encounte
     const lockOrder = mocks.prisma.$queryRaw.mock.invocationCallOrder[0];
     const readOrder = mocks.prisma.encounter.findMany.mock.invocationCallOrder[0];
     expect(lockOrder).toBeLessThan(readOrder as number);
+  });
+
+  // #845 QA cycle 1: this is what actually holds the boundary. The Encounter write is Serializable,
+  // so while this ran at READ COMMITTED the activation could take its snapshot, let this transaction
+  // take the lock and commit, then take the same lock afterwards and still read the pre-commit
+  // `isActive` with no error. Only matching the level makes the pair a cycle PostgreSQL must break.
+  it("runs the deactivation at Serializable, matching the Encounter write it races", async () => {
+    mocks.prisma.encounter.findMany.mockResolvedValue([]);
+    const repository = createPrismaScenarioRepository();
+
+    await repository.updateScenarioParticipantMetadata({
+      isActive: false,
+      participantId: "participant-1",
+      scenarioId: "scenario-1",
+    });
+
+    expect(mocks.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      isolationLevel: "Serializable",
+    });
+  });
+
+  it("re-decides on a fresh read after a serialization failure instead of reporting success", async () => {
+    // Attempt 1 loses the cycle to the Encounter activation, which therefore committed. Attempt 2
+    // reads the Encounter it could not see before, so the retry must produce the refusal.
+    const conflict = new Prisma.PrismaClientKnownRequestError("write conflict", {
+      clientVersion: "test",
+      code: "P2034",
+    });
+    let attempts = 0;
+    mocks.prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => {
+      attempts += 1;
+      if (attempts === 1) throw conflict;
+      return callback(mocks.prisma);
+    });
+    mocks.prisma.encounter.findMany.mockResolvedValue([
+      runningEncounter({ inForce: ["participant-1"] }),
+    ]);
+    const repository = createPrismaScenarioRepository();
+
+    await expect(
+      repository.updateScenarioParticipantMetadata({
+        isActive: false,
+        participantId: "participant-1",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: "encounter_participant_set_frozen" }));
+    expect(attempts).toBe(2);
+    expect(mocks.prisma.scenarioParticipant.update).not.toHaveBeenCalled();
+  });
+
+  it("reports an exhausted serialization retry as a conflict, and does not claim the set is frozen", async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError("write conflict", {
+      clientVersion: "test",
+      code: "P2034",
+    });
+    let attempts = 0;
+    mocks.prisma.$transaction.mockImplementation(async () => {
+      attempts += 1;
+      throw conflict;
+    });
+    const repository = createPrismaScenarioRepository();
+
+    await expect(
+      repository.updateScenarioParticipantMetadata({
+        isActive: false,
+        participantId: "participant-1",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: "transaction_conflict" }));
+    expect(attempts).toBe(3);
+  });
+
+  it("does not retry a refusal, a validation error or any other persistence error", async () => {
+    let attempts = 0;
+    mocks.prisma.$transaction.mockImplementation(async (callback: (tx: unknown) => unknown) => {
+      attempts += 1;
+      return callback(mocks.prisma);
+    });
+    mocks.prisma.encounter.findMany.mockResolvedValue([
+      runningEncounter({ inForce: ["participant-1"] }),
+    ]);
+    const repository = createPrismaScenarioRepository();
+
+    await expect(
+      repository.updateScenarioParticipantMetadata({
+        isActive: false,
+        participantId: "participant-1",
+        scenarioId: "scenario-1",
+      }),
+    ).rejects.toEqual(expect.objectContaining({ code: "encounter_participant_set_frozen" }));
+    expect(attempts).toBe(1);
   });
 
   it("allows the deactivation when no running Encounter holds the combatant", async () => {
