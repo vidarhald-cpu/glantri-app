@@ -28,15 +28,37 @@ import { API_URL } from "./targets";
  * ## Why the round is written exactly once
  *
  * The first version of this harness built a `CombatRoundState` by hand and wrote it through
- * `PUT /encounters/:id` **three times**, once per state under test. That route cannot write a
- * combat round state once the Encounter has left legacy storage, and the failure is silent.
- * `updateEncounterPreservingSplitCombat` in
- * `packages/database/src/repositories/combatStatePersistenceRepository.ts` writes only
- * `sessionWithoutCombatState` and bumps `EncounterActiveCombatState.revision`; the session it
- * returns is composed from the `stateJson` already in the row. Its name is the contract. So the
- * harness received `200 OK` three times and changed the round exactly once — on the first write,
- * while the Encounter was still in legacy storage — after which every later write was a no-op and
- * the figure on screen stayed at the first value.
+ * `PUT /encounters/:id` **three times**, once per state under test, and the figure on screen stayed
+ * at the first value. One Encounter per state, one write, and verification against the stored row
+ * rather than against the response is the practice that replaced it, and that practice is right and
+ * stands on its own. The **explanation** first recorded here was not: independent QA measured it
+ * wrong on 2026-11-06 (issue #940, comment 22419, §4). This is the corrected statement, with what
+ * was driven kept separate from what is inferred.
+ *
+ * **What the route does is conditional on storage mode.** `updateEncounterPreservingSplitCombat` in
+ * `packages/database/src/repositories/combatStatePersistenceRepository.ts` branches on
+ * `Encounter.combatStorageMode`. In the **legacy** branch it writes the whole normalized session,
+ * combat round state included. Only in the **split** branch does it write
+ * `sessionWithoutCombatState`, bump `EncounterActiveCombatState.revision` and compose its response
+ * from the `stateJson` already stored — and there, and only there, a write of combat state is a
+ * silent no-op that answers `200`.
+ *
+ * **Driven.** On one dedicated Encounter, three successive `PUT`s of the round state all *landed*:
+ * `-15`, then `-99`, then `-7`, each verified on the stored row, the third of them after a GM
+ * Combat tab load. Every Encounter in that run held `combatStorageMode = 'legacy'` and
+ * `EncounterActiveCombatState` held **0 rows**, so no Encounter ever entered split storage, which is
+ * why all three writes landed. The headline recorded here before — that the route *cannot* write a
+ * combat round state, and that only the first write landed — is **false** of this route in the state
+ * this harness uses.
+ *
+ * **Inferred, and left open.** What moved the *original* harness's Encounter is **unestablished**.
+ * The three-write failure was never reproduced, so nothing here identifies what migrated that
+ * Encounter into split storage. A canonical combat command is the likely candidate, and that is the
+ * deterministic auto-advance described under the fixture below — so these were never two
+ * independent mechanisms, and the next lane should not read them as such.
+ *
+ * What survives unconditionally is the practice, not the diagnosis: a `200` from that route is not
+ * evidence that the round state changed, so read the stored row back.
  *
  * Two further fields in that hand-built state do not exist. `activeCombatRoundStateShape` in
  * `packages/domain/src/encounter/combatRoundManager.ts` has **no round-level `stepStatuses`** —
@@ -45,10 +67,18 @@ import { API_URL } from "./targets";
  * and the fixture's claim to be "a round parked on phase-1 initiative with a committed
  * declaration" described three fields that never reached the database.
  *
+ * That part is **confirmed exactly**, independently, at source: `combatRoundDeclarationSchema.parse`
+ * on a declaration carrying `committed: true` returns only `["actionId","roundNumber","submittedBy"]`
+ * with no error, and a round-level `stepStatuses` supplied to `combatRoundStateSchema.parse` does
+ * not survive as supplied, because `stepStatuses` is a field of
+ * `combatRoundParticipantStateSchema`.
+ *
  * Measured on the stored row rather than inferred: after a run that asked for a raw modifier of
  * `-6` last, the persisted state held `currentStep: "review_phase_2_modifiers"`,
  * `currentCursor.step: "M2"`, a round-level `stepStatuses` of `null`, `declaration.committed`
- * absent, and `situationInitiative` still at the **first** state's `-15`.
+ * absent, and `situationInitiative` still at the **first** state's `-15`. Those are observations of
+ * that run and they stand; the *cause* of the stale `situationInitiative` is the open question
+ * above, not a settled property of the route.
  *
  * So each state under test gets its **own Encounter**, composed with the domain's own transition
  * functions and written with a single `PUT` while that Encounter is still in legacy storage — the
@@ -86,10 +116,18 @@ import { API_URL } from "./targets";
 const VIEWPORT_HEIGHT = 900;
 
 /**
- * The usable widths for this surface. Both panels are prose lines inside a card that reflows, so
- * 1024 sits between these two with no layout change of its own and is omitted deliberately rather
- * than silently: 768 is the narrow reflow and 1440 the wide one. The usable width is recorded from
- * `window.innerWidth` inside the read rather than assumed equal to the viewport asked for.
+ * The widths this harness reads. The established set for these surfaces is **768, 1024 and 1440**
+ * (issue #940, comment 21864), and this harness reads the outer two: 768 is the narrow reflow and
+ * 1440 the wide one.
+ *
+ * The omission of 1024 was justified here by a *claim* — that it "sits between these two with no
+ * layout change of its own" — rather than by a measurement, and a claim is not evidence. It has
+ * since been measured: independent QA read both panels at 1024 and at 390 and the marker rendered
+ * unclipped and on screen at both (comment 22419, §2). The claim held, by measurement rather than by
+ * assertion. The accepted readings below are not re-taken merely to add a column to the table.
+ *
+ * The usable width is recorded from `window.innerWidth` inside the read rather than assumed equal
+ * to the viewport asked for.
  */
 const WIDTHS = [768, 1440] as const;
 
@@ -420,22 +458,35 @@ test.describe("#940 Tier A an extrapolated initiative figure is marked on screen
     /**
      * Builds one Encounter parked at phase-1 initiative and returns its id.
      *
-     * **Two combatants, both attacking, is a requirement rather than tidiness.** The GM panel runs
-     * the application's own deterministic advance on mount, and a sole actor's phase-1 initiative
-     * is deterministic: `combatParticipation/project.ts:540` reports the initiative fact as
-     * `not_required` with reason `sole_actor_order_irrelevant` whenever
-     * `required = hasAction && (competing || orderedManeuver)` is false, after which the
-     * `commit_i1` boundary is a `deterministic_transition` and the page advances straight past the
-     * card. Measured on a one-combatant round that passed: the walk read
-     * `initiative_phase_1`/`i1`, and by the first page read the stored state was
-     * `review_phase_2_modifiers`/`M2` with the initiative card gone. `hasAction` needs a valid
-     * attack opportunity, so a `pass` declaration never makes initiative required at all — which
-     * is why both combatants here declare an attack on each other.
+     * **Two combatants, both attacking, is the route this harness takes. It is sufficient, not
+     * necessary.** The citation below is exact to the line; the conclusion first recorded here —
+     * that the card "cannot be read on a one-combatant round" — was too strong, and independent QA
+     * measured it so on 2026-11-06 (issue #940, comment 22419, §4).
+     *
+     * The code, cited: `combatParticipation/project.ts:509` is
+     * `const required = hasAction && (competing || orderedManeuver)`, `competing` is
+     * `executableParticipantIds.size > 1` at `:494`, and the `sole_actor_order_irrelevant` reason is
+     * reported at `:540`. A second executable participant is therefore one way to make the
+     * initiative fact required, and `orderedManeuver` is another.
+     *
+     * **Driven.** A one-combatant round carrying a `double_attack` declaration reached boundary
+     * `phase1_initiative` with `roll_initiative` **executable**, and its projection contained
+     * neither `sole_actor_order_irrelevant` nor `deterministic_transition`. One combatant can reach
+     * a readable card.
+     *
+     * **What remains true, and is why the fixture keeps two.** `hasAction` needs a valid attack
+     * opportunity, so a `pass` declaration never makes initiative required; and wherever the fact
+     * *is* `not_required`, `commit_i1` becomes a `deterministic_transition` that the GM panel runs
+     * on mount, taking the card off screen before it can be measured. Measured on a one-combatant
+     * round that this harness drove with a `pass`: the walk read `initiative_phase_1`/`i1`, and by
+     * the first page read the stored state was `review_phase_2_modifiers`/`M2` with the card gone.
+     * Two attacking combatants is the route that was driven to the readings below, which is why it
+     * is kept — not because it is the only one.
      *
      * The round is composed with the domain's own transition functions and written with a **single**
-     * `PUT`, which lands because the Encounter is still in legacy combat storage at that moment.
-     * This is the pattern `gm-superseded-figure-visibility.spec.ts` established; a second `PUT`
-     * would be the silent no-op described in this file's header.
+     * `PUT`, which lands while the Encounter is in legacy combat storage. This is the pattern
+     * `gm-superseded-figure-visibility.spec.ts` established; the one-write practice and its reason
+     * are in this file's header.
      */
     const buildRoundAtPhaseOneInitiative = async (input: {
       label: string;
@@ -805,6 +856,16 @@ test.describe("#940 Tier A an extrapolated initiative figure is marked on screen
      * one point per raw step — and it is deliberately **not** marked. The Product Owner ruled on
      * 2026-11-04, in comment 20880 on issue #922, that the override supersedes the authored row and
      * is an explicit rule decision, so it is a rule rather than an unreviewed extrapolation.
+     *
+     * **What this rendered control does and does not add.** Independent QA measured that all three
+     * readings in this run have `Base initiative 0` — the in-grid control at raw `-15`, this one at
+     * raw `-6`, and the marked case at raw `-16` — so the only property that distinguishes them is
+     * the modifier edge (comment 22419, §7.3). Both controls are non-vacuous and the behaviour is
+     * correct, but the rendered evidence therefore demonstrates "an in-grid modifier is never
+     * marked", twice, rather than "the base-zero override is never marked". The zero-row claim
+     * itself is carried by `combatExtrapolationPresentation.test.ts`, which pins it unmarked across
+     * all fifteen in-grid columns with the flip at 16. This control is kept as a second magnitude,
+     * described for what it is.
      */
     const zeroRowRound = await buildRoundAtPhaseOneInitiative({
       label: "zero-row",
