@@ -325,7 +325,7 @@ assertion that fails:
 Line numbers are those at `dev` `416636aa478961882b4040b456267ea1393419fe`; locate by the
 assertion text if they have moved. The only other known failure in this document is in a different
 project: the two `apps/web/browser-tests` `skill-reference.spec.mts` cases at `:97-98`, described
-[below](#the-appwebbrowser-tests-project-currently-has-two-failures--recorded-2026-11-06) and
+[below](#the-appswebbrowser-tests-project-currently-has-two-failures--recorded-2026-11-06) and
 tracked in #999. A failure whose assertion matches none of these is not covered by this section at
 all and is a new failure.
 
