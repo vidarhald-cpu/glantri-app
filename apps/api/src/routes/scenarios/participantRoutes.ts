@@ -4,6 +4,8 @@ import {
   CampaignService,
   CharacterService,
   EncounterService,
+  ScenarioMutationConflictError,
+  ScenarioParticipationFrozenError,
   ScenarioService,
 } from "@glantri/database";
 import {
@@ -541,6 +543,19 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
 
       return { participant };
     } catch (error) {
+      // A running Encounter's participant set is frozen (#850), so this is a state conflict rather
+      // than a malformed request, and the GM is shown the refusal's own message: it names the
+      // combatant, the Encounter and both ways forward. It deliberately does not say "refresh".
+      if (error instanceof ScenarioParticipationFrozenError) {
+        return reply.code(409).send({ code: error.code, error: error.message });
+      }
+      // The deactivation boundary runs Serializable against this Scenario's running Encounters, so
+      // an Encounter write committing against it is a conflict rather than a bad request. Its
+      // bounded retry normally re-decides and the GM gets the frozen refusal above; this is the
+      // exhausted case, and the GM is told to try again, which here is true.
+      if (error instanceof ScenarioMutationConflictError) {
+        return reply.code(409).send({ code: error.code, error: error.message });
+      }
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to update participant metadata.",
       });

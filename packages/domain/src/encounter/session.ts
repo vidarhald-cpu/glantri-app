@@ -763,6 +763,65 @@ export function encounterHeldRosterRefusal(
 }
 
 /**
+ * Which Encounters a combatant's Scenario participation is load-bearing for.
+ *
+ * An Encounter that is running requires every participant on its explicit roster to be an active
+ * Scenario participant, so making one inactive is a removal from combat by another name — and the
+ * participant set of a running Encounter is frozen (#850). Both rosters count: a held roster
+ * becomes the roster in force at the next round boundary, so a combatant made inactive while only
+ * waiting there would leave that boundary unable to write the roster it was promised.
+ *
+ * Only `active` Encounters are named. A draft, paused, completed or archived Encounter is running
+ * no round, so nothing about it is made incoherent by a Scenario-level change; a draft or paused
+ * one is refused its own activation later, by the presence check at the write, which is where that
+ * belongs.
+ */
+export function encountersBlockingScenarioParticipantDeactivation<
+  T extends {
+    participants: Pick<EncounterParticipant, "scenarioParticipantId">[];
+    pendingParticipants?: Pick<EncounterParticipant, "scenarioParticipantId">[];
+    status: EncounterStatus;
+  },
+>(input: { encounters: readonly T[]; scenarioParticipantId: string }): T[] {
+  return input.encounters.filter(
+    (encounter) =>
+      isEncounterActivityAllowed(encounter.status) &&
+      [...encounter.participants, ...(encounter.pendingParticipants ?? [])].some(
+        (participant) => participant.scenarioParticipantId === input.scenarioParticipantId,
+      ),
+  );
+}
+
+/**
+ * What to tell a GM who tried to make a combatant of a running Encounter inactive.
+ *
+ * The refusal names the combatant, the Encounters that hold them, and both ways forward, because
+ * the condition is recoverable in one action and the measured failure on #845 was that nothing
+ * said which action. It deliberately does not say "refresh": the Scenario state the GM is looking
+ * at is correct, and re-reading it changes nothing.
+ *
+ * `undefined` when no running Encounter holds the combatant, which is the ordinary case.
+ */
+export function scenarioParticipantDeactivationRefusal(input: {
+  encounterTitles: readonly string[];
+  participantDisplayName: string;
+}): string | undefined {
+  if (input.encounterTitles.length === 0) return undefined;
+
+  const titles =
+    input.encounterTitles.length === 1
+      ? `the Encounter ${input.encounterTitles[0]}`
+      : `the Encounters ${input.encounterTitles.slice(0, -1).join(", ")} and ${input.encounterTitles.at(-1)}`;
+
+  return (
+    `${input.participantDisplayName} is a combatant in ${titles}, which is under way, and combatants ` +
+    "enter and leave only between rounds. Take them out of the Encounter roster instead — that " +
+    "change applies at the next round boundary — or commit round end first and make them inactive " +
+    "in the Scenario then."
+  );
+}
+
+/**
  * The Encounter roster fields to persist when the round-end commit crosses into the next round.
  *
  * This is the one point that reads the waiting roster. It replaces the roster in force and stops
