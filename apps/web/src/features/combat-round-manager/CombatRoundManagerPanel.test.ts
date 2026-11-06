@@ -1517,9 +1517,11 @@ describe("#940 Tier A the GM panel draws the extrapolation flag it already recei
 
   /**
    * Forgejo #988. The participant navigation must not be gated on a participant already being
-   * selected. On a round-wide step the canonical task is ownerless — measured for all seven
-   * members of `isGlobalCombatRoundStep` — so the inspector selects no participant, and the only
-   * control that selects one used to be unrendered, which made that state sustain itself.
+   * selected. On a round-wide step the canonical task is ownerless once every participant's work
+   * for that step is discharged (before that, four of the seven `isGlobalCombatRoundStep` members
+   * present an owned participant task; the step class alone does not decide it), so the inspector
+   * then selects no participant, and the inspector's own participant navigation used to be
+   * unrendered there. Other controls could still reach a participant in the states measured.
    *
    * This is a placement guard, not the behavioural proof: source text cannot show that pressing
    * the arrows reaches a participant. `apps/web/e2e/gm-inspector-global-step-navigation.spec.ts`

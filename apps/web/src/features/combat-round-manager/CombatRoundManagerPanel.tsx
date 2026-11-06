@@ -12563,10 +12563,13 @@ export default function CombatRoundManagerPanel({
    * performs cannot disagree about which rows exist.
    *
    * The navigation section used to render only inside the `inspector.participant` arm. On a
-   * round-wide step the canonical task is ownerless — measured for all seven members of
-   * `isGlobalCombatRoundStep` — so `currentTaskSelection` carries no participant, the inspector
-   * renders its phase-wide arm, and the one control that selects a participant was absent; with
-   * nothing to press, the state sustained itself. Gating the section on the rows it moves between
+   * round-wide step the canonical task is ownerless once every participant's work for that step is
+   * discharged, so `currentTaskSelection` then carries no participant and the inspector renders
+   * its phase-wide arm. Before that, four of the seven `isGlobalCombatRoundStep` members present
+   * an owned participant task and render the participant arm; the step class alone does not
+   * decide it. In the phase-wide arm the inspector's own participant navigation was absent, though
+   * other controls could still reach a participant in the states measured, so that was an
+   * inconsistency rather than a dead end. Gating the section on the rows it moves between
    * adds that control to the phase-wide arm and changes nothing else: it is not disabled, because
    * `getAdjacentCombatRoundTimelineParticipantSelection` reads an absent participant as index 0,
    * so `Previous participant` selects the first row and `Next participant` the second.
