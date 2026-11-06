@@ -66,18 +66,39 @@ describe("PlayerCombatPanels", () => {
     const source = readSource();
 
     expect(source).toContain("buildPlayerCombatModifierRows");
-    expect(source).toContain("buildLiveCombatModifierContributionProjection");
     expect(source).not.toContain("mergePersistentCombatEffectModifiers");
-    expect(source).toContain("filterCombatModifierEntriesForPhase");
     expect(source).toContain("phaseKey?: EncounterCombatPhaseKey");
-    expect(source).toContain("General/Fatigue");
-    expect(source).toContain("Initiative");
-    expect(source).toContain("Skill/OB");
-    expect(source).toContain("DB/Parry");
-    expect(source.indexOf('label: "General/Fatigue"')).toBeLessThan(
-      source.indexOf('label: "Initiative"'),
-    );
-    expect(source.indexOf('label: "Initiative"')).toBeLessThan(source.indexOf('label: "Skill/OB"'));
+
+    // #951: the grouping, filtering and totals now live in one canonical domain projection,
+    // because the server's step-snapshot deriver persists exactly these rows. The bucket
+    // contract is asserted on the returned value rather than on the source text, so it holds
+    // wherever the implementation lives.
+    const rows = buildPlayerCombatModifierRows({
+      combatContext: {
+        modifierBuckets: {
+          general: [],
+          situationDb: [],
+          situationInitiative: [],
+          situationObSkill: [],
+        },
+      },
+      currentRound: 1,
+      ownerParticipantId: "participant-1",
+      phaseKey: "phase1",
+    });
+
+    expect(rows.map((row) => row.bucketKey)).toEqual([
+      "general",
+      "situation_initiative",
+      "situation_ob_skill",
+      "situation_db",
+    ]);
+    expect(rows.map((row) => row.label)).toEqual([
+      "General/Fatigue",
+      "Initiative",
+      "Skill/OB",
+      "DB/Parry",
+    ]);
   });
 
   it("renders the approved relative-position, movement, and facing declaration controls", () => {

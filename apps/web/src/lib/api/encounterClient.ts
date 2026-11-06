@@ -26,7 +26,6 @@ import {
   CombatRoundPhase,
   CombatRoundPhaseContexts,
   CombatRoundStep,
-  CombatRoundStepSnapshot,
   CombatStepAutomationOperationFamily,
   CombatStepAutomationRunResult,
   CombatNpcDeclarationProposal,
@@ -280,7 +279,6 @@ export async function submitCombatDeclarationOnServer(input: {
   phaseContexts?: CombatRoundPhaseContexts;
   phaseAttackSources?: Partial<Record<"phase1" | "phase2", CombatAttackSourceRef>>;
   phaseWeaponNames?: Partial<Record<"phase1" | "phase2", string | undefined>>;
-  reviewStepSnapshot?: CombatRoundStepSnapshot;
   scenarioParticipantId: string;
   secondaryActionContext?: ScenarioParticipantSecondaryActionContext;
   secondaryActionId?: string;
@@ -326,7 +324,6 @@ export async function submitCombatDeclarationOnServer(input: {
         phaseContexts: input.phaseContexts,
         phaseAttackSources: input.phaseAttackSources,
         phaseWeaponNames: input.phaseWeaponNames,
-        reviewStepSnapshot: input.reviewStepSnapshot,
         feint: input.feint,
         executionGroupId: input.executionGroupId,
         expectedRevision: input.expectedRevision,
@@ -992,7 +989,6 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
   executionGroupId: string;
   expectedBoundary: CombatProgressionBoundaryKind;
   expectedRevision: string;
-  stepSnapshots?: CombatRoundStepSnapshot[];
   taskId: string;
   targetBoundary: CombatProgressionBoundaryKind;
   currentEncounter?: EncounterSession;
@@ -1013,7 +1009,6 @@ export async function advanceCombatRoundCurrentStepOnServer(input: {
         executionGroupId: input.executionGroupId,
         expectedBoundary: input.expectedBoundary,
         expectedRevision: input.expectedRevision,
-        stepSnapshots: input.stepSnapshots,
         taskId: input.taskId,
         targetBoundary: input.targetBoundary,
       }),

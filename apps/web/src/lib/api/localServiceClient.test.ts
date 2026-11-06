@@ -4,7 +4,6 @@ import {
   buildActiveCombatMutationResponse,
   combatRoundStateSchema,
   encounterSessionSchema,
-  type CombatRoundStepSnapshot,
   type EncounterParticipant,
 } from "@glantri/domain";
 
@@ -1267,16 +1266,6 @@ describe("localServiceClient wire contract", () => {
       currentStep: "review_action_modifiers",
       warnings: [],
     };
-    const stepSnapshots: CombatRoundStepSnapshot[] = [
-      {
-        committedAt: "2026-01-01T00:00:00.000Z",
-        id: "1:encounter-participant-1:select_actions",
-        participantId: "encounter-participant-1",
-        participantLabel: "The Gladiator",
-        roundNumber: 1,
-        step: "select_actions",
-      },
-    ];
     const fetchMock = stubFetch({ commandEnvelope, encounter });
     const client = await loadClient();
 
@@ -1287,7 +1276,6 @@ describe("localServiceClient wire contract", () => {
         executionGroupId: "group:declaration:advance",
         expectedBoundary: "declaration",
         expectedRevision: "2026-01-01T00:00:00.000Z",
-        stepSnapshots,
         taskId: "task:declaration:advance",
         targetBoundary: "phase1_modifier_review",
       }),
@@ -1299,7 +1287,6 @@ describe("localServiceClient wire contract", () => {
         executionGroupId: "group:declaration:advance",
         expectedBoundary: "declaration",
         expectedRevision: "2026-01-01T00:00:00.000Z",
-        stepSnapshots,
         taskId: "task:declaration:advance",
         targetBoundary: "phase1_modifier_review",
       },

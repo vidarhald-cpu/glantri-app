@@ -1,4 +1,5 @@
 import {
+  createEmptyCombatModifierContext,
   COMBAT_PRIMARY_ACTION_IDS,
   COMBAT_SECONDARY_ACTION_IDS,
   getCombatDeclarationActionLabel,
@@ -271,16 +272,8 @@ function sumModifierEntries(entries: ScenarioCombatModifierEntry[]): number {
   return entries.reduce((sum, entry) => sum + entry.value, 0);
 }
 
-export function createEmptyPlayerEncounterCombatContext(): ScenarioParticipantCombatContext {
-  return {
-    modifierBuckets: {
-      general: [],
-      situationDb: [],
-      situationInitiative: [],
-      situationObSkill: [],
-    },
-  };
-}
+// #951: one canonical empty context, shared with the server-side step-snapshot deriver.
+export const createEmptyPlayerEncounterCombatContext = createEmptyCombatModifierContext;
 
 export function mergeCombatContextWithCurrentModifierBuckets(input: {
   baseContext?: ScenarioParticipantCombatContext;
