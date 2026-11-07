@@ -34,10 +34,12 @@ import {
   type ScenarioSessionState,
 } from "@glantri/domain";
 import { createDefaultEquipmentLocations } from "@glantri/content";
+import type { AuthRole } from "@glantri/auth";
 import { Prisma, PrismaClient } from "@prisma/client";
 
 import { prisma as defaultPrisma } from "../client";
 import { ScenarioParticipationFrozenError } from "../scenarioParticipationFrozen";
+import { normalizeStoredAuthRole } from "./authRepository";
 import { createPrismaCharacterEquipmentRepository } from "./characterEquipmentRepository";
 import { reconcileScenarioEquipmentForCharacters } from "../services/scenarioEquipmentReconciliation";
 
@@ -472,6 +474,18 @@ export interface ScenarioRepository {
   listCampaignsAllowingPlayerSelfJoin(): Promise<Campaign[]>;
   listCampaignsByCharacterRosterAccess(characterId: string): Promise<Campaign[]>;
   listCampaignsByPlayerAccess(userId: string): Promise<Campaign[]>;
+  /**
+   * The **current** normalized application roles of one user.
+   *
+   * Required by the GM predicate in `scenarioParticipantSupport.ts`, which asks the question of
+   * an arbitrary candidate user rather than of the caller, so no session role set can supply it.
+   * The names are normalized through `normalizeStoredAuthRole`, so a legacy stored `gm` row is
+   * reported as `game_master` exactly as the session path reports it.
+   *
+   * A user that cannot be read returns an empty set, which makes every predicate over it fail
+   * closed.
+   */
+  listUserAuthRoles(userId: string): Promise<AuthRole[]>;
   createScenario(input: {
     campaignId: string;
     description: string;
@@ -771,6 +785,20 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
 
       return records.map(mapCampaign);
+    },
+    async listUserAuthRoles(userId) {
+      const user = await prisma.user.findUnique({
+        select: { roles: { select: { role: { select: { name: true } } } } },
+        where: { id: userId },
+      });
+
+      if (!user) {
+        return [];
+      }
+
+      return user.roles
+        .map((assignment) => normalizeStoredAuthRole(assignment.role.name))
+        .filter((role): role is AuthRole => role !== null);
     },
     async createScenario(input) {
       const record = await prisma.scenario.create({
