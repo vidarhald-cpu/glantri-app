@@ -77,7 +77,16 @@ same authorized lane; task cleanup cannot merely assume revocation. The persiste
 is the normal path, so #55 neither creates a temporary token nor weakens #41.
 
 Before selecting the role credential, bootstrap verifies that `origin` is exactly the canonical
-loopback URL. A different or credential-bearing remote is rejected without printing its value.
+Forgejo origin for this installation. The default is the MacBook loopback URL
+`http://127.0.0.1:3001/recovery-admin/glantri-app.git`; another installation sets
+`GLANTRI_FORGEJO_ORIGIN` to its own origin, for example the Mac Studio's
+`http://192.168.1.66:3001/recovery-admin/glantri-app.git`. Only the host and port are configurable:
+the configured value must be an `http` or `https` URL with no userinfo, a hostname or IPv4 address,
+an optional port, and the exact path `/recovery-admin/glantri-app.git`, so the repository itself
+stays pinned in Git. A configured value that fails that validation is refused and never falls back
+to the default. A remote that does not match the resolved origin is rejected before any credential
+use; the refusal prints the observed and expected origins, with any userinfo in the observed value
+redacted.
 
 ## Setup-failure evidence retained from #55
 
