@@ -5,6 +5,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   rmSync,
   chmodSync,
   existsSync,
@@ -602,15 +603,10 @@ const defaultForgejoUrl = "http://host.docker.internal:3001/";
 const macStudioForgejoUrl = "http://192.168.1.66:3001/";
 const fixtureRunnerUuid = "3f0d1b2c-4e5a-6789-abcd-ef0123456789";
 
-function runnerHome(t, { registered = false } = {}) {
+function runnerHome(t, { state = true } = {}) {
   const home = mkdtempSync(path.join(tmpdir(), "glantri-runner-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
-  mkdirSync(path.join(home, "state"));
-  // `refresh_config` re-renders the committed template and preserves the
-  // registered UUID by reading it back, so one line represents a bootstrapped
-  // installation and no runner token is needed or written.
-  if (registered)
-    writeFileSync(path.join(home, "state/runner-config.yml"), `      uuid: ${fixtureRunnerUuid}\n`);
+  if (state) mkdirSync(path.join(home, "state"));
   return home;
 }
 
@@ -643,9 +639,44 @@ function persistedForgejoUrl(home) {
   return readFileSync(path.join(home, "state/forgejo-url"), "utf8");
 }
 
-test("runner service renders the committed default Forgejo address when nothing is configured", (t) => {
-  const home = runnerHome(t, { registered: true });
+// A real rendered configuration for `url`, produced by the script itself. The
+// `bootstrapped` shape is what `bootstrap` leaves behind; `pre-change` is the
+// shape an installation registered before the address became configurable has,
+// and the shape this Mac's live installation holds: a rendered configuration
+// naming its Forgejo, and no address file beside it.
+function installation(t, url, shape = "bootstrapped") {
+  const home = runnerHome(t);
+  writeFileSync(path.join(home, "state/forgejo-url"), `${url}\n`);
+  writeFileSync(path.join(home, "state/runner-config.yml"), `      uuid: ${fixtureRunnerUuid}\n`);
   runnerCommand(home, ["refresh-config"]);
+  assert.equal(renderedForgejoUrl(home), url);
+  if (shape === "pre-change") rmSync(path.join(home, "state/forgejo-url"));
+  return home;
+}
+
+function treeSnapshot(home) {
+  const entries = [];
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const absolute = path.join(directory, entry.name);
+      const relative = path.relative(home, absolute);
+      if (entry.isDirectory()) {
+        entries.push(`directory ${relative}`);
+        walk(absolute);
+      } else entries.push(`file ${relative} ${readFileSync(absolute, "utf8")}`);
+    }
+  };
+  walk(home);
+  return entries;
+}
+
+test("runner service renders the committed default Forgejo address when nothing is configured", (t) => {
+  const fresh = runnerHome(t, { state: false });
+  assert.equal(runnerCommand(fresh, ["print-endpoint", "bootstrap"]), defaultForgejoUrl);
+  assert.deepEqual(treeSnapshot(fresh), []);
+  const home = installation(t, defaultForgejoUrl);
   assert.equal(renderedForgejoUrl(home), defaultForgejoUrl);
   assert.equal(persistedForgejoUrl(home), `${defaultForgejoUrl}\n`);
   assert.ok(!renderedConfig(home).includes("__FORGEJO_URL__"));
@@ -655,13 +686,13 @@ test("runner service renders the committed default Forgejo address when nothing 
 });
 
 test("runner service adopts a configured Forgejo address and keeps it across refreshes", (t) => {
-  const home = runnerHome(t);
+  const fresh = runnerHome(t, { state: false });
   assert.equal(
-    runnerCommand(home, ["print-endpoint", "bootstrap"], macStudioForgejoUrl),
+    runnerCommand(fresh, ["print-endpoint", "bootstrap"], macStudioForgejoUrl),
     macStudioForgejoUrl,
   );
-  assert.equal(persistedForgejoUrl(home), `${macStudioForgejoUrl}\n`);
-  writeFileSync(path.join(home, "state/runner-config.yml"), `      uuid: ${fixtureRunnerUuid}\n`);
+  assert.deepEqual(treeSnapshot(fresh), []);
+  const home = installation(t, macStudioForgejoUrl);
   // Every later `up` and `restart` re-renders the template with no environment
   // set; an address taken only from the environment would revert here.
   for (const pass of [1, 2]) {
@@ -682,36 +713,105 @@ test("runner service adopts a configured Forgejo address and keeps it across ref
 });
 
 test("runner service refuses to repoint a registered runner from the environment", (t) => {
-  const home = runnerHome(t, { registered: true });
-  runnerCommand(home, ["refresh-config"]);
+  const home = installation(t, defaultForgejoUrl);
   const refusal = runnerFailure(home, ["refresh-config"], macStudioForgejoUrl);
   assert.equal(refusal.status, 2);
   assert.match(
     refusal.stderr,
-    /GLANTRI_FORGEJO_URL is http:\/\/192\.168\.1\.66:3001\/ but this installation is registered against http:\/\/host\.docker\.internal:3001\/\./,
+    /GLANTRI_FORGEJO_URL is http:\/\/192\.168\.1\.66:3001\/ but this installation is registered against http:\/\/host\.docker\.internal:3001\/, recorded in \S+\/state\/forgejo-url\./,
   );
   assert.match(refusal.stderr, /state\/forgejo-url and run restart/);
   assert.equal(renderedForgejoUrl(home), defaultForgejoUrl);
   assert.equal(persistedForgejoUrl(home), `${defaultForgejoUrl}\n`);
   assert.equal(runnerFailure(home, ["print-endpoint"], macStudioForgejoUrl).status, 2);
-  // An installation bootstrapped before the address became configurable has no
-  // persisted file: it keeps the address it was registered against, records it,
-  // and still refuses the disagreeing environment.
-  const legacy = runnerHome(t, { registered: true });
-  assert.equal(runnerFailure(legacy, ["refresh-config"], macStudioForgejoUrl).status, 2);
-  assert.equal(persistedForgejoUrl(legacy), `${defaultForgejoUrl}\n`);
+  // On an installation registered before the address became configurable the
+  // record is its rendered configuration, and the refusal names that address
+  // rather than the compiled default.
+  const preChange = installation(t, macStudioForgejoUrl, "pre-change");
+  const against = runnerFailure(preChange, ["print-endpoint"], defaultForgejoUrl);
+  assert.equal(against.status, 2);
+  assert.match(
+    against.stderr,
+    /registered against http:\/\/192\.168\.1\.66:3001\/, recorded in \S+\/state\/runner-config\.yml\./,
+  );
+  assert.equal(existsSync(path.join(preChange, "state/forgejo-url")), false);
+});
+
+test("runner service never invents a registration for an installation that has none", (t) => {
+  const fresh = runnerHome(t, { state: false });
+  // There is nothing to repoint, so the configured address is simply the one
+  // `bootstrap` would use, and no command may fabricate a record that refuses it.
+  assert.equal(
+    runnerCommand(fresh, ["print-endpoint", "bootstrap"], macStudioForgejoUrl),
+    macStudioForgejoUrl,
+  );
+  for (const args of [["print-endpoint"], ["print-endpoint", "verify"], ["refresh-config"]]) {
+    const refusal = runnerFailure(fresh, args, macStudioForgejoUrl);
+    assert.notEqual(refusal.status, 0);
+    assert.doesNotMatch(refusal.stderr, /Refusing to repoint/, args.join(" "));
+    assert.deepEqual(treeSnapshot(fresh), [], args.join(" "));
+  }
+  assert.match(
+    runnerFailure(fresh, ["print-endpoint"], macStudioForgejoUrl).stderr,
+    /has no registered Forgejo address[\s\S]*Run bootstrap to register a runner/,
+  );
+  assert.equal(
+    runnerCommand(fresh, ["print-endpoint", "bootstrap"], macStudioForgejoUrl),
+    macStudioForgejoUrl,
+  );
+});
+
+test("runner service adopts a pre-change installation's own rendered address, not the default", (t) => {
+  // The live installation on this Mac holds a rendered configuration and a
+  // token and no address file. Resolving must not overwrite the address it is
+  // registered against with the compiled default.
+  const home = installation(t, macStudioForgejoUrl, "pre-change");
+  assert.equal(runnerCommand(home, ["print-endpoint"]), macStudioForgejoUrl);
+  assert.equal(runnerCommand(home, ["print-endpoint", "verify"]), macStudioForgejoUrl);
+  assert.equal(existsSync(path.join(home, "state/forgejo-url")), false);
+  // `up` and `restart` re-render first: the rendered address survives and is
+  // recorded, rather than being replaced by the default.
+  runnerCommand(home, ["refresh-config"]);
+  assert.equal(renderedForgejoUrl(home), macStudioForgejoUrl);
+  assert.equal(persistedForgejoUrl(home), `${macStudioForgejoUrl}\n`);
+  assert.equal(runnerCommand(home, ["print-endpoint", "verify"]), macStudioForgejoUrl);
+});
+
+test("runner service print-endpoint and verify resolution write nothing at all", (t) => {
+  const states = [
+    ["fresh", runnerHome(t, { state: false })],
+    ["empty state directory", runnerHome(t)],
+    ["pre-change", installation(t, macStudioForgejoUrl, "pre-change")],
+    ["bootstrapped", installation(t, macStudioForgejoUrl)],
+  ];
+  for (const [name, home] of states) {
+    const before = treeSnapshot(home);
+    for (const args of [
+      ["print-endpoint"],
+      ["print-endpoint", "service"],
+      ["print-endpoint", "bootstrap"],
+      ["print-endpoint", "verify"],
+    ])
+      for (const forgejoUrl of ["", macStudioForgejoUrl, defaultForgejoUrl]) {
+        try {
+          runnerCommand(home, args, forgejoUrl);
+        } catch {
+          // A refusal is a legitimate outcome here; writing is not.
+        }
+        assert.deepEqual(treeSnapshot(home), before, `${name}: ${args.join(" ")} ${forgejoUrl}`);
+      }
+  }
 });
 
 test("runner service verify target is the rendered address and refuses a disagreement", (t) => {
-  const home = runnerHome(t, { registered: true });
-  runnerCommand(home, ["refresh-config"]);
+  const home = installation(t, defaultForgejoUrl);
   writeFileSync(path.join(home, "state/forgejo-url"), `${macStudioForgejoUrl}\n`);
   assert.equal(runnerCommand(home, ["print-endpoint"]), macStudioForgejoUrl);
   const refusal = runnerFailure(home, ["print-endpoint", "verify"]);
   assert.equal(refusal.status, 1);
   assert.match(
     refusal.stderr,
-    /Rendered runner configuration uses http:\/\/host\.docker\.internal:3001\/ but this installation is registered against http:\/\/192\.168\.1\.66:3001\/\./,
+    /Rendered runner configuration uses http:\/\/host\.docker\.internal:3001\/ but this installation is registered against http:\/\/192\.168\.1\.66:3001\/, recorded in \S+\/state\/forgejo-url\./,
   );
   runnerCommand(home, ["refresh-config"]);
   assert.equal(renderedForgejoUrl(home), macStudioForgejoUrl);
@@ -742,17 +842,16 @@ test("runner service rejects a Forgejo address that could break the rendered con
     "http://host-.bad:3001/",
     "http://host:3001/\nurl: http://evil.invalid/",
   ]) {
-    const home = runnerHome(t);
+    const home = runnerHome(t, { state: false });
     const refusal = runnerFailure(home, ["print-endpoint", "bootstrap"], candidate);
     assert.equal(refusal.status, 2, candidate);
     assert.match(refusal.stderr, /is not an accepted Forgejo address/, candidate);
-    assert.equal(existsSync(path.join(home, "state/forgejo-url")), false, candidate);
+    assert.deepEqual(treeSnapshot(home), [], candidate);
   }
   const accepted = "https://forgejo-ci.example-host.test:65535/";
-  const home = runnerHome(t, { registered: true });
-  assert.equal(runnerCommand(home, ["print-endpoint", "bootstrap"], accepted), accepted);
-  runnerCommand(home, ["refresh-config"]);
-  assert.equal(renderedForgejoUrl(home), accepted);
+  const fresh = runnerHome(t, { state: false });
+  assert.equal(runnerCommand(fresh, ["print-endpoint", "bootstrap"], accepted), accepted);
+  assert.equal(renderedForgejoUrl(installation(t, accepted)), accepted);
 });
 
 test("committed runner template and service script carry one Forgejo address literal", () => {
@@ -765,6 +864,11 @@ test("committed runner template and service script carry one Forgejo address lit
   assert.deepEqual(script.match(/https?:\/\/[^\s'"]+/g), [defaultForgejoUrl]);
   assert.match(script, /^FORGEJO_URL_DEFAULT='http:\/\/host\.docker\.internal:3001\/'$/m);
   assert.match(script, /--env "FORGEJO_HEALTH_URL=\$\{VERIFY_FORGEJO_URL\}api\/healthz"/);
+  // Exactly one address is ever given to the probe. A second --env carrying a
+  // variable passes the assertion above while docker run takes the last value.
+  assert.deepEqual(script.match(/FORGEJO_HEALTH_URL=[^"\s]*/g), [
+    "FORGEJO_HEALTH_URL=${VERIFY_FORGEJO_URL}api/healthz",
+  ]);
   const probes = script.split("\n").filter((line) => line.includes("curl "));
   assert.equal(probes.length, 1);
   assert.match(probes[0], /curl --fail --silent --show-error "\$FORGEJO_HEALTH_URL"/);

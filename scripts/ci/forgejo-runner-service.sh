@@ -23,6 +23,8 @@ FORGEJO_URL_DEFAULT='http://host.docker.internal:3001/'
 FORGEJO_URL_LABEL='[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?'
 FORGEJO_URL_PATTERN="^https?://$FORGEJO_URL_LABEL(\\.$FORGEJO_URL_LABEL)*(:[0-9]{1,5})?/\$"
 FORGEJO_URL=""
+REGISTERED_FORGEJO_URL=""
+REGISTRATION_SOURCE=""
 RENDERED_FORGEJO_URL=""
 VERIFY_FORGEJO_URL=""
 
@@ -42,10 +44,12 @@ usage() {
     '  refresh-config  Re-render the external configuration without starting anything.' \
     '  print-endpoint [service|bootstrap|verify]  Print only the resolved Forgejo address.' \
     '' \
-    'The Forgejo address is read from GLANTRI_FORGEJO_URL at bootstrap and then' \
-    'from state/forgejo-url. refresh-config and print-endpoint exist so that the' \
-    'resolution and the rendered configuration can be exercised without Docker;' \
-    'print-endpoint prints an address only, never the registration token.'
+    'bootstrap takes the Forgejo address from GLANTRI_FORGEJO_URL, or the default,' \
+    'and records it in state/forgejo-url. Afterwards the registered address is' \
+    'that file, or the rendered state/runner-config.yml when it is absent.' \
+    'print-endpoint reads and writes nothing: use print-endpoint bootstrap before' \
+    'an installation exists, and print-endpoint or print-endpoint verify on one' \
+    'that does. It prints an address only, never the registration token.'
 }
 
 require_runner_home() {
@@ -58,8 +62,12 @@ require_runner_home() {
   esac
 }
 
+forgejo_url_is_valid() {
+  [[ $1 =~ $FORGEJO_URL_PATTERN ]]
+}
+
 validate_forgejo_url() {
-  if [[ $1 =~ $FORGEJO_URL_PATTERN ]]; then
+  if forgejo_url_is_valid "$1"; then
     return 0
   fi
   printf '%s is not an accepted Forgejo address: %s\n' "$2" "$1" >&2
@@ -67,7 +75,12 @@ validate_forgejo_url() {
   exit 2
 }
 
+# Writes the registration record. Only bootstrap and the commands that re-render
+# the external configuration call this; resolution itself never writes.
 persist_forgejo_url() {
+  if [ -s "$RUNNER_HOME/state/forgejo-url" ] && [ "$(cat "$RUNNER_HOME/state/forgejo-url")" = "$1" ]; then
+    return 0
+  fi
   umask 077
   mkdir -p "$RUNNER_HOME/state"
   temporary_url="$RUNNER_HOME/state/forgejo-url.tmp"
@@ -76,56 +89,95 @@ persist_forgejo_url() {
   mv "$temporary_url" "$RUNNER_HOME/state/forgejo-url"
 }
 
-# Sets FORGEJO_URL. Mode bootstrap may adopt GLANTRI_FORGEJO_URL for an
-# installation that has no persisted address yet; mode service may not, because
-# a registered runner must not be repointed at another server by a routine up.
+# The address this installation is registered against: state/forgejo-url when
+# present, otherwise the address in the rendered configuration the runner loads.
+# Sets REGISTERED_FORGEJO_URL and REGISTRATION_SOURCE, both empty when the
+# installation holds no registration at all. Reads only; never writes.
+registration_forgejo_url() {
+  url_file="$RUNNER_HOME/state/forgejo-url"
+  registration_config="$RUNNER_HOME/state/runner-config.yml"
+  REGISTERED_FORGEJO_URL=""
+  REGISTRATION_SOURCE=""
+  if [ -s "$url_file" ]; then
+    REGISTERED_FORGEJO_URL=$(cat "$url_file")
+    REGISTRATION_SOURCE=$url_file
+    validate_forgejo_url "$REGISTERED_FORGEJO_URL" "$url_file"
+    return 0
+  fi
+  if [ -s "$registration_config" ]; then
+    rendered_candidate=$(sed -n 's/^      url: \(.*\)$/\1/p' "$registration_config")
+    # A rendered configuration that carries no usable address is not a record.
+    # rendered_forgejo_url reports that precisely for the commands that need it.
+    if forgejo_url_is_valid "$rendered_candidate"; then
+      REGISTERED_FORGEJO_URL=$rendered_candidate
+      REGISTRATION_SOURCE=$registration_config
+    fi
+  fi
+}
+
+# Sets FORGEJO_URL from the registration record, or — in bootstrap mode on an
+# installation that holds no registration — from GLANTRI_FORGEJO_URL or the
+# default. A registered runner is never repointed by the environment, and no
+# address is ever invented for an installation that has one.
 resolve_forgejo_url() {
   mode=$1
-  url_file="$RUNNER_HOME/state/forgejo-url"
   requested=${GLANTRI_FORGEJO_URL:-}
   if [ -n "$requested" ]; then
     validate_forgejo_url "$requested" 'GLANTRI_FORGEJO_URL'
   fi
 
-  if [ -s "$url_file" ]; then
-    FORGEJO_URL=$(cat "$url_file")
-    validate_forgejo_url "$FORGEJO_URL" "$url_file"
-  elif [ "$mode" = bootstrap ] && [ -n "$requested" ]; then
-    FORGEJO_URL=$requested
-    persist_forgejo_url "$FORGEJO_URL"
-  else
-    # An installation bootstrapped before the address became configurable keeps
-    # the address it was registered against.
-    FORGEJO_URL=$FORGEJO_URL_DEFAULT
-    persist_forgejo_url "$FORGEJO_URL"
+  registration_forgejo_url
+  if [ -n "$REGISTERED_FORGEJO_URL" ]; then
+    FORGEJO_URL=$REGISTERED_FORGEJO_URL
+    if [ -n "$requested" ] && [ "$requested" != "$FORGEJO_URL" ]; then
+      printf 'GLANTRI_FORGEJO_URL is %s but this installation is registered against %s, recorded in %s.\n' \
+        "$requested" "$FORGEJO_URL" "$REGISTRATION_SOURCE" >&2
+      printf 'Refusing to repoint a registered runner. Write the intended address into %s and run restart.\n' \
+        "$RUNNER_HOME/state/forgejo-url" >&2
+      exit 2
+    fi
+    return 0
   fi
 
-  if [ -n "$requested" ] && [ "$requested" != "$FORGEJO_URL" ]; then
-    printf 'GLANTRI_FORGEJO_URL is %s but this installation is registered against %s.\n' \
-      "$requested" "$FORGEJO_URL" >&2
-    printf 'Refusing to repoint a registered runner. Write the intended address into %s and run restart.\n' \
-      "$url_file" >&2
+  # Nothing is registered, so nothing can be repointed and nothing is assumed.
+  if [ "$mode" = bootstrap ]; then
+    FORGEJO_URL=${requested:-$FORGEJO_URL_DEFAULT}
+    return 0
+  fi
+  printf 'This installation has no registered Forgejo address: neither %s nor %s holds one.\n' \
+    "$RUNNER_HOME/state/forgejo-url" "$RUNNER_HOME/state/runner-config.yml" >&2
+  printf 'Run bootstrap to register a runner; print-endpoint bootstrap shows the address it would use.\n' >&2
+  exit 2
+}
+
+require_rendered_config() {
+  config_path="$RUNNER_HOME/state/runner-config.yml"
+  if [ ! -s "$config_path" ]; then
+    printf 'This installation has no rendered runner configuration at %s.\n' "$config_path" >&2
+    printf 'Run bootstrap to register a runner; print-endpoint bootstrap shows the address it would use.\n' >&2
     exit 2
   fi
 }
 
 # Sets RENDERED_FORGEJO_URL from the configuration the runner actually loads.
 rendered_forgejo_url() {
-  config_path="$RUNNER_HOME/state/runner-config.yml"
-  test -s "$config_path"
+  require_rendered_config
   RENDERED_FORGEJO_URL=$(sed -n 's/^      url: \(.*\)$/\1/p' "$config_path")
   validate_forgejo_url "$RENDERED_FORGEJO_URL" "$config_path"
 }
 
 # Sets VERIFY_FORGEJO_URL to the address the running runner is configured to
-# poll, after proving that it is the persisted address.
+# poll, after proving that it is the registered address. When state/forgejo-url
+# exists it is the record, so this is the cross-check; when it does not, the
+# rendered configuration is itself the record and there is nothing to cross-check
+# it against. Reads only; never writes.
 verify_forgejo_url() {
   rendered_forgejo_url
   resolve_forgejo_url service
   if [ "$RENDERED_FORGEJO_URL" != "$FORGEJO_URL" ]; then
-    printf 'Rendered runner configuration uses %s but this installation is registered against %s.\n' \
-      "$RENDERED_FORGEJO_URL" "$FORGEJO_URL" >&2
-    printf 'Run restart to re-render the configuration from the persisted address.\n' >&2
+    printf 'Rendered runner configuration uses %s but this installation is registered against %s, recorded in %s.\n' \
+      "$RENDERED_FORGEJO_URL" "$FORGEJO_URL" "$REGISTRATION_SOURCE" >&2
+    printf 'Run restart to re-render the configuration from the registered address.\n' >&2
     exit 1
   fi
   VERIFY_FORGEJO_URL=$RENDERED_FORGEJO_URL
@@ -193,10 +245,10 @@ render_config() {
 }
 
 refresh_config() {
-  config_path="$RUNNER_HOME/state/runner-config.yml"
-  test -s "$config_path"
+  require_rendered_config
   uuid=$(sed -n 's/^      uuid: \(.*\)$/\1/p' "$config_path")
   resolve_forgejo_url service
+  persist_forgejo_url "$FORGEJO_URL"
   render_config "$uuid" "$FORGEJO_URL"
 }
 
@@ -236,6 +288,7 @@ bootstrap() {
 
   umask 077
   mkdir -p "$RUNNER_HOME/state"
+  persist_forgejo_url "$FORGEJO_URL"
   cp "$SOURCE_DIR/compose.yaml" "$RUNNER_HOME/compose.yaml"
   cp "$SOURCE_DIR/dind-daemon.json" "$RUNNER_HOME/dind-daemon.json"
 

@@ -41,10 +41,11 @@ it is not a Forgejo user, API, Git, administration, protection-bypass, `main`,
 Azure, deployment, or production credential.
 
 The only application endpoint jobs need is the Forgejo instance itself, and its
-address is configuration rather than a constant. The service script resolves the
-address once, persists it, renders it into the runner configuration, and reads it
-back out of that rendered configuration when it probes the route, so the address
-the runner polls and the address `verify` checks cannot disagree; see
+address is configuration rather than a constant. `bootstrap` records the address
+it registers against, `up` and `restart` render that recorded address into the
+runner configuration, and `verify` reads the address back out of that rendered
+configuration when it probes the route, so the address the runner polls and the
+address `verify` checks cannot disagree; see
 [Forgejo address configuration](#forgejo-address-configuration). The default is
 `http://host.docker.internal:3001/`, which on a Docker Desktop host whose Forgejo
 listens on that host's own loopback interface reaches it from inside nested jobs
@@ -341,21 +342,31 @@ user-owner and instance runners.
 
 ### Forgejo address configuration
 
-| Setting      | Value                                                           |
-| ------------ | --------------------------------------------------------------- |
-| Variable     | `GLANTRI_FORGEJO_URL`, read from the environment of `bootstrap` |
-| Default      | `http://host.docker.internal:3001/`                             |
-| Persisted at | `$GLANTRI_RUNNER_HOME/state/forgejo-url`, mode `0600`           |
-| Mac Studio   | `http://192.168.1.66:3001/`                                     |
+| Setting     | Value                                                                 |
+| ----------- | --------------------------------------------------------------------- |
+| Variable    | `GLANTRI_FORGEJO_URL`, which chooses the address at `bootstrap`       |
+| Default     | `http://host.docker.internal:3001/`, used when that variable is unset |
+| Recorded at | `$GLANTRI_RUNNER_HOME/state/forgejo-url`, mode `0600`                 |
+| Mac Studio  | `http://192.168.1.66:3001/`                                           |
 
-`bootstrap` resolves the address from `GLANTRI_FORGEJO_URL`, or from the default
-when that variable is unset, validates it, and writes it to `state/forgejo-url`.
-`up`, `restart`, `verify` and `migrate-label` read that file. An installation
-bootstrapped before the address became configurable has no such file, so they
-fall back to the default, record it, and behave exactly as they did before. The
-external configuration is re-rendered from the committed template and the
-persisted address on every `up` and `restart`, so a configured address survives
-both.
+**The address an installation is registered against** is `state/forgejo-url`
+when that file is present, and otherwise the `url:` of its rendered
+`state/runner-config.yml` — the configuration the runner daemon itself loads.
+Every command resolves in that order, and no command invents an address for an
+installation that holds one. An installation bootstrapped before the address
+became configurable has no `state/forgejo-url`, so it keeps the address in its
+own rendered configuration and the next `up` or `restart` records it; on this
+Mac that address is the default, so nothing about its behaviour changes.
+
+`bootstrap` is the one command that chooses an address: it takes
+`GLANTRI_FORGEJO_URL`, or the default when that variable is unset, validates it,
+and writes it to `state/forgejo-url`. On an installation that holds no
+registration at all — no recorded address and no rendered configuration — there
+is nothing to repoint, so `GLANTRI_FORGEJO_URL` is simply the address
+`bootstrap` will use. `up` and `restart` re-render the external configuration
+from the committed template and the registered address every time, so a
+configured address survives both; the service commands refuse rather than assume
+an address on an installation that has none.
 
 An accepted address is a scheme, a host, an optional port and one trailing
 slash: `http` or `https`, dot-separated host labels of letters, digits and inner
@@ -363,51 +374,64 @@ hyphens, an optional one-to-five-digit port, and nothing else. A path,
 credentials, a query, whitespace or any other character is refused, because the
 address is substituted into the rendered configuration literally.
 
-`GLANTRI_FORGEJO_URL` cannot repoint a runner that is already registered. When
-it disagrees with the persisted address the command refuses, names both
-addresses, and exits 2. Repointing an existing installation is deliberate
-operator work: write the intended address into `state/forgejo-url`, then
-`restart`. Changing the address does not re-register the runner, so a Forgejo
-instance that does not already hold this registration still needs a fresh
-`bootstrap`.
+`GLANTRI_FORGEJO_URL` cannot repoint a runner that **is** already registered.
+When it disagrees with the registered address the command refuses, names both
+addresses and the file the registered one came from, and exits 2. Repointing an
+existing installation is deliberate operator work: write the intended address
+into `state/forgejo-url`, then `restart`. Changing the address does not
+re-register the runner, so a Forgejo instance that does not already hold this
+registration still needs a fresh `bootstrap`.
 
 `verify` takes the address it probes from the rendered
-`state/runner-config.yml`, the configuration the runner itself loads, and
-refuses when that address is not the persisted one. What is verified is
-therefore what the runner uses.
+`state/runner-config.yml`, the configuration the runner itself loads. Where
+`state/forgejo-url` also exists it refuses when the two disagree; where it does
+not, the rendered configuration is itself the record and there is nothing to
+cross-check it against. What is verified is therefore what the runner uses.
 
 Two commands make that resolution inspectable, and exercisable by the regression
-tests, without Docker:
+tests, without Docker. Use the `bootstrap` form before an installation exists —
+it is the only one that answers for a host with no runner yet — and the others
+on an installation that already has one:
 
 ```bash
 export GLANTRI_RUNNER_HOME=/Users/vidarhald/Glantri-Server/forgejo-actions-runner
-# The address up, restart, verify and migrate-label resolve.
-scripts/ci/forgejo-runner-service.sh print-endpoint
-# The address bootstrap would register against, including GLANTRI_FORGEJO_URL.
+# Before bootstrap: the address bootstrap would use, GLANTRI_FORGEJO_URL included.
 scripts/ci/forgejo-runner-service.sh print-endpoint bootstrap
+# On an existing installation: the address up, restart, verify and migrate-label
+# resolve. On one that holds no registration it refuses and names bootstrap.
+scripts/ci/forgejo-runner-service.sh print-endpoint
 # The rendered address verify probes, after its agreement check.
 scripts/ci/forgejo-runner-service.sh print-endpoint verify
-# Re-render the external configuration only; restart applies it.
+# Re-render the external configuration from the registered address and record
+# it; restart applies it.
 scripts/ci/forgejo-runner-service.sh refresh-config
 ```
 
-`print-endpoint` prints an address and nothing else. Neither command reads,
-copies or prints the registration token.
+`print-endpoint` only reads: it writes no file, creates no directory, and prints
+an address and nothing else, in every form and on every installation state. The
+commands that write are `bootstrap`, which records the address it registers
+against, and `refresh-config`, `up` and `restart`, which re-render the external
+configuration and record the address they rendered. None of them reads, copies
+or prints the registration token.
 
 `scripts/ci/dev-integration-gate.test.mjs` covers this behaviour by driving the
 real script in a disposable runner home: the default address when nothing is
-configured, a configured address adopted and persisted at bootstrap, that
-address surviving repeated re-renders, the refusal when the environment
-disagrees with the persisted file, the refusal when the rendered address
-disagrees with it, the rejected address forms, and the reintroduction of an
-address literal in either the template or the script.
+configured; a configured address resolved at bootstrap and surviving repeated
+re-renders; a pre-change installation keeping its own rendered address rather
+than the default; the refusal when the environment disagrees with the registered
+address, from either record; the refusal, naming `bootstrap`, on an installation
+that holds no registration, where no record is fabricated; that `print-endpoint`
+and `verify` resolution write nothing in any of four installation states; the
+refusal when the rendered address disagrees with the recorded one; the rejected
+address forms; and the reintroduction of an address literal in either the
+template or the script.
 
 ## Restart, stop, maintenance, and recovery
 
 Both containers use `restart: unless-stopped`; after Docker Desktop and the
 configured Forgejo instance return, the runner reconnects without interaction.
 `up` and `restart` atomically refresh the rendered external configuration from
-the committed template while retaining the existing UUID, the persisted Forgejo
+the committed template while retaining the existing UUID, the registered Forgejo
 address, and the token; they do not rotate or print either credential.
 Exercise and verify restart with:
 
