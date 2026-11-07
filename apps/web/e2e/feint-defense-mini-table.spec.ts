@@ -347,9 +347,10 @@ async function readPhasePanel(
  * - the phase-wide arm:  `Combat inspector — Round {n} · {step}`, naming no participant at all.
  *
  * So `/^Combat inspector — /` is satisfied in exactly the state a participant precondition exists
- * to exclude, and the walk below then has nothing to press: the `Tracker inspection navigation`
- * section lives inside the participant arm, and no participant button carries `disabled` at any
- * state, so the absent control is an unresolvable locator rather than a disabled one.
+ * to exclude, and a walk that assumed a selected participant then had nothing to press (before
+ * #988 the `Tracker inspection navigation` section lived inside the participant arm). No
+ * participant button carries `disabled` at any state, so an absent control is an unresolvable
+ * locator rather than a disabled one.
  *
  * `GM_INSPECTOR_PARTICIPANT_HEADING` requires the ` · Round <n> · ` that only follows a label, so
  * the phase-wide text — whose `Round <n>` is its first segment — cannot match it. The loose
@@ -358,7 +359,11 @@ async function readPhasePanel(
  */
 const GM_INSPECTOR_ANY_HEADING = /^Combat inspector — /;
 const GM_INSPECTOR_PARTICIPANT_HEADING = /^Combat inspector — .+ · Round \d+ · /;
-/** The product's own `inspector.participant` gate: this section renders only inside that arm. */
+/**
+ * The inspector's own participant navigation. Since #988 it renders on both arms: it is gated on
+ * the participant rows it moves between, not on `inspector.participant`, so the phase-wide arm
+ * carries it too. Its absence is therefore a defect, and the walk below reports it as one.
+ */
 const GM_INSPECTOR_NAV_SECTION = 'section[aria-label="Tracker inspection navigation"]';
 /** The participant arm can take a beat to mount after a GM command; its controls cannot. */
 const GM_INSPECTOR_SETTLE_TIMEOUT_MS = 15_000;
@@ -408,17 +413,39 @@ async function selectGmInspectorParticipant(input: { label: string; page: Page }
   if (!(await visibleWithin(anyHeading, GM_INSPECTOR_SETTLE_TIMEOUT_MS))) {
     await giveUp("the combat panel rendered no inspector heading at all");
   }
-  // The precondition the loose matcher was meant to carry, split into the two facts the walk
-  // actually needs: some participant is selected, and the navigation that moves that selection is
-  // on screen. On the phase-wide arm neither holds and there is no walk to attempt.
-  if (
-    !(await visibleWithin(participantHeading, GM_INSPECTOR_CONTROL_TIMEOUT_MS)) ||
-    !(await visibleWithin(page.locator(GM_INSPECTOR_NAV_SECTION), GM_INSPECTOR_CONTROL_TIMEOUT_MS))
-  ) {
-    await giveUp(
-      "the inspector is on its phase-wide row, which selects no participant and renders no " +
-        "participant navigation",
-    );
+  // What this helper proves changed with #988. It used to prove that a participant was already
+  // selected and reachable; it now proves that a participant was selected, or could be selected
+  // through the navigation. The give-up survives: with no navigation on screen there is nothing
+  // to click, and that absence (a #988 regression) still fails here, naming the state.
+  if (!(await visibleWithin(participantHeading, GM_INSPECTOR_CONTROL_TIMEOUT_MS))) {
+    if (
+      !(await visibleWithin(
+        page.locator(GM_INSPECTOR_NAV_SECTION),
+        GM_INSPECTOR_CONTROL_TIMEOUT_MS,
+      ))
+    ) {
+      await giveUp(
+        "the inspector is on its phase-wide row, which selects no participant, and the " +
+          "participant navigation that #988 renders there is absent",
+      );
+    }
+    // On the phase-wide row `Previous participant` selects the first roster row and `Next
+    // participant` the second (an absent participant reads as index 0). At most two clicks, one
+    // per direction: any participant heading is enough, because the bounded walk below
+    // starts from whichever row was selected, and a second click can only be needed if the first
+    // produced no participant heading.
+    for (const direction of ["Previous participant", "Next participant"]) {
+      const button = page.getByRole("button", { name: direction, exact: true });
+      if (!(await visibleWithin(button, GM_INSPECTOR_CONTROL_TIMEOUT_MS))) continue;
+      await button.click({ timeout: GM_INSPECTOR_CONTROL_TIMEOUT_MS });
+      if (await visibleWithin(participantHeading, GM_INSPECTOR_CONTROL_TIMEOUT_MS)) break;
+    }
+    if (!(await visibleWithin(participantHeading, GM_INSPECTOR_STEP_SETTLE_MS))) {
+      await giveUp(
+        "the inspector is on its phase-wide row and neither participant navigation button " +
+          "selected a participant",
+      );
+    }
   }
   // The inspector does not wrap, so walk forward and then back; bounded either way.
   for (const direction of ["Next participant", "Previous participant"]) {
