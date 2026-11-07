@@ -25,7 +25,7 @@
     "format:check": "prettier --check .",
     "format:check:changed": "node scripts/checkChangedFormatting.mjs",
     "lint": "eslint scripts/database scripts/recovery scripts/bootstrap scripts/playtest && turbo lint --force",
-    "test": "pnpm recovery:historical:test && pnpm database:tooling:test && pnpm database:stack:test && pnpm playtest:test && pnpm ops:test && turbo test --force",
+    "test": "pnpm bootstrap:test && pnpm recovery:historical:test && pnpm database:tooling:test && pnpm database:stack:test && pnpm playtest:test && pnpm ops:test && turbo test --force",
     "recovery:historical": "node --import tsx scripts/recovery/historicalPlaytestImporter.ts",
     "recovery:historical:migrate": "pnpm --filter @glantri/database exec prisma migrate deploy --config scripts/historicalPlaytestPrisma.config.ts",
     "recovery:historical:test": "vitest run scripts/recovery/*.test.ts",

@@ -18,7 +18,28 @@ export const ROLE_USERNAMES = Object.freeze({
   qa: "glantri-qa",
 });
 
-export const EXPECTED_ORIGIN = "http://127.0.0.1:3001/recovery-admin/glantri-app.git";
+export const FORGEJO_ORIGIN_ENVIRONMENT_KEY = "GLANTRI_FORGEJO_ORIGIN";
+
+// The repository path stays pinned here. Only the host and port are configurable: the configurable
+// surface is which host serves the canonical repository, never which repository is canonical.
+export const FORGEJO_ORIGIN_PATH = "/recovery-admin/glantri-app.git";
+
+export const DEFAULT_FORGEJO_ORIGIN = "http://127.0.0.1:3001/recovery-admin/glantri-app.git";
+
+const HOST_LABEL = "[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?";
+
+// A dotted label sequence covers both a hostname and an IPv4 address. Userinfo, a userinfo colon,
+// a path other than FORGEJO_ORIGIN_PATH, a query, a fragment, whitespace and every shell
+// metacharacter are outside the pattern, so they are refused rather than normalized away.
+const FORGEJO_ORIGIN_PATTERN = new RegExp(
+  `^https?://${HOST_LABEL}(?:\\.${HOST_LABEL})*(?::(\\d{1,5}))?${FORGEJO_ORIGIN_PATH.replaceAll(
+    ".",
+    "\\.",
+  )}$`,
+);
+
+const SCHEME_USERINFO_PATTERN = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/)[^/]*@/;
+const SCP_USERINFO_PATTERN = /^[^@/\s]+@/;
 
 export const DATABASE_ENVIRONMENT_KEYS = Object.freeze([
   "DATABASE_URL",
@@ -35,6 +56,79 @@ export const repositoryRoot = resolve(scriptDirectory, "..", "..");
 
 function fail(message) {
   throw new Error(message);
+}
+
+function hasUserinfo(value) {
+  const text = String(value);
+
+  return SCHEME_USERINFO_PATTERN.test(text) || SCP_USERINFO_PATTERN.test(text);
+}
+
+function redactUserinfo(value) {
+  const text = String(value);
+  const scheme = SCHEME_USERINFO_PATTERN.exec(text);
+
+  if (scheme) {
+    return `${scheme[1]}***@${text.slice(scheme[0].length)}`;
+  }
+
+  const scp = SCP_USERINFO_PATTERN.exec(text);
+
+  if (scp) {
+    return `***@${text.slice(scp[0].length)}`;
+  }
+
+  return text;
+}
+
+// Quoting keeps a trailing slash, trailing whitespace, or a control character visible in the
+// refusal instead of letting it forge a log line.
+function quoteForMessage(value) {
+  return JSON.stringify(String(value));
+}
+
+export function resolveExpectedOrigin(environment = process.env) {
+  const configured = environment[FORGEJO_ORIGIN_ENVIRONMENT_KEY];
+
+  if (configured === undefined) {
+    return DEFAULT_FORGEJO_ORIGIN;
+  }
+
+  if (hasUserinfo(configured)) {
+    fail(
+      `${FORGEJO_ORIGIN_ENVIRONMENT_KEY} carries a userinfo component ${quoteForMessage(
+        redactUserinfo(configured),
+      )}; refusing it rather than taking credentials from it or falling back to the default origin.`,
+    );
+  }
+
+  const match = FORGEJO_ORIGIN_PATTERN.exec(configured);
+  const port = match?.[1] === undefined ? undefined : Number(match[1]);
+
+  if (!match || (port !== undefined && (port < 1 || port > 65535))) {
+    fail(
+      `${FORGEJO_ORIGIN_ENVIRONMENT_KEY} must be an http or https URL with no userinfo, a hostname or IPv4 address, an optional port between 1 and 65535, and the exact path ${FORGEJO_ORIGIN_PATH}; received ${quoteForMessage(
+        redactUserinfo(configured),
+      )} and refusing rather than falling back to the default origin.`,
+    );
+  }
+
+  return configured;
+}
+
+export function assertCanonicalOrigin(observed, expected) {
+  if (observed !== expected) {
+    fail(
+      [
+        "origin is not the canonical Forgejo repository configured for this installation; refusing credential use.",
+        `  observed: ${quoteForMessage(redactUserinfo(observed))}`,
+        `  expected: ${quoteForMessage(expected)}`,
+        `  Set ${FORGEJO_ORIGIN_ENVIRONMENT_KEY} to the origin this installation serves when it is not the default ${DEFAULT_FORGEJO_ORIGIN}.`,
+      ].join("\n"),
+    );
+  }
+
+  return expected;
 }
 
 export function parsePackageManager(value) {
@@ -298,14 +392,15 @@ function verifyRuntime(root, versions, environment) {
 function verifyBaseline(options, environment) {
   const username = ROLE_USERNAMES[options.role];
   const gitEnvironment = { ...environment, GIT_TERMINAL_PROMPT: "0" };
+  // Resolve and validate the expected origin before any git invocation, so a malformed
+  // configured value refuses ahead of every credential use and never reaches the default.
+  const expectedOrigin = resolveExpectedOrigin(environment);
   const origin = run("git", ["remote", "get-url", "origin"], {
     capture: true,
     env: gitEnvironment,
   });
 
-  if (origin !== EXPECTED_ORIGIN) {
-    fail("origin is not the canonical loopback-only Forgejo repository; refusing credential use.");
-  }
+  assertCanonicalOrigin(origin, expectedOrigin);
 
   run("git", ["-c", `credential.username=${username}`, "fetch", "origin", "dev"], {
     env: gitEnvironment,
