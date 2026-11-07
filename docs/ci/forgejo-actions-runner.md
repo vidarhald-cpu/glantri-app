@@ -40,9 +40,17 @@ runner's registration token can poll and report jobs only for this repository;
 it is not a Forgejo user, API, Git, administration, protection-bypass, `main`,
 Azure, deployment, or production credential.
 
-The only application endpoint jobs need is the loopback Forgejo instance.
-Docker Desktop makes it available inside nested jobs as
-`http://host.docker.internal:3001/`; no public listener is created. The DIND API
+The only application endpoint jobs need is the Forgejo instance itself, and its
+address is configuration rather than a constant. The service script resolves the
+address once, persists it, renders it into the runner configuration, and reads it
+back out of that rendered configuration when it probes the route, so the address
+the runner polls and the address `verify` checks cannot disagree; see
+[Forgejo address configuration](#forgejo-address-configuration). The default is
+`http://host.docker.internal:3001/`, which on a Docker Desktop host whose Forgejo
+listens on that host's own loopback interface reaches it from inside nested jobs
+and creates no public listener. Whether a configured address is loopback-only is
+a property of that host and that Forgejo listener rather than of the runner, and
+this document does not claim it for an address it has not measured. The DIND API
 has no TLS because it is reachable only on the private Compose network and from
 its own nested containers. It is never published to the Mac.
 
@@ -306,8 +314,9 @@ refusal and never a reclamation.
 
 ## Bootstrap on this Mac
 
-Prerequisites are Docker Desktop, the running loopback `glantri-forgejo`
-container at Forgejo 15.0.7, and a clean checkout containing these files.
+Prerequisites are Docker Desktop, the running `glantri-forgejo` container at
+Forgejo 15.0.7 reachable at the address configured below, and a clean checkout
+containing these files.
 Bootstrap is an infrastructure mutation: run it only under an authorized
 runner task. It creates one repository-scoped runner registration through the
 local Forgejo CLI and does not create an administrator or user token.
@@ -330,13 +339,76 @@ Verify the runner is visible as one online repository runner named
 `glantri-private-ci` with label `glantri-private-ci`. There must still be zero
 user-owner and instance runners.
 
+### Forgejo address configuration
+
+| Setting      | Value                                                           |
+| ------------ | --------------------------------------------------------------- |
+| Variable     | `GLANTRI_FORGEJO_URL`, read from the environment of `bootstrap` |
+| Default      | `http://host.docker.internal:3001/`                             |
+| Persisted at | `$GLANTRI_RUNNER_HOME/state/forgejo-url`, mode `0600`           |
+| Mac Studio   | `http://192.168.1.66:3001/`                                     |
+
+`bootstrap` resolves the address from `GLANTRI_FORGEJO_URL`, or from the default
+when that variable is unset, validates it, and writes it to `state/forgejo-url`.
+`up`, `restart`, `verify` and `migrate-label` read that file. An installation
+bootstrapped before the address became configurable has no such file, so they
+fall back to the default, record it, and behave exactly as they did before. The
+external configuration is re-rendered from the committed template and the
+persisted address on every `up` and `restart`, so a configured address survives
+both.
+
+An accepted address is a scheme, a host, an optional port and one trailing
+slash: `http` or `https`, dot-separated host labels of letters, digits and inner
+hyphens, an optional one-to-five-digit port, and nothing else. A path,
+credentials, a query, whitespace or any other character is refused, because the
+address is substituted into the rendered configuration literally.
+
+`GLANTRI_FORGEJO_URL` cannot repoint a runner that is already registered. When
+it disagrees with the persisted address the command refuses, names both
+addresses, and exits 2. Repointing an existing installation is deliberate
+operator work: write the intended address into `state/forgejo-url`, then
+`restart`. Changing the address does not re-register the runner, so a Forgejo
+instance that does not already hold this registration still needs a fresh
+`bootstrap`.
+
+`verify` takes the address it probes from the rendered
+`state/runner-config.yml`, the configuration the runner itself loads, and
+refuses when that address is not the persisted one. What is verified is
+therefore what the runner uses.
+
+Two commands make that resolution inspectable, and exercisable by the regression
+tests, without Docker:
+
+```bash
+export GLANTRI_RUNNER_HOME=/Users/vidarhald/Glantri-Server/forgejo-actions-runner
+# The address up, restart, verify and migrate-label resolve.
+scripts/ci/forgejo-runner-service.sh print-endpoint
+# The address bootstrap would register against, including GLANTRI_FORGEJO_URL.
+scripts/ci/forgejo-runner-service.sh print-endpoint bootstrap
+# The rendered address verify probes, after its agreement check.
+scripts/ci/forgejo-runner-service.sh print-endpoint verify
+# Re-render the external configuration only; restart applies it.
+scripts/ci/forgejo-runner-service.sh refresh-config
+```
+
+`print-endpoint` prints an address and nothing else. Neither command reads,
+copies or prints the registration token.
+
+`scripts/ci/dev-integration-gate.test.mjs` covers this behaviour by driving the
+real script in a disposable runner home: the default address when nothing is
+configured, a configured address adopted and persisted at bootstrap, that
+address surviving repeated re-renders, the refusal when the environment
+disagrees with the persisted file, the refusal when the rendered address
+disagrees with it, the rejected address forms, and the reintroduction of an
+address literal in either the template or the script.
+
 ## Restart, stop, maintenance, and recovery
 
 Both containers use `restart: unless-stopped`; after Docker Desktop and the
-loopback Forgejo container return, the runner reconnects without interaction.
+configured Forgejo instance return, the runner reconnects without interaction.
 `up` and `restart` atomically refresh the rendered external configuration from
-the committed template while retaining the existing UUID and token; they do not
-rotate or print either credential.
+the committed template while retaining the existing UUID, the persisted Forgejo
+address, and the token; they do not rotate or print either credential.
 Exercise and verify restart with:
 
 ```bash
@@ -388,22 +460,31 @@ state directory through an approved recoverable deletion, then bootstrap a new
 registration. Deleting a runner is intentionally not automated by the service
 script.
 
-## Move to the future Mac mini
+## Move to another Mac
+
+The move in progress is to the Mac Studio, where Forgejo serves
+`http://192.168.1.66:3001/`.
 
 1. Install and start Docker Desktop; do not expose its daemon over the network.
-2. Restore/start the loopback Forgejo service and confirm its health at
-   `127.0.0.1:3001`.
-3. Stop this MacBook runner so two machines never share one registration.
-4. Check out the accepted Glantri `dev` revision on the Mac mini.
-5. Choose an absolute Mac-mini-local `GLANTRI_RUNNER_HOME` and run `bootstrap`.
-   Create a fresh repository-scoped registration; do not copy the MacBook token.
+2. Restore/start the Forgejo service on the new host and confirm its health at
+   the address step 5 configures — on the Mac Studio,
+   `http://192.168.1.66:3001/api/healthz`.
+3. Stop the runner on the old host so two machines never share one
+   registration.
+4. Check out the accepted Glantri `dev` revision on the new host.
+5. Choose an absolute host-local `GLANTRI_RUNNER_HOME`, export
+   `GLANTRI_FORGEJO_URL` when that host's Forgejo is not at the default address,
+   and run `bootstrap`. `print-endpoint bootstrap` prints the address
+   `bootstrap` will register against. Create a fresh repository-scoped
+   registration; do not copy the old host's token.
 6. Confirm exactly one online repository runner, then run `verify` and the proof
-   workflow. Remove the offline MacBook registration through repository
-   settings after evidence is captured.
+   workflow. Remove the offline old registration through repository settings
+   after evidence is captured.
 
-The Compose inputs are multi-architecture and work on Apple Silicon. A host
-move does not authorize a Forgejo URL, branch protection, credential, `main`,
-Azure, deployment, or production change.
+The Compose inputs are multi-architecture and work on Apple Silicon. A host move
+configures the runner's own Forgejo address through `GLANTRI_FORGEJO_URL`; it
+does not authorize widening Forgejo's listener, or any branch-protection,
+credential, `main`, Azure, deployment, or production change.
 
 ## Gate proof and failure handling
 

@@ -7,11 +7,13 @@ import {
   readFileSync,
   rmSync,
   chmodSync,
+  existsSync,
   symlinkSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { parsers as yaml } from "prettier/plugins/yaml";
 import { aggregate, collectPlan, parseChanges } from "./dev-integration-gate.mjs";
 import { checkLinks } from "./dev-integration-gate-docs.mjs";
@@ -250,6 +252,7 @@ for (const file of [
   "unknown.sh",
   "docs/process/policy.mjs",
   "scripts/ci/forgejo-runner-service.sh",
+  "infra/forgejo-actions/runner-config.template.yml",
   ".github/workflows/deploy.yml",
   "package.json",
   "pnpm-lock.yaml",
@@ -583,4 +586,186 @@ test("actual workflow parses and preserves aggregate dependencies, event head an
     ],
     "7",
   );
+});
+
+// The Forgejo address the runner polls is configuration, not a constant. These
+// tests drive the real service script in a disposable runner home: no Docker,
+// no registration and no token are involved, because the address resolution,
+// the rendered configuration and the address `verify` probes are all reachable
+// through `refresh-config` and `print-endpoint`.
+const runnerService = fileURLToPath(new URL("./forgejo-runner-service.sh", import.meta.url));
+const runnerTemplate = new URL(
+  "../../infra/forgejo-actions/runner-config.template.yml",
+  import.meta.url,
+);
+const defaultForgejoUrl = "http://host.docker.internal:3001/";
+const macStudioForgejoUrl = "http://192.168.1.66:3001/";
+const fixtureRunnerUuid = "3f0d1b2c-4e5a-6789-abcd-ef0123456789";
+
+function runnerHome(t, { registered = false } = {}) {
+  const home = mkdtempSync(path.join(tmpdir(), "glantri-runner-"));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  mkdirSync(path.join(home, "state"));
+  // `refresh_config` re-renders the committed template and preserves the
+  // registered UUID by reading it back, so one line represents a bootstrapped
+  // installation and no runner token is needed or written.
+  if (registered)
+    writeFileSync(path.join(home, "state/runner-config.yml"), `      uuid: ${fixtureRunnerUuid}\n`);
+  return home;
+}
+
+function runnerCommand(home, args, forgejoUrl = "") {
+  return execFileSync("bash", [runnerService, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, GLANTRI_RUNNER_HOME: home, GLANTRI_FORGEJO_URL: forgejoUrl },
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+function runnerFailure(home, args, forgejoUrl = "") {
+  try {
+    runnerCommand(home, args, forgejoUrl);
+  } catch (error) {
+    return { status: error.status, stderr: error.stderr.toString() };
+  }
+  throw new Error(`expected the runner service to refuse ${args.join(" ")}`);
+}
+
+function renderedConfig(home) {
+  return readFileSync(path.join(home, "state/runner-config.yml"), "utf8");
+}
+
+function renderedForgejoUrl(home) {
+  return /^ {6}url: (.*)$/m.exec(renderedConfig(home))?.[1];
+}
+
+function persistedForgejoUrl(home) {
+  return readFileSync(path.join(home, "state/forgejo-url"), "utf8");
+}
+
+test("runner service renders the committed default Forgejo address when nothing is configured", (t) => {
+  const home = runnerHome(t, { registered: true });
+  runnerCommand(home, ["refresh-config"]);
+  assert.equal(renderedForgejoUrl(home), defaultForgejoUrl);
+  assert.equal(persistedForgejoUrl(home), `${defaultForgejoUrl}\n`);
+  assert.ok(!renderedConfig(home).includes("__FORGEJO_URL__"));
+  assert.match(renderedConfig(home), new RegExp(`^ {6}uuid: ${fixtureRunnerUuid}$`, "m"));
+  assert.equal(runnerCommand(home, ["print-endpoint"]), defaultForgejoUrl);
+  assert.equal(runnerCommand(home, ["print-endpoint", "verify"]), defaultForgejoUrl);
+});
+
+test("runner service adopts a configured Forgejo address and keeps it across refreshes", (t) => {
+  const home = runnerHome(t);
+  assert.equal(
+    runnerCommand(home, ["print-endpoint", "bootstrap"], macStudioForgejoUrl),
+    macStudioForgejoUrl,
+  );
+  assert.equal(persistedForgejoUrl(home), `${macStudioForgejoUrl}\n`);
+  writeFileSync(path.join(home, "state/runner-config.yml"), `      uuid: ${fixtureRunnerUuid}\n`);
+  // Every later `up` and `restart` re-renders the template with no environment
+  // set; an address taken only from the environment would revert here.
+  for (const pass of [1, 2]) {
+    runnerCommand(home, ["refresh-config"]);
+    assert.equal(renderedForgejoUrl(home), macStudioForgejoUrl, `refresh ${pass}`);
+    assert.equal(persistedForgejoUrl(home), `${macStudioForgejoUrl}\n`, `refresh ${pass}`);
+  }
+  assert.equal(runnerCommand(home, ["print-endpoint"]), macStudioForgejoUrl);
+  assert.equal(runnerCommand(home, ["print-endpoint", "verify"]), macStudioForgejoUrl);
+  // The rendered configuration differs from the committed template in exactly
+  // the two substituted placeholders, so the address is inserted literally.
+  assert.equal(
+    renderedConfig(home),
+    readFileSync(runnerTemplate, "utf8")
+      .replace("__RUNNER_UUID__", () => fixtureRunnerUuid)
+      .replace("__FORGEJO_URL__", () => macStudioForgejoUrl),
+  );
+});
+
+test("runner service refuses to repoint a registered runner from the environment", (t) => {
+  const home = runnerHome(t, { registered: true });
+  runnerCommand(home, ["refresh-config"]);
+  const refusal = runnerFailure(home, ["refresh-config"], macStudioForgejoUrl);
+  assert.equal(refusal.status, 2);
+  assert.match(
+    refusal.stderr,
+    /GLANTRI_FORGEJO_URL is http:\/\/192\.168\.1\.66:3001\/ but this installation is registered against http:\/\/host\.docker\.internal:3001\/\./,
+  );
+  assert.match(refusal.stderr, /state\/forgejo-url and run restart/);
+  assert.equal(renderedForgejoUrl(home), defaultForgejoUrl);
+  assert.equal(persistedForgejoUrl(home), `${defaultForgejoUrl}\n`);
+  assert.equal(runnerFailure(home, ["print-endpoint"], macStudioForgejoUrl).status, 2);
+  // An installation bootstrapped before the address became configurable has no
+  // persisted file: it keeps the address it was registered against, records it,
+  // and still refuses the disagreeing environment.
+  const legacy = runnerHome(t, { registered: true });
+  assert.equal(runnerFailure(legacy, ["refresh-config"], macStudioForgejoUrl).status, 2);
+  assert.equal(persistedForgejoUrl(legacy), `${defaultForgejoUrl}\n`);
+});
+
+test("runner service verify target is the rendered address and refuses a disagreement", (t) => {
+  const home = runnerHome(t, { registered: true });
+  runnerCommand(home, ["refresh-config"]);
+  writeFileSync(path.join(home, "state/forgejo-url"), `${macStudioForgejoUrl}\n`);
+  assert.equal(runnerCommand(home, ["print-endpoint"]), macStudioForgejoUrl);
+  const refusal = runnerFailure(home, ["print-endpoint", "verify"]);
+  assert.equal(refusal.status, 1);
+  assert.match(
+    refusal.stderr,
+    /Rendered runner configuration uses http:\/\/host\.docker\.internal:3001\/ but this installation is registered against http:\/\/192\.168\.1\.66:3001\/\./,
+  );
+  runnerCommand(home, ["refresh-config"]);
+  assert.equal(renderedForgejoUrl(home), macStudioForgejoUrl);
+  assert.equal(runnerCommand(home, ["print-endpoint", "verify"]), macStudioForgejoUrl);
+  writeFileSync(
+    path.join(home, "state/runner-config.yml"),
+    `      url: __FORGEJO_URL__\n      uuid: ${fixtureRunnerUuid}\n`,
+  );
+  assert.equal(runnerFailure(home, ["print-endpoint", "verify"]).status, 2);
+});
+
+test("runner service rejects a Forgejo address that could break the rendered configuration", (t) => {
+  for (const candidate of [
+    "http://host.docker.internal:3001",
+    "http://host.docker.internal:3001/api/healthz",
+    "http://host:3001/;id",
+    "http://a&b:3001/",
+    "http://host:3001/?x=1",
+    "https://user:pass@host:3001/",
+    "http://*:3001/",
+    "http://$(id):3001/",
+    "ftp://host:3001/",
+    "//host:3001/",
+    "http://:3001/",
+    "http://host:300100/",
+    "http://host:3001//",
+    "http://host..bad:3001/",
+    "http://host-.bad:3001/",
+    "http://host:3001/\nurl: http://evil.invalid/",
+  ]) {
+    const home = runnerHome(t);
+    const refusal = runnerFailure(home, ["print-endpoint", "bootstrap"], candidate);
+    assert.equal(refusal.status, 2, candidate);
+    assert.match(refusal.stderr, /is not an accepted Forgejo address/, candidate);
+    assert.equal(existsSync(path.join(home, "state/forgejo-url")), false, candidate);
+  }
+  const accepted = "https://forgejo-ci.example-host.test:65535/";
+  const home = runnerHome(t, { registered: true });
+  assert.equal(runnerCommand(home, ["print-endpoint", "bootstrap"], accepted), accepted);
+  runnerCommand(home, ["refresh-config"]);
+  assert.equal(renderedForgejoUrl(home), accepted);
+});
+
+test("committed runner template and service script carry one Forgejo address literal", () => {
+  const template = readFileSync(runnerTemplate, "utf8");
+  assert.match(template, /^ {6}url: __FORGEJO_URL__$/m);
+  assert.deepEqual(template.match(/https?:\/\/[^\s'"]+/g), null);
+  const script = readFileSync(new URL("./forgejo-runner-service.sh", import.meta.url), "utf8");
+  // One address literal only: the documented default. A reintroduced literal in
+  // `verify` cannot be reached without Docker, so it is caught here.
+  assert.deepEqual(script.match(/https?:\/\/[^\s'"]+/g), [defaultForgejoUrl]);
+  assert.match(script, /^FORGEJO_URL_DEFAULT='http:\/\/host\.docker\.internal:3001\/'$/m);
+  assert.match(script, /--env "FORGEJO_HEALTH_URL=\$\{VERIFY_FORGEJO_URL\}api\/healthz"/);
+  const probes = script.split("\n").filter((line) => line.includes("curl "));
+  assert.equal(probes.length, 1);
+  assert.match(probes[0], /curl --fail --silent --show-error "\$FORGEJO_HEALTH_URL"/);
 });
