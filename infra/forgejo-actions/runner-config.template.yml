@@ -42,6 +42,6 @@ container:
 server:
   connections:
     glantri:
-      url: http://host.docker.internal:3001/
+      url: __FORGEJO_URL__
       uuid: __RUNNER_UUID__
       token_url: file:/data/runner-token
