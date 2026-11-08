@@ -779,10 +779,26 @@ test.describe("Player attack initiative identity", () => {
       participantId: encounterParticipantIds.attackerAId,
       type: "roll_attack",
     });
-    expect(gmAfter.encounter.combatRoundState.currentCursor).toMatchObject({
-      participantId: encounterParticipantIds.sentinelId,
-      step: "P1",
-    });
+    // #874 (amendment A4): the GM's roll is real too, so the cursor follows its outcome exactly as
+    // for the player's roll above.
+    const gmAttack = gmAfter.encounter.combatRoundState.participants.find(
+      (participant) => participant.participantId === encounterParticipantIds.attackerAId,
+    )?.attackResults.phase1;
+    console.log(
+      `#874 GM attack outcome: ${gmAttack?.hit ? "hit" : "miss"} (lookupTotal=${gmAttack?.lookupTotal}) cursor=${JSON.stringify(gmAfter.encounter.combatRoundState.currentCursor)}`,
+    );
+    if (gmAttack?.hit) {
+      expect(gmAfter.encounter.combatRoundState.currentCursor).toMatchObject({
+        participantId: encounterParticipantIds.sentinelId,
+        step: "P1",
+      });
+    } else {
+      expect(gmAfter.encounter.combatRoundState.currentCursor?.step).not.toBe("P1");
+      expect(gmAfter.encounter.combatRoundState.phaseResolutionCursor?.substep).not.toBe("defense");
+      expect(gmAfter.encounter.combatRoundState.commands.at(-1)?.facts.defenseReviewNotOwed).toBe(
+        true,
+      );
+    }
 
     await playerPage.close();
     await playerAContext.close();
