@@ -409,6 +409,10 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain(
       "showParrySourceSelector={isPlayerEncounterParryAllocationDeclaration(",
     );
+    // #874 (QA B1): with an allocation in force the selector stays rendered, shows the row that
+    // governs and is disabled; it is never withdrawn.
+    expect(source).not.toContain("&& !phaseDefenseAllocation");
+    expect(source).toContain("phaseDefenseAllocationRow?.id ??");
     expect(source).toContain("separatedFromAttack={phaseAttackGroupRendered}");
     expect(source).toContain("PlayerCombatAttackLocationSelector");
     expect(source).toContain("historicalPhasePanel?.distanceLabel");

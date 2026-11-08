@@ -439,6 +439,21 @@ function actorAndTarget(task: CombatProgressionPresentationTask): {
   };
 }
 
+/**
+ * Forgejo #874 finding 4. A defense review is framed around the defender, but the weapon its task
+ * carries is the attacking opportunity's weapon (`buildAdapterAttackProcess` copies
+ * `plan.opportunity`'s weapon into the task's `presentationContext.weapon`). The bare label was read
+ * as the defender's, so on a defense review it names whose weapon it is.
+ */
+function weaponLabelFor(
+  task: CombatProgressionPresentationTask,
+  actor: CombatPresentationSubject | undefined,
+  label: string,
+): string {
+  if (task.kind !== "defense_review") return label;
+  return actor && !actor.hidden ? `${actor.label}'s ${label}` : `${label} (attacking weapon)`;
+}
+
 function requiredActor(task: CombatProgressionPresentationTask): CombatPresentationSubject {
   const gmOnly = task.actorAccess.gm && !task.actorAccess.combatant;
   if (gmOnly) return { hidden: false, id: "gm", label: "GM" };
@@ -498,7 +513,7 @@ function summaryFor(input: {
       }
       return `${actor} hit ${target ?? "the defender"}.`;
     case "defense_review":
-      return `Review ${target ?? "the defender"}'s awareness and defense sources for this attack.`;
+      return `Review ${target ?? "the defender"}'s defense sources for this attack.`;
     case "offensive_parry_brawling_roll":
       return input.task.presentationContext?.responder?.participantId ===
         input.task.presentationContext?.actor?.participantId
@@ -764,7 +779,7 @@ function requiredNowFor(
         ? "Attempt the parry."
         : "Defend against the attack.";
     case "defense_review":
-      return "Confirm awareness and applicable defense sources.";
+      return "Confirm applicable defense sources.";
     case "offensive_parry_brawling_roll":
       return "Roll Brawling.";
     case "continued_contact_maintenance_roll":
@@ -1142,7 +1157,7 @@ export function buildCurrentActionPresentation(
     weapon: task.presentationContext?.weapon?.label
       ? {
           id: task.presentationContext.weapon.id,
-          label: task.presentationContext.weapon.label,
+          label: weaponLabelFor(task, actor, task.presentationContext.weapon.label),
         }
       : undefined,
   });

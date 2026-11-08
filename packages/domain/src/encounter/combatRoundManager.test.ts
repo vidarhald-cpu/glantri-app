@@ -11,6 +11,7 @@ import type { CombatEffect } from "./combatEffects";
 import type { CombatCriticalBleedControlState } from "./combatCriticalRuntime";
 
 import {
+  COMBAT_ROUND_DEFENSE_REVIEW_NOT_OWED_FACT,
   COMBAT_ROUND_STEP_ABBREVIATIONS,
   COMBAT_ROUND_STEPS,
   COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY,
@@ -58,6 +59,9 @@ import {
   getCombatRoundAttackResultsForParticipantPhase,
   getCombatRoundAttackResultForOpportunity,
   getCombatRoundAttackResultId,
+  getCombatRoundPendingDefenseAttackResult,
+  isCombatRoundAttackResolvedWithoutDefenseReview,
+  type CombatRoundState,
   getCanonicalAttackOpportunityIdentity,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundDisplayPhaseResolutionResultForParticipantPhase,
@@ -24509,5 +24513,166 @@ describe("#894 — the committed order records the publication state the commit 
         label,
       ).toBe(true);
     }
+  });
+});
+
+/**
+ * Forgejo #874, Product Owner ruling of 2026-11-08: a melee miss is recorded at the attack-result
+ * commit, the players are told at that commit, the defense review is skipped and the encounter
+ * moves on. Hits, pending missiles, offensive parries and disarms keep their review.
+ */
+describe("melee miss resolved at the attack-result commit (#874)", () => {
+  const ROLLED_AT = "2026-07-19T10:00:00.000Z";
+
+  function twoFighterState(): CombatRoundState {
+    return combatRoundStateSchema.parse({
+      encounterId: "encounter-874",
+      currentCursor: { participantId: "hero", roundNumber: 2, step: "A1" },
+      currentStep: "phase_1_actions",
+      participants: [
+        {
+          characterId: "character-hero",
+          declaration: {
+            actionId: "attack_parry",
+            phaseContexts: { phase1: { targetParticipantId: "guard" } },
+            roundNumber: 2,
+            submittedBy: "player",
+          },
+          label: "Hero",
+          participantId: "hero",
+          scenarioParticipantId: "scenario-hero",
+        },
+        {
+          characterId: "character-guard",
+          label: "Guard",
+          participantId: "guard",
+          scenarioParticipantId: "scenario-guard",
+        },
+      ],
+      roundNumber: 2,
+    });
+  }
+
+  function meleeResult(input: { defenderDb: number; ob: number; rollTotal: number }) {
+    return {
+      ...buildCombatRoundAttackRollResult({
+        actionId: "attack_parry",
+        attackerParticipantId: "hero",
+        defenderDb: input.defenderDb,
+        defenderParticipantId: "guard",
+        ob: input.ob,
+        phase: "phase1",
+        rollD20: input.rollTotal,
+        rollTotal: input.rollTotal,
+        rolledAt: ROLLED_AT,
+        weaponName: "Sword",
+      }),
+      attackOpportunityId: "round:2:participant:hero:phase1:attack_1",
+    };
+  }
+
+  function record(
+    result: ReturnType<typeof meleeResult>,
+    options: { defenderAware?: boolean; facts?: Record<string, unknown> } = {},
+  ) {
+    return recordCombatRoundAttackResult({
+      command: { commandId: "attack", createdAt: ROLLED_AT, facts: options.facts },
+      defenderAware: options.defenderAware,
+      participantId: "hero",
+      result,
+      state: twoFighterState(),
+      submittedBy: "gm",
+    });
+  }
+
+  function projectedCommands(state: CombatRoundState): string[] {
+    return buildCombatProgressionProjection(state)
+      .boundary.processes.flatMap((process) => process.stages)
+      .flatMap((stage) => stage.tasks ?? [])
+      .map((task) => task.expectedCommand);
+  }
+
+  it("records the miss, publishes it and owes no review", () => {
+    const result = meleeResult({ defenderDb: 30, ob: 0, rollTotal: 1 });
+    expect(result.hit).toBe(false);
+    const attackResultId = getCombatRoundAttackResultId({ result, roundNumber: 2 });
+    const state = record(result);
+
+    expect(projectedCommands(state)).not.toContain("commit_defense_review");
+    expect(state.phaseResolutionCursor?.substep).not.toBe("defense");
+    expect(state.phaseResolutionStatuses.hero?.phase1?.substep).toBe("done");
+    const resolution = state.phaseResolutionResults.find(
+      (entry) => entry.attackResultId === attackResultId,
+    );
+    expect(resolution).toBeDefined();
+    expect(resolution?.defenseSnapshotId).toBeUndefined();
+    expect(state.defenseSnapshots).toEqual([]);
+    const command = state.commands.at(-1);
+    expect(command?.type).toBe("roll_attack");
+    expect(command?.facts[COMBAT_ROUND_DEFENSE_REVIEW_NOT_OWED_FACT]).toBe(true);
+    expect(command?.afterCursor).toEqual(state.currentCursor);
+    const event = state.events.find((entry) => entry.commandId === command?.id);
+    expect(event?.facts.publicOutcome).toMatchObject({ hit: false });
+    expect(isCombatRoundAttackResolvedWithoutDefenseReview({ attackResultId, state })).toBe(true);
+    expect(
+      getCombatRoundPendingDefenseAttackResult({ participantId: "guard", phase: "phase1", state }),
+    ).toBeUndefined();
+    expect(() =>
+      advanceCombatRoundPhaseResolutionSubstepForParticipant({
+        participantId: "hero",
+        phase: "phase1",
+        state,
+        updatedAt: "2026-07-19T10:01:00.000Z",
+      }),
+    ).not.toThrow();
+  });
+
+  it("keeps the review for a hit, and the hit records nothing new", () => {
+    const result = meleeResult({ defenderDb: 0, ob: 80, rollTotal: 20 });
+    expect(result.hit).toBe(true);
+    const state = record(result);
+
+    expect(projectedCommands(state)).toContain("commit_defense_review");
+    expect(state.phaseResolutionCursor).toEqual({
+      participantId: "guard",
+      phase: "phase1",
+      substep: "defense",
+    });
+    expect(state.phaseResolutionResults).toEqual([]);
+    expect(state.commands.at(-1)?.facts).not.toHaveProperty(
+      COMBAT_ROUND_DEFENSE_REVIEW_NOT_OWED_FACT,
+    );
+  });
+
+  it("keeps the review when an unaware review could still turn the miss into a hit", () => {
+    // Misses against DB 60, connects against the preserved unaware DB of 0.
+    const result = meleeResult({ defenderDb: 60, ob: 50, rollTotal: 10 });
+    expect(result.hit).toBe(false);
+
+    const unknownAwareness = record(result);
+    expect(unknownAwareness.phaseResolutionCursor?.substep).toBe("defense");
+    expect(projectedCommands(unknownAwareness)).toContain("commit_defense_review");
+
+    const unaware = record(result, { defenderAware: false });
+    expect(unaware.phaseResolutionCursor?.substep).toBe("defense");
+
+    const aware = record(result, { defenderAware: true });
+    expect(aware.phaseResolutionCursor?.substep).not.toBe("defense");
+    expect(projectedCommands(aware)).not.toContain("commit_defense_review");
+  });
+
+  it("restores the pre-attack resolution state when the miss is undone", () => {
+    const result = meleeResult({ defenderDb: 30, ob: 0, rollTotal: 1 });
+    const before = twoFighterState();
+    const undone = undoLatestCombatRoundCommand({ state: record(result) });
+
+    expect(undone?.commands).toEqual(before.commands);
+    expect(undone?.phaseResolutionResults).toEqual(before.phaseResolutionResults);
+    expect(undone?.phaseResolutionCursor).toEqual({
+      participantId: "hero",
+      phase: "phase1",
+      substep: "attack",
+    });
+    expect(undone?.phaseResolutionStatuses.hero?.phase1?.substep ?? "pending").not.toBe("done");
   });
 });

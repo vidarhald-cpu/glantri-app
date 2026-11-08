@@ -222,6 +222,18 @@ describe("combat tracker task presentation", () => {
     });
   });
 
+  it("names a defense review without the retired awareness wording (#874)", () => {
+    const hover = buildCombatTrackerTaskHover(
+      task("defense_review", {
+        actorAccess: { combatant: false, gm: true },
+        expectedCommand: "commit_defense_review",
+      }),
+    );
+
+    expect(hover.text).toBe("Awaiting GM: Review defense sources for The Gladiator.");
+    expect(hover.text).not.toMatch(/awareness/i);
+  });
+
   it("uses Start next round wording for the round-boundary transition", () => {
     expect(
       buildCombatTrackerTaskHover(

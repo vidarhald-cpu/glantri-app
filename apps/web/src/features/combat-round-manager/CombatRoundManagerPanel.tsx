@@ -84,7 +84,6 @@ import {
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundRequiredCombatExperienceTrigger,
   getCombatRoundDamageSubstate,
-  getLatestCombatDefenseSnapshot,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundEffectiveCriticalRoll,
   getCombatRoundEffectiveDamageResult,
@@ -153,6 +152,7 @@ import {
 } from "@/features/player-combat/CombatDisarmDeclarationControls";
 import { buildCombatNpcDeclarationProposalPresentation } from "./view-models/combatNpcDeclarationProposalPresentation";
 import { buildGmCombatParryModifierRequest } from "./gmCombatParryRequest";
+import * as defenseAllocation from "./combatDefenseAllocation";
 import type { EquipmentFeatureState } from "@/features/equipment/types";
 import {
   advanceDeterministicCombatOnServer,
@@ -2738,15 +2738,7 @@ function formatSelectedCombatDefenseCombination(input: {
   selectedLabels: readonly string[];
   selection: CombatParrySourceSelection;
 }): string {
-  const options = input.options ?? [];
-  const row =
-    input.selection.usedMainHand && input.selection.usedOffHand
-      ? options.find((option) => option.id.startsWith("Combined|"))
-      : input.selection.usedMainHand
-        ? options.find((option) => option.sourceName === input.mainHandLabel)
-        : input.selection.usedOffHand
-          ? options.find((option) => option.sourceName === input.offHandLabel)
-          : undefined;
+  const row = defenseAllocation.selectCombatDefenseCombinationRow(input);
   const name =
     row?.sourceName ?? (input.selectedLabels.join(" + ") || "No defense source selected");
 
@@ -6875,14 +6867,45 @@ export default function CombatRoundManagerPanel({
   const inspectorParrySources =
     archivedAttackResolutionPresentation?.parry.sources ??
     inspectorParryDefenderPhaseSummary?.parrySources;
+  /*
+   * #874 rule 6. Once the attack's defense review is committed, its snapshot's included sources are
+   * the parry state in force: the server resolves the Parry from them alone, so the displayed
+   * selection, base and source name come from the same snapshot rather than from a default.
+   */
+  const inspectorResolutionDefenseSnapshot =
+    !archivedAttackResolutionPresentation && inspectorResolutionAttackResult
+      ? defenseAllocation.selectCombatDefenseSnapshotForAttackUnderResolution({
+          attackUnderResolutionId: defenseAllocation.getCombatDefenseAttackId({
+            result: inspectorResolutionAttackResult,
+            roundNumber: selectedTimelineRoundState.roundNumber,
+          }),
+          defenderParticipantId: inspectorResolutionAttackResult.defenderParticipantId,
+          historical: false,
+          phase: inspectorResolutionAttackResult.phase,
+          roundNumber: selectedTimelineRoundState.roundNumber,
+          snapshots: selectedTimelineRoundState.defenseSnapshots,
+        })
+      : undefined;
+  const inspectorResolutionSnapshotSelection = inspectorResolutionDefenseSnapshot
+    ? defenseAllocation.getCombatDefenseSelectionFromSnapshot(inspectorResolutionDefenseSnapshot)
+    : undefined;
   const inspectorParrySelection = archivedAttackResolutionPresentation
     ? archivedAttackResolutionPresentation.parry.selection
-    : getCombatParrySourceSelection({
-        selection: inspectorParrySelectionKey
-          ? parrySourceSelections[inspectorParrySelectionKey]
-          : undefined,
-        sources: inspectorParrySources,
-      });
+    : inspectorResolutionSnapshotSelection
+      ? {
+          usedMainHand:
+            inspectorResolutionSnapshotSelection.usedMainHand &&
+            Boolean(inspectorParrySources?.mainHand),
+          usedOffHand:
+            inspectorResolutionSnapshotSelection.usedOffHand &&
+            Boolean(inspectorParrySources?.offHand),
+        }
+      : getCombatParrySourceSelection({
+          selection: inspectorParrySelectionKey
+            ? parrySourceSelections[inspectorParrySelectionKey]
+            : undefined,
+          sources: inspectorParrySources,
+        });
   const inspectorParryBase = archivedAttackResolutionPresentation
     ? archivedAttackResolutionPresentation.parry.base
     : getSelectedCombatParryBase({
@@ -8267,6 +8290,11 @@ export default function CombatRoundManagerPanel({
    * `false` is the recorded miss, read from the stored result rather than re-derived from damage,
    * prose or the table label. A pending missile has no attack result yet — the review itself
    * materializes its ordinary result — so it is never read as a miss here.
+   *
+   * #874 keeps this as defence in depth only. The server now resolves a melee miss at the
+   * attack-result commit whenever its review could not change it, so no review reaches this panel
+   * for such a miss. A review still scheduled on a recorded miss is one the server could not prove
+   * final when the attack was recorded.
    */
   const inspectorDefenseReviewAttackResult = inspectorDefenseReviewAttackId
     ? getCombatRoundAttackResultById({
@@ -12988,12 +13016,67 @@ export default function CombatRoundManagerPanel({
                           inspectorNormalizedFeintPhaseContexts[phaseKey] ??
                           inspectorDisplayDraft.phaseContexts[phaseKey]);
                       const phaseLoadoutSummary = inspectorPhaseLoadoutSummaries[phaseKey];
-                      const phaseDefenseSnapshot = inspector.participant?.participantId
-                        ? getLatestCombatDefenseSnapshot({
-                            defenderParticipantId: inspector.participant.participantId,
-                            phase: phaseKey,
-                            roundNumber: selectedTimelineRoundState.roundNumber,
-                            snapshots: selectedTimelineRoundState.defenseSnapshots,
+                      /*
+                       * #874. The phase display reads the defense review of the attack under
+                       * resolution against this participant in this phase — never the latest
+                       * review in the phase, which can belong to another attacker. While that
+                       * attack's review is open the GM's uncommitted draft is the allocation in
+                       * force; once committed, its snapshot is. With no attack under resolution
+                       * nothing is bound and the panel shows the default.
+                       */
+                      const phaseDefenderParticipantId = inspector.participant?.participantId;
+                      const phaseDefenseReviewOpen =
+                        !inspectorIsHistorical &&
+                        Boolean(inspectorDefenseReviewDescriptor?.attackResultId) &&
+                        inspectorDefenseReviewDescriptor?.defenderParticipantId ===
+                          phaseDefenderParticipantId &&
+                        inspectorDefenseReviewDescriptor?.phase === phaseKey;
+                      const phaseResolutionCursor =
+                        selectedTimelineRoundState.phaseResolutionCursor;
+                      const phaseResolutionAttackBound =
+                        Boolean(inspectorResolutionAttackResult) &&
+                        inspectorResolutionAttackResult?.defenderParticipantId ===
+                          phaseDefenderParticipantId &&
+                        inspectorResolutionAttackResult?.phase === phaseKey &&
+                        (inspectorIsHistorical ||
+                          (phaseResolutionCursor?.phase === phaseKey &&
+                            phaseResolutionCursor.participantId === phaseDefenderParticipantId &&
+                            (phaseResolutionCursor.substep === "parry" ||
+                              phaseResolutionCursor.substep === "damage")));
+                      const phaseAttackUnderResolutionId = phaseDefenseReviewOpen
+                        ? inspectorDefenseReviewDescriptor?.attackResultId
+                        : phaseResolutionAttackBound && inspectorResolutionAttackResult
+                          ? defenseAllocation.getCombatDefenseAttackId({
+                              result: inspectorResolutionAttackResult,
+                              roundNumber: selectedTimelineRoundState.roundNumber,
+                            })
+                          : undefined;
+                      const phaseDefenseSnapshot =
+                        defenseAllocation.selectCombatDefenseSnapshotForAttackUnderResolution({
+                          attackUnderResolutionId: phaseAttackUnderResolutionId,
+                          defenderParticipantId: phaseDefenderParticipantId,
+                          historical: inspectorIsHistorical,
+                          phase: phaseKey,
+                          roundNumber: selectedTimelineRoundState.roundNumber,
+                          snapshots: selectedTimelineRoundState.defenseSnapshots,
+                        });
+                      const phaseDefenseAllocation:
+                        | defenseAllocation.CombatDefenseHandSelection
+                        | undefined = inspectorIsHistorical
+                        ? undefined
+                        : phaseDefenseReviewOpen
+                          ? inspectorDefenseReviewSelection
+                          : phaseAttackUnderResolutionId && phaseDefenseSnapshot
+                            ? defenseAllocation.getCombatDefenseSelectionFromSnapshot(
+                                phaseDefenseSnapshot,
+                              )
+                            : undefined;
+                      const phaseDefenseAllocationRow = phaseDefenseAllocation
+                        ? defenseAllocation.selectCombatDefenseCombinationRow({
+                            mainHandLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                            offHandLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                            options: phaseLoadoutSummary.parrySourceOptions,
+                            selection: phaseDefenseAllocation,
                           })
                         : undefined;
                       const phaseTargetIdentity = !inspectorIsHistorical
@@ -13053,14 +13136,54 @@ export default function CombatRoundManagerPanel({
                               });
                               return stats
                                 ? {
-                                    ...stats,
+                                    ...(phaseDefenseAllocation
+                                      ? defenseAllocation.applyCombatDefenseAllocationToStats(
+                                          stats,
+                                          phaseDefenseAllocationRow,
+                                        )
+                                      : stats),
                                     provisional: inspectorHasLocalModifierEdits,
                                   }
                                 : null;
                             })()
                           : null;
+                        /*
+                         * #874 rule 6. While this defender's review is open, the Parry in force is
+                         * the review's own attack under the GM's draft — not the latest attack with
+                         * a pending Parry, which can be another attacker's.
+                         */
+                        const reviewParryBase =
+                          phaseDefenseReviewOpen && inspectorDefenseReviewAttackResult
+                            ? getSelectedCombatParryBase({
+                                selection: inspectorDefenseReviewSelection,
+                                sources: inspectorParrySources,
+                              })
+                            : undefined;
+                        const reviewResolutionContext =
+                          phaseDefenseReviewOpen && inspectorDefenseReviewAttackResult
+                            ? {
+                                attackResultId: phaseAttackUnderResolutionId,
+                                parryBase: reviewParryBase,
+                                parryModifierCalculation:
+                                  reviewParryBase !== undefined
+                                    ? buildEncounterDbParryModifierCalculation({
+                                        baseValue: reviewParryBase,
+                                        extraRawModifiers: buildCombatAttackResultParryModifiers(
+                                          inspectorDefenseReviewAttackResult,
+                                        ),
+                                        liveModifiers:
+                                          inspectorParryDefenderPhaseSummary?.liveModifiers,
+                                      })
+                                    : null,
+                                parrySourceLabel: formatSelectedCombatParrySourceName({
+                                  selection: inspectorDefenseReviewSelection,
+                                  sources: inspectorParrySources,
+                                }),
+                              }
+                            : undefined;
                         const selectedResolutionContext =
-                          !inspectorIsHistorical &&
+                          reviewResolutionContext ??
+                          (!inspectorIsHistorical &&
                           phaseKey === inspectorResolutionPhase &&
                           inspector.participant?.participantId ===
                             inspectorResolutionAttackResult?.defenderParticipantId &&
@@ -13079,7 +13202,7 @@ export default function CombatRoundManagerPanel({
                                   sources: inspectorParrySources,
                                 }),
                               }
-                            : undefined;
+                            : undefined);
                         const projection = buildCombatRoundPhasePanelProjection({
                           actionId: inspectorDisplayDraft.actionId,
                           attackStats: inspectorIsHistorical
@@ -13122,6 +13245,9 @@ export default function CombatRoundManagerPanel({
                                 inspectorDisplayDraft.actionId,
                                 phaseLoadoutSummary,
                                 phaseDefenseSnapshot,
+                                phaseAttackUnderResolutionId,
+                                phaseDefenseAllocation?.usedMainHand,
+                                phaseDefenseAllocation?.usedOffHand,
                                 inspectorGeneratedCombatContext,
                                 selectedScenarioParticipant?.state.combatEffects,
                                 inspector.participant?.participantId,
@@ -13620,9 +13746,24 @@ export default function CombatRoundManagerPanel({
                           {(!inspectorIsHistorical || historicalPhasePanel) &&
                           phaseModel.showDefenseContext ? (
                             <PlayerCombatDefenseGroup
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              defaultParrySourceId={phaseLoadoutSummary.defaultParrySourceId}
+                              /*
+                               * #874 (QA B1). While an attack's allocation is in force the Parry
+                               * source selector stays rendered, shows the row that governs, and is
+                               * disabled: the review's hand checkboxes (before commit) or the
+                               * committed snapshot (after) decide it, as on the Parry card, so a
+                               * second live chooser could only contradict the value in force.
+                               */
+                              controlsDisabled={
+                                saving || inspectorIsHistorical || Boolean(phaseDefenseAllocation)
+                              }
+                              defaultParrySourceId={
+                                phaseDefenseAllocationRow?.id ??
+                                phaseLoadoutSummary.defaultParrySourceId
+                              }
                               defenseStats={phaseModel.defenseStats}
+                              // A presentational choice made before this attack's allocation
+                              // cannot survive into it (rule 4: nothing lingers between attacks).
+                              key={`defense-group:${phaseKey}:${phaseAttackUnderResolutionId ?? "none"}`}
                               parrySourceOptions={phaseLoadoutSummary.parrySourceOptions}
                               readOnly={inspectorIsHistorical}
                               separatedFromAttack={phaseAttackGroupRendered}
@@ -13883,6 +14024,7 @@ export default function CombatRoundManagerPanel({
                             saving ||
                             inspectorIsInspectionOnly ||
                             Boolean(inspectorSnapshot) ||
+                            Boolean(inspectorResolutionSnapshotSelection) ||
                             inspectorDisplayPhaseResolutionResult.parryResolution.status ===
                               "resolved"
                           }

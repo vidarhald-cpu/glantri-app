@@ -27,9 +27,19 @@ import { API_URL } from "./targets";
  * Every rendered read is taken inside one `page.evaluate` — these pages autoscroll after mount, so
  * reads across `await` boundaries straddle the scroll.
  *
- * The Defender attacks the Feinter in Phase 1, so the Feinter (declared Feint - Attack) reaches a
- * real `P1 Parry/defense resolution` step. The Feinter is very skilled so the committed feint lands
- * in the top table band and carries a real modifier for the Defender without a GM override.
+ * The Defender attacks the Feinter in Phase 1. The Feinter is very skilled so the committed feint
+ * lands in the top table band and carries a real modifier for the Defender without a GM override.
+ *
+ * Forgejo #874 (Product Owner ruling of 2026-11-08, amendment A3). That Phase 1 attack — Defender
+ * OB 9 against the Feinter's Dodge-driven DB 54 — cannot connect on any realistic d20, and a visible
+ * attacker's melee miss is now recorded at the attack commit with no defense review and no P1
+ * Parry step. Before the ruling the miss still opened that step, which is how this walk reached it.
+ * The walk cannot be given a connecting roll instead: the roll-attack route takes no client roll,
+ * and once the combat routes have written, an encounter `PUT` preserves the stored combat state, so
+ * a composed attack is not applied (measured). The spec therefore asserts the ruled behaviour for
+ * this attack — a recorded miss, no review owed, no snapshot, no P1 Parry step. The mini-table on a
+ * Feint-Attack declarer's P1 Parry/defense resolution step, with a connecting attack, is measured
+ * by `defense-review-per-attack.spec.ts` ("a Feint-Attack defense review …").
  */
 
 /** The canonical GM controls the walk may press, first enabled one wins. */
@@ -785,8 +795,8 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
       expect(response.ok(), await response.text()).toBe(true);
     };
     await declare();
-    // The defender attacks the feinter in Phase 1, so the feinter reaches a real
-    // `P1 Parry/defense resolution` step while their declared action is Feint - Attack.
+    // The defender attacks the feinter in Phase 1. Since #874 that attack, which cannot connect,
+    // is recorded as a miss and opens no P1 Parry step for the feinter (asserted below).
     await selectGmInspectorParticipant({ label: defenderName, page: gmPage });
     await gmPage.getByRole("combobox", { name: "Action" }).first().selectOption("attack_parry");
     await gmPage
@@ -1004,9 +1014,42 @@ test.describe("Phase panels show their DB/DM/P mini tables (#877)", () => {
       phase2Of(afterLive),
       "defender Phase 2 DB/DM/P changed after the committed feint",
     ).not.toBe(phase2Of(before));
-    expect(sawP1ParryStep, "the walk reached the feinter's P1 Parry/defense resolution step").toBe(
-      true,
+    // #874 (amendment A3): the defender's Phase 1 attack on the feinter is a visible melee miss,
+    // recorded at its attack commit with no defense review owed, so no P1 Parry step opens.
+    const resolvedState = await readRoundState({ encounterId, request: gmPage.request });
+    const defenderPhase1Attack = Object.values(
+      resolvedState.participants.find(
+        (participant) => participant.participantId === defenderCombatantId,
+      )?.attackResultsByOpportunity ?? {},
+    ).find((result) => result.phase === "phase1");
+    const defenderPhase1Command = resolvedState.commands.find(
+      (command) =>
+        command.type === "roll_attack" &&
+        command.participantId === defenderCombatantId &&
+        command.phase === "phase1",
     );
+    const defenderPhase1Resolution = resolvedState.phaseResolutionResults.find(
+      (entry) => entry.attackResultId === defenderPhase1Command?.facts.attackResultId,
+    );
+    record("defender phase 1 attack (#874)", {
+      defenseReviewNotOwed: defenderPhase1Command?.facts.defenseReviewNotOwed,
+      defenseSnapshotId: defenderPhase1Resolution?.defenseSnapshotId ?? null,
+      hit: defenderPhase1Attack?.hit,
+      lookupTotal: defenderPhase1Attack?.lookupTotal,
+      ob: defenderPhase1Attack?.ob,
+      resolutionRecorded: Boolean(defenderPhase1Resolution),
+      rollTotal: defenderPhase1Attack?.rollTotal,
+    });
+    expect(defenderPhase1Attack?.hit, "the defender's Phase 1 attack missed").toBe(false);
+    expect(
+      defenderPhase1Command?.facts.defenseReviewNotOwed,
+      "the miss was recorded at the attack commit with no defense review owed",
+    ).toBe(true);
+    expect(Boolean(defenderPhase1Resolution), "the miss's resolution was recorded").toBe(true);
+    expect(defenderPhase1Resolution?.defenseSnapshotId, "no defense review was committed").toBe(
+      undefined,
+    );
+    expect(sawP1ParryStep, "a visible miss opens no P1 Parry/defense resolution step").toBe(false);
 
     // The player's own panel after the commit.
     await playerPage.reload();

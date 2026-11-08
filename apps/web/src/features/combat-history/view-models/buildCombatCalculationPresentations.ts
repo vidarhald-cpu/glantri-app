@@ -3,8 +3,10 @@ import {
   type ProjectedCombatHistoryEvent,
 } from "@glantri/domain";
 
+import { buildCombatExtrapolationMarker } from "@/lib/campaigns/combatExtrapolationPresentation";
 import type {
   CombatCalculationDie,
+  CombatCalculationFigureMarker,
   CombatCalculationLabeledValue,
   CombatCalculationModifier,
   CombatCalculationPresentation,
@@ -420,9 +422,27 @@ function feintCalculation(
   });
 }
 
+/**
+ * The GM-only extrapolation marker (#1002) for one committed attack figure. The flag is declared
+ * GM-only (#922), so this runs only when the caller opted in, which only the GM snapshot entry
+ * point does. The flag carries no axes, so the detail is the axis-less sentence.
+ */
+function attackFigureMarker(
+  facts: FactRecord,
+  figure: "attacker_ob" | "defender_db",
+  includeMarkers: boolean,
+): CombatCalculationFigureMarker | undefined {
+  if (!includeMarkers) return undefined;
+  const flagged = Array.isArray(facts.extrapolatedWorkbookAdjustments)
+    ? facts.extrapolatedWorkbookAdjustments.includes(figure)
+    : false;
+  return buildCombatExtrapolationMarker({ extrapolated: flagged, extrapolatedAxes: [] });
+}
+
 function attackCalculation(
   event: ProjectedCombatHistoryEvent,
   facts: FactRecord,
+  includeMarkers = false,
 ): CombatCalculationPresentation | undefined {
   const ob = number(facts.ob);
   const defenderDb = number(facts.defenderDb);
@@ -443,13 +463,20 @@ function attackCalculation(
     unit: "percent",
   });
   const baseOb = number(facts.obBeforeOpponentSpecificModifier);
+  const obMarker = attackFigureMarker(facts, "attacker_ob", includeMarkers);
+  const dbMarker = attackFigureMarker(facts, "defender_db", includeMarkers);
+  // The committed OB is the adjusted figure when a base is shown, otherwise the plain OB.
   return calculation({
     actor: subject(event, "attacker", "actor"),
     calculationId,
     calculationType: "attack",
     completeness: "legacy_incomplete",
     derivedValues: [
-      { label: baseOb === undefined ? "OB" : "Base OB", value: baseOb ?? ob },
+      {
+        label: baseOb === undefined ? "OB" : "Base OB",
+        ...(baseOb === undefined && obMarker ? { marker: obMarker } : {}),
+        value: baseOb ?? ob,
+      },
       ...(number(facts.opponentSpecificObPercentageAdjustment) === undefined
         ? []
         : [
@@ -458,8 +485,14 @@ function attackCalculation(
               value: number(facts.opponentSpecificObPercentageAdjustment)!,
             },
           ]),
-      ...(baseOb === undefined ? [] : [{ label: "Adjusted OB", value: ob }]),
-      { label: "Defender DB", value: defenderDb },
+      ...(baseOb === undefined
+        ? []
+        : [{ label: "Adjusted OB", ...(obMarker ? { marker: obMarker } : {}), value: ob }]),
+      {
+        label: "Defender DB",
+        ...(dbMarker ? { marker: dbMarker } : {}),
+        value: defenderDb,
+      },
     ],
     die: roll,
     finalResult: { label: "Result", value: finalResult },
@@ -798,6 +831,7 @@ function damageCalculation(
  */
 export function buildCombatCalculationPresentations(
   event: ProjectedCombatHistoryEvent,
+  options: { readonly includeExtrapolationMarkers?: boolean } = {},
 ): readonly CombatCalculationPresentation[] {
   const facts = event.facts.privateCalculation;
   if (!facts) {
@@ -851,7 +885,7 @@ export function buildCombatCalculationPresentations(
       return result ? [result] : [];
     }
     case "attack": {
-      const result = attackCalculation(event, facts);
+      const result = attackCalculation(event, facts, options.includeExtrapolationMarkers === true);
       return result ? [result] : [];
     }
     case "parry": {
@@ -931,18 +965,22 @@ export function buildCombatCalculationPresentationFromSnapshot(input: {
   facts: FactRecord;
   label?: string;
 }): CombatCalculationPresentation | undefined {
-  const presentation = buildCombatCalculationPresentations({
-    completeness: "complete",
-    facts: { privateCalculation: input.facts, publicOutcome: {} },
-    id: input.calculationId,
-    identities: [],
-    missingFacts: [],
-    occurredAt: null,
-    roundNumber: 1,
-    sequence: 0,
-    status: "recorded",
-    step: "phase_1_actions",
-    type: input.calculationType,
-  })[0];
+  const presentation = buildCombatCalculationPresentations(
+    {
+      completeness: "complete",
+      facts: { privateCalculation: input.facts, publicOutcome: {} },
+      id: input.calculationId,
+      identities: [],
+      missingFacts: [],
+      occurredAt: null,
+      roundNumber: 1,
+      sequence: 0,
+      status: "recorded",
+      step: "phase_1_actions",
+      type: input.calculationType,
+    },
+    // The snapshot entry point serves the GM's inspector only; the extrapolation flag is GM-only.
+    { includeExtrapolationMarkers: true },
+  )[0];
   return presentation && input.label ? { ...presentation, label: input.label } : presentation;
 }

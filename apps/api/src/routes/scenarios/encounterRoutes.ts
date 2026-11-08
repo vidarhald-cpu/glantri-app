@@ -422,6 +422,7 @@ import {
 import { resolveCanonicalScenarioParticipantDefense } from "./combatDefenseResolution";
 import {
   buildCanonicalCombatDefenseSnapshot,
+  defaultCombatAttackAwareness,
   getCombatDefenseRefusalMessage,
   resolveCanonicalParryBaseForDefenseSnapshot,
 } from "./combatDefenseSnapshotResolution";
@@ -18197,6 +18198,9 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
                 ...attackerCalculationFacts,
               },
             },
+            // #874: the same awareness default a defense review commits, so a visible attacker's
+            // melee miss is final at this commit and owes no review.
+            defenderAware: defaultCombatAttackAwareness(scenarioParticipant),
             participantId: encounterParticipant.id,
             result: attackResult!,
             state: roundState,
