@@ -406,8 +406,10 @@ describe("CombatRoundManagerPanel", () => {
     // controls below it. The panel no longer places the mini-table itself.
     expect(source).toContain("PlayerCombatDefenseGroup");
     expect(source).not.toContain("<PlayerCombatDefenseStatsTable");
-    expect(source).toContain(
-      "showParrySourceSelector={isPlayerEncounterParryAllocationDeclaration(",
+    // #874: the shared predicate still gates the selector; the GM panel additionally withdraws
+    // it while an attack's allocation is in force, without widening the predicate.
+    expect(source).toMatch(
+      /showParrySourceSelector=\{[\s\S]{0,400}?isPlayerEncounterParryAllocationDeclaration\([\s\S]{0,120}?\) && !phaseDefenseAllocation/,
     );
     expect(source).toContain("separatedFromAttack={phaseAttackGroupRendered}");
     expect(source).toContain("PlayerCombatAttackLocationSelector");

@@ -7303,7 +7303,16 @@ export function getCombatRoundPendingDefenseAttackResult(input: {
         attackResult,
         state: normalized,
       });
-      return !resolution?.defenseSnapshotId;
+      return (
+        !resolution?.defenseSnapshotId &&
+        !(
+          resolution &&
+          isCombatRoundAttackResolvedWithoutDefenseReview({
+            attackResultId: resolution.attackResultId,
+            state: normalized,
+          })
+        )
+      );
     });
 }
 
@@ -23535,6 +23544,8 @@ function getCombatRoundAttackCommandAfterCursor(input: {
 }
 
 function recordCombatRoundAttackCommand(input: {
+  /** Where the cursor actually went, when the attack did not open its defense review. */
+  afterCursor?: CombatRoundCursor;
   command: {
     commandId?: string;
     createdAt: string;
@@ -23551,10 +23562,12 @@ function recordCombatRoundAttackCommand(input: {
     roundNumber: normalized.roundNumber,
     step: getCombatRoundAttackCursorStepForPhase(input.result.phase),
   });
-  const afterCursor = getCombatRoundAttackCommandAfterCursor({
-    result: input.result,
-    state: normalized,
-  });
+  const afterCursor =
+    input.afterCursor ??
+    getCombatRoundAttackCommandAfterCursor({
+      result: input.result,
+      state: normalized,
+    });
   const commandType = "roll_attack" satisfies CombatRoundCommandType;
   const command = combatRoundCommandSchema.parse({
     afterCursor,
@@ -23869,6 +23882,14 @@ function rebuildCombatRoundAttackResultWithDefenderDb(input: {
   });
 }
 
+function getUnawareMeleeDbFromAttackFacts(facts: Record<string, unknown> | undefined): number {
+  const calculation = acceptedCombatDefenseCalculationSchema.safeParse(facts?.defenderCalculation);
+  if (calculation.success && calculation.data.authority === "canonical_scenario_state") {
+    return calculation.data.flatDbAdjustment;
+  }
+  return typeof facts?.defenderFlatDbAdjustment === "number" ? facts.defenderFlatDbAdjustment : 0;
+}
+
 function getPreservedUnawareMeleeDb(input: {
   attackResultId: string;
   state: CombatRoundState;
@@ -23879,15 +23900,115 @@ function getPreservedUnawareMeleeDb(input: {
       (candidate) =>
         candidate.type === "roll_attack" && candidate.facts.attackResultId === input.attackResultId,
     );
-  const calculation = acceptedCombatDefenseCalculationSchema.safeParse(
-    command?.facts.defenderCalculation,
-  );
-  if (calculation.success && calculation.data.authority === "canonical_scenario_state") {
-    return calculation.data.flatDbAdjustment;
+  return getUnawareMeleeDbFromAttackFacts(command?.facts);
+}
+
+/**
+ * The `roll_attack` command fact recording that a melee miss was resolved at the attack-result
+ * commit, so no defense review is owed for it (Forgejo #874, Product Owner ruling of
+ * 2026-11-08). The resolution row of such an attack carries no `defenseSnapshotId`; this fact is
+ * what tells it apart from an attack whose review is still open (for example after the review was
+ * undone, which also leaves a row without one).
+ */
+export const COMBAT_ROUND_DEFENSE_REVIEW_NOT_OWED_FACT = "defenseReviewNotOwed";
+
+/**
+ * Whether a materialized melee miss is final when it is recorded, so the defense review has
+ * nothing left to decide. The review changes a melee result only when it commits the defender as
+ * unaware, which re-resolves the roll against the preserved unaware DB. When the caller states
+ * that the defender is aware, the result is final; when awareness is not stated, the miss is final
+ * only if it also misses against that unaware DB. Offensive parries and disarm attempts keep their
+ * review path, because their review is what opens the Parry they depend on.
+ */
+function isCombatRoundMeleeMissFinalAtAttackCommit(input: {
+  attackResult: CombatRoundAttackRollResult;
+  defenderAware?: boolean;
+  facts: Record<string, unknown> | undefined;
+  state: CombatRoundState;
+}): boolean {
+  const result = input.attackResult;
+  if (result.hit || (result.attackType ?? "melee") !== "melee") return false;
+  if (
+    getCombatRoundOffensiveParryAttemptIdentity({ attackResult: result, state: input.state }) ||
+    getCombatRoundParryDisarmAttemptIdentity({ attackResult: result, state: input.state }) ||
+    input.state.disarmAttempts.some(
+      (attempt) =>
+        attempt.roundNumber === input.state.roundNumber &&
+        attempt.phase === result.phase &&
+        attempt.actingParticipantId === result.attackerParticipantId &&
+        attempt.resistingParticipantId === result.defenderParticipantId &&
+        attempt.status !== "cancelled" &&
+        attempt.status !== "committed",
+    )
+  ) {
+    return false;
   }
-  return typeof command?.facts.defenderFlatDbAdjustment === "number"
-    ? command.facts.defenderFlatDbAdjustment
-    : 0;
+  if (input.defenderAware === true) return true;
+  if (input.defenderAware === false) return false;
+  return !rebuildCombatRoundAttackResultWithDefenderDb({
+    defenderDb: getUnawareMeleeDbFromAttackFacts(input.facts),
+    result,
+  }).hit;
+}
+
+/**
+ * Whether this attack was resolved as a miss at its attack-result commit, with no defense review
+ * owed. Reads the attack's own `roll_attack` command.
+ */
+export function isCombatRoundAttackResolvedWithoutDefenseReview(input: {
+  attackResultId: string;
+  state: CombatRoundState;
+}): boolean {
+  for (let index = input.state.commands.length - 1; index >= 0; index -= 1) {
+    const command = input.state.commands[index]!;
+    if (command.type === "roll_attack" && command.facts.attackResultId === input.attackResultId) {
+      return command.facts[COMBAT_ROUND_DEFENSE_REVIEW_NOT_OWED_FACT] === true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Records the resolution of a melee miss that owes no defense review: the attack's resolution row
+ * (without a defense snapshot), the attacker's phase status `done`, and the cursor on the next
+ * participant. This is the state a committed review of the same miss reaches, less the review.
+ */
+function recordCombatRoundPhaseResolutionMissWithoutReview(input: {
+  attackResult: CombatRoundAttackRollResult;
+  state: CombatRoundState;
+  updatedAt: string;
+}): CombatRoundState {
+  const attackResultId = getCombatRoundAttackResultId({
+    result: input.attackResult,
+    roundNumber: input.state.roundNumber,
+  });
+  const resolution = combatRoundPhaseResolutionResultSchema.parse(
+    buildCombatRoundPhaseResolutionResult({
+      attackResult: input.attackResult,
+      roundNumber: input.state.roundNumber,
+      state: input.state,
+      updatedAt: input.updatedAt,
+    }),
+  );
+  const withResolution = combatRoundStateSchema.parse({
+    ...input.state,
+    phaseResolutionResults: [
+      ...input.state.phaseResolutionResults.filter(
+        (candidate) => candidate.attackResultId !== attackResultId,
+      ),
+      resolution,
+    ],
+  });
+  return moveCombatRoundPhaseResolutionCursorToNextParticipant({
+    phase: input.attackResult.phase,
+    state: setCombatRoundPhaseResolutionStatus({
+      participantId: input.attackResult.attackerParticipantId,
+      phase: input.attackResult.phase,
+      state: withResolution,
+      status: { substep: "done", updatedAt: input.updatedAt },
+    }),
+    updatedAt: input.updatedAt,
+  });
 }
 
 /**
@@ -24314,6 +24435,11 @@ export function recordCombatRoundAttackResult(input: {
     createdByUserId?: string;
     facts?: Record<string, unknown>;
   };
+  /**
+   * Whether the defender is aware of this attack, when the caller knows it. An aware defender's
+   * melee miss is final at this commit; see `isCombatRoundMeleeMissFinalAtAttackCommit`.
+   */
+  defenderAware?: boolean;
   participantId: string;
   result: CombatRoundAttackRollResult;
   state: CombatRoundState;
@@ -24465,13 +24591,27 @@ export function recordCombatRoundAttackResult(input: {
     }),
   };
 
+  // Forgejo #874. A melee miss whose review could not change it is recorded here, at the
+  // attack-result commit; the public hit/miss outcome is on this command's event.
+  const defenseReviewNotOwed = isCombatRoundMeleeMissFinalAtAttackCommit({
+    attackResult: recordedResult,
+    defenderAware: input.defenderAware,
+    facts: input.command?.facts,
+    state: withResult,
+  });
   const withStatus = setCombatRoundParticipantStepStatus({
     participantId: input.participantId,
-    state: recordCombatRoundPhaseResolutionAttackDone({
-      attackResult: recordedResult,
-      state: withResult,
-      updatedAt: recordedResult.rolledAt,
-    }),
+    state: defenseReviewNotOwed
+      ? recordCombatRoundPhaseResolutionMissWithoutReview({
+          attackResult: recordedResult,
+          state: withResult,
+          updatedAt: recordedResult.rolledAt,
+        })
+      : recordCombatRoundPhaseResolutionAttackDone({
+          attackResult: recordedResult,
+          state: withResult,
+          updatedAt: recordedResult.rolledAt,
+        }),
     status: input.submittedBy === "gm" ? "gmEdited" : "submitted",
     step: attackStep,
   });
@@ -24480,6 +24620,7 @@ export function recordCombatRoundAttackResult(input: {
 
   return input.command
     ? recordCombatRoundAttackCommand({
+        afterCursor: defenseReviewNotOwed ? withReactiveModifiers.currentCursor : undefined,
         command: {
           ...input.command,
           facts: {
@@ -24487,6 +24628,7 @@ export function recordCombatRoundAttackResult(input: {
             interruptedMissileReadiness,
             previousMissileReadiness: missileReadiness ?? null,
             previousAttackPhaseDefensivePenalties: previousAttackPhaseDefensivePenalties ?? null,
+            ...(defenseReviewNotOwed ? { [COMBAT_ROUND_DEFENSE_REVIEW_NOT_OWED_FACT]: true } : {}),
           },
         },
         participantId: input.participantId,

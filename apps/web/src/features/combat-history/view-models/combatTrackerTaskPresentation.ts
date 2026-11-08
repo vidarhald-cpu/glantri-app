@@ -198,7 +198,7 @@ function gmText(task: CombatProgressionPresentationTask, owner: string | undefin
     case "damage_review":
       return `Awaiting GM: Review damage${owner ? ` for ${owner}` : ""}.`;
     case "defense_review":
-      return `Awaiting GM: Review awareness and defense sources${owner ? ` for ${owner}` : ""}.`;
+      return `Awaiting GM: Review defense sources${owner ? ` for ${owner}` : ""}.`;
     case "effect_review":
       return `Awaiting GM: Review round-end effects${owner ? ` for ${owner}` : ""}.`;
     case "participant_review":

@@ -340,6 +340,40 @@ describe("CurrentActionPresentation", () => {
     expect(Object.isFrozen(result?.primaryAction.descriptor)).toBe(true);
   });
 
+  it("frames a defense review without the retired awareness wording and names the attacking weapon (#874)", () => {
+    const result = build([
+      task({
+        actor: aria,
+        command: "commit_defense_review",
+        gmOnly: true,
+        kind: "defense_review",
+        responder: borin,
+        target: borin,
+        weaponLabel: "Broad sword",
+      }),
+    ]);
+
+    expect(result?.summary).toBe("Review Borin's defense sources for this attack.");
+    expect(result?.requiredNow).toBe("Confirm applicable defense sources.");
+    expect(`${result?.summary} ${result?.requiredNow}`).not.toMatch(/awareness/i);
+    // The task's weapon is the attacking opportunity's, so it is named as the attacker's.
+    expect(result?.weapon).toEqual({ id: "weapon-1", label: "Aria's Broad sword" });
+  });
+
+  it("keeps a non-review task's weapon label unchanged (#874)", () => {
+    const result = build([
+      task({
+        actor: aria,
+        command: "roll_attack",
+        kind: "attack",
+        target: borin,
+        weaponLabel: "Broad sword",
+      }),
+    ]);
+
+    expect(result?.weapon).toEqual({ id: "weapon-1", label: "Broad sword" });
+  });
+
   it("presents parry with the attacker, defender, and direct required action", () => {
     const result = build(
       [
