@@ -635,10 +635,27 @@ test.describe("Player attack initiative identity", () => {
       participantId: encounterParticipantIds.attackerAId,
       type: "roll_attack",
     });
-    expect(after.encounter.combatRoundState.currentCursor).toMatchObject({
-      participantId: encounterParticipantIds.sentinelId,
-      step: "P1",
-    });
+    // #874 (amendment A4): the roll is real, so the cursor depends on its outcome. A hit opens the
+    // sentinel's defense review at P1; a visible attacker's melee miss is recorded at the attack
+    // commit with no defense review owed, so the cursor does not stop at a defense step.
+    const playerAttack = after.encounter.combatRoundState.participants.find(
+      (participant) => participant.participantId === encounterParticipantIds.attackerAId,
+    )?.attackResults.phase1;
+    console.log(
+      `#874 player attack outcome: ${playerAttack?.hit ? "hit" : "miss"} (lookupTotal=${playerAttack?.lookupTotal}) cursor=${JSON.stringify(after.encounter.combatRoundState.currentCursor)}`,
+    );
+    if (playerAttack?.hit) {
+      expect(after.encounter.combatRoundState.currentCursor).toMatchObject({
+        participantId: encounterParticipantIds.sentinelId,
+        step: "P1",
+      });
+    } else {
+      expect(after.encounter.combatRoundState.currentCursor?.step).not.toBe("P1");
+      expect(after.encounter.combatRoundState.phaseResolutionCursor?.substep).not.toBe("defense");
+      expect(after.encounter.combatRoundState.commands.at(-1)?.facts.defenseReviewNotOwed).toBe(
+        true,
+      );
+    }
     expect(
       after.encounter.combatRoundState.participants.find(
         (participant) => participant.participantId === encounterParticipantIds.attackerAId,
