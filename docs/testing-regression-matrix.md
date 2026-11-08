@@ -320,7 +320,7 @@ assertion that fails:
 | You see                                                                                                                                                                                                                                | It is                                                                                                                                                                                                            | Read                                                                                                               |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `expect(artifactRoot).toBeTruthy()` at `apps/web/e2e/blackboard.spec.ts:122`, or a failure (or, where the guard at `apps/web/e2e/artifactImports.spec.ts:231` fires, a skip) in the recovery case at `artifactImports.spec.ts:227-231` | An **unsatisfied environment**: `ARTIFACT_LOCAL_ROOT` is not set, or reached Playwright but not the application stack. It says nothing about the product.                                                        | [The environment traps](#further-environment-traps--recorded-2026-09-26) earlier in this document                  |
-| A **product assertion** failing with the environment satisfied: `apps/web/e2e/artifacts.spec.ts:130` (a player's Artifact card button count) or `apps/web/e2e/artifactImports.spec.ts:146` (the `Excluded` text in the review step)    | A **known local failure** of the two cases listed below. The environment is fine: in the measuring run the `blackboard` case and the other environment-sensitive `artifactImports` cases passed in the same run. | [The two cases that fail locally](#the-two-artifact-cases-that-currently-fail-locally--recorded-2026-11-06), below |
+| A **product assertion** failing with the environment satisfied: `apps/web/e2e/artifactImports.spec.ts:146` (the `Excluded` text in the review step)                                                                                    | A **known local failure** of the two cases listed below. The environment is fine: in the measuring run the `blackboard` case and the other environment-sensitive `artifactImports` cases passed in the same run. | [The two cases that fail locally](#the-two-artifact-cases-that-currently-fail-locally--recorded-2026-11-06), below |
 
 Line numbers are those at `dev` `416636aa478961882b4040b456267ea1393419fe`; locate by the
 assertion text if they have moved. The only other known failure in this document is in a different
@@ -358,14 +358,20 @@ independent QA on an unrelated candidate at `331d7599c56c5ba586c727e20d7c72d66ff
 (73 collected, 68 passed, 3 skipped, 2 failed) and reproduced with a controlled second worktree at
 `dev` `416636aa`, with `ARTIFACT_LOCAL_ROOT` exported before the stack started:
 
-| Spec                                      | Case                                                                              | Failing assertion                                               | Remedy tracked in |
-| ----------------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------- |
-| `apps/web/e2e/artifactImports.spec.ts:10` | creates, reuses, revises, retires and imports through review at narrow width      | `artifactImports.spec.ts:146`, the `Excluded` text in review    | #892              |
-| `apps/web/e2e/artifacts.spec.ts:16`       | publishes a safe visual Artifact to entitled players without exposing GM controls | `artifacts.spec.ts:130`, `getByRole("button")` receives 1 not 0 | #892, #996        |
+| Spec                                      | Case                                                                              | Failing assertion                                            | Remedy tracked in |
+| ----------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------- |
+| `apps/web/e2e/artifactImports.spec.ts:10` | creates, reuses, revises, retires and imports through review at narrow width      | `artifactImports.spec.ts:146`, the `Excluded` text in review | #892              |
+| `apps/web/e2e/artifacts.spec.ts:32`       | publishes a safe visual Artifact to entitled players without exposing GM controls | none after #996: it passes locally (see below)               | #996 (done)       |
 
-**Why they fail is not established**, and this document does not say. Nobody has measured whether
-either is a stale assertion or a product defect; the second is a possible control exposure to a
-player and is being measured under #996.
+**Why they fail is not established for the first**, and this document does not say. The second
+(`artifacts.spec.ts`) was measured under #996: the one button on a player's card is the
+`Inspect <title>` zoom viewer (local state only, no network request, nothing beyond the picture
+already shown), so it was a stale over-broad assertion, not an exposure. The assertion was narrowed
+without any product change: the card must carry exactly that one button, and every privileged
+control (`Retry cleanup`, `Edit details`, `Save details`, `Share with Campaign`,
+`Withdraw from Campaign`, `Attach privately`, `Share with Scenario`, `Withdraw from Scenario`,
+`Retire`, `Restore`, `History, uses and new version`, `Preview new version`) stays forbidden by
+name. It passes locally with `ARTIFACT_E2E_STORAGE_ENABLED=1`; it still skips in CI (#892).
 
 **This is a live condition, not a baseline, and not an exemption.** What a lane does:
 
@@ -376,8 +382,8 @@ player and is being measured under #996.
   not run them.
 - Any failure in a required protected gate is a real failure. Nothing here changes that, and
   nothing here may be extended to name a further case.
-- Do not edit either case's assertion to make a local run green. The repair of the first belongs
-  to #892 and of the second to #996.
+- Do not edit the remaining case's assertion to make a local run green; its repair belongs to
+  #892. The `artifacts.spec.ts` case was repaired under #996 and passes locally.
 
 #### The `apps/web/browser-tests` project currently has two failures — recorded 2026-11-06
 
