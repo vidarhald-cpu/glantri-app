@@ -150,58 +150,6 @@ function splitCurrentCombatMutation(input: {
   };
 }
 
-function composeSplitRecord(record: {
-  activeCombatState: { revision: Date; stateJson: Prisma.JsonValue } | null;
-  archivedCombatRounds: { roundJson: Prisma.JsonValue; roundNumber: number }[];
-  campaignId: string | null;
-  combatArchiveCount: number;
-  combatStorageMode: string;
-  createdAt: Date;
-  id: string;
-  name: string;
-  scenarioId: string | null;
-  sessionJson: Prisma.JsonValue | null;
-  status: string;
-  updatedAt: Date;
-}): EncounterSession {
-  if (asStorageMode(record.combatStorageMode) !== COMBAT_STORAGE_MODE_SPLIT_V1) {
-    throw new CombatPersistenceError(
-      "malformed_split_storage",
-      "Split encounter composition requires split_v1 storage.",
-    );
-  }
-  if (!record.activeCombatState) {
-    throw new CombatPersistenceError(
-      "malformed_split_storage",
-      "Split combat storage is missing its active-state row.",
-    );
-  }
-  if (
-    record.activeCombatState.revision.getTime() !== record.updatedAt.getTime() ||
-    record.archivedCombatRounds.length !== record.combatArchiveCount
-  ) {
-    throw new CombatPersistenceError(
-      "malformed_split_storage",
-      "Split combat storage revision or archive count is inconsistent.",
-    );
-  }
-  for (const [index, round] of record.archivedCombatRounds.entries()) {
-    if (round.roundNumber !== index + 1) {
-      throw new CombatPersistenceError(
-        "malformed_split_storage",
-        "Split combat archive ordering is not contiguous.",
-      );
-    }
-  }
-
-  return composeEncounterSessionFromSplitCombatPersistence({
-    activeCombatState: record.activeCombatState.stateJson,
-    archivedRounds: record.archivedCombatRounds.map((round) => round.roundJson),
-    metadata: metadataInput(record),
-    sessionWithoutCombatState: record.sessionJson ?? {},
-  });
-}
-
 async function updateMetadataWithExpectedRevision(input: {
   archiveCount: number;
   encounterId: string;
@@ -629,19 +577,4 @@ export function createPrismaCombatStatePersistenceRepository(
       );
     },
   };
-}
-
-export async function readComposedSplitEncounter(
-  transaction: TransactionClient,
-  encounterId: string,
-): Promise<EncounterSession | null> {
-  const record = await transaction.encounter.findUnique({
-    select: splitEncounterRecordSelect,
-    where: { id: encounterId },
-  });
-
-  if (!record) {
-    return null;
-  }
-  return composeSplitRecord(record);
 }
