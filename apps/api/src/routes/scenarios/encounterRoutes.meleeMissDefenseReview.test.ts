@@ -708,8 +708,16 @@ function expectTheMissWouldConnectAgainstTheUnawareDb(input: {
     (input.command.facts.defenderCalculation as { flatDbAdjustment?: number } | undefined)
       ?.flatDbAdjustment ?? 0;
   const againstUnawareDb = buildCombatRoundAttackRollResult({
-    ...input.result,
+    actionId: input.result.actionId,
+    attackerParticipantId: input.result.attackerParticipantId,
     defenderDb: unawareDb,
+    defenderParticipantId: input.result.defenderParticipantId,
+    ob: input.result.ob,
+    phase: input.result.phase,
+    rollD20: input.result.rollD20,
+    rollTotal: input.result.rollTotal,
+    rolledAt: input.result.rolledAt,
+    weaponName: input.result.weaponName,
   });
   console.log(
     `#874 route fixture (${input.label}): ob=${input.result.ob} rollTotal=${input.result.rollTotal} defenderDb=${input.result.defenderDb} lookupTotal=${input.result.lookupTotal} hit=${input.result.hit} unawareDb=${unawareDb} hitAgainstUnawareDb=${againstUnawareDb.hit}`,

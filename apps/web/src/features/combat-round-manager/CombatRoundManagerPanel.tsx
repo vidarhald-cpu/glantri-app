@@ -13145,8 +13145,43 @@ export default function CombatRoundManagerPanel({
                                 : null;
                             })()
                           : null;
+                        /*
+                         * #874 rule 6. While this defender's review is open, the Parry in force is
+                         * the review's own attack under the GM's draft — not the latest attack with
+                         * a pending Parry, which can be another attacker's.
+                         */
+                        const reviewParryBase =
+                          phaseDefenseReviewOpen && inspectorDefenseReviewAttackResult
+                            ? getSelectedCombatParryBase({
+                                selection: inspectorDefenseReviewSelection,
+                                sources: inspectorParrySources,
+                              })
+                            : undefined;
+                        const reviewResolutionContext =
+                          phaseDefenseReviewOpen && inspectorDefenseReviewAttackResult
+                            ? {
+                                attackResultId: phaseAttackUnderResolutionId,
+                                parryBase: reviewParryBase,
+                                parryModifierCalculation:
+                                  reviewParryBase !== undefined
+                                    ? buildEncounterDbParryModifierCalculation({
+                                        baseValue: reviewParryBase,
+                                        extraRawModifiers: buildCombatAttackResultParryModifiers(
+                                          inspectorDefenseReviewAttackResult,
+                                        ),
+                                        liveModifiers:
+                                          inspectorParryDefenderPhaseSummary?.liveModifiers,
+                                      })
+                                    : null,
+                                parrySourceLabel: formatSelectedCombatParrySourceName({
+                                  selection: inspectorDefenseReviewSelection,
+                                  sources: inspectorParrySources,
+                                }),
+                              }
+                            : undefined;
                         const selectedResolutionContext =
-                          !inspectorIsHistorical &&
+                          reviewResolutionContext ??
+                          (!inspectorIsHistorical &&
                           phaseKey === inspectorResolutionPhase &&
                           inspector.participant?.participantId ===
                             inspectorResolutionAttackResult?.defenderParticipantId &&
@@ -13165,7 +13200,7 @@ export default function CombatRoundManagerPanel({
                                   sources: inspectorParrySources,
                                 }),
                               }
-                            : undefined;
+                            : undefined);
                         const projection = buildCombatRoundPhasePanelProjection({
                           actionId: inspectorDisplayDraft.actionId,
                           attackStats: inspectorIsHistorical
