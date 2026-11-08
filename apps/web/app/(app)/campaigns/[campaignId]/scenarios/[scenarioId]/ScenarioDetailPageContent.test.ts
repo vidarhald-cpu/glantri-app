@@ -164,7 +164,7 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("Create temporary actor");
     expect(source).toContain("Temporary actor count");
     expect(source).toContain("temporaryActorCount");
-    expect(source).toContain("templateSources[0]");
+    expect(source).toContain("fieldableTemplateSources[0]");
     expect(source).toContain("setParticipants((current) =>");
     expect(source).toContain("Temporary actor");
     expect(source).toContain('.filter((entry) => entry.category !== "template")');
