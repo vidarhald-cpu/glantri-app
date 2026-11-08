@@ -100,6 +100,19 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     );
   });
 
+  it("does not offer a direct-field temporary actor for a page-authored archetype Template (#851)", () => {
+    const source = readScenarioDetailSource();
+
+    expect(source).toContain("function isArchetypeTemplateEntity");
+    expect(source).toContain('record.templateKind === "humanoid_npc_archetype"');
+    expect(source).toContain('record.actorClass !== "campaign_npc"');
+    expect(source).toContain('record.actorClass !== "generated_npc"');
+    expect(source).toContain("fieldableTemplateSources");
+    expect(source).toContain("templateSources={fieldableTemplateSources}");
+    expect(source).not.toContain("templateSources={templateSources}");
+    expect(source).toContain("fieldableTemplateSources.find(");
+  });
+
   it("assigns encounter participants from concrete scenario participant rows", () => {
     const source = readScenarioDetailSources();
     const assignmentSource = readComponentSource("ScenarioEncounterAssignmentSection.tsx");
