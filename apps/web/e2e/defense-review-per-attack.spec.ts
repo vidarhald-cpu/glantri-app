@@ -867,9 +867,9 @@ test.describe("Defense review is bound to the attack under resolution (#874)", (
     await gmPage.waitForTimeout(800);
     const both = await readSurface(gmPage);
     console.log(`#874 selector both: ${JSON.stringify(both)}`);
+    await captureAtUsableWidths(gmPage, "allocation-selector");
     // QA B1: the selector stays rendered while the allocation is in force.
     expect(both.phase1ParrySourceSelectors, note("selector with allocation", both)).toBe(1);
-    await captureAtUsableWidths(gmPage, "allocation-selector");
 
     await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
     const weaponOnly = await readSurface(gmPage);
