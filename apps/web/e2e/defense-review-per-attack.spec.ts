@@ -612,6 +612,61 @@ function incomingAttacks(state: CombatRoundState, defenderId: string) {
   );
 }
 
+/**
+ * #874 (amendment A5). The walk-based cases need a real attack to connect, and the dice are real:
+ * under the 2026-11-08 ruling a visible attacker's miss opens no defense review, so a case whose
+ * attack misses never reaches the review it measures. Each such case therefore runs in a fresh
+ * world up to `CONNECTING_ATTEMPTS` times. A failed attempt reads the stored state and records why
+ * (the incoming attacks, their outcome, and the misses recorded without a review), and only a run
+ * with no connecting attack in all attempts fails — explicitly, with every recorded reason.
+ *
+ * N = 5. The skilled attacker connects on the large majority of rolls (lookup = d20 + OB 38 −
+ * DB 7..11, so a miss needs an unusually low roll); across this lane's runs before A5 exactly one
+ * walk ended without its review. Five independent attempts leave a residual failure chance below
+ * one in three thousand even at a pessimistic one-in-five miss rate (0.2^5).
+ */
+const CONNECTING_ATTEMPTS = 5;
+
+async function withConnectingAttack(
+  label: string,
+  attemptCase: (attempt: number) => Promise<string | undefined>,
+): Promise<void> {
+  const reasons: string[] = [];
+  for (let attempt = 1; attempt <= CONNECTING_ATTEMPTS; attempt += 1) {
+    const retryReason = await attemptCase(attempt);
+    if (retryReason === undefined) {
+      console.log(
+        `#874 ${label}: connected on attempt ${attempt}${reasons.length ? `; earlier: ${reasons.join(" | ")}` : ""}`,
+      );
+      return;
+    }
+    reasons.push(`attempt ${attempt}: ${retryReason}`);
+    console.log(`#874 retry ${label} attempt ${attempt}: ${retryReason}`);
+  }
+  throw new Error(
+    `${label}: no connecting attack within ${CONNECTING_ATTEMPTS} attempts — ${reasons.join(" | ")}`,
+  );
+}
+
+/** Why a walk ended without the review its case needs, read from the stored state. */
+async function noReviewReason(
+  world: World,
+  defenderParticipantId: string,
+  expectation: string,
+): Promise<string> {
+  const state = await readRoundState(world.gmPage.request, world.encounterId);
+  const attacks = incomingAttacks(state, defenderParticipantId).map((attack) => ({
+    hit: attack.hit,
+    lookupTotal: attack.lookupTotal,
+    phase: attack.phase,
+  }));
+  const missesWithoutReview = state.commands.filter(
+    (command) => command.type === "roll_attack" && command.facts.defenseReviewNotOwed === true,
+  ).length;
+  await world.playerContextClose();
+  return `${expectation} — not reached (step ${state.currentStep}); incoming attacks ${JSON.stringify(attacks)}; misses recorded with defenseReviewNotOwed: ${missesWithoutReview}`;
+}
+
 test.describe("Defense review is bound to the attack under resolution (#874)", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
 
@@ -697,459 +752,501 @@ test.describe("Defense review is bound to the attack under resolution (#874)", (
     browser,
     page: gmPage,
   }) => {
-    test.setTimeout(300_000);
-    const world = await openWorld({
-      browser,
-      entries: [
-        { key: "attacker", skills: { dodge: 1, weapon: 60 } },
-        { key: "defender", skills: { dodge: 1, weapon: 9 } },
-      ],
-      gmPage,
-      tag: "hit",
-    });
-    const { attacker, defender } = world.combatants as Record<string, Combatant>;
-    await openGmCombat(world);
-    await declare(world, {
-      actionId: "attack_parry",
-      who: attacker!.name,
-      targetName: defender!.name,
-    });
-    await declare(world, { actionId: "parry", who: defender!.name, targetName: attacker!.name });
-    await waitForResolution(world);
+    test.setTimeout(900_000);
+    await withConnectingAttack("hit case", async () => {
+      const world = await openWorld({
+        browser,
+        entries: [
+          { key: "attacker", skills: { dodge: 1, weapon: 60 } },
+          { key: "defender", skills: { dodge: 1, weapon: 9 } },
+        ],
+        gmPage,
+        tag: "hit",
+      });
+      const { attacker, defender } = world.combatants as Record<string, Combatant>;
+      await openGmCombat(world);
+      await declare(world, {
+        actionId: "attack_parry",
+        who: attacker!.name,
+        targetName: defender!.name,
+      });
+      await declare(world, { actionId: "parry", who: defender!.name, targetName: attacker!.name });
+      await waitForResolution(world);
 
-    const reason = await walk(world, ({ buttons }) => buttons.includes("Commit defense review"));
-    expect(reason, "the walk must reach the defense review").toBe("stopped");
-    const state = await readRoundState(gmPage.request, world.encounterId);
-    const [attack] = incomingAttacks(state, defender!.combatantId);
-    console.log(
-      `#874 hit case attack: ob=${attack?.ob} rollTotal=${attack?.rollTotal} defenderDb=${attack?.defenderDb} hit=${attack?.hit}`,
-    );
-    expect(attack?.hit, "the fixture's skilled attack must connect").toBe(true);
-    await selectGmInspectorParticipant(gmPage, defender!.name);
-    await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
-
-    const both = await readSurface(gmPage);
-    console.log(`#874 hit both: ${JSON.stringify(both)}`);
-    expect(both.regionPresent, note("hit both", both)).toBe(true);
-    expect(both.checkboxes.length, note("hit both", both)).toBe(2);
-    expect(
-      both.checkboxes.every((entry) => entry.checked),
-      note("hit both", both),
-    ).toBe(true);
-    expect
-      .soft(
-        tableShows(both.phase1DefenseCells, combinationValues(both.combinationLine)),
-        note("hit both: the mini-table shows the row in force", both),
-      )
-      .toBe(true);
-    await captureAtUsableWidths(gmPage, "hit");
-
-    // Untick the shield for this attack: the row in force becomes the weapon-only row.
-    await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
-    const weaponOnly = await readSurface(gmPage);
-    console.log(`#874 hit weapon only: ${JSON.stringify(weaponOnly)}`);
-    expect(weaponOnly.combinationLine, note("weapon only", weaponOnly)).not.toBe(
-      both.combinationLine,
-    );
-    expect
-      .soft(
-        tableShows(weaponOnly.phase1DefenseCells, combinationValues(weaponOnly.combinationLine)),
-        note("weapon only: the mini-table shows the row in force", weaponOnly),
-      )
-      .toBe(true);
-    const weaponOnlyParry = combinationValues(weaponOnly.combinationLine)[2];
-    const hitDelta = parryMovesWith({ after: weaponOnly, before: both });
-    console.log(`#874 hit parry delta on untick: ${JSON.stringify(hitDelta)}`);
-    expect
-      .soft(Math.sign(hitDelta.tableDelta), note("weapon only: P follows the row", weaponOnly))
-      .toBe(Math.sign(hitDelta.combinationDelta));
-    expect.soft(hitDelta.tableDelta, note("weapon only: P moved", weaponOnly)).not.toBe(0);
-    const reviewTimeParry = weaponOnly.phase1DefenseCells.at(-1);
-
-    const committed = gmPage.waitForResponse((response) =>
-      response.url().includes("/combat-round/commit-defense-review"),
-    );
-    await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
-    expect((await committed).ok()).toBe(true);
-    await gmPage.waitForTimeout(1500);
-
-    const afterCommit = await readRoundState(gmPage.request, world.encounterId);
-    const snapshot = afterCommit.defenseSnapshots.at(-1);
-    console.log(`#874 hit committed snapshot sources: ${JSON.stringify(snapshot?.sources)}`);
-    expect(snapshot?.sources.find((source) => source.slot === "offHand")?.decision).toBe(
-      "gm_excluded",
-    );
-
-    // Walk to the Parry roll, read the panel, roll, and compare with what the server resolved.
-    const toParry = await walk(world, ({ buttons }) => buttons.includes("Roll parry"));
-    if (toParry === "stopped") {
-      await selectGmInspectorParticipant(gmPage, defender!.name);
-      await gmPage.waitForTimeout(800);
-      const atParry = await readSurface(gmPage);
-      console.log(`#874 hit at parry step: ${JSON.stringify(atParry)}`);
-      const parryRequest = gmPage.waitForResponse((response) =>
-        response.url().includes("/combat-round/roll-parry"),
-      );
-      const currentTask = gmPage.getByRole("button", { name: /^(Resume )?current task$/i });
-      if (await currentTask.count()) await currentTask.first().click();
-      await gmPage.getByRole("button", { name: "Roll parry", exact: true }).first().click();
-      expect((await parryRequest).ok()).toBe(true);
-      const resolved = await readRoundState(gmPage.request, world.encounterId);
-      const parry = resolved.phaseResolutionResults.find(
-        (entry) => entry.attackResultId === snapshot?.attackId,
-      )?.parryResolution;
-      const stored = parry as
-        | {
-            combinedParryScore?: number;
-            modifiedParryBeforeRoll?: number;
-            usedMainHand?: boolean;
-            usedOffHand?: boolean;
-          }
-        | undefined;
+      const reason = await walk(world, ({ buttons }) => buttons.includes("Commit defense review"));
+      if (reason !== "stopped") {
+        return noReviewReason(
+          world,
+          defender!.combatantId,
+          "the walk must reach the defense review",
+        );
+      }
+      const state = await readRoundState(gmPage.request, world.encounterId);
+      const [attack] = incomingAttacks(state, defender!.combatantId);
       console.log(
-        `#874 hit resolved parry: ${JSON.stringify({ combinedParryScore: stored?.combinedParryScore, displayedAtParryStepP: atParry.phase1DefenseCells.at(-1), displayedWeaponOnlyRowP: weaponOnlyParry, modifiedParryBeforeRoll: stored?.modifiedParryBeforeRoll, usedMainHand: stored?.usedMainHand, usedOffHand: stored?.usedOffHand })}`,
+        `#874 hit case attack: ob=${attack?.ob} rollTotal=${attack?.rollTotal} defenderDb=${attack?.defenderDb} hit=${attack?.hit}`,
       );
-      // The value the mini-table showed — during the review, under the GM's untick, and at the
-      // Parry step — is the value the server resolved the Parry with.
+      expect(attack?.hit, "the fixture's skilled attack must connect").toBe(true);
+      await selectGmInspectorParticipant(gmPage, defender!.name);
+      await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
+
+      const both = await readSurface(gmPage);
+      console.log(`#874 hit both: ${JSON.stringify(both)}`);
+      expect(both.regionPresent, note("hit both", both)).toBe(true);
+      expect(both.checkboxes.length, note("hit both", both)).toBe(2);
+      expect(
+        both.checkboxes.every((entry) => entry.checked),
+        note("hit both", both),
+      ).toBe(true);
       expect
-        .soft(String(stored?.modifiedParryBeforeRoll), note("parry step P", atParry))
-        .toBe(atParry.phase1DefenseCells.at(-1));
+        .soft(
+          tableShows(both.phase1DefenseCells, combinationValues(both.combinationLine)),
+          note("hit both: the mini-table shows the row in force", both),
+        )
+        .toBe(true);
+      await captureAtUsableWidths(gmPage, "hit");
+
+      // Untick the shield for this attack: the row in force becomes the weapon-only row.
+      await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
+      const weaponOnly = await readSurface(gmPage);
+      console.log(`#874 hit weapon only: ${JSON.stringify(weaponOnly)}`);
+      expect(weaponOnly.combinationLine, note("weapon only", weaponOnly)).not.toBe(
+        both.combinationLine,
+      );
       expect
-        .soft(String(stored?.modifiedParryBeforeRoll), note("review-time P", weaponOnly))
-        .toBe(reviewTimeParry);
-      expect.soft(String(stored?.combinedParryScore)).toBe(weaponOnlyParry);
-      expect.soft(parry && "usedOffHand" in parry ? parry.usedOffHand : undefined).toBe(false);
-    } else {
-      console.log(`#874 hit: the walk did not reach Roll parry (${toParry}).`);
-    }
-    await world.playerContextClose();
+        .soft(
+          tableShows(weaponOnly.phase1DefenseCells, combinationValues(weaponOnly.combinationLine)),
+          note("weapon only: the mini-table shows the row in force", weaponOnly),
+        )
+        .toBe(true);
+      const weaponOnlyParry = combinationValues(weaponOnly.combinationLine)[2];
+      const hitDelta = parryMovesWith({ after: weaponOnly, before: both });
+      console.log(`#874 hit parry delta on untick: ${JSON.stringify(hitDelta)}`);
+      expect
+        .soft(Math.sign(hitDelta.tableDelta), note("weapon only: P follows the row", weaponOnly))
+        .toBe(Math.sign(hitDelta.combinationDelta));
+      expect.soft(hitDelta.tableDelta, note("weapon only: P moved", weaponOnly)).not.toBe(0);
+      const reviewTimeParry = weaponOnly.phase1DefenseCells.at(-1);
+
+      const committed = gmPage.waitForResponse((response) =>
+        response.url().includes("/combat-round/commit-defense-review"),
+      );
+      await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
+      expect((await committed).ok()).toBe(true);
+      await gmPage.waitForTimeout(1500);
+
+      const afterCommit = await readRoundState(gmPage.request, world.encounterId);
+      const snapshot = afterCommit.defenseSnapshots.at(-1);
+      console.log(`#874 hit committed snapshot sources: ${JSON.stringify(snapshot?.sources)}`);
+      expect(snapshot?.sources.find((source) => source.slot === "offHand")?.decision).toBe(
+        "gm_excluded",
+      );
+
+      // Walk to the Parry roll, read the panel, roll, and compare with what the server resolved.
+      const toParry = await walk(world, ({ buttons }) => buttons.includes("Roll parry"));
+      if (toParry === "stopped") {
+        await selectGmInspectorParticipant(gmPage, defender!.name);
+        await gmPage.waitForTimeout(800);
+        const atParry = await readSurface(gmPage);
+        console.log(`#874 hit at parry step: ${JSON.stringify(atParry)}`);
+        const parryRequest = gmPage.waitForResponse((response) =>
+          response.url().includes("/combat-round/roll-parry"),
+        );
+        const currentTask = gmPage.getByRole("button", { name: /^(Resume )?current task$/i });
+        if (await currentTask.count()) await currentTask.first().click();
+        await gmPage.getByRole("button", { name: "Roll parry", exact: true }).first().click();
+        expect((await parryRequest).ok()).toBe(true);
+        const resolved = await readRoundState(gmPage.request, world.encounterId);
+        const parry = resolved.phaseResolutionResults.find(
+          (entry) => entry.attackResultId === snapshot?.attackId,
+        )?.parryResolution;
+        const stored = parry as
+          | {
+              combinedParryScore?: number;
+              modifiedParryBeforeRoll?: number;
+              usedMainHand?: boolean;
+              usedOffHand?: boolean;
+            }
+          | undefined;
+        console.log(
+          `#874 hit resolved parry: ${JSON.stringify({ combinedParryScore: stored?.combinedParryScore, displayedAtParryStepP: atParry.phase1DefenseCells.at(-1), displayedWeaponOnlyRowP: weaponOnlyParry, modifiedParryBeforeRoll: stored?.modifiedParryBeforeRoll, usedMainHand: stored?.usedMainHand, usedOffHand: stored?.usedOffHand })}`,
+        );
+        // The value the mini-table showed — during the review, under the GM's untick, and at the
+        // Parry step — is the value the server resolved the Parry with.
+        expect
+          .soft(String(stored?.modifiedParryBeforeRoll), note("parry step P", atParry))
+          .toBe(atParry.phase1DefenseCells.at(-1));
+        expect
+          .soft(String(stored?.modifiedParryBeforeRoll), note("review-time P", weaponOnly))
+          .toBe(reviewTimeParry);
+        expect.soft(String(stored?.combinedParryScore)).toBe(weaponOnlyParry);
+        expect.soft(parry && "usedOffHand" in parry ? parry.usedOffHand : undefined).toBe(false);
+      } else {
+        console.log(`#874 hit: the walk did not reach Roll parry (${toParry}).`);
+      }
+      await world.playerContextClose();
+      return undefined;
+    });
   });
 
   test("an attack_parry defender keeps its Parry source selector while an allocation is in force", async ({
     browser,
     page: gmPage,
   }) => {
-    test.setTimeout(360_000);
-    const world = await openWorld({
-      browser,
-      entries: [
-        { key: "attacker", skills: { dodge: 1, weapon: 60 } },
-        { key: "defender", skills: { dodge: 1, weapon: 9 } },
-      ],
-      gmPage,
-      tag: "selector",
-    });
-    const { attacker, defender } = world.combatants as Record<string, Combatant>;
-    await openGmCombat(world);
-    await declare(world, {
-      actionId: "attack_parry",
-      who: attacker!.name,
-      targetName: defender!.name,
-    });
-    await declare(world, {
-      actionId: "attack_parry",
-      who: defender!.name,
-      targetName: attacker!.name,
-    });
-    await waitForResolution(world);
+    test.setTimeout(900_000);
+    await withConnectingAttack("selector case", async () => {
+      const world = await openWorld({
+        browser,
+        entries: [
+          { key: "attacker", skills: { dodge: 1, weapon: 60 } },
+          { key: "defender", skills: { dodge: 1, weapon: 9 } },
+        ],
+        gmPage,
+        tag: "selector",
+      });
+      const { attacker, defender } = world.combatants as Record<string, Combatant>;
+      await openGmCombat(world);
+      await declare(world, {
+        actionId: "attack_parry",
+        who: attacker!.name,
+        targetName: defender!.name,
+      });
+      await declare(world, {
+        actionId: "attack_parry",
+        who: defender!.name,
+        targetName: attacker!.name,
+      });
+      await waitForResolution(world);
 
-    // Walk to the defender's own review (any other review is committed at its default).
-    const reason = await walk(
-      world,
-      ({ buttons, state }) =>
-        buttons.includes("Commit defense review") &&
-        state.phaseResolutionCursor?.participantId === defender!.combatantId &&
-        state.phaseResolutionCursor.substep === "defense",
-    );
-    expect(reason, "the walk must reach the attack_parry defender's review").toBe("stopped");
-    await selectGmInspectorParticipant(gmPage, defender!.name);
-    await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
-    await gmPage.waitForTimeout(800);
-    const both = await readSurface(gmPage);
-    console.log(`#874 selector both: ${JSON.stringify(both)}`);
-    await captureAtUsableWidths(gmPage, "allocation-selector");
-    // QA B1: the selector stays rendered while the allocation is in force.
-    expect(both.phase1ParrySourceSelectors, note("selector with allocation", both)).toBe(1);
+      // Walk to the defender's own review (any other review is committed at its default).
+      const reason = await walk(
+        world,
+        ({ buttons, state }) =>
+          buttons.includes("Commit defense review") &&
+          state.phaseResolutionCursor?.participantId === defender!.combatantId &&
+          state.phaseResolutionCursor.substep === "defense",
+      );
+      if (reason !== "stopped") {
+        return noReviewReason(
+          world,
+          defender!.combatantId,
+          "the walk must reach the attack_parry defender's review",
+        );
+      }
+      await selectGmInspectorParticipant(gmPage, defender!.name);
+      await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
+      await gmPage.waitForTimeout(800);
+      const both = await readSurface(gmPage);
+      console.log(`#874 selector both: ${JSON.stringify(both)}`);
+      await captureAtUsableWidths(gmPage, "allocation-selector");
+      // QA B1: the selector stays rendered while the allocation is in force.
+      expect(both.phase1ParrySourceSelectors, note("selector with allocation", both)).toBe(1);
 
-    await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
-    const weaponOnly = await readSurface(gmPage);
-    console.log(`#874 selector weapon only: ${JSON.stringify(weaponOnly)}`);
-    expect(weaponOnly.phase1ParrySourceSelectors, note("selector after untick", weaponOnly)).toBe(
-      1,
-    );
-    // It shows the row in force and is not a second, contradicting chooser.
-    const rowName = (read: SurfaceRead) => (read.combinationLine ?? "").split(" · DB ")[0] ?? "";
-    expect
-      .soft(
-        weaponOnly.phase1ParrySource?.selected.startsWith(`${rowName(weaponOnly)} · `),
-        note("selector shows the row in force", weaponOnly),
-      )
-      .toBe(true);
-    expect
-      .soft(both.phase1ParrySource?.selected.startsWith(`${rowName(both)} · `), note("both", both))
-      .toBe(true);
-    expect
-      .soft(weaponOnly.phase1ParrySource?.disabled, note("selector disabled", weaponOnly))
-      .toBe(true);
-    expect
-      .soft(both.phase1ParrySource?.selected, note("selector shows both", both))
-      .not.toBe(weaponOnly.phase1ParrySource?.selected);
-    await world.playerContextClose();
+      await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
+      const weaponOnly = await readSurface(gmPage);
+      console.log(`#874 selector weapon only: ${JSON.stringify(weaponOnly)}`);
+      expect(weaponOnly.phase1ParrySourceSelectors, note("selector after untick", weaponOnly)).toBe(
+        1,
+      );
+      // It shows the row in force and is not a second, contradicting chooser.
+      const rowName = (read: SurfaceRead) => (read.combinationLine ?? "").split(" · DB ")[0] ?? "";
+      expect
+        .soft(
+          weaponOnly.phase1ParrySource?.selected.startsWith(`${rowName(weaponOnly)} · `),
+          note("selector shows the row in force", weaponOnly),
+        )
+        .toBe(true);
+      expect
+        .soft(
+          both.phase1ParrySource?.selected.startsWith(`${rowName(both)} · `),
+          note("both", both),
+        )
+        .toBe(true);
+      expect
+        .soft(weaponOnly.phase1ParrySource?.disabled, note("selector disabled", weaponOnly))
+        .toBe(true);
+      expect
+        .soft(both.phase1ParrySource?.selected, note("selector shows both", both))
+        .not.toBe(weaponOnly.phase1ParrySource?.selected);
+      await world.playerContextClose();
+      return undefined;
+    });
   });
 
   test("while the GM reviews the second attack the panel shows that attack, not the first", async ({
     browser,
     page: gmPage,
   }) => {
-    test.setTimeout(420_000);
-    const world = await openWorld({
-      browser,
-      entries: [
-        { key: "first", skills: { dodge: 1, weapon: 60 } },
-        { key: "second", skills: { dodge: 1, weapon: 60 } },
-        { key: "defender", skills: { dodge: 1, weapon: 9 } },
-      ],
-      gmPage,
-      tag: "two",
-    });
-    const { first, second, defender } = world.combatants as Record<string, Combatant>;
-    await openGmCombat(world);
-    await declare(world, {
-      actionId: "attack_parry",
-      who: first!.name,
-      targetName: defender!.name,
-    });
-    await declare(world, {
-      actionId: "attack_parry",
-      who: second!.name,
-      targetName: defender!.name,
-    });
-    await declare(world, { actionId: "parry", who: defender!.name, targetName: first!.name });
-    await waitForResolution(world);
+    test.setTimeout(1_500_000);
+    await withConnectingAttack("two-attacker case", async () => {
+      const world = await openWorld({
+        browser,
+        entries: [
+          { key: "first", skills: { dodge: 1, weapon: 60 } },
+          { key: "second", skills: { dodge: 1, weapon: 60 } },
+          { key: "defender", skills: { dodge: 1, weapon: 9 } },
+        ],
+        gmPage,
+        tag: "two",
+      });
+      const { first, second, defender } = world.combatants as Record<string, Combatant>;
+      await openGmCombat(world);
+      await declare(world, {
+        actionId: "attack_parry",
+        who: first!.name,
+        targetName: defender!.name,
+      });
+      await declare(world, {
+        actionId: "attack_parry",
+        who: second!.name,
+        targetName: defender!.name,
+      });
+      await declare(world, { actionId: "parry", who: defender!.name, targetName: first!.name });
+      await waitForResolution(world);
 
-    // First review: untick the shield and commit.
-    expect(await walk(world, ({ buttons }) => buttons.includes("Commit defense review"))).toBe(
-      "stopped",
-    );
-    await selectGmInspectorParticipant(gmPage, defender!.name);
-    await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
-    const firstReview = await readSurface(gmPage);
-    console.log(`#874 two: first review: ${JSON.stringify(firstReview)}`);
-    await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
-    const firstCommitted = gmPage.waitForResponse((response) =>
-      response.url().includes("/combat-round/commit-defense-review"),
-    );
-    await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
-    expect((await firstCommitted).ok()).toBe(true);
-    await gmPage.waitForTimeout(1500);
-    const afterFirst = await readRoundState(gmPage.request, world.encounterId);
-    const firstSnapshot = afterFirst.defenseSnapshots.at(-1)!;
-    console.log(
-      `#874 two: first snapshot attacker=${firstSnapshot.attackerParticipantId} direction=${firstSnapshot.attackDirection} sources=${JSON.stringify(firstSnapshot.sources.map((source) => [source.slot, source.included, source.decision]))}`,
-    );
+      // First review: untick the shield and commit.
+      if (
+        (await walk(world, ({ buttons }) => buttons.includes("Commit defense review"))) !==
+        "stopped"
+      ) {
+        return noReviewReason(world, defender!.combatantId, "the walk must reach the first review");
+      }
+      await selectGmInspectorParticipant(gmPage, defender!.name);
+      await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
+      const firstReview = await readSurface(gmPage);
+      console.log(`#874 two: first review: ${JSON.stringify(firstReview)}`);
+      await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
+      const firstCommitted = gmPage.waitForResponse((response) =>
+        response.url().includes("/combat-round/commit-defense-review"),
+      );
+      await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
+      expect((await firstCommitted).ok()).toBe(true);
+      await gmPage.waitForTimeout(1500);
+      const afterFirst = await readRoundState(gmPage.request, world.encounterId);
+      const firstSnapshot = afterFirst.defenseSnapshots.at(-1)!;
+      console.log(
+        `#874 two: first snapshot attacker=${firstSnapshot.attackerParticipantId} direction=${firstSnapshot.attackDirection} sources=${JSON.stringify(firstSnapshot.sources.map((source) => [source.slot, source.included, source.decision]))}`,
+      );
 
-    // Walk on (parry, damage, ...) until the second attack's review opens.
-    const reached = await walk(
-      world,
-      ({ buttons, state }) =>
-        buttons.includes("Commit defense review") && state.defenseSnapshots.length === 1,
-    );
-    expect(reached, "the walk must reach the second attack's review").toBe("stopped");
-    const atSecond = await readRoundState(gmPage.request, world.encounterId);
-    const attacks = incomingAttacks(atSecond, defender!.combatantId);
-    console.log(
-      `#874 two: incoming attacks ${JSON.stringify(attacks.map((attack) => [attack.attackerParticipantId, attack.hit]))}`,
-    );
-    await selectGmInspectorParticipant(gmPage, defender!.name);
-    await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
-    await gmPage.waitForTimeout(800);
-    const secondReview = await readSurface(gmPage);
-    console.log(`#874 two: second review: ${JSON.stringify(secondReview)}`);
-    // The second attack starts from the default: both included.
-    expect(
-      secondReview.checkboxes.every((entry) => entry.checked),
-      note("second review defaults", secondReview),
-    ).toBe(true);
-    // The panel shows no committed review of the first attack while the second is under review.
-    expect
-      .soft(
-        secondReview.snapshotPanels.some((text) => text.includes("excluded")),
-        note("second review must not show the first attack's committed review", secondReview),
-      )
-      .toBe(false);
-    // Its mini-table shows the second attack's own allocation.
-    expect
-      .soft(
-        tableShows(
-          secondReview.phase1DefenseCells,
-          combinationValues(secondReview.combinationLine),
-        ),
-        note("second review: the mini-table shows the second attack's row", secondReview),
-      )
-      .toBe(true);
-    await captureAtUsableWidths(gmPage, "two-attackers-second");
+      // Walk on (parry, damage, ...) until the second attack's review opens.
+      const reached = await walk(
+        world,
+        ({ buttons, state }) =>
+          buttons.includes("Commit defense review") && state.defenseSnapshots.length === 1,
+      );
+      if (reached !== "stopped") {
+        return noReviewReason(
+          world,
+          defender!.combatantId,
+          "the walk must reach the second attack's review",
+        );
+      }
+      const atSecond = await readRoundState(gmPage.request, world.encounterId);
+      const attacks = incomingAttacks(atSecond, defender!.combatantId);
+      console.log(
+        `#874 two: incoming attacks ${JSON.stringify(attacks.map((attack) => [attack.attackerParticipantId, attack.hit]))}`,
+      );
+      await selectGmInspectorParticipant(gmPage, defender!.name);
+      await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
+      await gmPage.waitForTimeout(800);
+      const secondReview = await readSurface(gmPage);
+      console.log(`#874 two: second review: ${JSON.stringify(secondReview)}`);
+      // The second attack starts from the default: both included.
+      expect(
+        secondReview.checkboxes.every((entry) => entry.checked),
+        note("second review defaults", secondReview),
+      ).toBe(true);
+      // The panel shows no committed review of the first attack while the second is under review.
+      expect
+        .soft(
+          secondReview.snapshotPanels.some((text) => text.includes("excluded")),
+          note("second review must not show the first attack's committed review", secondReview),
+        )
+        .toBe(false);
+      // Its mini-table shows the second attack's own allocation.
+      expect
+        .soft(
+          tableShows(
+            secondReview.phase1DefenseCells,
+            combinationValues(secondReview.combinationLine),
+          ),
+          note("second review: the mini-table shows the second attack's row", secondReview),
+        )
+        .toBe(true);
+      await captureAtUsableWidths(gmPage, "two-attackers-second");
 
-    // Commit the second at the default; its own review then shows both included.
-    const secondCommitted = gmPage.waitForResponse((response) =>
-      response.url().includes("/combat-round/commit-defense-review"),
-    );
-    await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
-    expect((await secondCommitted).ok()).toBe(true);
-    await gmPage.waitForTimeout(1500);
-    await selectGmInspectorParticipant(gmPage, defender!.name);
-    const afterSecond = await readSurface(gmPage);
-    const secondSnapshot = (
-      await readRoundState(gmPage.request, world.encounterId)
-    ).defenseSnapshots.at(-1)!;
-    console.log(
-      `#874 two: second snapshot attacker=${secondSnapshot.attackerParticipantId} direction=${secondSnapshot.attackDirection} sources=${JSON.stringify(secondSnapshot.sources.map((source) => [source.slot, source.included, source.decision]))}; panel=${JSON.stringify(afterSecond.snapshotPanels)}`,
-    );
-    expect(secondSnapshot.attackerParticipantId).not.toBe(firstSnapshot.attackerParticipantId);
-    expect
-      .soft(
-        afterSecond.snapshotPanels.every((text) => !text.includes("excluded")),
-        note("after the second commit the panel shows the second attack's review", afterSecond),
-      )
-      .toBe(true);
-    await world.playerContextClose();
+      // Commit the second at the default; its own review then shows both included.
+      const secondCommitted = gmPage.waitForResponse((response) =>
+        response.url().includes("/combat-round/commit-defense-review"),
+      );
+      await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
+      expect((await secondCommitted).ok()).toBe(true);
+      await gmPage.waitForTimeout(1500);
+      await selectGmInspectorParticipant(gmPage, defender!.name);
+      const afterSecond = await readSurface(gmPage);
+      const secondSnapshot = (
+        await readRoundState(gmPage.request, world.encounterId)
+      ).defenseSnapshots.at(-1)!;
+      console.log(
+        `#874 two: second snapshot attacker=${secondSnapshot.attackerParticipantId} direction=${secondSnapshot.attackDirection} sources=${JSON.stringify(secondSnapshot.sources.map((source) => [source.slot, source.included, source.decision]))}; panel=${JSON.stringify(afterSecond.snapshotPanels)}`,
+      );
+      expect(secondSnapshot.attackerParticipantId).not.toBe(firstSnapshot.attackerParticipantId);
+      expect
+        .soft(
+          afterSecond.snapshotPanels.every((text) => !text.includes("excluded")),
+          note("after the second commit the panel shows the second attack's review", afterSecond),
+        )
+        .toBe(true);
+      await world.playerContextClose();
+      return undefined;
+    });
   });
 
   test("a Feint-Attack defense review offers both sources and an untick moves only that review", async ({
     browser,
     page: gmPage,
   }) => {
-    test.setTimeout(360_000);
-    const world = await openWorld({
-      browser,
-      entries: [
-        { key: "attacker", skills: { dodge: 1, weapon: 60 } },
-        { key: "feinter", player: true, skills: { dodge: 1, weapon: 9 } },
-      ],
-      gmPage,
-      tag: "feint",
-    });
-    const { attacker, feinter } = world.combatants as Record<string, Combatant>;
-    await openGmCombat(world);
-    await declare(world, {
-      actionId: "feint_attack",
-      who: feinter!.name,
-      targetName: attacker!.name,
-    });
-    await declare(world, {
-      actionId: "attack_parry",
-      who: attacker!.name,
-      targetName: feinter!.name,
-    });
+    test.setTimeout(900_000);
+    await withConnectingAttack("Feint case", async () => {
+      const world = await openWorld({
+        browser,
+        entries: [
+          { key: "attacker", skills: { dodge: 1, weapon: 60 } },
+          { key: "feinter", player: true, skills: { dodge: 1, weapon: 9 } },
+        ],
+        gmPage,
+        tag: "feint",
+      });
+      const { attacker, feinter } = world.combatants as Record<string, Combatant>;
+      await openGmCombat(world);
+      await declare(world, {
+        actionId: "feint_attack",
+        who: feinter!.name,
+        targetName: attacker!.name,
+      });
+      await declare(world, {
+        actionId: "attack_parry",
+        who: attacker!.name,
+        targetName: feinter!.name,
+      });
 
-    // The player's own declaration surface for that Feint, read and hashed once declared.
-    const playerPage = await world.playerPage();
-    await playerPage.setViewportSize({ height: 900, width: 1440 });
-    await playerPage.goto(
-      `/campaigns/${world.campaignId}/scenarios/${world.scenarioId}/player/combat`,
-    );
-    await expect(
-      playerPage.locator('section:has(> div > strong:text-is("Phase 1"))').first(),
-    ).toBeVisible({ timeout: 30_000 });
-    await playerPage.waitForTimeout(1500);
-    const playerRead = await playerPage.evaluate(
-      (names) => {
-        const sections = [...document.querySelectorAll("section")].filter((candidate) => {
-          const heading = candidate.firstElementChild?.firstElementChild;
-          return (
-            heading?.tagName === "STRONG" &&
-            (heading.textContent === "Phase 1" || heading.textContent === "Phase 2")
+      // The player's own declaration surface for that Feint, read and hashed once declared.
+      const playerPage = await world.playerPage();
+      await playerPage.setViewportSize({ height: 900, width: 1440 });
+      await playerPage.goto(
+        `/campaigns/${world.campaignId}/scenarios/${world.scenarioId}/player/combat`,
+      );
+      await expect(
+        playerPage.locator('section:has(> div > strong:text-is("Phase 1"))').first(),
+      ).toBeVisible({ timeout: 30_000 });
+      await playerPage.waitForTimeout(1500);
+      const playerRead = await playerPage.evaluate(
+        (names) => {
+          const sections = [...document.querySelectorAll("section")].filter((candidate) => {
+            const heading = candidate.firstElementChild?.firstElementChild;
+            return (
+              heading?.tagName === "STRONG" &&
+              (heading.textContent === "Phase 1" || heading.textContent === "Phase 2")
+            );
+          });
+          let html = sections.map((section) => section.outerHTML).join("\n");
+          for (const name of names) html = html.split(name).join("<name>");
+          html = html.replace(/\d{13}/g, "<suffix>");
+          // Equipment item ids are generated per run; the rendered surface is otherwise identical.
+          html = html.replace(
+            /item-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+            "item-<uuid>",
           );
-        });
-        let html = sections.map((section) => section.outerHTML).join("\n");
-        for (const name of names) html = html.split(name).join("<name>");
-        html = html.replace(/\d{13}/g, "<suffix>");
-        // Equipment item ids are generated per run; the rendered surface is otherwise identical.
-        html = html.replace(
-          /item-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
-          "item-<uuid>",
+          return {
+            html,
+            parrySourceSelectors: sections.map(
+              (section) => section.querySelectorAll('select[aria-label="Parry source"]').length,
+            ),
+            scrollY: Math.round(window.scrollY),
+            usableWidth: document.documentElement.clientWidth,
+          };
+        },
+        [feinter!.name, attacker!.name],
+      );
+      const playerHash = createHash("sha256").update(playerRead.html).digest("hex");
+      mkdirSync(CAPTURE_DIR, { recursive: true });
+      writeFileSync(
+        path.join(CAPTURE_DIR, `${CAPTURE_LABEL}-feint-player-declaration.html`),
+        playerRead.html,
+      );
+      console.log(
+        `#874 feint player declaration surface: selectors=${JSON.stringify(playerRead.parrySourceSelectors)} sha256=${playerHash} length=${playerRead.html.length} usable=${playerRead.usableWidth}`,
+      );
+      expect(playerRead.parrySourceSelectors, "player Feint selector gate unchanged").toEqual([
+        0, 0,
+      ]);
+
+      await waitForResolution(world);
+      const reason = await walk(world, ({ buttons }) => buttons.includes("Commit defense review"));
+      if (reason !== "stopped") {
+        return noReviewReason(
+          world,
+          feinter!.combatantId,
+          "the walk must reach the Feint-Attack declarer's defense review",
         );
-        return {
-          html,
-          parrySourceSelectors: sections.map(
-            (section) => section.querySelectorAll('select[aria-label="Parry source"]').length,
-          ),
-          scrollY: Math.round(window.scrollY),
-          usableWidth: document.documentElement.clientWidth,
-        };
-      },
-      [feinter!.name, attacker!.name],
-    );
-    const playerHash = createHash("sha256").update(playerRead.html).digest("hex");
-    mkdirSync(CAPTURE_DIR, { recursive: true });
-    writeFileSync(
-      path.join(CAPTURE_DIR, `${CAPTURE_LABEL}-feint-player-declaration.html`),
-      playerRead.html,
-    );
-    console.log(
-      `#874 feint player declaration surface: selectors=${JSON.stringify(playerRead.parrySourceSelectors)} sha256=${playerHash} length=${playerRead.html.length} usable=${playerRead.usableWidth}`,
-    );
-    expect(playerRead.parrySourceSelectors, "player Feint selector gate unchanged").toEqual([0, 0]);
+      }
+      const state = await readRoundState(gmPage.request, world.encounterId);
+      const [attack] = incomingAttacks(state, feinter!.combatantId);
+      expect(attack?.hit, "the skilled attack on the feinter must connect").toBe(true);
+      await selectGmInspectorParticipant(gmPage, feinter!.name);
+      await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
+      await gmPage.waitForTimeout(800);
+      const feintBoth = await readSurface(gmPage);
+      console.log(`#874 feint review both: ${JSON.stringify(feintBoth)}`);
+      expect(feintBoth.checkboxes.map((entry) => entry.name.split(":")[0]).sort()).toEqual([
+        "Main hand",
+        "Off hand",
+      ]);
+      expect(
+        feintBoth.checkboxes.every((entry) => entry.checked),
+        note("feint both", feintBoth),
+      ).toBe(true);
+      expect
+        .soft(
+          tableShows(feintBoth.phase1DefenseCells, combinationValues(feintBoth.combinationLine)),
+          note("feint both: the mini-table shows the row in force", feintBoth),
+        )
+        .toBe(true);
+      await captureAtUsableWidths(gmPage, "feint");
 
-    await waitForResolution(world);
-    const reason = await walk(world, ({ buttons }) => buttons.includes("Commit defense review"));
-    expect(reason, "the walk must reach the Feint-Attack declarer's defense review").toBe(
-      "stopped",
-    );
-    const state = await readRoundState(gmPage.request, world.encounterId);
-    const [attack] = incomingAttacks(state, feinter!.combatantId);
-    expect(attack?.hit, "the skilled attack on the feinter must connect").toBe(true);
-    await selectGmInspectorParticipant(gmPage, feinter!.name);
-    await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
-    await gmPage.waitForTimeout(800);
-    const feintBoth = await readSurface(gmPage);
-    console.log(`#874 feint review both: ${JSON.stringify(feintBoth)}`);
-    expect(feintBoth.checkboxes.map((entry) => entry.name.split(":")[0]).sort()).toEqual([
-      "Main hand",
-      "Off hand",
-    ]);
-    expect(
-      feintBoth.checkboxes.every((entry) => entry.checked),
-      note("feint both", feintBoth),
-    ).toBe(true);
-    expect
-      .soft(
-        tableShows(feintBoth.phase1DefenseCells, combinationValues(feintBoth.combinationLine)),
-        note("feint both: the mini-table shows the row in force", feintBoth),
-      )
-      .toBe(true);
-    await captureAtUsableWidths(gmPage, "feint");
-
-    await gmPage.getByRole("checkbox", { name: /^Main hand: / }).click();
-    const shieldOnly = await readSurface(gmPage);
-    console.log(`#874 feint review shield only: ${JSON.stringify(shieldOnly)}`);
-    const feintDelta = parryMovesWith({ after: shieldOnly, before: feintBoth });
-    console.log(`#874 feint parry delta on untick: ${JSON.stringify(feintDelta)}`);
-    expect
-      .soft(
-        Math.sign(feintDelta.tableDelta),
-        note("feint shield only: P follows the row", shieldOnly),
-      )
-      .toBe(Math.sign(feintDelta.combinationDelta));
-    expect(shieldOnly.combinationLine).not.toBe(feintBoth.combinationLine);
-    expect
-      .soft(
-        tableShows(shieldOnly.phase1DefenseCells, combinationValues(shieldOnly.combinationLine)),
-        note("feint shield only: the mini-table shows the row in force", shieldOnly),
-      )
-      .toBe(true);
-    const committed = gmPage.waitForResponse((response) =>
-      response.url().includes("/combat-round/commit-defense-review"),
-    );
-    await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
-    expect((await committed).ok()).toBe(true);
-    const after = await readRoundState(gmPage.request, world.encounterId);
-    const snapshot = after.defenseSnapshots.at(-1);
-    console.log(`#874 feint committed sources: ${JSON.stringify(snapshot?.sources)}`);
-    expect(snapshot?.sources.find((source) => source.slot === "mainHand")?.decision).toBe(
-      "gm_excluded",
-    );
-    // A GM-submitted selection records every source as the GM's decision (`gm_included`).
-    expect(snapshot?.sources.find((source) => source.slot === "offHand")?.included).toBe(true);
-    await world.playerContextClose();
+      await gmPage.getByRole("checkbox", { name: /^Main hand: / }).click();
+      const shieldOnly = await readSurface(gmPage);
+      console.log(`#874 feint review shield only: ${JSON.stringify(shieldOnly)}`);
+      const feintDelta = parryMovesWith({ after: shieldOnly, before: feintBoth });
+      console.log(`#874 feint parry delta on untick: ${JSON.stringify(feintDelta)}`);
+      expect
+        .soft(
+          Math.sign(feintDelta.tableDelta),
+          note("feint shield only: P follows the row", shieldOnly),
+        )
+        .toBe(Math.sign(feintDelta.combinationDelta));
+      expect(shieldOnly.combinationLine).not.toBe(feintBoth.combinationLine);
+      expect
+        .soft(
+          tableShows(shieldOnly.phase1DefenseCells, combinationValues(shieldOnly.combinationLine)),
+          note("feint shield only: the mini-table shows the row in force", shieldOnly),
+        )
+        .toBe(true);
+      const committed = gmPage.waitForResponse((response) =>
+        response.url().includes("/combat-round/commit-defense-review"),
+      );
+      await gmPage.getByRole("button", { name: "Commit defense review", exact: true }).click();
+      expect((await committed).ok()).toBe(true);
+      const after = await readRoundState(gmPage.request, world.encounterId);
+      const snapshot = after.defenseSnapshots.at(-1);
+      console.log(`#874 feint committed sources: ${JSON.stringify(snapshot?.sources)}`);
+      expect(snapshot?.sources.find((source) => source.slot === "mainHand")?.decision).toBe(
+        "gm_excluded",
+      );
+      // A GM-submitted selection records every source as the GM's decision (`gm_included`).
+      expect(snapshot?.sources.find((source) => source.slot === "offHand")?.included).toBe(true);
+      await world.playerContextClose();
+      return undefined;
+    });
   });
 });
