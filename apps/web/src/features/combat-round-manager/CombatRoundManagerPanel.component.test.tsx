@@ -2997,7 +2997,11 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
       await screen.findByText(/Combat inspector — Scyrian cavalry guy · Round 1 · Declaration/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Declare action" })).toBeEnabled();
-    expect(screen.getByText(/The Gladiator declared Parry/)).toBeInTheDocument();
+    const combatLog = screen.getByRole("region", { name: "Combat Log" });
+    expect(within(combatLog).getByText(/The Gladiator declared Parry/)).toBeInTheDocument();
+    expect(screen.getByTestId("combat-last-action")).toHaveTextContent(
+      "Last action: The Gladiator declared Parry",
+    );
     const attackerDeclarationCell = screen.getByRole("button", {
       name: /The Gladiator.*Round 1.*DE.*declared by player/i,
     });
@@ -3011,9 +3015,16 @@ describe("CombatRoundManagerPanel post-mutation task adoption", () => {
     expect(
       screen.getByRole("heading", { name: /Combat inspector — The Gladiator · Round 1/ }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/The Gladiator declared Parry/)).toBeInTheDocument();
-    expect(screen.getByText(/Scyrian cavalry guy declared Parry/)).toBeInTheDocument();
-    expect(screen.getAllByText(/declared Parry/)).toHaveLength(2);
+    const finalCombatLog = screen.getByRole("region", { name: "Combat Log" });
+    expect(within(finalCombatLog).getByText(/The Gladiator declared Parry/)).toBeInTheDocument();
+    expect(
+      within(finalCombatLog).getByText(/Scyrian cavalry guy declared Parry/),
+    ).toBeInTheDocument();
+    expect(within(finalCombatLog).getAllByText(/declared Parry/)).toHaveLength(2);
+    // The line names the most recent actor, whoever is being inspected.
+    expect(screen.getByTestId("combat-last-action")).toHaveTextContent(
+      /Last action: (The Gladiator|Scyrian cavalry guy) declared Parry/,
+    );
   });
 
   it("preserves manual inspection across a remote revision and resumes its newest current task", async () => {
