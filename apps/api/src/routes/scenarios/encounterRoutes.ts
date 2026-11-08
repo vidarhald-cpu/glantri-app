@@ -309,7 +309,6 @@ import {
   playerFacingCombatMissileReadinessSchema,
   playerFacingCombatRoundEndReviewSchema,
   playerFacingCombatMissileIncomingAttackSchema,
-  playerFacingCombatRoundAttackRollResultSchema,
   playerFacingCombatRoundStateSchema,
   playerFacingCombatSkillContestCalculationSchema,
   playerFacingContinuedContactMaintenanceContestSchema,
@@ -317,8 +316,8 @@ import {
   playerFacingEncounterParticipantSchema,
   playerFacingOffensiveParryContestSchema,
   playerFacingRoleplayStateSchema,
+  projectPlayerOwnAttackResult,
   type CombatMissileIncomingAttack,
-  type CombatRoundAttackRollResult,
   type CombatRoundCommandType,
   type PlayerFacingCombatRoundCommand,
   type PlayerFacingCombatRoundParticipant,
@@ -6660,11 +6659,12 @@ export function buildPlayerSafeCombatRoundCommandForUser(
  * compact contract inherits that because its `mutationPresentation` is built from this payload.
  *
  * The GM's response keeps the stored value, which is where the ruling says the flag belongs.
+ *
+ * #1044. The attack result's allow-list now lives in `@glantri/domain` as
+ * `projectPlayerOwnAttackResult`, the one definition this response and the combat history's
+ * snapshot panel both use, so the two cannot drift apart. The pending missile shot stays here: the
+ * combat history does not project it.
  */
-function playerOwnAttackResult(attack: CombatRoundAttackRollResult | undefined) {
-  return attack && buildPlayerFacing(playerFacingCombatRoundAttackRollResultSchema, attack);
-}
-
 function playerOwnPendingMissileAttack(attack: CombatMissileIncomingAttack | undefined) {
   return attack && buildPlayerFacing(playerFacingCombatMissileIncomingAttackSchema, attack);
 }
@@ -18337,7 +18337,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           : undefined;
 
       return {
-        attackResult: access.mode === "gm" ? attackResult : playerOwnAttackResult(attackResult),
+        attackResult:
+          access.mode === "gm" ? attackResult : projectPlayerOwnAttackResult(attackResult),
         pendingMissileAttack:
           access.mode === "gm"
             ? pendingMissileAttack
