@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { ProjectedCombatHistoryEvent } from "@glantri/domain";
 
-import { buildCombatCalculationPresentations } from "./buildCombatCalculationPresentations";
+import {
+  buildCombatCalculationPresentationFromSnapshot,
+  buildCombatCalculationPresentations,
+} from "./buildCombatCalculationPresentations";
 import {
   buildCombatCalculationPresentationLines,
   buildCombatCalculationPresentationRows,
@@ -173,17 +176,13 @@ describe("shared combat calculation presentation", () => {
       skillXp: 8,
     };
     const presentation = buildCombatCalculationPresentations(
-      event(
-        "feint_roll",
-        privateCalculation,
-        {
-          facts: {
-            involvedOutcome: { side: "defender" },
-            privateCalculation,
-            publicOutcome: {},
-          },
+      event("feint_roll", privateCalculation, {
+        facts: {
+          involvedOutcome: { side: "defender" },
+          privateCalculation,
+          publicOutcome: {},
         },
-      ),
+      }),
     )[0];
 
     expect(buildCombatCalculationPresentationLines(presentation!)).toEqual([
@@ -747,5 +746,88 @@ describe("shared combat calculation presentation", () => {
     );
     expect(presentation).toEqual([]);
     expect(JSON.stringify(presentation)).not.toMatch(/secret|margin|success|tableBand/i);
+  });
+});
+
+describe("GM-only extrapolation markers on the attack calculation (#1002)", () => {
+  const attackFacts = (extra: Record<string, unknown> = {}) => ({
+    defenderDb: 12,
+    lookupTotal: 83,
+    ob: 81,
+    openEndedD10s: [],
+    rollD20: 14,
+    rollTotal: 14,
+    ...extra,
+  });
+  const markedLabels = (presentation: {
+    derivedValues: readonly { label: string; marker?: unknown }[];
+  }) => presentation.derivedValues.filter((value) => value.marker).map((value) => value.label);
+  const snapshot = (facts: Record<string, unknown>) =>
+    buildCombatCalculationPresentationFromSnapshot({
+      calculationId: "snap:attack",
+      calculationType: "attack",
+      facts,
+      label: "To hit",
+    })!;
+
+  it("marks OB and Defender DB independently from the snapshot entry point", () => {
+    const both = snapshot(
+      attackFacts({ extrapolatedWorkbookAdjustments: ["attacker_ob", "defender_db"] }),
+    );
+    expect(markedLabels(both)).toEqual(["OB", "Defender DB"]);
+    expect(both.derivedValues[0]?.marker).toEqual({
+      detail: "Resolved past the table. Review this figure.",
+      label: "Extrapolated",
+    });
+    expect(
+      markedLabels(snapshot(attackFacts({ extrapolatedWorkbookAdjustments: ["attacker_ob"] }))),
+    ).toEqual(["OB"]);
+    expect(
+      markedLabels(snapshot(attackFacts({ extrapolatedWorkbookAdjustments: ["defender_db"] }))),
+    ).toEqual(["Defender DB"]);
+  });
+
+  it("leaves unflagged and unrelated figures unmarked, and the row text unchanged", () => {
+    expect(markedLabels(snapshot(attackFacts()))).toEqual([]);
+    expect(markedLabels(snapshot(attackFacts({ extrapolatedWorkbookAdjustments: [] })))).toEqual(
+      [],
+    );
+    const flagged = snapshot(
+      attackFacts({ extrapolatedWorkbookAdjustments: ["attacker_ob", "defender_db"] }),
+    );
+    const plain = snapshot(attackFacts());
+    expect(buildCombatCalculationPresentationLines(flagged)).toEqual(
+      buildCombatCalculationPresentationLines(plain),
+    );
+  });
+
+  it("marks the committed Adjusted OB, not the base, when a base figure is shown", () => {
+    const presentation = snapshot(
+      attackFacts({
+        extrapolatedWorkbookAdjustments: ["attacker_ob"],
+        obBeforeOpponentSpecificModifier: 70,
+      }),
+    );
+    expect(markedLabels(presentation)).toEqual(["Adjusted OB"]);
+  });
+
+  it("never marks on the event-ledger path, even if the flag appears among event facts", () => {
+    const presentation = buildCombatCalculationPresentations(
+      event(
+        "attack",
+        attackFacts({ extrapolatedWorkbookAdjustments: ["attacker_ob", "defender_db"] }),
+      ),
+    )[0]!;
+    expect(markedLabels(presentation)).toEqual([]);
+    expect(buildCombatCalculationPresentationRows(presentation).some((row) => row.marker)).toBe(
+      false,
+    );
+  });
+
+  it("carries the marker onto exactly the flagged presentation rows", () => {
+    const rows = buildCombatCalculationPresentationRows(
+      snapshot(attackFacts({ extrapolatedWorkbookAdjustments: ["defender_db"] })),
+    );
+    expect(rows.filter((row) => row.marker).map((row) => row.text)).toEqual(["Defender DB: 12"]);
   });
 });

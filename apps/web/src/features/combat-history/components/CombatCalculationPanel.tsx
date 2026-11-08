@@ -1,9 +1,35 @@
 import React from "react";
 
 import {
+  COMBAT_EXTRAPOLATION_MARKER_BADGE_STYLE,
+  COMBAT_EXTRAPOLATION_MARKER_DETAIL_STYLE,
+} from "@/lib/campaigns/combatExtrapolationPresentation";
+import {
   buildCombatCalculationPresentationRows,
   type CombatCalculationPresentation,
+  type CombatCalculationPresentationRow,
 } from "../view-models/combatCalculationPresentation";
+
+function CombatCalculationRow({ row }: { row: CombatCalculationPresentationRow }) {
+  if (!row.marker) return <div>{row.text}</div>;
+  return (
+    <div data-testid="combat-calculation-extrapolated-row">
+      {row.text}
+      <span
+        data-testid="combat-calculation-extrapolation-marker"
+        style={COMBAT_EXTRAPOLATION_MARKER_BADGE_STYLE}
+      >
+        {row.marker.label}
+      </span>
+      <div
+        data-testid="combat-calculation-extrapolation-detail"
+        style={COMBAT_EXTRAPOLATION_MARKER_DETAIL_STYLE}
+      >
+        {row.marker.detail}
+      </div>
+    </div>
+  );
+}
 
 export function CombatCalculationPanel(input: {
   expanded?: boolean;
@@ -49,7 +75,7 @@ export function CombatCalculationPanel(input: {
             style={{ display: "grid", gap: "0.12rem" }}
           >
             {rows.map((row) => (
-              <div key={row.key}>{row.text}</div>
+              <CombatCalculationRow key={row.key} row={row} />
             ))}
           </div>
         ) : null}
@@ -71,7 +97,7 @@ export function CombatCalculationPanel(input: {
       </summary>
       <div style={{ display: "grid", gap: "0.12rem", paddingTop: "0.25rem" }}>
         {rows.map((row) => (
-          <div key={row.key}>{row.text}</div>
+          <CombatCalculationRow key={row.key} row={row} />
         ))}
       </div>
     </details>

@@ -26,8 +26,19 @@ export interface CombatCalculationSubject {
   readonly participantId?: string;
 }
 
+/**
+ * The GM-only extrapolation marker for one figure (#1002). Structured rather than folded into
+ * the row string, so the badge can sit beside the figure and the sentence beneath it. Only the
+ * GM snapshot entry point ever attaches one.
+ */
+export interface CombatCalculationFigureMarker {
+  readonly detail: string;
+  readonly label: string;
+}
+
 export interface CombatCalculationLabeledValue {
   readonly label: string;
+  readonly marker?: CombatCalculationFigureMarker;
   readonly value: number;
 }
 
@@ -94,6 +105,7 @@ export interface CombatCalculationPresentationRow {
     | "die"
     | "result";
   readonly key: string;
+  readonly marker?: CombatCalculationFigureMarker;
   readonly text: string;
 }
 
@@ -142,6 +154,7 @@ export function buildCombatCalculationPresentationRows(
     rows.push({
       key: `${presentation.calculationId}:derived:${index}`,
       kind: "derived",
+      ...(value.marker ? { marker: value.marker } : {}),
       text: `${value.label}: ${value.value}`,
     });
   }
