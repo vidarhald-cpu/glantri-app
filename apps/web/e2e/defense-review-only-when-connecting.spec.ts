@@ -35,11 +35,10 @@ import { API_URL } from "./targets";
  * ## Why the absences are not vacuous
  *
  * The defense review is conditional, so "absent" proves nothing unless the surface that carries it
- * is mounted. Every absence here is taken after clicking the defender's own enabled `P1` tracker
- * cell — the baseline mount condition — and is paired with a positive control read on the same
- * page: for the miss, the defender's mounted DB/DM/P mini-table (since #874 a miss carries no
- * review task, so no commit control either); for the removed awareness checkbox, the two per-hand
- * checkboxes inside the same region.
+ * is mounted. The hit's absences are taken after clicking the defender's own enabled `P1` tracker
+ * cell — the baseline mount condition — and are paired with the two per-hand checkboxes inside the
+ * same region. Since #874 a miss has no `P1` parry step and no review task, so its absences are
+ * taken with the inspector mounted on the defender, paired with the rendered miss result.
  *
  * ## Read method
  *
@@ -616,7 +615,25 @@ test.describe("Defense review is asked for only when the attack connects (#832)"
     ).toBe(true);
     expect(bothAgain.combinationLine, describe("both again", bothAgain)).toBe(bothHandsCombination);
 
-    // ================= CASE 2: the attack already missed =================
+    // ================= CASE 2: the hit reloaded, same page =================
+    /*
+     * Before the miss is written: the same hit state on a fresh load mounts the region again, so the
+     * miss's absences below cannot be explained by a fetch that had not landed yet. (The miss runs
+     * last because since #874 it records one more command than the hit, and a later write may not
+     * rewind the recorded command log.)
+     */
+    await writeState(hitState);
+    await openDefenderParryCell();
+    await expect(gmPage.locator('[aria-label="Defense review choices"]')).toBeVisible();
+    await waitForPerHandSources();
+    const restored = await readReview(gmPage);
+    console.log(`#832 hit restored: ${JSON.stringify(restored)}`);
+    expect(restored.regionPresent, describe("restored", restored)).toBe(true);
+    expect(restored.checkboxes.length, describe("restored", restored)).toBe(2);
+    expect(restored.awarenessPresent, describe("restored", restored)).toBe(false);
+    expect(restored.combinationLine, describe("restored", restored)).toBe(bothHandsCombination);
+
+    // ================= CASE 3: the attack already missed =================
     /*
      * Only one recorded fact changes: the attack result's `hit`. Everything else that decides
      * whether the review surface can mount — the same encounter, the same participants, the same
@@ -624,9 +641,9 @@ test.describe("Defense review is asked for only when the attack connects (#832)"
      * has already shown on this very page that the region, both per-hand controls and the commit
      * control do mount under it. #874 (Product Owner ruling of 2026-11-08): the miss is recorded
      * at the attack commit, so no `commit_defense_review` task exists and neither the choices nor
-     * the commit control may render. The defender's mounted DB/DM/P mini-table is the positive
-     * control. Case 3 then restores the hit and the region returns, so this absence cannot be
-     * explained by a fetch that had not landed yet.
+     * the commit control may render. The inspector mounted on the defender and the rendered miss
+     * result are the positive controls, and case 2 has just shown the region mounting again on a
+     * fresh load of the hit.
      */
     const missState = buildDefenseSubstepState({ ob: 20, rollTotal: 3 });
     // #874: the miss is recorded at the attack commit and no defense review is scheduled for it.
@@ -636,7 +653,7 @@ test.describe("Defense review is asked for only when the attack connects (#832)"
     ).not.toBe("defense");
     await writeState(missState);
     // With no review owed there is no `P1` parry step, so no enabled `P1` cell to click: the miss
-    // is read on the Combat surface as it opens, with the mounted mini-table as positive control.
+    // is read on the Combat surface with the defender selected through the inspector navigation.
     await gmPage.goto(
       `/campaigns/${campaignId}?scenarioId=${scenarioId}&encounterId=${encounterId}&tab=combat`,
     );
@@ -655,12 +672,16 @@ test.describe("Defense review is asked for only when the attack connects (#832)"
       }
     }
     await expect(defenderHeading).toBeVisible();
-    // The defender's derived defence context is on screen, so the panel has the defender's
-    // equipment: the region's absence is not a pending read of it.
+    // Positive controls for the absences below: the inspector is mounted on the defender, and the
+    // recorded miss is rendered on the defender's own `P1` tracker cell. (After a miss there is no Parry step, so the
+    // defender's DB/DM/P mini-table has no step to mount on.)
     await expect(
       gmPage
-        .locator("table")
-        .filter({ has: gmPage.locator('th:text-is("DM")') })
+        .getByRole("button", {
+          name: new RegExp(
+            `^${characterName} · Round 1 · P1: No parry required\\. The incoming attack missed\\.`,
+          ),
+        })
         .first(),
     ).toBeVisible();
     await gmPage.screenshot({
@@ -671,23 +692,10 @@ test.describe("Defense review is asked for only when the attack connects (#832)"
     console.log(`#832 miss: ${JSON.stringify(miss)}`);
     // #874: no review surface at all — neither the choices nor the commit control.
     expect(miss.commitControlPresent, describe("miss", miss)).toBe(false);
-    expect(miss.miniTables.length, describe("miss", miss)).toBeGreaterThan(0);
     expect(miss.regionPresent, describe("miss", miss)).toBe(false);
     expect(miss.checkboxes, describe("miss", miss)).toEqual([]);
     expect(miss.awarenessPresent, describe("miss", miss)).toBe(false);
     expect(miss.implementationProsePresent, describe("miss", miss)).toBe(false);
-
-    // ================= CASE 3: the hit restored, same page =================
-    await writeState(hitState);
-    await openDefenderParryCell();
-    await expect(gmPage.locator('[aria-label="Defense review choices"]')).toBeVisible();
-    await waitForPerHandSources();
-    const restored = await readReview(gmPage);
-    console.log(`#832 hit restored: ${JSON.stringify(restored)}`);
-    expect(restored.regionPresent, describe("restored", restored)).toBe(true);
-    expect(restored.checkboxes.length, describe("restored", restored)).toBe(2);
-    expect(restored.awarenessPresent, describe("restored", restored)).toBe(false);
-    expect(restored.combinationLine, describe("restored", restored)).toBe(bothHandsCombination);
 
     await playerContext.close();
   });
