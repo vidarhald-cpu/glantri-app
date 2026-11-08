@@ -39,14 +39,18 @@ import { API_URL } from "./targets";
  * Reads are atomic: every rectangle and value is taken in one `page.evaluate` together with
  * `scrollY` and the usable width, because this page autoscrolls after mount.
  *
- * Captures: `<repo>/.local-artifacts/874/captures/<before|after>-<case>-<usable width>.png`, at
- * usable widths 1280 and 1024 (the viewport is widened by the measured scrollbar so the document's
- * own `clientWidth` is the stated width). `E874_CAPTURE_LABEL=before` labels a run against the
- * baseline build; its expectations are soft so the same spec produces the before-the-change
- * evidence and shows each probe capable of failing.
+ * Captures: `<repo>/.local-artifacts/874/captures/<label>-<case>-<usable width>.png`, at usable
+ * widths 1280 and 1024 (the viewport is widened by the measured scrollbar so the document's own
+ * `clientWidth` is the stated width). The label is `after` unless `E874_CAPTURE_LABEL` is `before`
+ * (a run against the baseline build) or `prerepair` (the head before a QA repair). Most
+ * expectations are soft so the same spec produces that evidence and shows each probe capable of
+ * failing.
  */
 
-const CAPTURE_LABEL = process.env.E874_CAPTURE_LABEL === "before" ? "before" : "after";
+const CAPTURE_LABEL =
+  process.env.E874_CAPTURE_LABEL === "before" || process.env.E874_CAPTURE_LABEL === "prerepair"
+    ? process.env.E874_CAPTURE_LABEL
+    : "after";
 const CAPTURE_DIR = path.resolve(__dirname, "../../../.local-artifacts/874/captures");
 const USABLE_WIDTHS = [1280, 1024] as const;
 
@@ -55,6 +59,7 @@ const SHIELD_TEMPLATE = "shield-template-medium-metal-shield";
 
 /** The canonical GM controls a walk may press, first enabled one wins. */
 const WALK_CONTROLS = [
+  /^Roll Combat Experience$/,
   /^Complete modifier review$/,
   /^Roll initiative$/,
   /^Roll feint/i,
@@ -196,6 +201,8 @@ interface SurfaceRead {
   missedTextPresent: boolean;
   phase1DefenseCells: string[];
   phase1ParrySourceSelectors: number;
+  /** The Phase 1 Parry source selector's state: disabled, and the option it shows. */
+  phase1ParrySource: { disabled: boolean; selected: string } | null;
   regionPresent: boolean;
   scrollY: number;
   snapshotPanels: string[];
@@ -242,6 +249,18 @@ async function readSurface(page: Page): Promise<SurfaceRead> {
         : [],
       phase1ParrySourceSelectors:
         phase1?.querySelectorAll('select[aria-label="Parry source"]').length ?? 0,
+      phase1ParrySource: (() => {
+        const select = phase1?.querySelector('select[aria-label="Parry source"]') as
+          | HTMLSelectElement
+          | null
+          | undefined;
+        return select
+          ? {
+              disabled: select.disabled,
+              selected: clean(select.selectedOptions[0]?.textContent),
+            }
+          : null;
+      })(),
       regionPresent: Boolean(region),
       scrollY: Math.round(window.scrollY),
       snapshotPanels: [
@@ -803,6 +822,78 @@ test.describe("Defense review is bound to the attack under resolution (#874)", (
     } else {
       console.log(`#874 hit: the walk did not reach Roll parry (${toParry}).`);
     }
+    await world.playerContextClose();
+  });
+
+  test("an attack_parry defender keeps its Parry source selector while an allocation is in force", async ({
+    browser,
+    page: gmPage,
+  }) => {
+    test.setTimeout(360_000);
+    const world = await openWorld({
+      browser,
+      entries: [
+        { key: "attacker", skills: { dodge: 1, weapon: 60 } },
+        { key: "defender", skills: { dodge: 1, weapon: 9 } },
+      ],
+      gmPage,
+      tag: "selector",
+    });
+    const { attacker, defender } = world.combatants as Record<string, Combatant>;
+    await openGmCombat(world);
+    await declare(world, {
+      actionId: "attack_parry",
+      who: attacker!.name,
+      targetName: defender!.name,
+    });
+    await declare(world, {
+      actionId: "attack_parry",
+      who: defender!.name,
+      targetName: attacker!.name,
+    });
+    await waitForResolution(world);
+
+    // Walk to the defender's own review (any other review is committed at its default).
+    const reason = await walk(
+      world,
+      ({ buttons, state }) =>
+        buttons.includes("Commit defense review") &&
+        state.phaseResolutionCursor?.participantId === defender!.combatantId &&
+        state.phaseResolutionCursor.substep === "defense",
+    );
+    expect(reason, "the walk must reach the attack_parry defender's review").toBe("stopped");
+    await selectGmInspectorParticipant(gmPage, defender!.name);
+    await expect(gmPage.getByRole("checkbox", { name: /^Off hand: / })).toBeVisible();
+    await gmPage.waitForTimeout(800);
+    const both = await readSurface(gmPage);
+    console.log(`#874 selector both: ${JSON.stringify(both)}`);
+    // QA B1: the selector stays rendered while the allocation is in force.
+    expect(both.phase1ParrySourceSelectors, note("selector with allocation", both)).toBe(1);
+    await captureAtUsableWidths(gmPage, "allocation-selector");
+
+    await gmPage.getByRole("checkbox", { name: /^Off hand: / }).click();
+    const weaponOnly = await readSurface(gmPage);
+    console.log(`#874 selector weapon only: ${JSON.stringify(weaponOnly)}`);
+    expect(weaponOnly.phase1ParrySourceSelectors, note("selector after untick", weaponOnly)).toBe(
+      1,
+    );
+    // It shows the row in force and is not a second, contradicting chooser.
+    const rowName = (read: SurfaceRead) => (read.combinationLine ?? "").split(" · DB ")[0] ?? "";
+    expect
+      .soft(
+        weaponOnly.phase1ParrySource?.selected.startsWith(`${rowName(weaponOnly)} · `),
+        note("selector shows the row in force", weaponOnly),
+      )
+      .toBe(true);
+    expect
+      .soft(both.phase1ParrySource?.selected.startsWith(`${rowName(both)} · `), note("both", both))
+      .toBe(true);
+    expect
+      .soft(weaponOnly.phase1ParrySource?.disabled, note("selector disabled", weaponOnly))
+      .toBe(true);
+    expect
+      .soft(both.phase1ParrySource?.selected, note("selector shows both", both))
+      .not.toBe(weaponOnly.phase1ParrySource?.selected);
     await world.playerContextClose();
   });
 

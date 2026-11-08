@@ -13071,6 +13071,14 @@ export default function CombatRoundManagerPanel({
                                 phaseDefenseSnapshot,
                               )
                             : undefined;
+                      const phaseDefenseAllocationRow = phaseDefenseAllocation
+                        ? defenseAllocation.selectCombatDefenseCombinationRow({
+                            mainHandLabel: phaseLoadoutSummary.mainHandParryItemLabel,
+                            offHandLabel: phaseLoadoutSummary.offHandParryItemLabel,
+                            options: phaseLoadoutSummary.parrySourceOptions,
+                            selection: phaseDefenseAllocation,
+                          })
+                        : undefined;
                       const phaseTargetIdentity = !inspectorIsHistorical
                         ? resolveCanonicalCombatTargetIdentity({
                             encounterParticipants: encounter.participants,
@@ -13131,13 +13139,7 @@ export default function CombatRoundManagerPanel({
                                     ...(phaseDefenseAllocation
                                       ? defenseAllocation.applyCombatDefenseAllocationToStats(
                                           stats,
-                                          defenseAllocation.selectCombatDefenseCombinationRow({
-                                            mainHandLabel:
-                                              phaseLoadoutSummary.mainHandParryItemLabel,
-                                            offHandLabel: phaseLoadoutSummary.offHandParryItemLabel,
-                                            options: phaseLoadoutSummary.parrySourceOptions,
-                                            selection: phaseDefenseAllocation,
-                                          }),
+                                          phaseDefenseAllocationRow,
                                         )
                                       : stats),
                                     provisional: inspectorHasLocalModifierEdits,
@@ -13744,19 +13746,30 @@ export default function CombatRoundManagerPanel({
                           {(!inspectorIsHistorical || historicalPhasePanel) &&
                           phaseModel.showDefenseContext ? (
                             <PlayerCombatDefenseGroup
-                              controlsDisabled={saving || inspectorIsHistorical}
-                              defaultParrySourceId={phaseLoadoutSummary.defaultParrySourceId}
+                              /*
+                               * #874 (QA B1). While an attack's allocation is in force the Parry
+                               * source selector stays rendered, shows the row that governs, and is
+                               * disabled: the review's hand checkboxes (before commit) or the
+                               * committed snapshot (after) decide it, as on the Parry card, so a
+                               * second live chooser could only contradict the value in force.
+                               */
+                              controlsDisabled={
+                                saving || inspectorIsHistorical || Boolean(phaseDefenseAllocation)
+                              }
+                              defaultParrySourceId={
+                                phaseDefenseAllocationRow?.id ??
+                                phaseLoadoutSummary.defaultParrySourceId
+                              }
                               defenseStats={phaseModel.defenseStats}
+                              // A presentational choice made before this attack's allocation
+                              // cannot survive into it (rule 4: nothing lingers between attacks).
+                              key={`defense-group:${phaseKey}:${phaseAttackUnderResolutionId ?? "none"}`}
                               parrySourceOptions={phaseLoadoutSummary.parrySourceOptions}
                               readOnly={inspectorIsHistorical}
                               separatedFromAttack={phaseAttackGroupRendered}
-                              showParrySourceSelector={
-                                // #874: while an attack's allocation is in force the mini-table
-                                // shows that allocation, so no second chooser can contradict it.
-                                isPlayerEncounterParryAllocationDeclaration(
-                                  inspectorDisplayDraft.actionId,
-                                ) && !phaseDefenseAllocation
-                              }
+                              showParrySourceSelector={isPlayerEncounterParryAllocationDeclaration(
+                                inspectorDisplayDraft.actionId,
+                              )}
                             >
                               <PlayerCombatParryContextPanel
                                 combatContext={phaseModel.phaseContext}
