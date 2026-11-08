@@ -12794,6 +12794,7 @@ export default function CombatRoundManagerPanel({
         ) : null}
 
         <CombatLastActionLine
+          committedInitiativeOrders={roundState.committedInitiativeOrders}
           gmEvents={combatPresentation.active.gmEvents}
           logEvents={combatLogProjection.events}
           participants={roundState.participants}
@@ -14164,7 +14165,11 @@ export default function CombatRoundManagerPanel({
                         presentation={recentResultPresentation}
                         title="Recent result"
                       />
-                    ) : null}
+                    ) : (
+                      // #836: holds the inspector row's third column that the removed
+                      // "Current step results" box occupied, so the row composition is unchanged.
+                      <div aria-hidden="true" />
+                    )}
                   </div>
                 </>
               ) : (
@@ -14223,7 +14228,10 @@ export default function CombatRoundManagerPanel({
                     presentation={recentResultPresentation}
                     title="Recent result"
                   />
-                ) : null}
+                ) : (
+                  // #836: holds the third column the removed box occupied (see above).
+                  <div aria-hidden="true" />
+                )}
               </div>
             </>
           )}

@@ -14,7 +14,18 @@ export interface CombatLastAction {
   readonly text: string;
 }
 
+/** The recorded result of a committed initiative (`state.committedInitiativeOrders`). */
+export interface CombatLastActionInitiativeCommit {
+  readonly entries: readonly {
+    readonly initiativeResult?: { readonly total: number };
+    readonly participantId: string;
+  }[];
+  readonly phase: string;
+  readonly roundNumber: number;
+}
+
 export interface BuildCombatLastActionInput {
+  readonly committedInitiativeOrders?: readonly CombatLastActionInitiativeCommit[];
   readonly gmEvents: readonly ProjectedCombatHistoryEvent[];
   readonly logEvents: readonly CombatLogEventPresentation[];
   readonly participants: readonly { readonly label: string; readonly participantId: string }[];
@@ -25,6 +36,17 @@ interface Candidate {
   readonly order: number;
   readonly result: CombatLastAction;
 }
+
+/** Order of the round's phases; a phase's initiative follows every strictly earlier phase. */
+const PHASE_RANK: Readonly<Record<string, number>> = {
+  declaration: 0,
+  phase1: 1,
+  phase2: 2,
+  round_end: 3,
+};
+
+/** A long order would stop being one short line. */
+const ORDER_NAMES_SHOWN = 4;
 
 function attackOutcomeWord(outcome: "grazed" | "hit" | "missed"): string {
   return outcome === "missed" ? "miss" : outcome === "grazed" ? "graze" : "hit";
@@ -43,6 +65,11 @@ function logEventText(event: CombatLogEventPresentation, actorLabel: string): st
       return `${actorLabel} parried${
         event.target ? ` ${event.target.displayName}` : ""
       } — ${facts.outcome}`;
+    case "damage_committed":
+      // A bleeding tick's actor is the bleeder, not someone who acted; only attack damage counts.
+      return facts.source === "attack" && event.target
+        ? `${actorLabel} dealt ${facts.amount} damage to ${event.target.displayName}`
+        : undefined;
     case "maneuver_attempt":
     case "participant_response":
     case "contest_resolved": {
@@ -56,21 +83,18 @@ function logEventText(event: CombatLogEventPresentation, actorLabel: string): st
 
 export function buildCombatLastAction(input: BuildCombatLastActionInput): CombatLastAction | null {
   const labels = new Map(input.participants.map((entry) => [entry.participantId, entry.label]));
-  const sequenceByEventId = new Map(input.gmEvents.map((event) => [event.id, event.sequence]));
-  // The Combat Log is already oldest-to-newest, so its own position is the order key. Raw events
-  // that the log does not project (an initiative roll) are placed by comparing source sequences
-  // against the log events that do resolve one, never by mixing the two scales.
+  // The Combat Log is already oldest-to-newest, so its own position is the order key. Many log
+  // entries are derived from legacy commands: they have no raw source event and may carry no
+  // timestamp, so neither source sequences nor times can order them reliably. Raw events the log
+  // does not project (an individual initiative roll) are placed by the round's own structure
+  // instead: a phase's initiative is rolled after every earlier phase's entries and before any of
+  // that phase's own entries. Placing it by sequence alone ranked a roll above every later entry.
   const candidates: Candidate[] = [];
-  const logSequences: Array<{ order: number; sequence: number }> = [];
+  const logPositions: Array<{ order: number; phase?: string }> = [];
 
   for (const [index, event] of input.logEvents.entries()) {
     if (event.roundNumber !== input.roundNumber || event.state !== "final") continue;
-    const sourceSequences = event.sourceEventIds
-      .map((id) => sequenceByEventId.get(id))
-      .filter((sequence): sequence is number => sequence !== undefined);
-    if (sourceSequences.length) {
-      logSequences.push({ order: index, sequence: Math.max(...sourceSequences) });
-    }
+    logPositions.push({ order: index, phase: event.phase });
     const actorLabel = event.actor?.displayName;
     if (!actorLabel) continue;
     const text = logEventText(event, actorLabel);
@@ -83,8 +107,14 @@ export function buildCombatLastAction(input: BuildCombatLastActionInput): Combat
     const actorLabel = event.ownerParticipantId ? labels.get(event.ownerParticipantId) : undefined;
     const total = event.facts.publicOutcome?.total;
     if (!actorLabel || typeof total !== "number") continue;
-    const precedingLog = logSequences
-      .filter((entry) => entry.sequence < event.sequence)
+    const rank = event.phase ? PHASE_RANK[event.phase] : undefined;
+    const precedingLog = logPositions
+      .filter(
+        (entry) =>
+          rank !== undefined &&
+          entry.phase !== undefined &&
+          (PHASE_RANK[entry.phase] ?? Number.POSITIVE_INFINITY) < rank,
+      )
       .reduce((max, entry) => Math.max(max, entry.order), -1);
     candidates.push({
       order: precedingLog + 0.5,
@@ -92,6 +122,45 @@ export function buildCombatLastAction(input: BuildCombatLastActionInput): Combat
         actorLabel,
         sourceEventId: event.id,
         text: `${actorLabel} rolled Initiative ${total}`,
+      },
+    });
+  }
+
+  // A bulk initiative commit (the GM commits initiative for every combatant at once) records an
+  // order, not a roller, so the line names the GM as the source and never a combatant. When the
+  // phase's initiative was rolled individually, the commit only closes those rolls and the last
+  // roller stays the line.
+  for (const commit of input.committedInitiativeOrders ?? []) {
+    if (commit.roundNumber !== input.roundNumber) continue;
+    const individuallyRolled = input.gmEvents.some(
+      (event) =>
+        event.type === "initiative" &&
+        event.roundNumber === input.roundNumber &&
+        event.phase === commit.phase,
+    );
+    if (individuallyRolled) continue;
+    const rank = PHASE_RANK[commit.phase];
+    const precedingLog = logPositions
+      .filter(
+        (entry) =>
+          rank !== undefined &&
+          entry.phase !== undefined &&
+          (PHASE_RANK[entry.phase] ?? Number.POSITIVE_INFINITY) < rank,
+      )
+      .reduce((max, entry) => Math.max(max, entry.order), -1);
+    const ranked = commit.entries.flatMap((entry) => {
+      const label = labels.get(entry.participantId);
+      return label && entry.initiativeResult ? [`${label} ${entry.initiativeResult.total}`] : [];
+    });
+    const shown = ranked.slice(0, ORDER_NAMES_SHOWN);
+    const order = shown.length
+      ? ` (${shown.join(", ")}${ranked.length > shown.length ? ", …" : ""})`
+      : "";
+    candidates.push({
+      order: precedingLog + 0.5,
+      result: {
+        actorLabel: "GM",
+        text: `GM committed initiative for all combatants${order}`,
       },
     });
   }

@@ -41,6 +41,7 @@ const WALK_CONTROLS = [
   /^Roll Combat Experience$/,
   /^Complete modifier review$/,
   /^Roll initiative$/,
+  /^Commit initiative$/,
   /^Roll attack$/,
   /^Roll parry$/,
   /^Commit defense review$/,
@@ -465,6 +466,27 @@ async function captureAtUsableWidths(page: Page, name: string): Promise<void> {
     }
     await page.waitForTimeout(400);
     const measured = await page.evaluate(() => document.documentElement.clientWidth);
+    const row = await page.evaluate(() => {
+      const heading = [...document.querySelectorAll("strong")].find(
+        (node) => node.textContent === "Combat situation",
+      );
+      const container = heading?.closest("section")?.parentElement;
+      return container
+        ? {
+            columns: getComputedStyle(container).gridTemplateColumns,
+            items: [...container.children].map((child) => ({
+              width: Math.round(child.getBoundingClientRect().width),
+              label:
+                child.getAttribute("aria-label") ??
+                child.querySelector("strong")?.textContent ??
+                "(empty)",
+            })),
+          }
+        : null;
+    });
+    console.log(
+      `#836 inspector row ${CAPTURE_LABEL} ${name} usable ${measured}: ${JSON.stringify(row)}`,
+    );
     const file = path.join(CAPTURE_DIR, `${CAPTURE_LABEL}-${name}-${measured}.png`);
     await page.screenshot({ fullPage: true, path: file });
     console.log(`#836 capture ${name}: usable ${measured}px -> ${file}`);
@@ -703,5 +725,171 @@ test.describe("GM Last action names the actor (#836)", () => {
       return;
     }
     throw new Error(`no connecting attack in 5 attempts: ${reasons.join(" | ")}`);
+  });
+
+  test("three combatants: individual initiative, attack, parry and damage each name their own actor", async ({
+    browser,
+    page: gmPage,
+  }) => {
+    test.setTimeout(900_000);
+    const world = await openWorld({
+      browser,
+      entries: [
+        { key: "attacker", skills: { dodge: 1, weapon: 60 } },
+        { key: "defender", skills: { dodge: 1, weapon: 9 } },
+        { key: "bystander", skills: { dodge: 1, weapon: 9 } },
+      ],
+      gmPage,
+      tag: "last-action-three",
+    });
+    const { attacker, defender, bystander } = world.combatants as Record<string, Combatant>;
+    const everyone = [attacker!, defender!, bystander!];
+    const nameOf = (combatantId?: string) =>
+      everyone.find((combatant) => combatant.combatantId === combatantId)?.name;
+    await openGmCombat(world);
+    await declare(world, {
+      actionId: "attack_parry",
+      who: attacker!.name,
+      targetName: defender!.name,
+    });
+    await declare(world, {
+      actionId: "attack_parry",
+      who: defender!.name,
+      targetName: attacker!.name,
+    });
+    await declare(world, {
+      actionId: "attack_parry",
+      who: bystander!.name,
+      targetName: defender!.name,
+    });
+    await waitForResolution(world);
+    /** Reads the line while a participant other than `actor` is inspected. */
+    const readLineWhileInspectingAnother = async (actor: string, what: string) => {
+      const inspected = everyone.find((combatant) => combatant.name !== actor)!.name;
+      await gmPage.reload();
+      await expect(gmPage.getByRole("heading", { name: "Combat Round Manager" })).toBeVisible();
+      await selectGmInspectorParticipant(gmPage, inspected);
+      await gmPage.waitForTimeout(500);
+      const read = await readGm(gmPage);
+      console.log(
+        `#836 ${what}: ${JSON.stringify({ line: read.lastAction, inspected: read.inspectorHeading })}`,
+      );
+      return read;
+    };
+
+    // Press one canonical control at a time. After each press, the newest new initiative, attack,
+    // parry or damage event decides what the line must say, read while a different participant
+    // than that event's actor is inspected.
+    const seen = new Set<string>();
+    const checked = { attack: 0, damage_committed: 0, initiative: 0, parry: 0 };
+    for (let step = 0; step < 80 && checked.damage_committed === 0; step += 1) {
+      const reason = await walk(world, () => false, { maxSteps: 1 });
+      const state = await readRoundState(gmPage.request, world.encounterId);
+      const fresh = state.events
+        .filter(
+          (event) =>
+            (event.type === "initiative" ||
+              event.type === "attack" ||
+              event.type === "parry" ||
+              event.type === "damage_committed") &&
+            !seen.has(event.id),
+        )
+        .sort((left, right) => left.sequence - right.sequence);
+      for (const event of fresh) seen.add(event.id);
+      const newest = fresh.at(-1);
+      if (!newest) {
+        if (reason === "round_summary") break;
+        continue;
+      }
+      const type = newest.type as keyof typeof checked;
+      checked[type] += 1;
+      const attackerName = nameOf(newest.attackerParticipantId ?? newest.actorParticipantId);
+      const defenderName = nameOf(newest.defenderParticipantId ?? newest.targetParticipantId);
+      const actor =
+        type === "initiative"
+          ? nameOf(newest.ownerParticipantId)!
+          : type === "parry"
+            ? (defenderName ?? nameOf(newest.actorParticipantId))!
+            : attackerName!;
+      const read = await readLineWhileInspectingAnother(actor, `${type} #${checked[type]}`);
+      const expected =
+        type === "initiative"
+          ? `^Last action: ${escapeForRegExp(actor)} rolled Initiative ${String(newest.facts.publicOutcome.total)}$`
+          : type === "attack"
+            ? `^Last action: ${escapeForRegExp(actor)} attacked ${escapeForRegExp(defenderName!)} — `
+            : type === "parry"
+              ? `^Last action: ${escapeForRegExp(actor)} parried `
+              : `^Last action: ${escapeForRegExp(actor)} dealt \\d+ damage to ${escapeForRegExp(defenderName!)}$`;
+      expect(read.lastAction, `${type} by ${actor}`).toMatch(new RegExp(expected));
+    }
+    console.log(`#836 three-combatant checks: ${JSON.stringify(checked)}`);
+    expect(checked.initiative, "initiative was rolled individually").toBeGreaterThan(0);
+    expect(checked.attack).toBeGreaterThan(0);
+    expect(checked.parry).toBeGreaterThan(0);
+    expect(checked.damage_committed).toBeGreaterThan(0);
+    await world.playerContextClose();
+  });
+
+  test("a bulk initiative commit reads as the GM's, then the next real action replaces it", async ({
+    browser,
+    page: gmPage,
+  }) => {
+    test.setTimeout(300_000);
+    const world = await openWorld({
+      browser,
+      entries: [
+        { key: "attacker", skills: { dodge: 1, weapon: 1 } },
+        { key: "defender", skills: { dodge: 60, weapon: 9 } },
+      ],
+      gmPage,
+      tag: "last-action-bulk",
+    });
+    const { attacker, defender } = world.combatants as Record<string, Combatant>;
+    await openGmCombat(world);
+    await declare(world, {
+      actionId: "attack_parry",
+      who: attacker!.name,
+      targetName: defender!.name,
+    });
+    await declare(world, { actionId: "parry", who: defender!.name, targetName: attacker!.name });
+    await waitForResolution(world);
+
+    // Walk until the bulk commit is recorded and no attack has been made yet.
+    const reason = await walk(world, ({ state }) => state.committedInitiativeOrders.length > 0);
+    expect(reason).toBe("stopped");
+    const committed = await readRoundState(gmPage.request, world.encounterId);
+    expect(
+      committed.events.some((event) => event.type === "initiative"),
+      "a bulk commit, not individual rolls",
+    ).toBe(false);
+    await gmPage.reload();
+    await expect(gmPage.getByRole("heading", { name: "Combat Round Manager" })).toBeVisible();
+    await selectGmInspectorParticipant(gmPage, defender!.name);
+    await gmPage.waitForTimeout(500);
+    const afterCommit = await readGm(gmPage);
+    console.log(`#836 bulk commit: ${JSON.stringify(afterCommit)}`);
+    expect(afterCommit.inspectorHeading).toContain(defender!.name);
+    expect(afterCommit.lastAction).toMatch(
+      /^Last action: GM committed initiative for all combatants/,
+    );
+    expect(afterCommit.lastAction).not.toContain(`Last action: ${defender!.name}`);
+
+    // The next real action (the attack) replaces it.
+    const next = await walk(
+      world,
+      ({ state }) => incomingAttacks(state, defender!.combatantId).length > 0,
+      { skip: [/^Commit defense review$/] },
+    );
+    expect(next).toBe("stopped");
+    await gmPage.reload();
+    await expect(gmPage.getByRole("heading", { name: "Combat Round Manager" })).toBeVisible();
+    await selectGmInspectorParticipant(gmPage, defender!.name);
+    await gmPage.waitForTimeout(500);
+    const afterAttack = await readGm(gmPage);
+    console.log(`#836 after attack: ${JSON.stringify({ line: afterAttack.lastAction })}`);
+    expect(afterAttack.lastAction).toBe(
+      `Last action: ${attacker!.name} attacked ${defender!.name} — miss`,
+    );
+    await world.playerContextClose();
   });
 });
