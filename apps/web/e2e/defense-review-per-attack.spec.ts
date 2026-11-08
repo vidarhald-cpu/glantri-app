@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
@@ -972,6 +972,11 @@ test.describe("Defense review is bound to the attack under resolution (#874)", (
         let html = sections.map((section) => section.outerHTML).join("\n");
         for (const name of names) html = html.split(name).join("<name>");
         html = html.replace(/\d{13}/g, "<suffix>");
+        // Equipment item ids are generated per run; the rendered surface is otherwise identical.
+        html = html.replace(
+          /item-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g,
+          "item-<uuid>",
+        );
         return {
           html,
           parrySourceSelectors: sections.map(
@@ -984,6 +989,11 @@ test.describe("Defense review is bound to the attack under resolution (#874)", (
       [feinter!.name, attacker!.name],
     );
     const playerHash = createHash("sha256").update(playerRead.html).digest("hex");
+    mkdirSync(CAPTURE_DIR, { recursive: true });
+    writeFileSync(
+      path.join(CAPTURE_DIR, `${CAPTURE_LABEL}-feint-player-declaration.html`),
+      playerRead.html,
+    );
     console.log(
       `#874 feint player declaration surface: selectors=${JSON.stringify(playerRead.parrySourceSelectors)} sha256=${playerHash} length=${playerRead.html.length} usable=${playerRead.usableWidth}`,
     );
