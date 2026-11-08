@@ -9,6 +9,23 @@ const ARTIFACT_MUTATION_HEADERS = {
   "x-glantri-artifact-mutation": "1",
 };
 
+// Listed rather than derived from ArtifactPanel/ArtifactDetails: deriving would couple this
+// black-box exposure test to component internals, and a derived set shrinks silently with them.
+const PRIVILEGED_ARTIFACT_CONTROLS = [
+  "Retry cleanup",
+  "Edit details",
+  "Save details",
+  "Share with Campaign",
+  "Withdraw from Campaign",
+  "Attach privately",
+  "Share with Scenario",
+  "Withdraw from Scenario",
+  "Retire",
+  "Restore",
+  "History, uses and new version",
+  "Preview new version",
+];
+
 test.describe("Campaign Artifact player presentation", () => {
   test.use({ storageState: "e2e/.auth/gm.json" });
 
@@ -127,7 +144,15 @@ test.describe("Campaign Artifact player presentation", () => {
     await expect(playerCard).toBeVisible();
     await expect(playerCard.getByRole("img", { name: altText })).toBeVisible();
     expect((await contentResponsePromise).status()).toBe(200);
-    await expect(playerCard.getByRole("button")).toHaveCount(0);
+    // Every privileged control stays forbidden by name, in the card and on the whole page.
+    for (const name of PRIVILEGED_ARTIFACT_CONTROLS) {
+      await expect(playerCard.getByRole("button", { name }), `${name} (card)`).toHaveCount(0);
+      await expect(playerPage.getByRole("button", { name }), `${name} (page)`).toHaveCount(0);
+      await expect(playerPage.getByText(name, { exact: true }), `${name} (text)`).toHaveCount(0);
+    }
+    // Players keep exactly one control, the zoom viewer (#996). Any other button is a failure.
+    await expect(playerCard.getByRole("button")).toHaveCount(1);
+    await expect(playerCard.getByRole("button", { name: `Inspect ${title}` })).toHaveCount(1);
     await expect(playerPage.getByText(/digest|storage key|original filename/i)).toHaveCount(0);
     expect(
       await playerPage

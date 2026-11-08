@@ -93,6 +93,18 @@ describe("ArtifactPanel", () => {
         name: /share with|withdraw|attach privately|retire|restore|edit details/i,
       }),
     ).not.toBeInTheDocument();
+    // The viewer's one control is the zoom viewer (#996).
+    expect(
+      screen.getAllByRole("button").map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["Inspect Shared pass map"]);
+    for (const name of [
+      "Retry cleanup",
+      "Save details",
+      "Preview new version",
+      "History, uses and new version",
+    ]) {
+      expect(screen.queryByText(name)).not.toBeInTheDocument();
+    }
   });
 
   it("offers exactly two access filter values and a removable active-filter chip", async () => {
