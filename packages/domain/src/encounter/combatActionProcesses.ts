@@ -7,6 +7,7 @@ import {
   getCombatRoundDoubleAttackPhase2Decision,
   getCombatRoundOffensiveParryAttemptIdentity,
   getCombatRoundParryDisarmAttemptIdentity,
+  isCombatRoundAttackResolvedWithoutDefenseReview,
   getCombatRoundPendingMissileIncomingAttack,
   getCombatRoundOutgoingAttackResultForParticipantPhase,
   getCombatRoundParticipantAttackResults,
@@ -307,6 +308,16 @@ function stageStates(input: {
   const resolution = input.state.phaseResolutionResults.find(
     (entry) => entry.attackResultId === attackResultId,
   );
+  // Forgejo #874. A melee miss resolved at its attack-result commit owes no defense review.
+  if (
+    attack &&
+    resolution &&
+    !resolution.defenseSnapshotId &&
+    isCombatRoundAttackResolvedWithoutDefenseReview({ attackResultId, state: input.state })
+  ) {
+    for (const kind of STAGE_ORDER.slice(1)) pending[kind] = "skipped";
+    return { completion: { complete: true, reason: "miss" }, states: pending };
+  }
   if (!resolution?.defenseSnapshotId) {
     pending.defense = "ready";
     return { completion: { complete: false }, states: pending };

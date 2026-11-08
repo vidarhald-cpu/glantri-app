@@ -31917,6 +31917,10 @@ describe("scenarios route contract", () => {
     });
     const app = await buildScenarioTestApp();
 
+    // #874: a visible attacker's melee miss is recorded at the attack commit and owes no defense
+    // review, so the attack this test reviews must connect. The d20 is fixed to a hit: a natural
+    // 20 that open-ends once (20 + 6), the pattern this file already uses for a connecting roll.
+    const randomSpy = vi.spyOn(Math, "random").mockReturnValueOnce(0.95).mockReturnValue(0.5);
     const attackResponse = await app.inject({
       method: "POST",
       payload: {
@@ -31928,6 +31932,7 @@ describe("scenarios route contract", () => {
       },
       url: "/encounters/encounter-1/combat-round/roll-attack",
     });
+    randomSpy.mockRestore();
     expect(attackResponse.statusCode, JSON.stringify(attackResponse.json())).toBe(200);
 
     const openState = mutable.encounter.combatRoundState!;
