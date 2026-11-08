@@ -56,22 +56,61 @@ const encounterSessionJsonSelect = {
   sessionJson: true,
 } as const;
 
-function assertSplitRevision(input: {
-  activeRevision?: Date;
-  archiveCount?: number;
-  expectedArchiveCount: number;
+const SPLIT_ACTIVE_STATE_MISSING = "the active-state row is missing";
+const SPLIT_REVISION_DISAGREEMENT =
+  "the active-state revision does not match the Encounter revision";
+const SPLIT_ARCHIVE_COUNT_DISAGREEMENT =
+  "the archived round count does not match the stored archive count";
+
+// Fails closed on split storage whose rows disagree. Each check runs only for the rows the read
+// actually selected. The message names every agreement that failed, so a stored inconsistency is
+// distinguishable from another one, and carries no stored values.
+function assertSplitConsistency(input: {
+  activeCombatState?: { revision: Date } | null;
+  archivedRoundCount?: number;
+  checkActiveState: boolean;
+  combatArchiveCount: number;
   metadataRevision: Date;
 }): void {
+  const failures: string[] = [];
+  if (input.checkActiveState) {
+    if (!input.activeCombatState) {
+      failures.push(SPLIT_ACTIVE_STATE_MISSING);
+    } else if (input.activeCombatState.revision.getTime() !== input.metadataRevision.getTime()) {
+      failures.push(SPLIT_REVISION_DISAGREEMENT);
+    }
+  }
   if (
-    !input.activeRevision ||
-    input.activeRevision.getTime() !== input.metadataRevision.getTime() ||
-    input.archiveCount !== input.expectedArchiveCount
+    input.archivedRoundCount !== undefined &&
+    input.archivedRoundCount !== input.combatArchiveCount
   ) {
+    failures.push(SPLIT_ARCHIVE_COUNT_DISAGREEMENT);
+  }
+  if (failures.length > 0) {
     throw new CombatPersistenceError(
       "malformed_split_storage",
-      "Split combat storage revision or archive count is inconsistent.",
+      `Split combat storage is inconsistent: ${failures.join("; ")}.`,
     );
   }
+}
+
+// Prisma reads every relation include as its own SELECT. At READ COMMITTED each SELECT takes its
+// own snapshot, so a combat write committing between them pairs an old Encounter row with a new
+// active-state row or archive, and the consistency check above refuses stored rows that are in
+// fact consistent (#1021). A read that spans the Encounter and its split rows therefore runs in
+// one REPEATABLE READ transaction: one snapshot for every statement. A read-only REPEATABLE READ
+// transaction in PostgreSQL never raises a serialization failure. When the repository is handed a
+// transaction client, the caller's transaction already provides the snapshot.
+function readSplitSnapshot<T>(
+  client: PrismaClient | TransactionClient,
+  read: (database: TransactionClient) => Promise<T>,
+): Promise<T> {
+  if ("$transaction" in client) {
+    return client.$transaction(read, {
+      isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+    });
+  }
+  return read(client);
 }
 
 function metadataInput(record: EncounterMetadataRecord) {
@@ -130,16 +169,18 @@ export function createPrismaCombatStateReadRepository(
   const database = client as PrismaClient;
   return {
     async getActiveCombatStateById(encounterId) {
-      const record = await database.encounter.findUnique({
-        select: {
-          ...encounterSessionJsonSelect,
-          activeCombatState: {
-            select: { revision: true, stateJson: true },
+      const record = await readSplitSnapshot(client, (snapshot) =>
+        snapshot.encounter.findUnique({
+          select: {
+            ...encounterSessionJsonSelect,
+            activeCombatState: {
+              select: { revision: true, stateJson: true },
+            },
+            combatArchiveCount: true,
           },
-          combatArchiveCount: true,
-        },
-        where: { id: encounterId },
-      });
+          where: { id: encounterId },
+        }),
+      );
 
       if (!record) {
         return null;
@@ -156,10 +197,10 @@ export function createPrismaCombatStateReadRepository(
           `Unsupported combat storage mode: ${record.combatStorageMode}.`,
         );
       }
-      assertSplitRevision({
-        activeRevision: record.activeCombatState?.revision,
-        archiveCount: record.combatArchiveCount,
-        expectedArchiveCount: record.combatArchiveCount,
+      assertSplitConsistency({
+        activeCombatState: record.activeCombatState,
+        checkActiveState: true,
+        combatArchiveCount: record.combatArchiveCount,
         metadataRevision: record.updatedAt,
       });
       return buildActiveCombatStateViewFromSplitStorage({
@@ -169,17 +210,19 @@ export function createPrismaCombatStateReadRepository(
       });
     },
     async getArchivedCombatRoundsById(encounterId) {
-      const record = await database.encounter.findUnique({
-        select: {
-          ...encounterSessionJsonSelect,
-          archivedCombatRounds: {
-            orderBy: { roundNumber: "asc" },
-            select: { roundJson: true },
+      const record = await readSplitSnapshot(client, (snapshot) =>
+        snapshot.encounter.findUnique({
+          select: {
+            ...encounterSessionJsonSelect,
+            archivedCombatRounds: {
+              orderBy: { roundNumber: "asc" },
+              select: { roundJson: true },
+            },
+            combatArchiveCount: true,
           },
-          combatArchiveCount: true,
-        },
-        where: { id: encounterId },
-      });
+          where: { id: encounterId },
+        }),
+      );
 
       if (!record) {
         return null;
@@ -196,32 +239,34 @@ export function createPrismaCombatStateReadRepository(
           `Unsupported combat storage mode: ${record.combatStorageMode}.`,
         );
       }
-      if (record.archivedCombatRounds.length !== record.combatArchiveCount) {
-        throw new CombatPersistenceError(
-          "malformed_split_storage",
-          "Split combat archive count is inconsistent.",
-        );
-      }
+      assertSplitConsistency({
+        archivedRoundCount: record.archivedCombatRounds.length,
+        checkActiveState: false,
+        combatArchiveCount: record.combatArchiveCount,
+        metadataRevision: record.updatedAt,
+      });
       return buildArchivedCombatRoundsViewFromSplitStorage({
         archivedRounds: record.archivedCombatRounds.map((round) => round.roundJson),
         metadata: metadataInput(record),
       });
     },
     async getCombatHistorySourceById(encounterId) {
-      const record = await database.encounter.findUnique({
-        select: {
-          ...encounterSessionJsonSelect,
-          activeCombatState: {
-            select: { revision: true, stateJson: true },
+      const record = await readSplitSnapshot(client, (snapshot) =>
+        snapshot.encounter.findUnique({
+          select: {
+            ...encounterSessionJsonSelect,
+            activeCombatState: {
+              select: { revision: true, stateJson: true },
+            },
+            archivedCombatRounds: {
+              orderBy: { roundNumber: "asc" },
+              select: { roundJson: true },
+            },
+            combatArchiveCount: true,
           },
-          archivedCombatRounds: {
-            orderBy: { roundNumber: "asc" },
-            select: { roundJson: true },
-          },
-          combatArchiveCount: true,
-        },
-        where: { id: encounterId },
-      });
+          where: { id: encounterId },
+        }),
+      );
 
       if (!record) {
         return null;
@@ -238,10 +283,11 @@ export function createPrismaCombatStateReadRepository(
           `Unsupported combat storage mode: ${record.combatStorageMode}.`,
         );
       }
-      assertSplitRevision({
-        activeRevision: record.activeCombatState?.revision,
-        archiveCount: record.archivedCombatRounds.length,
-        expectedArchiveCount: record.combatArchiveCount,
+      assertSplitConsistency({
+        activeCombatState: record.activeCombatState,
+        archivedRoundCount: record.archivedCombatRounds.length,
+        checkActiveState: true,
+        combatArchiveCount: record.combatArchiveCount,
         metadataRevision: record.updatedAt,
       });
       return buildCombatHistorySourceViewFromSplitStorage({
@@ -260,13 +306,15 @@ export function createPrismaCombatStateReadRepository(
       return record ? buildEncounterMetadataView(metadataInput(record)) : null;
     },
     async getFullEncounterById(encounterId) {
-      const record = await database.encounter.findUnique({
-        include: {
-          activeCombatState: true,
-          archivedCombatRounds: { orderBy: { roundNumber: "asc" } },
-        },
-        where: { id: encounterId },
-      });
+      const record = await readSplitSnapshot(client, (snapshot) =>
+        snapshot.encounter.findUnique({
+          include: {
+            activeCombatState: true,
+            archivedCombatRounds: { orderBy: { roundNumber: "asc" } },
+          },
+          where: { id: encounterId },
+        }),
+      );
 
       if (!record) {
         return null;
@@ -280,10 +328,11 @@ export function createPrismaCombatStateReadRepository(
           `Unsupported combat storage mode: ${record.combatStorageMode}.`,
         );
       }
-      assertSplitRevision({
-        activeRevision: record.activeCombatState?.revision,
-        archiveCount: record.archivedCombatRounds.length,
-        expectedArchiveCount: record.combatArchiveCount,
+      assertSplitConsistency({
+        activeCombatState: record.activeCombatState,
+        archivedRoundCount: record.archivedCombatRounds.length,
+        checkActiveState: true,
+        combatArchiveCount: record.combatArchiveCount,
         metadataRevision: record.updatedAt,
       });
       return buildFullEncounterReadView(

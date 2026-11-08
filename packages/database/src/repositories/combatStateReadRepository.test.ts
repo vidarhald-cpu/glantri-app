@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Prisma } from "@prisma/client";
+
 import { combatRoundStateSchema, encounterSessionSchema } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   prisma: {
     $queryRaw: vi.fn(),
+    $transaction: vi.fn(),
     encounter: {
       findMany: vi.fn(),
       findUnique: vi.fn(),
@@ -66,6 +69,9 @@ const record = {
 describe("combatStateReadRepository", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.prisma.$transaction.mockImplementation(
+      async (read: (client: typeof mocks.prisma) => Promise<unknown>) => read(mocks.prisma),
+    );
     mocks.prisma.encounter.findUnique.mockResolvedValue(record);
     mocks.prisma.encounter.findMany.mockResolvedValue([record]);
   });
@@ -285,5 +291,91 @@ describe("combatStateReadRepository", () => {
     await expect(repository.getFullEncounterById(encounter.id)).rejects.toMatchObject({
       code: "malformed_split_storage",
     });
+  });
+
+  it("reads every split view as one REPEATABLE READ snapshot on the root client", async () => {
+    const repository = createPrismaCombatStateReadRepository();
+
+    await repository.getFullEncounterById(encounter.id);
+    await repository.getCombatHistorySourceById(encounter.id);
+    await repository.getActiveCombatStateById(encounter.id);
+    await repository.getArchivedCombatRoundsById(encounter.id);
+
+    expect(mocks.prisma.$transaction).toHaveBeenCalledTimes(4);
+    for (const call of mocks.prisma.$transaction.mock.calls) {
+      expect(call[1]).toEqual({ isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    }
+    expect(mocks.prisma.encounter.findUnique).toHaveBeenCalledTimes(4);
+  });
+
+  it("does not open a transaction for single-table reads", async () => {
+    const repository = createPrismaCombatStateReadRepository();
+
+    await repository.getEncounterMetadataById(encounter.id);
+    await repository.listEncounterAccessMetadataByScenario("scenario-1");
+
+    expect(mocks.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("reads inside the caller's transaction when given a transaction client", async () => {
+    const transaction = { encounter: { findUnique: vi.fn().mockResolvedValue(record) } };
+    const repository = createPrismaCombatStateReadRepository(transaction as never);
+
+    await expect(repository.getFullEncounterById(encounter.id)).resolves.toMatchObject({
+      encounterId: encounter.id,
+    });
+    expect(transaction.encounter.findUnique).toHaveBeenCalledTimes(1);
+    expect(mocks.prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("names which split agreement failed without carrying stored values", async () => {
+    const { rounds, ...activeCombatState } = encounter.combatRoundState!;
+    const splitRecord = {
+      ...record,
+      activeCombatState: {
+        revision: new Date(encounter.updatedAt),
+        stateJson: activeCombatState,
+      },
+      archivedCombatRounds: rounds.map((round) => ({
+        roundJson: round,
+        roundNumber: round.roundNumber,
+      })),
+      combatArchiveCount: rounds.length,
+      combatStorageMode: "split_v1",
+      sessionJson: { ...encounter, combatRoundState: undefined },
+    };
+    const skewedRevision = {
+      ...splitRecord.activeCombatState,
+      revision: new Date(Date.parse(encounter.updatedAt) + 1),
+    };
+    const repository = createPrismaCombatStateReadRepository();
+    const refusal = async (value: unknown) => {
+      mocks.prisma.encounter.findUnique.mockResolvedValue(value);
+      const error = await repository.getFullEncounterById(encounter.id).then(
+        () => undefined,
+        (caught: unknown) => caught as Error & { code?: string },
+      );
+      expect(error?.code).toBe("malformed_split_storage");
+      return error?.message;
+    };
+
+    await expect(refusal({ ...splitRecord, activeCombatState: skewedRevision })).resolves.toBe(
+      "Split combat storage is inconsistent: the active-state revision does not match the Encounter revision.",
+    );
+    await expect(refusal({ ...splitRecord, combatArchiveCount: rounds.length + 1 })).resolves.toBe(
+      "Split combat storage is inconsistent: the archived round count does not match the stored archive count.",
+    );
+    await expect(
+      refusal({
+        ...splitRecord,
+        activeCombatState: skewedRevision,
+        combatArchiveCount: rounds.length + 1,
+      }),
+    ).resolves.toBe(
+      "Split combat storage is inconsistent: the active-state revision does not match the Encounter revision; the archived round count does not match the stored archive count.",
+    );
+    await expect(refusal({ ...splitRecord, activeCombatState: null })).resolves.toBe(
+      "Split combat storage is inconsistent: the active-state row is missing.",
+    );
   });
 });
