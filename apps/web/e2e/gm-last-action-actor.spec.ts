@@ -397,7 +397,10 @@ async function declare(
     (response) =>
       response.request().method() === "POST" && response.url().includes("/combat-declaration"),
   );
-  await page.getByRole("button", { name: "Declare action" }).first().click();
+  await page
+    .getByRole("button", { name: /^(Declare action|Update declaration)$/ })
+    .first()
+    .click();
   const response = await declared;
   expect(response.ok(), await response.text()).toBe(true);
 }
@@ -601,10 +604,8 @@ test.describe("GM Last action names the actor (#836)", () => {
       what: "declaration: defender declared, attacker inspected",
     });
 
-    // Initiative has no browser case: in the live GM flow initiative is committed in bulk by the
-    // final modifier review (`commit_phase_initiative_resolution`) and records no per-participant
-    // `initiative` event, so there is no single roller to name. The event-driven path is covered in
-    // `buildCombatLastAction.test.ts`.
+    // This two-combatant world commits initiative in bulk; individually rolled initiative and the
+    // bulk line have their own cases below.
     await waitForResolution(world);
 
     // Attack: a miss. Walk until the attack is recorded, never pressing a defense review.
@@ -870,7 +871,7 @@ test.describe("GM Last action names the actor (#836)", () => {
     console.log(`#836 bulk commit: ${JSON.stringify(afterCommit)}`);
     expect(afterCommit.inspectorHeading).toContain(defender!.name);
     expect(afterCommit.lastAction).toMatch(
-      /^Last action: GM committed initiative for all combatants/,
+      /^Last action: GM committed Phase 1 initiative for all combatants/,
     );
     expect(afterCommit.lastAction).not.toContain(`Last action: ${defender!.name}`);
 
@@ -892,4 +893,373 @@ test.describe("GM Last action names the actor (#836)", () => {
     );
     await world.playerContextClose();
   });
+
+  for (const scenario of [
+    { bulk: false, name: "three combatants with individually rolled initiative" },
+    { bulk: true, name: "two combatants with a bulk initiative commit" },
+  ]) {
+    test(`${scenario.name}: through the Phase 2 review to Round End and into round 2, the line follows the newest action`, async ({
+      browser,
+      page: gmPage,
+    }) => {
+      test.setTimeout(1_200_000);
+      const world = await openWorld({
+        browser,
+        entries: scenario.bulk
+          ? [
+              { key: "halgeir", skills: { dodge: 1, weapon: 60 } },
+              { key: "gangho", skills: { dodge: 1, weapon: 9 } },
+            ]
+          : [
+              { key: "halgeir", skills: { dodge: 1, weapon: 60 } },
+              // Bramwell attacks Halgeir, so each defender faces exactly one attacker and one parry.
+              { key: "bramwell", skills: { dodge: 1, weapon: 1 } },
+              { key: "gangho", skills: { dodge: 1, weapon: 9 } },
+            ],
+        gmPage,
+        tag: scenario.bulk ? "last-action-round-bulk" : "last-action-round-three",
+      });
+      const everyone = Object.values(world.combatants);
+      const { halgeir, gangho } = world.combatants as Record<string, Combatant>;
+      const bramwell = world.combatants.bramwell;
+      await openGmCombat(world);
+      const result = await walkRoundAgainstOracle({
+        declarations: [
+          { actionId: "attack_parry", targetName: gangho!.name, who: halgeir!.name },
+          ...(bramwell
+            ? [{ actionId: "attack_parry", targetName: halgeir!.name, who: bramwell.name }]
+            : []),
+          // Take-back: the GM re-declares an earlier actor (Update declaration).
+          { actionId: "attack_parry", targetName: gangho!.name, who: halgeir!.name },
+          { actionId: "parry", targetName: halgeir!.name, who: gangho!.name },
+        ],
+        everyone,
+        world,
+      });
+      console.log(`#836 round walk ${scenario.name}: ${JSON.stringify(result.reached)}`);
+      expect(result.violations, result.violations.join("\n")).toEqual([]);
+      expect(result.reached.phase2Review, "the walk reached the Phase 2 review").toBe(true);
+      expect(result.reached.roundEnd, "the walk reached Round End").toBe(true);
+      expect(result.reached.round2, "the walk crossed into round 2").toBe(true);
+      expect(result.reached.laterActionAfterInitiative).toBe(true);
+      if (scenario.bulk) {
+        expect(result.reached.bulkCommits).toBeGreaterThan(0);
+      } else {
+        expect(result.reached.individualInitiative).toBeGreaterThan(0);
+      }
+      await world.playerContextClose();
+    });
+  }
 });
+
+const ROUND_CONTROLS = [
+  ...WALK_CONTROLS,
+  /^Begin round end$/,
+  /^Roll health check$/,
+  /^Commit participant SU review$/,
+  /^Mark SU review complete$/,
+  /^Complete effect review$/,
+  /^Roll distance control for /,
+  /^Apply distance control$/,
+  /^Start next round$/,
+  /^Open next round$/,
+];
+
+interface OracleAction {
+  actor: string;
+  key: string;
+  order: [number, number];
+  pattern: RegExp;
+  what: string;
+}
+
+/**
+ * The independent oracle: from the server's own round state, the actions that exist now. A press
+ * that creates none must leave the line exactly as it was; a press that creates one or more must
+ * show the newest of them. "Newest" is the round's command journal order, then event sequence.
+ */
+function oracleActions(state: CombatRoundState, nameOf: (id?: string) => string): OracleAction[] {
+  const round = state.roundNumber;
+  const commands = state.commands.filter((command) => command.roundNumber === round);
+  const journalIndex = new Map(commands.map((command, index) => [command.id, index]));
+  const actions: OracleAction[] = [];
+  const name = (id?: string) => escapeForRegExp(nameOf(id));
+  for (const [index, command] of commands.entries()) {
+    if (command.type === "declare_action") {
+      actions.push({
+        actor: nameOf(command.participantId),
+        key: `declare:${command.id}:${command.createdAt}`,
+        order: [index, 0],
+        pattern: new RegExp(`^Last action: ${name(command.participantId)} declared `),
+        what: "declaration",
+      });
+    }
+    if (
+      command.type === "commit_phase_initiative_resolution" &&
+      !commands.some((other) => other.type === `roll_initiative_${command.phase}`)
+    ) {
+      const phase = command.phase === "phase2" ? "Phase 2" : "Phase 1";
+      actions.push({
+        actor: "GM",
+        key: `commit:${command.id}`,
+        order: [index, 0],
+        pattern: new RegExp(`^Last action: GM committed ${phase} initiative for all combatants`),
+        what: `bulk ${phase} initiative commit`,
+      });
+    }
+  }
+  for (const event of state.events) {
+    if (event.roundNumber !== round) continue;
+    const order: [number, number] = [journalIndex.get(event.commandId ?? "") ?? -1, event.sequence];
+    const publicOutcome = (event.facts.publicOutcome ?? {}) as Record<string, unknown>;
+    const involved = (event.facts.involvedOutcome ?? {}) as Record<string, unknown>;
+    const attackerId = event.attackerParticipantId ?? event.actorParticipantId;
+    const defenderId = event.defenderParticipantId ?? event.targetParticipantId;
+    if (event.type === "initiative" && typeof publicOutcome.total === "number") {
+      actions.push({
+        actor: nameOf(event.ownerParticipantId),
+        key: `event:${event.id}`,
+        order,
+        pattern: new RegExp(
+          `^Last action: ${name(event.ownerParticipantId)} rolled Initiative ${publicOutcome.total}$`,
+        ),
+        what: "individual initiative",
+      });
+    } else if (
+      event.type === "attack" &&
+      attackerId &&
+      defenderId &&
+      (typeof publicOutcome.hit === "boolean" || typeof publicOutcome.grazing === "boolean")
+    ) {
+      actions.push({
+        actor: nameOf(attackerId),
+        key: `event:${event.id}`,
+        order,
+        pattern: new RegExp(
+          `^Last action: ${name(attackerId)} attacked ${name(defenderId)} — (hit|miss|graze)$`,
+        ),
+        what: "attack",
+      });
+    } else if (event.type === "parry" && typeof publicOutcome.success === "boolean") {
+      const parrier = event.defenderParticipantId ?? event.actorParticipantId;
+      actions.push({
+        actor: nameOf(parrier),
+        key: `event:${event.id}`,
+        order,
+        pattern: new RegExp(`^Last action: ${name(parrier)} parried `),
+        what: "parry",
+      });
+    } else if (
+      event.type === "damage_committed" &&
+      attackerId &&
+      defenderId &&
+      typeof involved.finalCommittedDamage === "number"
+    ) {
+      actions.push({
+        actor: nameOf(attackerId),
+        key: `event:${event.id}`,
+        order,
+        pattern: new RegExp(
+          `^Last action: ${name(attackerId)} dealt \\d+ damage to ${name(defenderId)}$`,
+        ),
+        what: "damage",
+      });
+    }
+  }
+  return actions;
+}
+
+function newestOf(actions: readonly OracleAction[]): OracleAction | undefined {
+  return [...actions].sort(
+    (left, right) => left.order[0] - right.order[0] || left.order[1] - right.order[1],
+  )[actions.length - 1];
+}
+
+/**
+ * Declares, then presses one canonical GM control at a time from the declaration step, through
+ * Phase 1, the Phase 2 modifier review and Round End, into round 2 (where the line must name no
+ * round-1 actor, live and after a reload). After every press it reads the line live (no reload) while
+ * each participant other than the expected actor is inspected, and compares it with the oracle.
+ * Violations are collected rather than thrown at the first one, so a run lists every bad moment.
+ */
+async function walkRoundAgainstOracle(input: {
+  declarations: Array<{ actionId: string; targetName: string; who: string }>;
+  everyone: Combatant[];
+  world: World;
+}) {
+  const { world } = input;
+  const page = world.gmPage;
+  const nameOf = (id?: string) =>
+    input.everyone.find((combatant) => combatant.combatantId === id)?.name ?? `(unknown ${id})`;
+  const violations: string[] = [];
+  const reached = {
+    bulkCommits: 0,
+    individualInitiative: 0,
+    laterActionAfterInitiative: false,
+    phase2Review: false,
+    presses: 0,
+    round2: false,
+    roundEnd: false,
+  };
+  const seen = new Set<string>();
+  let expected: OracleAction | undefined;
+  let expectedLine: string | null = null;
+  let sawInitiative = false;
+
+  const check = async (moment: string) => {
+    // A press can trigger follow-up commands; read the round only once its journal is settled.
+    let state = await readRoundState(page.request, world.encounterId);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await page.waitForTimeout(800);
+      const again = await readRoundState(page.request, world.encounterId);
+      const settled =
+        again.commands.length === state.commands.length &&
+        again.events.length === state.events.length &&
+        again.currentStep === state.currentStep;
+      state = again;
+      if (settled) break;
+    }
+    const actions = oracleActions(state, nameOf);
+    const fresh = actions.filter((action) => !seen.has(action.key));
+    for (const action of actions) seen.add(action.key);
+    const newest = newestOf(fresh);
+    if (state.roundNumber === 2 && !reached.round2) {
+      reached.round2 = true;
+      expected = undefined;
+      expectedLine = null;
+    }
+    if (newest) {
+      expected = newest;
+      expectedLine = null;
+      if (newest.what === "individual initiative") reached.individualInitiative += 1;
+      if (newest.what.startsWith("bulk")) reached.bulkCommits += 1;
+      if (/initiative/.test(newest.what)) sawInitiative = true;
+      else if (sawInitiative && newest.what !== "declaration") {
+        reached.laterActionAfterInitiative = true;
+      }
+    }
+    if (state.currentStep === "review_phase_2_modifiers") reached.phase2Review = true;
+    if (state.currentStep === "round_summary") reached.roundEnd = true;
+    const inspectable = input.everyone.filter((combatant) => combatant.name !== expected?.actor);
+    for (const combatant of inspectable) {
+      await selectGmInspectorParticipant(page, combatant.name);
+      await page.waitForTimeout(400);
+      let read = await readGm(page);
+      if (expected && expectedLine === null) {
+        // A new action: allow the live view to re-render, then pin its exact text.
+        for (
+          let attempt = 0;
+          attempt < 20 && !expected.pattern.test(read.lastAction ?? "");
+          attempt += 1
+        ) {
+          await page.waitForTimeout(500);
+          read = await readGm(page);
+        }
+      }
+      const where = `${moment} [step ${state.currentStep}, round ${state.roundNumber}, inspecting ${combatant.name}]`;
+      console.log(
+        `#836 oracle ${where}: expected ${expected ? `${expected.what} by ${expected.actor}` : "no line"}; line ${JSON.stringify(read.lastAction)}`,
+      );
+      if (!read.inspectorHeading.includes(combatant.name)) {
+        // E.g. Round End, where the inspector shows the round rather than a participant.
+        console.log(
+          `#836 note ${where}: inspector heading ${JSON.stringify(read.inspectorHeading)}`,
+        );
+      }
+      if (read.currentStepResultsRegions !== 0) {
+        violations.push(`${where}: the GM "Current step results" box is back`);
+      }
+      if (!expected) {
+        if (read.lastAction !== null) {
+          violations.push(`${where}: expected no line, read ${JSON.stringify(read.lastAction)}`);
+        }
+        continue;
+      }
+      if (!expected.pattern.test(read.lastAction ?? "")) {
+        violations.push(
+          `${where}: expected ${expected.what} by ${expected.actor} (${expected.pattern.source}), read ${JSON.stringify(read.lastAction)}`,
+        );
+        continue;
+      }
+      if (expectedLine === null) {
+        expectedLine = read.lastAction;
+      } else if (read.lastAction !== expectedLine) {
+        violations.push(
+          `${where}: no new action, but the line changed from ${JSON.stringify(expectedLine)} to ${JSON.stringify(read.lastAction)}`,
+        );
+      }
+    }
+  };
+
+  const declareAll = async (roundLabel: string) => {
+    for (const declaration of input.declarations) {
+      await declare(world, declaration);
+      await page.waitForTimeout(900);
+      await check(`${roundLabel}: ${declaration.who} declared ${declaration.actionId}`);
+    }
+  };
+
+  await check("start");
+  await declareAll("round 1");
+  await waitForResolution(world);
+  let repeat = { commands: -1, control: "", count: 0 };
+  let blocked = { commands: -1, controls: new Set<string>() };
+  let reloadedAt = -1;
+  for (let step = 0; step < 160; step += 1) {
+    const state = await readRoundState(page.request, world.encounterId);
+    if (state.roundNumber >= 2) {
+      // Round 2 is open (its Combat Experience step): the line must name no round-1 actor, live
+      // (checked after the press above) and after a reload.
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Combat Round Manager" })).toBeVisible();
+      await check("round 2 open, after a reload");
+      break;
+    }
+    const currentTask = page.getByRole("button", { name: /^(Resume )?current task$/i });
+    if (await currentTask.count()) {
+      await currentTask.first().click();
+      await page.waitForTimeout(500);
+    }
+    const buttons = await enabledButtonNames(page);
+    if (blocked.commands !== state.commands.length) {
+      blocked = { commands: state.commands.length, controls: new Set() };
+    }
+    const control = buttons.find(
+      (label) => ROUND_CONTROLS.some((rx) => rx.test(label)) && !blocked.controls.has(label),
+    );
+    if (!control && reloadedAt !== state.commands.length) {
+      // The GM's current-task focus can hide the next control; one reload restores it.
+      reloadedAt = state.commands.length;
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "Combat Round Manager" })).toBeVisible();
+      await page.waitForTimeout(1500);
+      continue;
+    }
+    if (!control) {
+      violations.push(
+        `walk stalled at ${state.currentStep} round ${state.roundNumber}: ${JSON.stringify(buttons.slice(0, 30))}`,
+      );
+      break;
+    }
+    // A control that records nothing, pressed again and again, is a stall, not progress.
+    repeat =
+      repeat.control === control && repeat.commands === state.commands.length
+        ? { ...repeat, count: repeat.count + 1 }
+        : { commands: state.commands.length, control, count: 1 };
+    if (repeat.count > 2) {
+      // E.g. a defender who already parried this phase: try the next canonical control instead.
+      console.log(
+        `#836 walk: "${control}" records nothing at ${state.currentStep}; buttons ${JSON.stringify(buttons.slice(0, 40))}`,
+      );
+      blocked.controls.add(control);
+      repeat = { commands: -1, control: "", count: 0 };
+      continue;
+    }
+    await page.getByRole("button", { name: control, exact: true }).first().click();
+    await page.waitForTimeout(1500);
+    reached.presses += 1;
+    if (control === "Open next round") reached.roundEnd = true;
+    await check(`press ${reached.presses} "${control}"`);
+  }
+  return { reached, violations };
+}
