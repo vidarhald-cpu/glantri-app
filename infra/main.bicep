@@ -17,6 +17,14 @@ param webOrigin string
 @description('E-postadresse for varsler')
 param alertEmail string
 
+@description('Lagringskonto for Artifacts og kart (3-24 små bokstaver/sifre, globalt unik)')
+@minLength(3)
+@maxLength(24)
+param artifactStorageAccountName string = 'glantri${environment}artifacts'
+
+@description('Privat blob-container for Artifacts og kart')
+param artifactContainerName string = 'glantri-artifacts'
+
 var prefix = 'glantri-${environment}'
 var kvName = 'glantri-${environment}-kv'
 var dbAdminUser = 'glantri_admin'
@@ -56,6 +64,16 @@ module acr 'modules/acr.bicep' = {
   }
 }
 
+// Blob-lagring for Artifacts og kart (#1053). Kun managed identity, ingen nøkler.
+module storage 'modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    name: artifactStorageAccountName
+    location: location
+    containerName: artifactContainerName
+  }
+}
+
 module appService 'modules/appservice.bicep' = {
   name: 'appservice'
   params: {
@@ -63,6 +81,8 @@ module appService 'modules/appservice.bicep' = {
     location: location
     keyVaultUri: keyVault.outputs.uri
     registryServer: acr.outputs.loginServer
+    artifactAzureAccountUrl: storage.outputs.accountUrl
+    artifactAzureContainer: storage.outputs.containerName
   }
 }
 
@@ -88,9 +108,22 @@ module kvAccess 'modules/kvAccess.bicep' = {
   }
 }
 
+// RBAC: API-ets managed identity får Storage Blob Data Contributor på containeren
+module storageAccess 'modules/storageAccess.bicep' = {
+  name: 'storageAccess'
+  params: {
+    storageAccountName: storage.outputs.accountName
+    containerName: storage.outputs.containerName
+    apiPrincipalId: appService.outputs.apiPrincipalId
+  }
+}
+
 output apiUrl string = appService.outputs.apiUrl
 output webUrl string = appService.outputs.webUrl
 output apiAppName string = appService.outputs.apiAppName
 output webAppName string = appService.outputs.webAppName
 output acrLoginServer string = acr.outputs.loginServer
 output acrName string = acr.outputs.name
+output artifactStorageAccountName string = storage.outputs.accountName
+output artifactStorageAccountUrl string = storage.outputs.accountUrl
+output artifactContainerName string = storage.outputs.containerName

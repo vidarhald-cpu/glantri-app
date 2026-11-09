@@ -3,6 +3,12 @@ param location string
 param keyVaultUri string
 param registryServer string
 
+@description('Blob account URL for Artifact storage, e.g. https://<account>.blob.core.windows.net')
+param artifactAzureAccountUrl string
+
+@description('Private blob container for Artifact storage')
+param artifactAzureContainer string
+
 resource plan 'Microsoft.Web/serverfarms@2023-12-01' = {
   name: '${prefix}-plan'
   location: location
@@ -40,6 +46,21 @@ resource apiApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
           value: '@Microsoft.KeyVault(SecretUri=${keyVaultUri}secrets/appinsights-connection-string/)'
+        }
+        // Artifact and Map storage (#1053), read by
+        // apps/api/src/artifacts/artifactStorageConfig.ts. Managed identity
+        // only: no key or connection string.
+        {
+          name: 'ARTIFACT_STORAGE_PROVIDER'
+          value: 'azure'
+        }
+        {
+          name: 'ARTIFACT_AZURE_ACCOUNT_URL'
+          value: artifactAzureAccountUrl
+        }
+        {
+          name: 'ARTIFACT_AZURE_CONTAINER'
+          value: artifactAzureContainer
         }
       ]
       appCommandLine: ''
