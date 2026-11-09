@@ -117,6 +117,9 @@ function findTargetStructureErrors(
   content: CanonicalContentShape,
 ): string[] {
   const errors: string[] = [];
+  // The server re-derives the saved Profession metadata from this id, so it must stay real.
+  if (!content.professions.some((profession) => profession.id === build.professionId))
+    errors.push("Unknown target Profession or track.");
   const catalogue = content.chargenCatalogue;
   const p = build.progression;
   for (const group of p.skillGroups) {

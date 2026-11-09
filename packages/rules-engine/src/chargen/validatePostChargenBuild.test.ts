@@ -193,6 +193,9 @@ describe("validatePostChargenBuild (#1068)", () => {
       skillId: "literacy",
     } as CharacterBuild["progression"]["skills"][number]);
     expect(post(legacy, stored)).toContain("Unknown target competency literacy.");
+    const forgedProfession = structuredClone(stored);
+    forgedProfession.professionId = "profession:soldier:forged";
+    expect(post(forgedProfession, stored)).toContain("Unknown target Profession or track.");
     const duplicate = structuredClone(stored);
     duplicate.progression.skills.push(structuredClone(duplicate.progression.skills[0]!));
     expect(post(duplicate, stored)).toContain("Duplicate target purchase identity.");
