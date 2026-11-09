@@ -29,6 +29,7 @@ export * from "./docs/glantriTerms";
 export * from "./dice/openEndedD20";
 export * from "./encounter/armorModifier";
 export * from "./encounter/combatRoundManager";
+export * from "./encounter/playerAttackResultProjection";
 export * from "./encounter/playerFacingCombatRoundCommand";
 export * from "./encounter/playerFacingCombatRoundParticipant";
 export * from "./encounter/playerFacingCombatRoundState";

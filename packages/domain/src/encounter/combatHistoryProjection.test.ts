@@ -3064,3 +3064,149 @@ describe("the superseded GM figure never reaches a player through an event fact 
     );
   });
 });
+
+/*
+ * Forgejo #1044. The snapshot panel's attack result was projected to its owning player as the
+ * stored result less `rolledByUserId` — a denylist — so the GM-only extrapolation flag (#922) and
+ * the workbook import provenance (#517, ruling E2) reached the rolling player through
+ * `GET /encounters/:id/combat-history`. It now goes through the same allow-list as the roll-attack
+ * response. Every key path of the whole projection is enumerated, for the GM as well, so the
+ * instrument is shown to see the field where it belongs.
+ */
+describe("a player's own snapshot attack result carries no GM-only field (#1044)", () => {
+  const GM_ONLY_ATTACK_RESULT_FIELDS = [
+    "extrapolatedWorkbookAdjustments",
+    "rolledByUserId",
+    "weaponDmbRoll",
+    "weaponModeSourceMetadata",
+  ];
+
+  const flaggedAttack = () =>
+    buildCombatRoundAttackRollResult({
+      actionId: "attack_parry",
+      attackOpportunityId: "opportunity-aria",
+      attackerParticipantId: "aria",
+      defenderDb: -11,
+      defenderParticipantId: "borin",
+      extrapolatedWorkbookAdjustments: ["defender_db"],
+      ob: 8,
+      phase: "phase1",
+      rollD20: 11,
+      rollTotal: 11,
+      rolledAt: "2026-11-08T10:00:00.000Z",
+      rolledByUserId: "SECRET_ROLLER_ACCOUNT",
+      weaponDmb: 7,
+      weaponDmbRoll: {
+        diceCount: 2,
+        diceSides: 6,
+        flatModifier: 1,
+        provenance: "SECRET_DMB_SHEET:12:2d6+1",
+        rolls: [3, 3],
+        total: 7,
+      },
+      weaponModeSourceMetadata: {
+        rawRow: { A: "SECRET_RAW_ROW_CELL" },
+        row: 12,
+        sheet: "Weapon2",
+        sourceColumns: { name: "A" },
+        sourceRange: "A12:Q12",
+        workbook: "SECRET_WORKBOOK.xlsx",
+      },
+      weaponName: "Spear",
+    });
+
+  const state = () => {
+    const snapshot = {
+      actionResultStatus: "recorded" as const,
+      attackResult: flaggedAttack(),
+      committedAt: "2026-11-08T10:00:01.000Z",
+      id: "snapshot-aria-attack",
+      participantId: "aria",
+      participantLabel: "Aria",
+      phase: "phase1" as const,
+      roundNumber: 1,
+      step: "phase_1_actions" as const,
+    };
+    return combatRoundStateSchema.parse({
+      participants: [
+        { label: "Aria", participantId: "aria" },
+        { label: "Borin", participantId: "borin" },
+      ],
+      roundNumber: 2,
+      rounds: [{ roundNumber: 1, stepSnapshots: [snapshot] }],
+      stepSnapshots: [{ ...snapshot, id: "snapshot-aria-attack-active", roundNumber: 2 }],
+    });
+  };
+
+  /** Every key path in a JSON body whose last key is one of `fields`. */
+  const keyPathsNaming = (body: unknown, fields: readonly string[]): string[] => {
+    const found: string[] = [];
+    const walk = (value: unknown, path: string) => {
+      if (Array.isArray(value)) {
+        value.forEach((entry, index) => walk(entry, `${path}[${index}]`));
+      } else if (value && typeof value === "object") {
+        for (const [key, nested] of Object.entries(value)) {
+          if (fields.includes(key)) found.push(`${path}.${key}`);
+          walk(nested, `${path}.${key}`);
+        }
+      }
+    };
+    walk(JSON.parse(JSON.stringify(body)), "history");
+    return found;
+  };
+
+  const project = (viewer: Parameters<typeof projectCombatHistory>[0]["viewer"]) =>
+    projectCombatHistory({ participants, source: historySource(state()), viewer });
+
+  it("the GM's projection carries the flag and the provenance in both rounds, unchanged", () => {
+    const gm = project({ kind: "gm" });
+
+    expect(keyPathsNaming(gm, GM_ONLY_ATTACK_RESULT_FIELDS).sort()).toEqual(
+      [
+        "history.activeRound.snapshots[0].panels.actionResult.attackResult.extrapolatedWorkbookAdjustments",
+        "history.activeRound.snapshots[0].panels.actionResult.attackResult.weaponDmbRoll",
+        "history.activeRound.snapshots[0].panels.actionResult.attackResult.weaponModeSourceMetadata",
+        "history.archivedRounds[0].snapshots[0].panels.actionResult.attackResult.extrapolatedWorkbookAdjustments",
+        "history.archivedRounds[0].snapshots[0].panels.actionResult.attackResult.weaponDmbRoll",
+        "history.archivedRounds[0].snapshots[0].panels.actionResult.attackResult.weaponModeSourceMetadata",
+      ].sort(),
+    );
+    // Byte-for-byte what the GM received before #1044: the stored result less the roller account.
+    const { rolledByUserId: _roller, ...expected } = flaggedAttack();
+    expect(JSON.parse(JSON.stringify(gm.activeRound.snapshots[0]?.panels.actionResult))).toEqual({
+      attackResult: JSON.parse(JSON.stringify(expected)),
+      status: "recorded",
+    });
+  });
+
+  it("the rolling player's projection carries none of them, and keeps every other field", () => {
+    const own = project(player(["aria"], ["aria", "borin"]));
+
+    expect(keyPathsNaming(own, GM_ONLY_ATTACK_RESULT_FIELDS)).toEqual([]);
+    expect(JSON.stringify(own)).not.toMatch(
+      /SECRET_(ROLLER_ACCOUNT|RAW_ROW_CELL|WORKBOOK|DMB_SHEET)/,
+    );
+    const stored = flaggedAttack() as unknown as Record<string, unknown>;
+    for (const snapshot of [own.activeRound.snapshots[0], own.archivedRounds[0]?.snapshots[0]]) {
+      const attackResult = snapshot?.panels.actionResult.attackResult;
+      expect(attackResult).toBeDefined();
+      expect(Object.keys(attackResult ?? {}).sort()).toEqual(
+        Object.keys(stored)
+          .filter((key) => stored[key] !== undefined && !GM_ONLY_ATTACK_RESULT_FIELDS.includes(key))
+          .sort(),
+      );
+      for (const [key, value] of Object.entries(attackResult ?? {})) {
+        expect(value, key).toEqual(stored[key]);
+      }
+    }
+  });
+
+  it("a player who does not own the snapshot still receives no attack result", () => {
+    const other = project(player(["borin"], ["aria", "borin"]));
+
+    expect(other.activeRound.snapshots.map((entry) => entry.panels.actionResult)).toEqual([
+      { status: "recorded" },
+    ]);
+    expect(keyPathsNaming(other, GM_ONLY_ATTACK_RESULT_FIELDS)).toEqual([]);
+  });
+});

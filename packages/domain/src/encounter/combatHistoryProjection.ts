@@ -47,6 +47,7 @@ import {
   ATTACK_RESULT_WORKBOOK_IMPORT_PROVENANCE_FIELDS,
   withoutAttackResultWorkbookImportProvenance,
 } from "./playerFacingCombatRoundParticipant";
+import { projectPlayerOwnAttackResult } from "./playerAttackResultProjection";
 import { withoutSupersededGmFigure } from "./supersededGmFigureAudience";
 
 export type CombatHistoryViewer =
@@ -1201,6 +1202,13 @@ function projectSnapshot(input: {
   const incomplete =
     input.snapshot.actionResultStatus === "no_result" ||
     input.snapshot.actionResultStatus === undefined;
+  /*
+   * #1044. A player's copy is built from the player-facing attack result, which names its fields,
+   * rather than from the stored result less `rolledByUserId`: that denylist let every other stored
+   * field through, including the GM-only `extrapolatedWorkbookAdjustments` (#922) and the workbook
+   * import provenance (#517, ruling E2). It is the same allow-list the roll-attack response uses
+   * (`projectPlayerOwnAttackResult`). The GM's copy is unchanged.
+   */
   const safeAttackResult =
     ownsSnapshot &&
     input.snapshot.attackResult &&
@@ -1212,10 +1220,12 @@ function projectSnapshot(input: {
       participantId: input.snapshot.attackResult.defenderParticipantId,
       viewer: input.viewer,
     })
-      ? {
-          ...input.snapshot.attackResult,
-          rolledByUserId: undefined,
-        }
+      ? input.viewer.kind === "gm"
+        ? {
+            ...input.snapshot.attackResult,
+            rolledByUserId: undefined,
+          }
+        : projectPlayerOwnAttackResult(input.snapshot.attackResult)
       : undefined;
   const declarationEvent = input.declarationEvents.find(
     (event) =>
