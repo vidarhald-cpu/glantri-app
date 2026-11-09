@@ -1362,6 +1362,46 @@ describe("combat progression participation consumption", () => {
     });
   });
 
+  // #1001. A GM clear at initiative undoes the M1 boundary and holds the round at the restored
+  // review. When that review was already completed, the boundary is a complete deterministic
+  // transition again; unheld, the client re-ran it at once and the clear changed nothing.
+  for (const [step, phase, cursorStep] of [
+    ["review_action_modifiers", "phase1", "M1"],
+    ["review_phase_2_modifiers", "phase2", "M2"],
+  ] as const) {
+    it(`holds a restored, already reviewed ${cursorStep} boundary for an explicit GM continuation`, () => {
+      const reviewed = (held: boolean) =>
+        activeState({
+          currentStep: step,
+          overrides: {
+            currentCursor: { participantId: "hero", roundNumber: 2, step: cursorStep },
+            gmBacktrackHold: held ? { participantId: "hero", roundNumber: 2, step } : undefined,
+          },
+          participants: ["hero", "guard"].map((id) =>
+            participant(id, declaration("move_only"), {
+              stepStatuses: { [step]: "gmEdited" },
+            }),
+          ),
+        });
+      const boundary = (held: boolean) =>
+        fact(project(reviewed(held)), {
+          family: "boundary",
+          phase,
+          step: `${cursorStep}_boundary`,
+        });
+
+      expect(boundary(false)).toMatchObject({
+        status: "required",
+        workClass: "deterministic_transition",
+      });
+      expect(boundary(true)).toMatchObject({
+        reason: "unresolved_choice",
+        status: "required",
+        workClass: "human_decision",
+      });
+    });
+  }
+
   it("retains M1 review when a canonical proposal requires work", () => {
     const active = activeState({
       currentStep: "review_action_modifiers",
