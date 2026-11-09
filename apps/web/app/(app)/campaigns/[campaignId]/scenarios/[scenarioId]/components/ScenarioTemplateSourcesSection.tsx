@@ -1,10 +1,12 @@
 "use client";
 
 import type { ScenarioParticipant } from "@glantri/domain";
+import Link from "next/link";
 
 import type { TemplateSource } from "./scenarioScreenTypes";
 
 interface ScenarioTemplateSourcesSectionProps {
+  hasHiddenArchetypeTemplates?: boolean;
   onCreateTemporaryActor: () => void;
   onSelectedTemplateSourceIdChange: (value: string) => void;
   onTemporaryActorCountChange: (value: number) => void;
@@ -18,6 +20,7 @@ interface ScenarioTemplateSourcesSectionProps {
 }
 
 export function ScenarioTemplateSourcesSection({
+  hasHiddenArchetypeTemplates = false,
   onCreateTemporaryActor,
   onSelectedTemplateSourceIdChange,
   onTemporaryActorCountChange,
@@ -44,6 +47,12 @@ export function ScenarioTemplateSourcesSection({
         Templates create scenario-local temporary actors. The template itself is not an active
         scenario participant.
       </p>
+      {hasHiddenArchetypeTemplates ? (
+        <p style={{ margin: 0 }}>
+          Page-authored Templates are used through Generate NPC on the{" "}
+          <Link href="/templates">Templates page</Link>.
+        </p>
+      ) : null}
       {templateSources.length > 0 ? (
         <div
           style={{

@@ -117,6 +117,14 @@ test.describe("Scenario Template sources and archetype Templates (#851)", () => 
     expect(labels).not.toContain(`${archetypeName} (template library)`);
     expect(labels).toContain(`${banditName} (template library)`);
 
+    // #1094: the hidden archetype is signposted to the Templates page, with a working link.
+    const signpost = page.getByText("Page-authored Templates are used through Generate NPC on the");
+    await expect(signpost).toBeVisible();
+    await expect(signpost.getByRole("link", { name: "Templates page" })).toHaveAttribute(
+      "href",
+      "/templates",
+    );
+
     // The Bandit still uses Create temporary actor unchanged.
     await expect(createButton).toBeVisible();
     await createButton.click();
