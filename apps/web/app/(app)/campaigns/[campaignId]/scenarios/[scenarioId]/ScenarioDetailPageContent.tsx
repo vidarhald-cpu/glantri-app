@@ -80,6 +80,22 @@ interface ScenarioDetailPageContentProps {
   onWorkspaceEncountersChanged?: () => void;
   scenarioId: string;
 }
+function isArchetypeTemplateEntity(entity: ReusableEntity): boolean {
+  const snapshot = entity.snapshot;
+
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return false;
+  }
+
+  const record = snapshot as Record<string, unknown>;
+
+  return (
+    record.templateKind === "humanoid_npc_archetype" &&
+    record.actorClass !== "campaign_npc" &&
+    record.actorClass !== "generated_npc"
+  );
+}
+
 export default function ScenarioDetailPageContent({
   campaignId,
   embedded = false,
@@ -290,6 +306,14 @@ export default function ScenarioDetailPageContent({
 
     return [...sourcesById.values()].sort((left, right) => left.label.localeCompare(right.label));
   }, [entitiesById, roster, templates]);
+  // #851: a page-authored humanoid archetype Template is a thing NPCs are generated from, not a
+  // combatant; the server refuses to field it directly (generate_npc_from_template_first). The
+  // Templates page "Generate NPC" tab is local page state with no deep link, so it cannot be
+  // offered from here without editing the Templates feature; the archetype is hidden instead.
+  const fieldableTemplateSources = useMemo(
+    () => templateSources.filter((source) => !isArchetypeTemplateEntity(source.entity)),
+    [templateSources],
+  );
   const concreteParticipants = useMemo(() => {
     const templateIds = new Set(templateSources.map((source) => source.entity.id));
 
@@ -743,8 +767,8 @@ export default function ScenarioDetailPageContent({
 
   async function handleCreateTemporaryActorFromTemplate() {
     const templateSource =
-      templateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
-      templateSources[0];
+      fieldableTemplateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
+      fieldableTemplateSources[0];
     const template = templateSource?.entity;
 
     if (!template) {
@@ -1044,8 +1068,8 @@ export default function ScenarioDetailPageContent({
   }
 
   const selectedTemplateSource =
-    templateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
-    templateSources[0];
+    fieldableTemplateSources.find((source) => source.entity.id === selectedTemplateSourceId) ??
+    fieldableTemplateSources[0];
 
   return (
     /*
@@ -1267,7 +1291,7 @@ export default function ScenarioDetailPageContent({
         temporaryActorCount={temporaryActorCount}
         temporaryActorName={temporaryActorName}
         temporaryActorRole={temporaryActorRole}
-        templateSources={templateSources}
+        templateSources={fieldableTemplateSources}
       />
 
       <ScenarioEventLogSection eventLogs={eventLogs} />
