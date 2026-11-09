@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import { Writable } from "node:stream";
 
 import Fastify from "fastify";
@@ -71,7 +72,7 @@ import { scenariosRoutes } from "./scenarios";
 
 // The genuine Prisma runtime classes, resolved from the database package that owns the dependency.
 const prismaRuntime = createRequire(
-  new URL("../../../../packages/database/package.json", import.meta.url),
+  resolve(__dirname, "../../../../packages/database/package.json"),
 )("@prisma/client/runtime/library") as {
   PrismaClientKnownRequestError: new (
     message: string,
