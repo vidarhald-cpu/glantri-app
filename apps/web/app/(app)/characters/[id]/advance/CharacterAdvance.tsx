@@ -11,6 +11,7 @@ import {
   removeCharacterProgressionCheck,
   requestCharacterProgressionCheck,
   resolveCharacterProgressionAttempts,
+  resolveRetainedTargetCharacterContent,
 } from "@glantri/rules-engine";
 
 import {
@@ -24,6 +25,7 @@ import type { LocalCharacterDraft, LocalCharacterRecord } from "@/lib/offline/gl
 import { CharacterDraftRepository } from "@/lib/offline/repositories/characterDraftRepository";
 import {
   buildServerBackedLocalCharacterRecord,
+  getServerCharacterRevision,
   LocalCharacterRepository,
   requireServerCharacterRevision,
 } from "@/lib/offline/repositories/localCharacterRepository";
@@ -114,7 +116,13 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
           return;
         }
 
-        setContent(result.content);
+        // Forgejo #1068: Progression prices, resolves and offers the Character's own catalogue —
+        // the approved target content for a target Character — as Chargen, the Sheet and combat do.
+        setContent(
+          result.record
+            ? resolveRetainedTargetCharacterContent(result.record.build, result.content)
+            : result.content,
+        );
         setRecord(result.record);
         setRecoveryDraft(result.recoveryDraft);
         setRecoveryRequired(Boolean(result.recoveryDraft || result.recoveryRecord));
@@ -170,10 +178,13 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
       progressionView.rows.filter((row) => row.targetType === "skill").map((row) => row.targetId),
     );
 
+    const catalogueSkillIds = content.chargenCatalogue?.skillIds;
+
     return [...content.skills]
       .filter(
         (skill) =>
           !skill.specializationOfSkillId &&
+          (!catalogueSkillIds || catalogueSkillIds.includes(skill.id)) &&
           !existingSkillIds.has(skill.id) &&
           !existingProgressionRowSkillIds.has(skill.id),
       )
@@ -381,7 +392,12 @@ export default function CharacterAdvance({ id }: CharacterAdvanceProps) {
 
     setSaving(true);
 
-    const hasServerSavePath = record.syncStatus === "synced" || draft.syncStatus === "synced";
+    // Forgejo #1068: resolving saves the record locally first, which marks it unsynced; a record
+    // that is based on a server revision still saves to the server.
+    const hasServerSavePath =
+      Boolean(getServerCharacterRevision(record)) ||
+      record.syncStatus === "synced" ||
+      draft.syncStatus === "synced";
 
     if (!hasServerSavePath) {
       const savedRecord = await localCharacterRepository.save({

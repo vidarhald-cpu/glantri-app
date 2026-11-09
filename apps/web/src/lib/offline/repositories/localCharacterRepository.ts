@@ -1,4 +1,4 @@
-import { validateTargetChargenBuild } from "@glantri/rules-engine";
+import { validatePostChargenBuild, validateTargetChargenBuild } from "@glantri/rules-engine";
 import { assertApprovedTargetProgression, getApprovedV2RuntimeContent } from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild, type CharacterRecord } from "@glantri/domain";
 
@@ -112,7 +112,19 @@ export class LocalCharacterRepository {
     const now = input.updatedAt ?? new Date().toISOString();
     const existing = await localDb.localCharacters.get(input.build.id);
     const build = parseApprovedBuild(input.build);
-    const targetErrors = validateTargetChargenBuild(build, getApprovedV2RuntimeContent());
+    // Forgejo #1068: only a brand-new local finalization is a Chargen save. A record that already
+    // exists locally, or that carries a server revision, is a Character after Chargen: it keeps
+    // the basic rules and the frozen Chargen totals, and the server alone decides who may change
+    // values (ruling 6), so the browser checks as a direct editor would.
+    const isChargenFinalization = !existing && !input.serverUpdatedAt;
+    const targetErrors = isChargenFinalization
+      ? validateTargetChargenBuild(build, getApprovedV2RuntimeContent())
+      : validatePostChargenBuild({
+          build,
+          content: getApprovedV2RuntimeContent(),
+          directValueEdit: true,
+          storedBuild: existing ? characterBuildSchema.parse(existing.build) : undefined,
+        });
     if (targetErrors.length) throw new Error(targetErrors.join(" "));
     const syncStatus = input.syncStatus ?? existing?.syncStatus ?? "local";
     const inheritedServerRevision = existing ? getServerCharacterRevision(existing) : undefined;

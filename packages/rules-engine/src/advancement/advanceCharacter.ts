@@ -255,7 +255,7 @@ function getTargetCurrentValue(input: {
   return getStatValue(input.build, input.targetId as GlantriCharacteristicKey);
 }
 
-function getProgressionAttemptCost(input: {
+export function getProgressionAttemptCost(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
   targetId: string;
@@ -303,6 +303,8 @@ function getProgressionAttemptCost(input: {
 
 function createEmptySkill(skill: SkillDefinition): CharacterSkill {
   return {
+    // Forgejo #1068: a new target-catalogue row carries its approved definition, as Chargen does.
+    ...("catalogueSource" in skill ? { targetDefinition: skill } : {}),
     category: skill.category,
     categoryId: skill.categoryId,
     grantedRanks: 0,
@@ -371,6 +373,7 @@ function ensureSpecializationExists(
     ranks: 0,
     relationshipGrantedRanks: 0,
     secondaryRanks: 0,
+    ...("catalogueSource" in specialization ? { targetDefinition: specialization } : {}),
     skillId: specialization.skillId,
     specializationId: specialization.id,
   };
@@ -378,7 +381,19 @@ function ensureSpecializationExists(
   return created;
 }
 
-function applySuccessfulIncrease(input: {
+/**
+ * The increase one successful progression roll applies (Forgejo #1068).
+ *
+ * It raises the competency's value by one rank **without touching the Chargen purchase fields**
+ * (`primaryRanks` / `secondaryRanks` on skills and groups) or the Chargen spending totals, so the
+ * Sheet keeps "Original N" frozen and reads the gain from the progression history. Skills and
+ * Learning Groups record it in `grantedRanks`, the rank field that is not a Chargen purchase. The
+ * mother tongue is the exception: its `grantedRanks` is re-derived from education on every read,
+ * so its gain is recorded in `primaryRanks`. A Specialization row has no such field (`ranks = secondaryRanks + relationshipGrantedRanks`), so
+ * its increase stays in `secondaryRanks`. The server replays this same function to check a
+ * player's resolved successes (`validatePostChargenBuild`).
+ */
+export function applySuccessfulProgressionIncrease(input: {
   build: CharacterBuild;
   content: CanonicalContentShape;
   targetId: string;
@@ -388,8 +403,12 @@ function applySuccessfulIncrease(input: {
   const progression = normalizeChargenProgression(build.progression);
 
   if (input.targetType === "skillGroup") {
+    if (!getGroupById(input.content, input.targetId)) {
+      return input.build;
+    }
+
     const group = ensureGroupExists(progression, input.targetId);
-    group.primaryRanks += 1;
+    group.grantedRanks += 1;
     group.ranks = group.grantedRanks + group.primaryRanks + group.secondaryRanks;
   } else if (input.targetType === "skill") {
     const skillDefinition = getSkillById(input.content, input.targetId);
@@ -399,13 +418,13 @@ function applySuccessfulIncrease(input: {
     }
 
     const skill = ensureSkillExists(progression, skillDefinition);
-
-    if (skillDefinition.category === "secondary") {
-      skill.secondaryRanks += 1;
-    } else {
+    if (skill.sourceTag === "mother-tongue") {
+      // The mother-tongue grant is re-derived from education on every read
+      // (`syncChargenMotherTongueSkillRow`), so a gain above it must live in a rank field.
       skill.primaryRanks += 1;
+    } else {
+      skill.grantedRanks += 1;
     }
-
     skill.ranks =
       skill.grantedRanks +
       skill.primaryRanks +
@@ -681,7 +700,7 @@ export function resolveCharacterProgressionAttempts(input: {
     const roll = rollOpenEndedProgressionD20(input.rng);
     const success = attempt.targetType !== "stat" && roll.rollTotal >= beforeValue;
     const nextBuild = success
-      ? applySuccessfulIncrease({
+      ? applySuccessfulProgressionIncrease({
           build,
           content: input.content,
           targetId: attempt.targetId,

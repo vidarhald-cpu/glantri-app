@@ -85,6 +85,8 @@ vi.mock("../lib/sessionAuth", () => ({
 }));
 
 vi.mock("../lib/characterEditAccess", () => ({
+  canEditCharacterInApi: (user: { roles: string[] }) =>
+    user.roles.includes("game_master") || user.roles.includes("admin"),
   loadAccessibleCharacterInApi: mocks.loadAccessibleCharacterInApi,
 }));
 
@@ -376,8 +378,34 @@ describe("characters route contract", () => {
     expect(mocks.characterService.saveExistingCharacter).toHaveBeenCalledWith({
       build: stubCharacter.build,
       characterId: "char-1",
+      // Forgejo #1068 ruling 6: an owning player is not a direct value editor.
+      directValueEdit: false,
       expectedUpdatedAt: stubCharacter.updatedAt,
     });
+  });
+
+  it("marks a GM update as a direct value edit (#1068 ruling 6)", async () => {
+    mocks.requireAuthenticatedUser.mockResolvedValue(mocks.gmUser);
+    mocks.loadAccessibleCharacterInApi.mockResolvedValue(stubCharacter);
+    mocks.characterService.saveExistingCharacter.mockResolvedValue({
+      ...stubCharacter,
+      updatedAt: "2026-01-01T01:00:00.000Z",
+    });
+
+    const app = await buildCharactersTestApp();
+    const response = await app.inject({
+      method: "PUT",
+      url: "/char-1",
+      payload: {
+        build: stubCharacter.build,
+        expectedUpdatedAt: stubCharacter.updatedAt,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(mocks.characterService.saveExistingCharacter).toHaveBeenCalledWith(
+      expect.objectContaining({ directValueEdit: true }),
+    );
   });
 
   it("requires an explicit server revision for updates", async () => {

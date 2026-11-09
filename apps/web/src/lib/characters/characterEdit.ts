@@ -1,5 +1,6 @@
 import type {
   CharacterBuild,
+  CharacterSkill,
   GlantriCharacteristicKey,
   ProfessionDefinition,
   ProfessionFamilyDefinition,
@@ -88,6 +89,72 @@ function cloneBuild(build: CharacterBuild): CharacterBuild {
   return structuredClone(build);
 }
 
+/**
+ * Forgejo #1068: a GM direct edit sets the owned value of a skill or Learning Group row to exactly
+ * `value` (rulings 1, 4 and 7). A raise is recorded in `grantedRanks`, the rank field that is not a
+ * Chargen purchase; a lowering removes those ranks first and then the Chargen purchases. The
+ * Chargen spending totals are never touched, so the Sheet's "Original" skill points stay frozen.
+ */
+function setOwnedRanks(
+  row: {
+    grantedRanks: number;
+    primaryRanks: number;
+    secondaryRanks: number;
+    sourceTag?: string;
+  },
+  value: number,
+): void {
+  const purchased = row.primaryRanks + row.secondaryRanks;
+
+  if (row.sourceTag === "mother-tongue") {
+    // The mother-tongue grant is re-derived from education on every read
+    // (`syncChargenMotherTongueSkillRow`), so it is a floor here and the GM's value above it
+    // lives in the rank fields.
+    const target = Math.max(0, value - row.grantedRanks);
+    if (target >= purchased) {
+      row.primaryRanks += target - purchased;
+      return;
+    }
+    let excess = purchased - target;
+    const fromSecondary = Math.min(row.secondaryRanks, excess);
+    row.secondaryRanks -= fromSecondary;
+    excess -= fromSecondary;
+    row.primaryRanks -= excess;
+    return;
+  }
+
+  if (value >= purchased) {
+    row.grantedRanks = value - purchased;
+    return;
+  }
+
+  let excess = purchased - value;
+  const fromSecondary = Math.min(row.secondaryRanks, excess);
+  row.grantedRanks = 0;
+  row.secondaryRanks -= fromSecondary;
+  excess -= fromSecondary;
+  row.primaryRanks -= excess;
+}
+
+/** A new skill row keeps the identity of the definition it comes from, as Chargen does. */
+function createSkillRow(skill: SkillDefinition, ownedXp: number): CharacterSkill {
+  const isTarget = "catalogueSource" in skill;
+
+  return {
+    ...(isTarget ? { targetDefinition: skill } : {}),
+    category: skill.category,
+    categoryId: skill.categoryId,
+    grantedRanks: ownedXp,
+    groupId: isTarget ? skill.groupId : (skill.groupIds[0] ?? skill.groupId),
+    level: 0,
+    primaryRanks: 0,
+    ranks: ownedXp,
+    relationshipGrantedRanks: 0,
+    secondaryRanks: 0,
+    skillId: skill.id,
+  } as CharacterSkill;
+}
+
 function updateCurrentStatModifier(
   build: CharacterBuild,
   stat: GlantriCharacteristicKey,
@@ -112,22 +179,29 @@ function updateCurrentStatModifier(
   return nextBuild;
 }
 
-export function setCharacterOriginalStatValue(
+/**
+ * Forgejo #1068 ruling 3: a GM's permanent stat edit is Developed (`developedStatModifiers`).
+ * Original is locked after Chargen. Current keeps its own temporary modifier, so it moves with
+ * Developed.
+ */
+export function setCharacterDevelopedStatValue(
   build: CharacterBuild,
   stat: GlantriCharacteristicKey,
   value: number,
 ): CharacterBuild {
   const nextBuild = cloneBuild(build);
-  const nextOriginalValue = clampStatValue(value);
-  const statLayers = deriveCharacterStatLayers(build);
-  const currentValue = statLayers.current[stat];
+  const originalValue = deriveCharacterStatLayers(build).original[stat];
+  const modifier = clampStatValue(value) - originalValue;
+  const nextModifiers = { ...(nextBuild.developedStatModifiers ?? {}) };
 
-  nextBuild.profile.resolvedStats = {
-    ...statLayers.original,
-    [stat]: nextOriginalValue,
-  };
+  if (modifier === 0) {
+    delete nextModifiers[stat];
+  } else {
+    nextModifiers[stat] = modifier;
+  }
 
-  return updateCurrentStatModifier(nextBuild, stat, currentValue);
+  nextBuild.developedStatModifiers = nextModifiers;
+  return nextBuild;
 }
 
 export function setCharacterCurrentStatValue(
@@ -208,18 +282,25 @@ export function setCharacterSkillGroupLevel(input: {
   }
 
   if (existing) {
-    const grantedRanks = existing.grantedRanks ?? 0;
-    existing.primaryRanks = Math.max(0, normalizedLevel - grantedRanks);
-    existing.secondaryRanks = 0;
-    existing.ranks = normalizedLevel;
+    // The shown level is ranks + GMs; the GM types the level.
+    setOwnedRanks(existing, Math.max(0, normalizedLevel - (existing.gms ?? 0)));
+    existing.ranks = existing.grantedRanks + existing.primaryRanks + existing.secondaryRanks;
+    nextBuild.progression = applyRelationshipMinimumGrants({
+      content: input.content,
+      progression: nextBuild.progression,
+    });
     return nextBuild;
   }
 
+  const definition = input.content.skillGroups.find((group) => group.id === input.groupId);
   nextBuild.progression.skillGroups.push({
+    ...(input.build.targetChargen && definition
+      ? { targetDefinition: structuredClone(definition) }
+      : {}),
     gms: 0,
-    grantedRanks: 0,
+    grantedRanks: normalizedLevel,
     groupId: input.groupId,
-    primaryRanks: normalizedLevel,
+    primaryRanks: 0,
     ranks: normalizedLevel,
     secondaryRanks: 0,
   });
@@ -231,23 +312,14 @@ export function setCharacterSkillGroupLevel(input: {
   return nextBuild;
 }
 
+/** Adds a skill the Character lacks at 1 XP, so the new row is visible and editable. */
 export function addCharacterSkill(build: CharacterBuild, skill: SkillDefinition): CharacterBuild {
   if (build.progression.skills.some((entry) => entry.skillId === skill.id)) {
     return cloneBuild(build);
   }
 
   const nextBuild = cloneBuild(build);
-  nextBuild.progression.skills.push({
-    category: skill.category,
-    categoryId: skill.categoryId,
-    grantedRanks: 0,
-    groupId: skill.groupIds[0] ?? skill.groupId,
-    level: 0,
-    primaryRanks: 0,
-    ranks: 0,
-    secondaryRanks: 0,
-    skillId: skill.id,
-  });
+  nextBuild.progression.skills.push(createSkillRow(skill, 1));
 
   return nextBuild;
 }
@@ -283,26 +355,15 @@ export function setCharacterSkillXp(input: {
   const normalizedXp = Math.max(0, Math.trunc(input.xp));
   const existing = nextBuild.progression.skills.find((entry) => entry.skillId === input.skill.id);
 
-  if (normalizedXp <= 0 && existing) {
-    existing.primaryRanks = 0;
-    existing.secondaryRanks = 0;
-    existing.ranks = existing.grantedRanks ?? 0;
-    nextBuild.progression = applyRelationshipMinimumGrants({
-      content: input.content,
-      progression: nextBuild.progression,
-    });
-    return nextBuild;
-  }
-
   if (existing) {
-    const grantedRanks = existing.grantedRanks ?? 0;
-    existing.primaryRanks = Math.max(0, normalizedXp - grantedRanks);
-    existing.secondaryRanks = 0;
+    // The row keeps its own saved identity (category, group, target definition); a GM edit only
+    // changes its value. Forgejo #1068: rewriting identity from another catalogue crashed the page.
+    setOwnedRanks(existing, normalizedXp);
     existing.ranks =
-      grantedRanks + existing.primaryRanks + (existing.relationshipGrantedRanks ?? 0);
-    existing.category = input.skill.category;
-    existing.categoryId = input.skill.categoryId;
-    existing.groupId = input.skill.groupIds[0] ?? input.skill.groupId;
+      existing.grantedRanks +
+      existing.primaryRanks +
+      existing.secondaryRanks +
+      (existing.relationshipGrantedRanks ?? 0);
     nextBuild.progression = applyRelationshipMinimumGrants({
       content: input.content,
       progression: nextBuild.progression,
@@ -310,18 +371,11 @@ export function setCharacterSkillXp(input: {
     return nextBuild;
   }
 
-  nextBuild.progression.skills.push({
-    category: input.skill.category,
-    categoryId: input.skill.categoryId,
-    grantedRanks: 0,
-    groupId: input.skill.groupIds[0] ?? input.skill.groupId,
-    level: 0,
-    primaryRanks: normalizedXp,
-    ranks: normalizedXp,
-    relationshipGrantedRanks: 0,
-    secondaryRanks: 0,
-    skillId: input.skill.id,
-  });
+  if (normalizedXp <= 0) {
+    return nextBuild;
+  }
+
+  nextBuild.progression.skills.push(createSkillRow(input.skill, normalizedXp));
 
   nextBuild.progression = applyRelationshipMinimumGrants({
     content: input.content,
@@ -344,25 +398,7 @@ export function setCharacterSpecializationXp(input: {
   const existing = nextBuild.progression.specializations.find(
     (entry) => entry.specializationId === input.specialization.id,
   );
-  const currentXp = existing?.secondaryRanks ?? 0;
-
-  if (normalizedXp > currentXp) {
-    const evaluation = evaluateSkillSelection({
-      content: input.content,
-      progression: nextBuild.progression,
-      target: {
-        specialization: input.specialization,
-        targetType: "specialization",
-      },
-    });
-
-    if (!evaluation.isAllowed) {
-      return {
-        build: input.build,
-        error: evaluation.blockingReasons[0]?.message ?? "Specialization purchase is blocked.",
-      };
-    }
-  }
+  // Forgejo #1068 ruling 1: after Chargen a GM edit is bound by no Chargen prerequisite.
 
   if (normalizedXp <= 0) {
     nextBuild.progression.specializations = nextBuild.progression.specializations.filter(
@@ -387,6 +423,9 @@ export function setCharacterSpecializationXp(input: {
   }
 
   nextBuild.progression.specializations.push({
+    ...("catalogueSource" in input.specialization
+      ? { targetDefinition: input.specialization }
+      : {}),
     level: 0,
     ranks: normalizedXp,
     relationshipGrantedRanks: 0,
@@ -491,7 +530,10 @@ export function buildCharacterEditSkillRows(input: {
 }): CharacterEditSkillRow[] {
   const directSkillKeys = new Set(
     input.build.progression.skills
-      .filter((entry) => (entry.primaryRanks ?? 0) + (entry.secondaryRanks ?? 0) > 0)
+      .filter(
+        (entry) =>
+          (entry.grantedRanks ?? 0) + (entry.primaryRanks ?? 0) + (entry.secondaryRanks ?? 0) > 0,
+      )
       .map((entry) =>
         getCharacterSkillKey({
           languageName: entry.languageName,
@@ -565,7 +607,7 @@ export function buildCharacterEditSpecializationRows(input: {
     rows.push({
       blockingMessage: evaluation.blockingReasons[0]?.message,
       canDecreaseDirectXp: (specializationView.secondaryRanks ?? 0) > 0,
-      canIncreaseDirectXp: evaluation.isAllowed,
+      canIncreaseDirectXp: true,
       grantedSourceLabel: formatDerivedSkillSourceLabel({
         sourceSkillName: specializationView.relationshipGrantedSourceSkillName,
         sourceType: specializationView.relationshipGrantedSourceType,
