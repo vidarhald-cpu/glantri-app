@@ -236,33 +236,20 @@ describe("buildCombatLastAction", () => {
     expect(build({ commands: [declareGangHo], logEvents: [actorless] })).toBeUndefined();
   });
 
-  it("names the GM, with the phase, for a bulk initiative commit, and then yields to real actions", () => {
+  it("a bulk initiative commit produces no line: the previous real action stays", () => {
     const bulk1 = command("c-commit-1", "commit_phase_initiative_resolution", "p-halgeir", {
       phase: "phase1",
     });
     const bulk2 = command("c-commit-2", "commit_phase_initiative_resolution", "p-halgeir", {
       phase: "phase2",
     });
-    const order = {
-      entries: [
-        { initiativeResult: { total: 14 }, participantId: "p-halgeir" },
-        { initiativeResult: { total: 9 }, participantId: "p-gangho" },
-      ],
-      phase: "phase1",
-      roundNumber: 1,
-    };
-    expect(build({ commands: [declareGangHo, bulk1] })).toBe(
-      "GM committed Phase 1 initiative for all combatants",
-    );
-    expect(build({ commands: [declareGangHo, bulk1], committedInitiativeOrders: [order] })).toBe(
-      "GM committed Phase 1 initiative for all combatants (Halgeir 14, GangHo 9)",
-    );
+    expect(build({ commands: [bulk1] })).toBeUndefined();
+    expect(build({ commands: [declareGangHo, bulk1] })).toBe("GangHo declared Parry");
     expect(build({ commands: [declareGangHo, bulk1, rollAttack, commitDamage] })).toBe(
       "Halgeir dealt 25 damage to GangHo",
     );
-    // The Phase 2 commit is a new action of its own and says so; Phase 1's does not come back.
     expect(build({ commands: [declareGangHo, bulk1, rollAttack, commitDamage, bulk2] })).toBe(
-      "GM committed Phase 2 initiative for all combatants",
+      "Halgeir dealt 25 damage to GangHo",
     );
   });
 

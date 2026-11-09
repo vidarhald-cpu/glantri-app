@@ -43,19 +43,8 @@ export interface CombatLastActionEvent {
   readonly type: string;
 }
 
-/** The recorded result of a committed initiative (`state.committedInitiativeOrders`). */
-export interface CombatLastActionInitiativeCommit {
-  readonly entries: readonly {
-    readonly initiativeResult?: { readonly total: number };
-    readonly participantId: string;
-  }[];
-  readonly phase: string;
-  readonly roundNumber: number;
-}
-
 export interface BuildCombatLastActionInput {
   readonly commands: readonly CombatLastActionCommand[];
-  readonly committedInitiativeOrders?: readonly CombatLastActionInitiativeCommit[];
   readonly events: readonly CombatLastActionEvent[];
   readonly logEvents: readonly CombatLogEventPresentation[];
   readonly participants: readonly { readonly label: string; readonly participantId: string }[];
@@ -63,14 +52,6 @@ export interface BuildCombatLastActionInput {
 }
 
 const BULK_INITIATIVE_COMMIT = "commit_phase_initiative_resolution";
-const INDIVIDUAL_INITIATIVE_ROLL: Readonly<Record<string, string>> = {
-  phase1: "roll_initiative_phase1",
-  phase2: "roll_initiative_phase2",
-};
-const PHASE_NAME: Readonly<Record<string, string>> = { phase1: "Phase 1", phase2: "Phase 2" };
-
-/** A long order would stop being one short line. */
-const ORDER_NAMES_SHOWN = 4;
 
 function attackOutcomeWord(outcome: "grazed" | "hit" | "missed"): string {
   return outcome === "missed" ? "miss" : outcome === "grazed" ? "graze" : "hit";
@@ -105,25 +86,6 @@ function logEventText(event: CombatLogEventPresentation, actorLabel: string): st
   }
 }
 
-function bulkCommitText(input: {
-  commit?: CombatLastActionInitiativeCommit;
-  labels: ReadonlyMap<string, string>;
-  phase?: string;
-}): string {
-  // The phase is named because a round commits initiative once per phase: two identical lines
-  // would make a Phase 2 commit indistinguishable from a stale Phase 1 one.
-  const phaseName = input.phase ? PHASE_NAME[input.phase] : undefined;
-  const ranked = (input.commit?.entries ?? []).flatMap((entry) => {
-    const label = input.labels.get(entry.participantId);
-    return label && entry.initiativeResult ? [`${label} ${entry.initiativeResult.total}`] : [];
-  });
-  const shown = ranked.slice(0, ORDER_NAMES_SHOWN);
-  const order = shown.length
-    ? ` (${shown.join(", ")}${ranked.length > shown.length ? ", …" : ""})`
-    : "";
-  return `GM committed ${phaseName ? `${phaseName} ` : ""}initiative for all combatants${order}`;
-}
-
 export function buildCombatLastAction(input: BuildCombatLastActionInput): CombatLastAction | null {
   const labels = new Map(input.participants.map((entry) => [entry.participantId, entry.label]));
 
@@ -149,22 +111,13 @@ export function buildCombatLastAction(input: BuildCombatLastActionInput): Combat
   }
 
   const commands = input.commands.filter((command) => command.roundNumber === input.roundNumber);
-  const commandTypes = new Set(commands.map((command) => command.type));
 
   for (let index = commands.length - 1; index >= 0; index -= 1) {
     const command = commands[index]!;
 
-    if (command.type === BULK_INITIATIVE_COMMIT) {
-      // A bulk commit records an order, not a roller, so the line names the GM as its source and
-      // never a combatant. When the phase's initiative was rolled individually, the commit only
-      // closes those rolls and the last roller stays the line.
-      const rollType = command.phase ? INDIVIDUAL_INITIATIVE_ROLL[command.phase] : undefined;
-      if (rollType && commandTypes.has(rollType)) continue;
-      const commit = [...(input.committedInitiativeOrders ?? [])]
-        .reverse()
-        .find((entry) => entry.roundNumber === input.roundNumber && entry.phase === command.phase);
-      return { actorLabel: "GM", text: bulkCommitText({ commit, labels, phase: command.phase }) };
-    }
+    // A bulk initiative commit records an order, not an action anyone took (the players roll
+    // initiative), so it is skipped like any wording-less command: the previous real action stays.
+    if (command.type === BULK_INITIATIVE_COMMIT) continue;
 
     const events = [...(eventsByCommandId.get(command.id) ?? [])].sort(
       (left, right) => right.sequence - left.sequence,

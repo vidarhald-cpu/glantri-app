@@ -12795,7 +12795,6 @@ export default function CombatRoundManagerPanel({
 
         <CombatLastActionLine
           commands={roundState.commands}
-          committedInitiativeOrders={roundState.committedInitiativeOrders}
           events={combatPresentation.active.resultEvents}
           logEvents={combatLogProjection.events}
           participants={roundState.participants}

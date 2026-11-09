@@ -7,19 +7,17 @@ import {
 
 /** Compact, actor-qualified one-line "Last action" (Forgejo #836). Renders nothing when absent. */
 export function CombatLastActionLine(input: BuildCombatLastActionInput) {
-  const { commands, committedInitiativeOrders, events, logEvents, participants, roundNumber } =
-    input;
+  const { commands, events, logEvents, participants, roundNumber } = input;
   const lastAction = useMemo(
     () =>
       buildCombatLastAction({
         commands,
-        committedInitiativeOrders,
         events,
         logEvents,
         participants,
         roundNumber,
       }),
-    [commands, committedInitiativeOrders, events, logEvents, participants, roundNumber],
+    [commands, events, logEvents, participants, roundNumber],
   );
   if (!lastAction) return null;
   return (

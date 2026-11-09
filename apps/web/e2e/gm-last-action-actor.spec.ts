@@ -831,7 +831,7 @@ test.describe("GM Last action names the actor (#836)", () => {
     await world.playerContextClose();
   });
 
-  test("a bulk initiative commit reads as the GM's, then the next real action replaces it", async ({
+  test("a bulk initiative commit produces no line: the previous real action stays, then the next real action replaces it", async ({
     browser,
     page: gmPage,
   }) => {
@@ -870,10 +870,10 @@ test.describe("GM Last action names the actor (#836)", () => {
     const afterCommit = await readGm(gmPage);
     console.log(`#836 bulk commit: ${JSON.stringify(afterCommit)}`);
     expect(afterCommit.inspectorHeading).toContain(defender!.name);
-    expect(afterCommit.lastAction).toMatch(
-      /^Last action: GM committed Phase 1 initiative for all combatants/,
-    );
-    expect(afterCommit.lastAction).not.toContain(`Last action: ${defender!.name}`);
+    // The bulk commit is no action: the line keeps the last declaration (the defender's parry).
+    expect(afterCommit.lastAction).toMatch(/^Last action: .+ declared /);
+    expect(afterCommit.lastAction).not.toContain("GM committed");
+    expect(afterCommit.lastAction).not.toContain("initiative");
 
     // The next real action (the attack) replaces it.
     const next = await walk(
@@ -943,7 +943,9 @@ test.describe("GM Last action names the actor (#836)", () => {
       expect(result.reached.round2, "the walk crossed into round 2").toBe(true);
       expect(result.reached.laterActionAfterInitiative).toBe(true);
       if (scenario.bulk) {
-        expect(result.reached.bulkCommits).toBeGreaterThan(0);
+        // Both the Phase 1 and the Phase 2 bulk commits were passed, with the line following the
+        // previous real action (checked at every press, including Round End).
+        expect(result.reached.bulkCommits).toBe(2);
       } else {
         expect(result.reached.individualInitiative).toBeGreaterThan(0);
       }
@@ -994,19 +996,8 @@ function oracleActions(state: CombatRoundState, nameOf: (id?: string) => string)
         what: "declaration",
       });
     }
-    if (
-      command.type === "commit_phase_initiative_resolution" &&
-      !commands.some((other) => other.type === `roll_initiative_${command.phase}`)
-    ) {
-      const phase = command.phase === "phase2" ? "Phase 2" : "Phase 1";
-      actions.push({
-        actor: "GM",
-        key: `commit:${command.id}`,
-        order: [index, 0],
-        pattern: new RegExp(`^Last action: GM committed ${phase} initiative for all combatants`),
-        what: `bulk ${phase} initiative commit`,
-      });
-    }
+    // A bulk initiative commit (no individual rolls in its phase) is deliberately not an action:
+    // it produces no line, so the previous real action stays (WO-836-S1/A2).
   }
   for (const event of state.events) {
     if (event.roundNumber !== round) continue;
@@ -1102,6 +1093,7 @@ async function walkRoundAgainstOracle(input: {
     roundEnd: false,
   };
   const seen = new Set<string>();
+  const bulkPhasesSeen = new Set<string>();
   let expected: OracleAction | undefined;
   let expectedLine: string | null = null;
   let sawInitiative = false;
@@ -1119,6 +1111,17 @@ async function walkRoundAgainstOracle(input: {
       state = again;
       if (settled) break;
     }
+    for (const command of state.commands) {
+      if (
+        command.roundNumber === 1 &&
+        command.type === "commit_phase_initiative_resolution" &&
+        !state.commands.some((other) => other.type === `roll_initiative_${command.phase}`)
+      ) {
+        bulkPhasesSeen.add(`${command.phase}`);
+      }
+    }
+    reached.bulkCommits = bulkPhasesSeen.size;
+    if (bulkPhasesSeen.size > 0) sawInitiative = true;
     const actions = oracleActions(state, nameOf);
     const fresh = actions.filter((action) => !seen.has(action.key));
     for (const action of actions) seen.add(action.key);
@@ -1132,7 +1135,6 @@ async function walkRoundAgainstOracle(input: {
       expected = newest;
       expectedLine = null;
       if (newest.what === "individual initiative") reached.individualInitiative += 1;
-      if (newest.what.startsWith("bulk")) reached.bulkCommits += 1;
       if (/initiative/.test(newest.what)) sawInitiative = true;
       else if (sawInitiative && newest.what !== "declaration") {
         reached.laterActionAfterInitiative = true;
@@ -1168,6 +1170,9 @@ async function walkRoundAgainstOracle(input: {
       }
       if (read.currentStepResultsRegions !== 0) {
         violations.push(`${where}: the GM "Current step results" box is back`);
+      }
+      if (read.lastAction?.includes("GM committed")) {
+        violations.push(`${where}: a bulk initiative commit is on the line: ${read.lastAction}`);
       }
       if (!expected) {
         if (read.lastAction !== null) {
