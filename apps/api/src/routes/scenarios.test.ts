@@ -17424,22 +17424,24 @@ describe("scenarios route contract", () => {
     expect(mocks.encounterService.updateEncounter).not.toHaveBeenCalled();
   });
 
-  it("uses the live character sheet displayed Combat Experience total when the participant snapshot omits skill data", async () => {
+  it("uses the participant snapshot build's displayed Combat Experience total, not the live Character (#1068 ruling 8)", async () => {
     setupCombatDeclarationRoute({
       combatExperienceResolved: false,
       combatExperienceWindowOpen: true,
       participant: {
         characterId: "character-1",
         snapshot: {
+          build: makeCombatExperienceCharacterBuild(),
           displayName: "The Gladiator",
         },
       },
       user: mocks.adminUser,
     });
-    mocks.characterService.getCharacterById.mockResolvedValue({
-      build: makeCombatExperienceCharacterBuild(),
-      id: "character-1",
-    });
+    // A GM edit saved after the participant's last refresh: the live Character's Combat Experience
+    // is higher, and must not reach the roll until the GM refreshes the participant between rounds.
+    const edited = makeCombatExperienceCharacterBuild();
+    edited.progression.skills[0]!.secondaryRanks = 20;
+    mocks.characterService.getCharacterById.mockResolvedValue({ build: edited, id: "character-1" });
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.2);
     const app = await buildScenarioTestApp();
 
@@ -17455,7 +17457,7 @@ describe("scenarios route contract", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(mocks.characterService.getCharacterById).toHaveBeenCalledWith("character-1");
+    expect(mocks.characterService.getCharacterById).not.toHaveBeenCalled();
     expect(response.json().combatExperience).toMatchObject({
       difficulty: 26,
       difficultyShift: 5,

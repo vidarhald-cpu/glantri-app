@@ -12,7 +12,6 @@ import {
 } from "@glantri/content";
 import {
   CampaignService,
-  CharacterService,
   CharacterEquipmentReadModelService,
   CombatStateReadService,
   CombatItemInteractionService,
@@ -440,7 +439,6 @@ const campaignService = instrumentCombatService(new CampaignService(), {
     stage: "repository_read_campaign",
   },
 });
-const characterService = new CharacterService();
 const characterEquipmentReadModelService = new CharacterEquipmentReadModelService();
 const combatItemInteractionService = new CombatItemInteractionService();
 const combatStateReadService = instrumentCombatService(new CombatStateReadService(), {
@@ -757,6 +755,12 @@ function computeDieResult(rollD20: number, openEndedD10s: number[]): number {
   return rollD20 + direction * openEndedD10s.reduce((sum, d10) => sum + d10, 0);
 }
 
+/**
+ * The Combat Experience skill total for a Character participant, read from the participant's
+ * Scenario snapshot build — the same source every other combat resolver reads — and never from
+ * the live Character. Forgejo #1068 ruling 8: a GM edit or a resolved Progression reaches combat
+ * only when the GM refreshes the participant, and never mid-round.
+ */
 async function getCombatExperienceSkillLookupForScenarioParticipant(
   participant: ScenarioParticipant,
 ) {
@@ -764,10 +768,10 @@ async function getCombatExperienceSkillLookupForScenarioParticipant(
     return getParticipantCombatExperienceSkillTotalLookup(participant);
   }
 
-  const character = await characterService.getCharacterById(participant.characterId);
-  const sheetSummary = character
+  const build = characterBuildSchema.safeParse(participant.snapshot.build);
+  const sheetSummary = build.success
     ? buildCharacterSheetSummary({
-        build: character.build,
+        build: build.data,
         content: defaultCanonicalContent,
       })
     : undefined;
