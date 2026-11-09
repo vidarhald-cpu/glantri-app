@@ -33,6 +33,26 @@ function createEquipmentWriteStub(record?: (characterId: string) => void) {
   } as never;
 }
 
+/**
+ * Forgejo #1068 ruling 8. The participant refresh reads this Scenario's active Encounters to
+ * decide whether a round is under way; these stubs answer that read without a database.
+ */
+function createEncounterClientStub(sessions: unknown[] = []) {
+  return {
+    encounter: {
+      findMany: async () =>
+        sessions.map((session) => {
+          // A split-storage Encounter keeps the round in force beside the session.
+          const { activeCombatState, ...sessionJson } = session as { activeCombatState?: unknown };
+          return {
+            activeCombatState: activeCombatState ? { stateJson: activeCombatState } : null,
+            sessionJson,
+          };
+        }),
+    },
+  } as never;
+}
+
 describe("ScenarioService controller assignment", () => {
   it("explicitly refreshes committed equipment while preserving live participant state", async () => {
     const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
@@ -49,7 +69,7 @@ describe("ScenarioService controller assignment", () => {
       repository,
       { getCharacterById: async () => character } as never,
       { getCharacterEquipmentState: async () => equipmentState } as never,
-      undefined,
+      createEncounterClientStub(),
       createEquipmentWriteStub(),
     );
     const original = await service.addCharacterParticipant({
@@ -135,52 +155,127 @@ describe("ScenarioService controller assignment", () => {
     expect(refreshed.state.health.currentHp).toBe(4);
   });
 
-  it("refreshes the participant's build so a GM edit reaches combat (#1068 ruling 8)", async () => {
-    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
-    scenario.status = "live";
-    const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
-    rosterCharacters(rosterEntries, character.id);
-    const service = new ScenarioService(
-      repository,
-      { getCharacterById: async () => character } as never,
-      {
-        getCharacterEquipmentState: async () => ({
-          activeLoadoutByCharacterId: {},
-          itemsById: {},
-          locationsById: {},
-          templatesById: {},
-        }),
-      } as never,
-      undefined,
-      createEquipmentWriteStub(),
-    );
-    const original = await service.addCharacterParticipant({
-      characterId: character.id,
-      joinSource: "gm_added",
-      scenarioId: "scenario-1",
-    });
-    await repository.updateScenarioParticipantState(original.id, {
-      ...original.state,
-      health: { ...original.state.health, currentHp: 4 },
-    });
-    character.build = {
-      ...character.build,
-      developedStatModifiers: { str: 2 },
-      profile: { ...character.build.profile, notes: "Owner-only notes" },
-    };
-    character.updatedAt = "2026-04-21T01:00:00.000Z";
+  describe("the participant refresh copies the build only between rounds (#1068 ruling 8)", () => {
+    const ROUND_TWO = { commands: [] as Array<{ roundNumber: number }>, roundNumber: 2 };
 
-    const refreshed = await service.refreshCharacterParticipantEquipmentSnapshot({
-      participantId: original.id,
-      scenarioId: "scenario-1",
+    async function refreshAfterGmEdit(input: {
+      encounterSessions: (participantId: string) => unknown[];
+    }) {
+      const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+      scenario.status = "live";
+      const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
+      rosterCharacters(rosterEntries, character.id);
+      let equipmentRevision = 1;
+      const sessions: unknown[] = [];
+      const service = new ScenarioService(
+        repository,
+        { getCharacterById: async () => character } as never,
+        {
+          getCharacterEquipmentState: async () => ({
+            activeLoadoutByCharacterId: {},
+            itemsById: {},
+            locationsById: {},
+            revision: equipmentRevision,
+            templatesById: {},
+          }),
+        } as never,
+        createEncounterClientStub(sessions),
+        createEquipmentWriteStub(),
+      );
+      const original = await service.addCharacterParticipant({
+        characterId: character.id,
+        joinSource: "gm_added",
+        scenarioId: "scenario-1",
+      });
+      sessions.push(...input.encounterSessions(original.id));
+      await repository.updateScenarioParticipantState(original.id, {
+        ...original.state,
+        health: { ...original.state.health, currentHp: 4 },
+      });
+      // The GM edits the Character, and its equipment changes, after it joined the Scenario.
+      character.build = {
+        ...character.build,
+        developedStatModifiers: { str: 2 },
+        profile: { ...character.build.profile, notes: "Owner-only notes" },
+      };
+      character.updatedAt = "2026-04-21T01:00:00.000Z";
+      equipmentRevision = 2;
+
+      const refreshed = await service.refreshCharacterParticipantEquipmentSnapshot({
+        participantId: original.id,
+        scenarioId: "scenario-1",
+      });
+      return { original, refreshed };
+    }
+
+    function rosterSession(participantId: string, combatRoundState?: unknown) {
+      return {
+        combatRoundState,
+        participantMembershipMode: "explicit",
+        participants: [{ id: "encounter-row-1", scenarioParticipantId: participantId }],
+      };
+    }
+
+    it("copies the build when no Encounter is running", async () => {
+      const { original, refreshed } = await refreshAfterGmEdit({ encounterSessions: () => [] });
+
+      expect(original.snapshot.build).not.toHaveProperty("developedStatModifiers.str", 2);
+      expect(refreshed.snapshot.build).toMatchObject({ developedStatModifiers: { str: 2 } });
+      // The private projection still applies, and live participant state survives the refresh.
+      expect(refreshed.snapshot.build).not.toHaveProperty("profile.notes");
+      expect(refreshed.snapshot.sourceUpdatedAt).toBe("2026-04-21T01:00:00.000Z");
+      expect(refreshed.snapshot.equipmentProjection?.aggregateRevision).toBe(2);
+      expect(refreshed.state.health.currentHp).toBe(4);
     });
 
-    expect(original.snapshot.build).not.toHaveProperty("developedStatModifiers.str", 2);
-    expect(refreshed.snapshot.build).toMatchObject({ developedStatModifiers: { str: 2 } });
-    // The private projection still applies, and live participant state survives the refresh.
-    expect(refreshed.snapshot.build).not.toHaveProperty("profile.notes");
-    expect(refreshed.snapshot.sourceUpdatedAt).toBe("2026-04-21T01:00:00.000Z");
-    expect(refreshed.state.health.currentHp).toBe(4);
+    it("copies the build before round 1 and between rounds", async () => {
+      for (const combatRoundState of [
+        undefined,
+        { commands: [], roundNumber: 1 },
+        // Round end committed: the commands recorded belong to the round that ended.
+        { ...ROUND_TWO, commands: [{ roundNumber: 1 }] },
+      ]) {
+        const { refreshed } = await refreshAfterGmEdit({
+          encounterSessions: (participantId) => [rosterSession(participantId, combatRoundState)],
+        });
+        expect(refreshed.snapshot.build).toMatchObject({ developedStatModifiers: { str: 2 } });
+      }
+    });
+
+    it("keeps the build and reconciles equipment only while a round holding the participant is under way", async () => {
+      for (const sessions of [
+        (participantId: string) => [
+          rosterSession(participantId, { ...ROUND_TWO, commands: [{ roundNumber: 2 }] }),
+        ],
+        // An Encounter with no explicit roster holds every active Scenario participant.
+        () => [{ combatRoundState: { ...ROUND_TWO, commands: [{ roundNumber: 2 }] } }],
+        // Split storage: the round in force is the active combat state, not the session copy.
+        (participantId: string) => [
+          {
+            ...rosterSession(participantId, undefined),
+            activeCombatState: { ...ROUND_TWO, commands: [{ roundNumber: 2 }] },
+          },
+        ],
+      ]) {
+        const { original, refreshed } = await refreshAfterGmEdit({ encounterSessions: sessions });
+
+        expect(refreshed.snapshot.build).toEqual(original.snapshot.build);
+        expect(refreshed.snapshot.build).not.toHaveProperty("developedStatModifiers.str", 2);
+        // Equipment is reconciled exactly as before #1068, and live state survives.
+        expect(refreshed.snapshot.equipmentProjection?.aggregateRevision).toBe(2);
+        expect(refreshed.snapshot.sourceUpdatedAt).toBe("2026-04-21T01:00:00.000Z");
+        expect(refreshed.state.health.currentHp).toBe(4);
+      }
+    });
+
+    it("copies the build when the round under way holds other participants only", async () => {
+      const { refreshed } = await refreshAfterGmEdit({
+        encounterSessions: () => [
+          rosterSession("someone-else", { ...ROUND_TWO, commands: [{ roundNumber: 2 }] }),
+        ],
+      });
+      expect(refreshed.snapshot.build).toMatchObject({ developedStatModifiers: { str: 2 } });
+    });
   });
 
   it("prevents one player from being assigned to two active player characters in the same scenario", async () => {
@@ -1105,7 +1200,7 @@ describe("ScenarioService equipment aggregate initialization boundary", () => {
           };
         },
       } as never,
-      undefined,
+      createEncounterClientStub(),
       createEquipmentWriteStub((characterId) => order.push(`initialize:${characterId}`)),
     );
     const participant = await service.addCharacterParticipant({

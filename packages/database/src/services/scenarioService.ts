@@ -1,4 +1,5 @@
 import type {
+  CombatRoundState,
   ReusableEntity,
   Scenario,
   ScenarioAvailableObjectReference,
@@ -14,6 +15,7 @@ import {
   createParticipantSnapshotFromEntity,
   canMutateScenarioInStatus,
   canTransitionScenarioStatus,
+  encounterRosterChangeWaitsForRoundBoundary,
   isScenarioReadOnly,
   isScenarioLiveInteractive,
   formatScenarioAvailableObjectReferenceType,
@@ -566,10 +568,19 @@ export class ScenarioService {
   }
 
   /**
-   * Explicitly reconciles the current canonical Character into the Scenario-owned projection:
-   * its equipment and, since Forgejo #1068, its build (stats and skills), so a GM edit or a
-   * resolved Progression reaches combat when the GM refreshes the participant. Round state keeps
-   * its own frozen copy; this refresh does not reach into a round already under way.
+   * Explicitly reconciles the current canonical Character into the Scenario-owned projection.
+   *
+   * Equipment is always reconciled, exactly as before Forgejo #1068: Item interactions refuse a
+   * stale projection, so the GM must be able to reconcile it during a round.
+   *
+   * Since #1068 the refresh also copies the Character's build (stats and skills), so a GM edit or
+   * a resolved Progression reaches combat — but never mid-round (Product Owner ruling 8). The
+   * combat resolvers read `snapshot.build` live whenever they resolve; there is no separate frozen
+   * per-round copy. So while an active Encounter that holds this participant has a round under
+   * way (the same boundary the #850 roster freeze uses,
+   * `encounterRosterChangeWaitsForRoundBoundary`), the build is left as it is and only equipment
+   * is reconciled. Between rounds, before round 1, or with no active Encounter, the build is
+   * copied too, and the GM refreshes again after round end to pick a mid-round edit up.
    */
   async refreshCharacterParticipantEquipmentSnapshot(input: {
     participantId: string;
@@ -607,13 +618,50 @@ export class ScenarioService {
       sourceUpdatedAt: character.updatedAt,
     });
 
+    // Read narrowly, as the #850 deactivation check does: the question is only whether a running
+    // Encounter holds this participant in a round under way, and a full session parse would let an
+    // unrelated stored-session defect refuse an ordinary equipment reconcile. The round in force
+    // lives in the split active combat state, or in the session for a legacy-storage Encounter.
+    const activeEncounters = await this.client.encounter.findMany({
+      select: { activeCombatState: { select: { stateJson: true } }, sessionJson: true },
+      where: { scenarioId: input.scenarioId, status: "active" },
+    });
+    const roundUnderWay = activeEncounters.some((record) => {
+      const session = record.sessionJson as {
+        combatRoundState?: CombatRoundState;
+        participantMembershipMode?: string;
+        participants?: { id?: string; scenarioParticipantId?: string }[];
+      } | null;
+      if (!session || typeof session !== "object" || Array.isArray(session)) return false;
+      const participants = Array.isArray(session.participants) ? session.participants : [];
+      // An Encounter with no explicit roster holds every active Scenario participant.
+      const holdsParticipant =
+        session.participantMembershipMode !== "explicit" && participants.length === 0
+          ? participant.isActive
+          : participants.some(
+              (row) => row.scenarioParticipantId === participant.id || row.id === participant.id,
+            );
+      const roundState = (record.activeCombatState?.stateJson ?? session.combatRoundState) as
+        | CombatRoundState
+        | null
+        | undefined;
+      return (
+        holdsParticipant &&
+        Array.isArray(roundState?.commands) &&
+        encounterRosterChangeWaitsForRoundBoundary({
+          combatRoundState: roundState ?? undefined,
+          status: "active",
+        })
+      );
+    });
+
     const capturedAt = new Date().toISOString();
     const fingerprint = fingerprintScenarioEquipment(equipmentState);
     const reconciled = await this.repository.updateScenarioParticipantSnapshotAndState(
       participant.id,
       {
         ...participant.snapshot,
-        build: refreshed.snapshot.build,
+        ...(roundUnderWay ? {} : { build: refreshed.snapshot.build }),
         equipmentProjection: {
           aggregateRevision: equipmentState.revision,
           capturedAt,
