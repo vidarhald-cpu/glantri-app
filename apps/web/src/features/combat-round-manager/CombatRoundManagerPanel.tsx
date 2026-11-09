@@ -13,7 +13,6 @@ import {
   useRef,
   useState,
 } from "react";
-
 import type {
   CombatRoundDeclaration,
   CombatDeclarationIntent,
@@ -130,6 +129,7 @@ import {
   buildDodgeCalculationPresentationFromSnapshot,
   CombatEventResultList,
   CombatLog,
+  CombatLastActionLine,
   CombatStepResultList,
   CombatTracker,
   createDefaultCombatLogSelection,
@@ -12793,6 +12793,13 @@ export default function CombatRoundManagerPanel({
           </section>
         ) : null}
 
+        <CombatLastActionLine
+          commands={roundState.commands}
+          events={combatPresentation.active.resultEvents}
+          logEvents={combatLogProjection.events}
+          participants={roundState.participants}
+          roundNumber={roundState.roundNumber}
+        />
         <CombatTracker
           followCurrent={!inspectorIsHistorical}
           model={trackerModel}
@@ -14153,18 +14160,15 @@ export default function CombatRoundManagerPanel({
                       </div>
                     ) : inspectorIsHistorical ? (
                       <PlayerCombatActionResultPanel result={null} title="Historical result" />
-                    ) : gmCurrentStepResultPresentation ? (
-                      <CombatStepResultList
-                        presentation={gmCurrentStepResultPresentation}
-                        recentPresentation={recentResultPresentation}
-                      />
                     ) : recentResultPresentation ? (
                       <CombatStepResultList
                         presentation={recentResultPresentation}
                         title="Recent result"
                       />
                     ) : (
-                      <PlayerCombatActionResultPanel result={null} />
+                      // #836: holds the inspector row's third column that the removed
+                      // "Current step results" box occupied, so the row composition is unchanged.
+                      <div aria-hidden="true" />
                     )}
                   </div>
                 </>
@@ -14219,18 +14223,14 @@ export default function CombatRoundManagerPanel({
                   }
                   validationMessage={inspectorActionValidationMessage}
                 />
-                {gmCurrentStepResultPresentation ? (
-                  <CombatStepResultList
-                    presentation={gmCurrentStepResultPresentation}
-                    recentPresentation={recentResultPresentation}
-                  />
-                ) : recentResultPresentation ? (
+                {recentResultPresentation ? (
                   <CombatStepResultList
                     presentation={recentResultPresentation}
                     title="Recent result"
                   />
                 ) : (
-                  <PlayerCombatActionResultPanel result={null} />
+                  // #836: holds the third column the removed box occupied (see above).
+                  <div aria-hidden="true" />
                 )}
               </div>
             </>

@@ -163,7 +163,9 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("getLatestRelevantPlayerCombatAttackResult");
     expect(source).toContain("inspectorIsHistorical && inspectorHasCanonicalActionResult");
     expect(source).toContain("buildCombatStepResultPresentation({");
-    expect(source).toContain("presentation={gmCurrentStepResultPresentation}");
+    // #836: the GM no longer renders a persistent "Current step results" box.
+    expect(source).not.toContain("presentation={gmCurrentStepResultPresentation}");
+    expect(source).toContain("<CombatLastActionLine");
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
   });
 
@@ -173,7 +175,7 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).toContain("createCombatRecentResultCandidate({");
     expect(source).toContain("resolveCombatRecentResultFocus({");
     expect(source).toContain("selectCombatRecentResultPresentation({");
-    expect(source).toContain("recentPresentation={recentResultPresentation}");
+    expect(source).toContain("presentation={recentResultPresentation}");
     expect(source).toContain("acceptedEncounterRevisionRef.current");
     expect(source).toContain("function selectTimelineSelection(");
     expect(source).toContain("setRecentResultFocus(undefined)");
@@ -741,10 +743,8 @@ describe("CombatRoundManagerPanel", () => {
     expect(source).not.toContain("Legacy result · canonical event history unavailable");
     expect(source).toContain("Some historical result details are unavailable.");
     expect(source).toContain("deriveCombatHistoryStepOutcome");
-    expect(source).toContain("<PlayerCombatActionResultPanel result={null} />");
     expect(source).toContain("gmCurrentStepResultPresentation");
-    expect(source).toContain("presentation={gmCurrentStepResultPresentation}");
-    expect(source).toContain("recentPresentation={recentResultPresentation}");
+    expect(source).not.toContain("presentation={gmCurrentStepResultPresentation}");
     expect(source).not.toContain("selectedCombatLogActionOutcomeEvents");
     expect(source).toContain("inspectorDisplayPhaseResolutionResult");
     expect(source).toContain("inspectorPhaseResolutionCursor");
