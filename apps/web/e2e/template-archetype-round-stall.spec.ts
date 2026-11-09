@@ -87,7 +87,13 @@ async function authorArchetypeTemplate(page: Page, name: string) {
   await page.getByRole("button", { name: "Save archetype template" }).click();
   await expect(page.getByText(`Created archetype template ${name}.`)).toBeVisible();
   const { templates } = await json<{
-    templates: { id: string; name: string; snapshot: Record<string, unknown> }[];
+    templates: {
+      description?: string;
+      id: string;
+      kind: "npc" | "monster" | "animal";
+      name: string;
+      snapshot: Record<string, unknown>;
+    }[];
   }>(await page.request.get(`${API_URL}/templates`));
   const template = templates.find((entry) => entry.name === name);
   expect(template, "the authored Template is saved").toBeTruthy();
@@ -746,32 +752,47 @@ test.describe("a round stuck at initiative on a raw Template actor can be recove
     test.setTimeout(300_000);
     const suffix = String(Date.now());
     const templateName = `Gate Warden ${suffix}`;
-    await authorArchetypeTemplate(page, templateName);
+    const template = await authorArchetypeTemplate(page, templateName);
     const campaignId = await newCampaign(page, suffix);
     const { scenario } = await post<{ scenario: { id: string } }>(
       page.request,
       `/campaigns/${campaignId}/scenarios`,
       { name: `Issue 1001 Fielding ${suffix}`, status: "live" },
     );
+    // #851: the Scenario page does not offer the archetype Template as a direct-field source.
     await page.goto(`/campaigns/${campaignId}/scenarios/${scenario.id}`);
-    await page
-      .locator("select")
-      .filter({ has: page.locator("option", { hasText: "(template library)" }) })
-      .first()
-      .selectOption({ label: `${templateName} (template library)` });
-    const refused = page.waitForResponse((response) =>
-      response.url().includes("/participants/entity"),
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Issue 1001 Fielding");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("option", { hasText: templateName })).toHaveCount(0);
+    await expect(page.getByText(templateName)).toHaveCount(0);
+    await page.screenshot({ fullPage: true, path: `${SHOTS}/06-archetype-not-offered.png` });
+    // #1001: the server still refuses it. The body is the one `buildScenarioActorInputFromTemplate`
+    // sends for a Template source.
+    const response = await page.request.post(
+      `${API_URL}/scenarios/${scenario.id}/participants/entity`,
+      {
+        data: {
+          entityInput: {
+            description: template.description,
+            kind: template.kind,
+            name: templateName,
+            snapshot: {
+              ...template.snapshot,
+              templateId: template.id,
+              templateName: template.name,
+            },
+          },
+          isTemporary: true,
+          joinSource: "gm_added",
+          role: "enemy",
+        },
+      },
     );
-    await page.getByRole("button", { name: "Create temporary actor" }).click();
-    const response = await refused;
     expect(response.status()).toBe(409);
     expect(await response.json()).toEqual({
       code: "generate_npc_from_template_first",
       error: "Generate an NPC from this Template first.",
     });
-    // The Scenario page's existing error line carries the server's message; nothing was added.
-    await expect(page.getByText("Generate an NPC from this Template first.")).toBeVisible();
-    await page.screenshot({ fullPage: true, path: `${SHOTS}/06-archetype-fielding-refused.png` });
     const { participants } = await json<{ participants: unknown[] }>(
       await page.request.get(`${API_URL}/scenarios/${scenario.id}/participants`),
     );
