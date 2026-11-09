@@ -110,8 +110,20 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
             where: { name: "game_master" }
           });
 
+          // Alpha bootstrap simplification (#1089): the one-time claim also grants admin.
+          const adminRole = await tx.role.upsert({
+            create: { name: "admin" },
+            update: {},
+            where: { name: "admin" }
+          });
+
           await tx.userRole.deleteMany({ where: { userId } });
-          await tx.userRole.create({ data: { roleId: gmRole.id, userId } });
+          await tx.userRole.createMany({
+            data: [
+              { roleId: gmRole.id, userId },
+              { roleId: adminRole.id, userId }
+            ]
+          });
 
           const user = await tx.user.findUnique({
             include: { roles: { include: { role: true } } },
