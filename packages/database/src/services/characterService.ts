@@ -1,8 +1,16 @@
-import { getApprovedTargetDefinitions, getApprovedV2RuntimeContent } from "@glantri/content";
+import {
+  defaultCanonicalContent,
+  getApprovedTargetDefinitions,
+  getApprovedV2RuntimeContent,
+} from "@glantri/content";
 import { isDeepStrictEqual } from "node:util";
 
 import { characterBuildSchema } from "@glantri/domain";
-import { validateCharacterBuild, validateTargetChargenBuild } from "@glantri/rules-engine";
+import {
+  validateCharacterBuild,
+  validatePostChargenBuild,
+  validateTargetChargenBuild,
+} from "@glantri/rules-engine";
 
 import {
   createPrismaCharacterRepository,
@@ -198,9 +206,18 @@ export class CharacterService {
     return this.repository.findUnderPlayerControl(controllerUserId, characterId);
   }
 
+  /**
+   * Saves a Character after Chargen finalization (Forgejo #1068). The full Chargen purchase
+   * validation applies only at finalization (`saveCharacter`); every later save is checked by
+   * `validatePostChargenBuild` against the stored record instead.
+   *
+   * `directValueEdit` is true only for a GM or admin writer. Any other writer — and any caller that
+   * does not say — may change stat and skill values only through resolved Progression.
+   */
   async saveExistingCharacter(input: {
     build: CreateCharacterRecordInput["build"];
     characterId: string;
+    directValueEdit?: boolean;
     expectedUpdatedAt: string;
   }): Promise<CharacterRecord | null> {
     const existingCharacter = await this.repository.findById(input.characterId);
@@ -210,8 +227,19 @@ export class CharacterService {
     }
 
     const build = characterBuildSchema.parse(input.build);
-    assertNoLegacyEquipmentWrite(build, characterBuildSchema.parse(existingCharacter.build));
-    const targetErrors = validateTargetChargenBuild(build, getApprovedV2RuntimeContent());
+    const storedBuild = characterBuildSchema.parse(existingCharacter.build);
+    assertNoLegacyEquipmentWrite(build, storedBuild);
+    const targetErrors = validatePostChargenBuild({
+      build,
+      content:
+        storedBuild.targetChargen ||
+        build.targetChargen ||
+        build.professionId?.startsWith("profession:")
+          ? getApprovedV2RuntimeContent()
+          : defaultCanonicalContent,
+      directValueEdit: input.directValueEdit === true,
+      storedBuild,
+    });
     if (targetErrors.length) throw new CharacterValidationError(targetErrors);
     if (build.professionId?.startsWith("profession:")) {
       const trusted = getApprovedV2RuntimeContent();

@@ -58,59 +58,7 @@ export function validateTargetChargenBuild(
   let ordinaryEligibleCost = 0,
     flexibleOnlyCost = 0;
   const p = build.progression;
-  // Derived grants are recomputed from purchases using the existing relationship engine.
-  // Submitted derived ranks and attribution cannot seed or amplify that computation.
-  const purchases = structuredClone(p);
-  for (const row of [...purchases.skills, ...purchases.specializations]) {
-    row.relationshipGrantedRanks = 0;
-    delete row.relationshipGrantSourceName;
-    delete row.relationshipGrantSourceSkillId;
-    delete row.relationshipGrantSourceType;
-    if ("primaryRanks" in row) {
-      if (row.sourceTag !== "mother-tongue") row.grantedRanks = 0;
-      row.ranks = row.grantedRanks + row.primaryRanks + row.secondaryRanks;
-    } else row.ranks = row.secondaryRanks;
-  }
-  const derived = applyRelationshipMinimumGrants({
-    content: {
-      ...content,
-      skills: content.skills.filter(
-        (s) =>
-          content.chargenCatalogue!.skillIds.includes(s.id) ||
-          p.skills.some((row) => row.skillId === s.id),
-      ),
-      specializations: content.specializations.filter(
-        (s) =>
-          content.chargenCatalogue!.specializationIds.includes(s.id) ||
-          p.specializations.some((row) => row.specializationId === s.id),
-      ),
-    },
-    progression: purchases,
-  });
-  const grantKeys = [
-    "relationshipGrantedRanks",
-    "relationshipGrantSourceName",
-    "relationshipGrantSourceSkillId",
-    "relationshipGrantSourceType",
-  ] as const;
-  for (const expected of [...derived.skills, ...derived.specializations]) {
-    const id =
-      "skillId" in expected && !("specializationId" in expected)
-        ? expected.skillId
-        : expected.specializationId;
-    const actual =
-      "specializationId" in expected
-        ? p.specializations.find((s) => s.specializationId === id)
-        : p.skills.find((s) => s.skillId === id && s.languageName === expected.languageName);
-    if (
-      grantKeys.some((key) =>
-        key === "relationshipGrantedRanks"
-          ? (actual?.[key] ?? 0) !== (expected[key] ?? 0)
-          : actual?.[key] !== expected[key],
-      )
-    )
-      errors.push(`Invalid derived relationship grant: ${id}.`);
-  }
+  errors.push(...findDerivedRelationshipGrantErrors(p, content, { keepGrantedRanks: false }));
   for (const group of p.skillGroups) {
     const approved = content.skillGroups.find((g) => g.id === group.groupId);
     // Forgejo #764: the same integrity predicate as the read path. A submitted build may
@@ -217,5 +165,73 @@ export function validateTargetChargenBuild(
     new Set(p.specializations.map((s) => s.specializationId)).size !== p.specializations.length
   )
     errors.push("Duplicate target purchase identity.");
+  return errors;
+}
+
+/**
+ * Derived relationship grants are recomputed from the owned ranks using the existing relationship
+ * engine; submitted derived ranks and attribution can neither seed nor amplify that computation.
+ *
+ * Chargen (`keepGrantedRanks: false`) recomputes from purchases only, so any non-mother-tongue
+ * `grantedRanks` is discarded first. After Chargen (Forgejo #1068) `grantedRanks` carries GM
+ * corrections and successful Progression, which are owned ranks and stay in the computation.
+ */
+export function findDerivedRelationshipGrantErrors(
+  p: CharacterBuild["progression"],
+  content: CanonicalContentShape,
+  options: { keepGrantedRanks: boolean },
+): string[] {
+  const errors: string[] = [];
+  const purchases = structuredClone(p);
+  for (const row of [...purchases.skills, ...purchases.specializations]) {
+    row.relationshipGrantedRanks = 0;
+    delete row.relationshipGrantSourceName;
+    delete row.relationshipGrantSourceSkillId;
+    delete row.relationshipGrantSourceType;
+    if ("primaryRanks" in row) {
+      if (!options.keepGrantedRanks && row.sourceTag !== "mother-tongue") row.grantedRanks = 0;
+      row.ranks = row.grantedRanks + row.primaryRanks + row.secondaryRanks;
+    } else row.ranks = row.secondaryRanks;
+  }
+  const derived = applyRelationshipMinimumGrants({
+    content: {
+      ...content,
+      skills: content.skills.filter(
+        (s) =>
+          content.chargenCatalogue!.skillIds.includes(s.id) ||
+          p.skills.some((row) => row.skillId === s.id),
+      ),
+      specializations: content.specializations.filter(
+        (s) =>
+          content.chargenCatalogue!.specializationIds.includes(s.id) ||
+          p.specializations.some((row) => row.specializationId === s.id),
+      ),
+    },
+    progression: purchases,
+  });
+  const grantKeys = [
+    "relationshipGrantedRanks",
+    "relationshipGrantSourceName",
+    "relationshipGrantSourceSkillId",
+    "relationshipGrantSourceType",
+  ] as const;
+  for (const expected of [...derived.skills, ...derived.specializations]) {
+    const id =
+      "skillId" in expected && !("specializationId" in expected)
+        ? expected.skillId
+        : expected.specializationId;
+    const actual =
+      "specializationId" in expected
+        ? p.specializations.find((s) => s.specializationId === id)
+        : p.skills.find((s) => s.skillId === id && s.languageName === expected.languageName);
+    if (
+      grantKeys.some((key) =>
+        key === "relationshipGrantedRanks"
+          ? (actual?.[key] ?? 0) !== (expected[key] ?? 0)
+          : actual?.[key] !== expected[key],
+      )
+    )
+      errors.push(`Invalid derived relationship grant: ${id}.`);
+  }
   return errors;
 }

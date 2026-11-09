@@ -565,7 +565,12 @@ export class ScenarioService {
     return participant;
   }
 
-  /** Explicitly reconciles current canonical equipment into the Scenario-owned projection. */
+  /**
+   * Explicitly reconciles the current canonical Character into the Scenario-owned projection:
+   * its equipment and, since Forgejo #1068, its build (stats and skills), so a GM edit or a
+   * resolved Progression reaches combat when the GM refreshes the participant. Round state keeps
+   * its own frozen copy; this refresh does not reach into a round already under way.
+   */
   async refreshCharacterParticipantEquipmentSnapshot(input: {
     participantId: string;
     scenarioId: string;
@@ -608,6 +613,7 @@ export class ScenarioService {
       participant.id,
       {
         ...participant.snapshot,
+        build: refreshed.snapshot.build,
         equipmentProjection: {
           aggregateRevision: equipmentState.revision,
           capturedAt,
