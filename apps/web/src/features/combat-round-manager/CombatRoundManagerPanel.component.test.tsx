@@ -2825,6 +2825,57 @@ describe("CombatRoundManagerPanel GM attack proxy", () => {
     expect(request).not.toHaveProperty("offensiveParryAttemptId");
   });
 
+  /**
+   * #1065: the GM's own mutation echo is held as a local override. A participant row fetched later
+   * with a strictly newer `updatedAt` (a player-side commit seen by the poll) must win, so the next
+   * GM command carries the newest revision; an echo at least as new as the prop still wins.
+   */
+  it("sends the newest participant revision when a polled row is newer than the GM's own echo", async () => {
+    const encounter = buildAttackReadyEncounter();
+    const attackReadyState = combatRoundStateSchema.parse(encounter.combatRoundState);
+    const T1 = "2026-11-08T22:49:30.450Z";
+    const T2 = "2026-11-08T22:49:46.329Z";
+    const at = (updatedAt: string) => [
+      {
+        ...scenarioParticipant({ id: "scenario-attacker", name: "The Gladiator", order: 0 }),
+        updatedAt,
+      } as ScenarioParticipant,
+      scenarioParticipant({ id: "scenario-defender", name: "Scyrian cavalry guy", order: 1 }),
+    ];
+    mocks.rollAttack.mockResolvedValue({
+      commandEnvelope: buildCombatRoundCommandEnvelope({
+        state: attackReadyState,
+        viewer: { kind: "gm" },
+      }),
+      encounter,
+      participant: at(T1)[0],
+    });
+    const { rerender } = render(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={at(T1)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Current task" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Roll attack" }));
+    await waitFor(() => expect(mocks.rollAttack).toHaveBeenCalledTimes(1));
+    expect(mocks.rollAttack.mock.calls[0]?.[0]).toMatchObject({ expectedParticipantRevision: T1 });
+
+    // The GM's echo (T1) is now an override; the poll brings a strictly newer row (T2).
+    rerender(
+      <CombatRoundManagerPanel
+        encounter={encounter}
+        onEncounterUpdated={vi.fn()}
+        scenarioParticipants={at(T2)}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Roll attack" }));
+    await waitFor(() => expect(mocks.rollAttack).toHaveBeenCalledTimes(2));
+    expect(mocks.rollAttack.mock.calls[1]?.[0]).toMatchObject({ expectedParticipantRevision: T2 });
+  });
+
   it("refreshes a genuine cross-client stale revision without replaying the attack", async () => {
     const encounter = buildAttackReadyEncounter();
     const refreshedEncounter = encounterSessionSchema.parse({

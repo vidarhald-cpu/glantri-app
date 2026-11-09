@@ -382,6 +382,7 @@ import {
 } from "./view-models/inspectedDeclarationCommand";
 import { getOrCreateCombatModifierReviewInputSnapshot } from "./view-models/modifierReviewInputSnapshot";
 import { buildCombatStepWorkflowStatusPresentation } from "./view-models/combatStepWorkflowStatus";
+import { resolveEffectiveScenarioParticipants } from "./view-models/effectiveScenarioParticipants";
 import {
   createCombatRecentResultCandidate,
   resolveCombatRecentResultFocus,
@@ -410,7 +411,6 @@ interface CombatRoundManagerPanelProps {
 
 type PhaseAttackChoiceSelection = "continue" | "back_out";
 type DoubleAttackPhase2Decision = "continue" | "cancel";
-
 type InspectorCurrentActionOutcomeSelection = "perform" | "skip" | "complete_remaining";
 
 type RoundEndDistanceRollOption = {
@@ -4793,10 +4793,7 @@ export default function CombatRoundManagerPanel({
     [encounter.participants],
   );
   const effectiveScenarioParticipants = useMemo(
-    () =>
-      scenarioParticipants.map(
-        (participant) => scenarioParticipantOverrides[participant.id] ?? participant,
-      ),
+    () => resolveEffectiveScenarioParticipants(scenarioParticipants, scenarioParticipantOverrides),
     [scenarioParticipantOverrides, scenarioParticipants],
   );
   const descriptorRevision = getCombatRoundDescriptorRevision({
