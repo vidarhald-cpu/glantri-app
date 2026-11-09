@@ -20254,7 +20254,13 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
           return { encounter: savedEncounter, participants: [] };
         }
 
-        return { encounter, participants: [] };
+        // #1001. Nothing in this round can be cleared from here, so nothing is written. Answering
+        // 200 with the encounter unchanged told the GM the control had worked when it had not.
+        return reply.code(409).send({
+          code: "nothing_to_clear",
+          error:
+            "There is nothing to clear in this step: the round records no action for it that can be undone. Nothing was changed.",
+        });
       }
 
       const clearedRoundState =
