@@ -8,7 +8,12 @@ import {
   removeDistanceGeneratedObSkillModifiers,
 } from "./combatActionModifiers";
 import {
+  buildDefaultCombatDistanceEdge,
   calculateDistanceObPenalty,
+  combatDistanceStateSchema,
+  type CombatDistanceEdge,
+  type CombatDistanceState,
+  type CombatDistanceWeaponLike,
   ensureDistanceEdgesForParticipantPairs,
   getDefaultCombatDistanceForWeapons,
   getDistanceBetween,
@@ -439,5 +444,217 @@ describe("combat distance", () => {
 
     expect(getDistanceBetween(cleared.distanceState, "participant-a", "participant-b")).toBe(4);
     expect(cleared.commands).toEqual([]);
+  });
+});
+
+// #1047: test-local copy of the original O(N^4) implementation (re-parses the whole edge
+// record per added edge). The optimized implementation must match it byte for byte.
+function originalEnsureDistanceEdgesForParticipantPairs(input: {
+  lastChangedPhase?: string;
+  lastChangedRound?: number;
+  participantIds: readonly string[];
+  refreshFallbackDefaultEdges?: boolean;
+  state?: CombatDistanceState;
+  weaponsByParticipantId?: Record<string, readonly (CombatDistanceWeaponLike | undefined | null)[]>;
+}): CombatDistanceState {
+  let nextState = combatDistanceStateSchema.parse(input.state ?? {});
+
+  for (let leftIndex = 0; leftIndex < input.participantIds.length; leftIndex += 1) {
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < input.participantIds.length;
+      rightIndex += 1
+    ) {
+      const participantAId = input.participantIds[leftIndex];
+      const participantBId = input.participantIds[rightIndex];
+
+      if (!participantAId || !participantBId) {
+        continue;
+      }
+
+      const pairKey = makeDistancePairKey(participantAId, participantBId);
+      const existingEdge = nextState.edges[pairKey];
+
+      if (
+        existingEdge &&
+        (!input.refreshFallbackDefaultEdges ||
+          existingEdge.source !== "default_weapon_reach" ||
+          !existingEdge.notes?.includes("metadata was missing or invalid"))
+      ) {
+        continue;
+      }
+
+      const edge = buildDefaultCombatDistanceEdge({
+        lastChangedPhase: input.lastChangedPhase,
+        lastChangedRound: input.lastChangedRound,
+        participantAId,
+        participantAWeapons: input.weaponsByParticipantId?.[participantAId],
+        participantBId,
+        participantBWeapons: input.weaponsByParticipantId?.[participantBId],
+      });
+
+      nextState = combatDistanceStateSchema.parse({
+        edges: {
+          ...nextState.edges,
+          [edge.pairKey]: edge,
+        },
+      });
+    }
+  }
+
+  return nextState;
+}
+
+describe("ensureDistanceEdgesForParticipantPairs equivalence and performance (#1047)", () => {
+  const ids = (count: number) => Array.from({ length: count }, (_, index) => `p-${index}`);
+  const weaponKinds: Record<string, readonly CombatDistanceWeaponLike[]> = {
+    spear: [{ preferredDistances: [3, 4] }],
+    sword: [{ range: "1-2" }],
+    dagger: [{ range: 1 }],
+    bow: [{ preferredDistances: [6, 7, 8] }],
+  };
+  const weaponsFor = (participantIds: readonly string[], mode: "armed" | "unarmed" | "mixed") => {
+    const kinds = Object.values(weaponKinds);
+    const result: Record<string, readonly CombatDistanceWeaponLike[]> = {};
+
+    participantIds.forEach((id, index) => {
+      if (mode === "armed" || (mode === "mixed" && index % 2 === 0)) {
+        result[id] = kinds[index % kinds.length] ?? [];
+      }
+    });
+
+    return result;
+  };
+  const fallbackEdge = (a: string, b: string): CombatDistanceEdge =>
+    buildDefaultCombatDistanceEdge({ participantAId: a, participantBId: b });
+  const buildState = (
+    participantIds: readonly string[],
+    kind: "empty" | "preexisting" | "stale",
+  ): CombatDistanceState | undefined => {
+    if (kind === "empty") {
+      return undefined;
+    }
+
+    const edges: Record<string, CombatDistanceEdge> = {};
+
+    for (let index = 0; index + 1 < participantIds.length; index += 3) {
+      const a = participantIds[index] as string;
+      const b = participantIds[index + 1] as string;
+      const edge =
+        kind === "stale"
+          ? fallbackEdge(a, b)
+          : setDistanceBetween({
+              distance: 4,
+              participantAId: a,
+              participantBId: b,
+              source: "gm_set",
+            }).edges[makeDistancePairKey(a, b)];
+
+      if (edge) {
+        edges[edge.pairKey] = edge;
+      }
+    }
+
+    // A pair outside the participant list must be preserved in place.
+    const outsider = fallbackEdge("zz-outside-a", "zz-outside-b");
+    edges[outsider.pairKey] = outsider;
+
+    return { edges };
+  };
+
+  // The original takes ~18s at 100 participants, so 100 runs a representative subset of
+  // cases (one per state kind, covering armed/unarmed/mixed and both refresh settings);
+  // 5-50 run the full matrix.
+  const largeCases: readonly [string, string, boolean][] = [
+    ["empty", "armed", false],
+    ["preexisting", "unarmed", true],
+    ["stale", "mixed", true],
+  ];
+  const cases: [
+    number,
+    "empty" | "preexisting" | "stale",
+    "armed" | "unarmed" | "mixed",
+    boolean,
+  ][] = [];
+
+  for (const count of [5, 10, 25, 50]) {
+    for (const stateKind of ["empty", "preexisting", "stale"] as const) {
+      for (const mode of ["armed", "unarmed", "mixed"] as const) {
+        for (const refresh of [false, true]) {
+          cases.push([count, stateKind, mode, refresh]);
+        }
+      }
+    }
+  }
+
+  for (const [stateKind, mode, refresh] of largeCases) {
+    cases.push([100, stateKind as "empty", mode as "armed", refresh]);
+  }
+
+  for (const [count, stateKind, mode, refresh] of cases) {
+    it(`matches the original: ${count} participants, ${stateKind} state, ${mode}, refresh=${refresh}`, () => {
+      const participantIds = ids(count);
+      const input = {
+        lastChangedPhase: "declaration",
+        lastChangedRound: 2,
+        participantIds,
+        refreshFallbackDefaultEdges: refresh,
+        state: buildState(participantIds, stateKind),
+        weaponsByParticipantId: weaponsFor(participantIds, mode),
+      };
+
+      const actual = ensureDistanceEdgesForParticipantPairs(input);
+      const expected = originalEnsureDistanceEdgesForParticipantPairs(input);
+
+      expect(actual).toEqual(expected);
+      expect(JSON.stringify(actual)).toBe(JSON.stringify(expected));
+    }, 120_000);
+  }
+
+  it("matches the original (result or thrown error) for degenerate participant lists", () => {
+    const outcome = (
+      run: (input: { participantIds: readonly string[] }) => CombatDistanceState,
+      participantIds: string[],
+    ) => {
+      try {
+        return JSON.stringify(run({ participantIds }));
+      } catch (error) {
+        return `throws: ${(error as Error).message}`;
+      }
+    };
+
+    for (const participantIds of [[], ["a"], ["a", "a", "b"], ["a", "", "b"], ["b", "a"]]) {
+      expect(outcome(ensureDistanceEdgesForParticipantPairs, participantIds)).toBe(
+        outcome(originalEnsureDistanceEdgesForParticipantPairs, participantIds),
+      );
+    }
+  });
+
+  it("does not mutate the input state", () => {
+    const participantIds = ids(5);
+    const state = buildState(participantIds, "stale") as CombatDistanceState;
+    const before = JSON.stringify(state);
+
+    ensureDistanceEdgesForParticipantPairs({
+      participantIds,
+      refreshFallbackDefaultEdges: true,
+      state,
+    });
+
+    expect(JSON.stringify(state)).toBe(before);
+  });
+
+  it("stays within the performance budget at 100 participants", () => {
+    // The original takes ~18s here; the single-parse version takes ~20ms. The 3000ms budget leaves >10x headroom for loaded CI machines.
+    const participantIds = ids(100);
+    const started = performance.now();
+    const result = ensureDistanceEdgesForParticipantPairs({
+      participantIds,
+      weaponsByParticipantId: weaponsFor(participantIds, "mixed"),
+    });
+    const elapsed = performance.now() - started;
+
+    expect(Object.keys(result.edges)).toHaveLength((100 * 99) / 2);
+    expect(elapsed).toBeLessThan(3000);
   });
 });

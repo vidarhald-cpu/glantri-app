@@ -106,6 +106,18 @@ function isHeldForExplicitGmBacktrack(context: ProjectionContext, input: AddFact
     return false;
   }
 
+  // #1001. A GM clear at initiative undoes the boundary that left modifier review and records the
+  // hold at the restored review step. When that review was already complete, the boundary is again
+  // a complete deterministic transition; left unheld, the client re-ran it at once, so the clear
+  // answered 200 and the round stood exactly where it was. The restored review stage is retained,
+  // as it already is for a no-work review above, until the GM moves on explicitly.
+  if (hold.step === "review_action_modifiers" || hold.step === "review_phase_2_modifiers") {
+    return (
+      input.processFamily === "boundary" &&
+      input.step === (hold.step === "review_action_modifiers" ? "M1_boundary" : "M2_boundary")
+    );
+  }
+
   // Ruling 2 (#215): `pre_declaration` and `select_actions` are two steps of the one `declaration`
   // boundary, and that boundary projects a single `declaration_boundary` deterministic transition. A
   // GM backtrack hold recorded at either step is therefore honoured at that same fact. A hold at

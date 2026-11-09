@@ -50,6 +50,31 @@ function playerParticipantResponse(response: {
   return response;
 }
 
+/**
+ * #851 ruling 22734 ("Press generate first") as scoped by the Product Owner's option (i) on #1001:
+ * a humanoid archetype Template — every Template authored on the Templates page — is a thing NPCs
+ * are generated from, not itself a combatant. It carries no build, so fielded directly it can
+ * neither roll initiative nor be attacked.
+ *
+ * Only that Template kind is refused. A Template that carries its own build (the seeded Training
+ * Bandit, the #666 Templates) and a concrete NPC generated from an archetype are not archetypes and
+ * are fielded exactly as before. A generated NPC's snapshot never carries `templateKind`; the
+ * `actorClass` check states that independence explicitly rather than relying on it.
+ */
+const GENERATE_FROM_TEMPLATE_FIRST = "Generate an NPC from this Template first.";
+
+function isUnfieldableArchetypeTemplateSnapshot(snapshot: unknown): boolean {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return false;
+  }
+  const record = snapshot as Record<string, unknown>;
+  return (
+    record.templateKind === "humanoid_npc_archetype" &&
+    record.actorClass !== "campaign_npc" &&
+    record.actorClass !== "generated_npc"
+  );
+}
+
 export const participantRoutes: FastifyPluginAsync = async (app) => {
   app.get("/scenarios/:scenarioId/participants", async (request, reply) => {
     const user = await requireAuthenticatedUser(request, reply);
@@ -268,6 +293,13 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
             ? (entity.snapshot as Record<string, unknown>)
             : undefined;
 
+        if (isUnfieldableArchetypeTemplateSnapshot(snapshot)) {
+          return reply.code(409).send({
+            code: "generate_npc_from_template_first",
+            error: GENERATE_FROM_TEMPLATE_FIRST,
+          });
+        }
+
         if (snapshot?.actorClass === "campaign_npc") {
           if (snapshot.campaignId !== access.campaignId) {
             return reply.code(400).send({ error: "NPC belongs to a different campaign." });
@@ -298,6 +330,12 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
                 snapshot: entityPayload.snapshot,
               };
             })();
+
+      if (!entityId && isUnfieldableArchetypeTemplateSnapshot(entityInput?.snapshot)) {
+        return reply
+          .code(409)
+          .send({ code: "generate_npc_from_template_first", error: GENERATE_FROM_TEMPLATE_FIRST });
+      }
 
       const participant = await scenarioService.addEntityParticipant({
         controlledByUserId: parseOptionalNullableString(body, "controlledByUserId") ?? user.id,
