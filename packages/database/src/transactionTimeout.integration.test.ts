@@ -1,48 +1,40 @@
-import { PrismaClient } from "@prisma/client";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { buildTransactionOptions } from "./transactionOptions";
+import { getTestPrismaClient } from "./testing/testDatabase";
 
 // #1100: simulates Azure latency with pg_sleep inside an interactive transaction.
-if (!process.env.DATABASE_URL_TEST) {
+// The shared test client has no client-level transactionOptions (Prisma defaults: 5 s timeout),
+// so the Glantri defaults are applied per call here; client.ts passes the same builder output
+// as the client-level transactionOptions.
+const prisma = getTestPrismaClient();
+
+if (!prisma) {
   describe.skip("Transaction timeout (DATABASE_URL_TEST not set)", () => {});
 } else {
-  const url = process.env.DATABASE_URL_TEST;
-  const clients: PrismaClient[] = [];
-  const make = (withOptions: boolean) => {
-    const c = new PrismaClient({
-      datasources: { db: { url } },
-      ...(withOptions ? { transactionOptions: buildTransactionOptions() } : {}),
-    });
-    clients.push(c);
-    return c;
-  };
   afterAll(async () => {
-    await Promise.all(clients.map((c) => c.$disconnect()));
+    await prisma.$disconnect();
   });
 
+  const slow = async (tx: Pick<typeof prisma, "$queryRaw">) => {
+    await tx.$queryRaw`SELECT pg_sleep(3)::text`;
+    await tx.$queryRaw`SELECT pg_sleep(3)::text`;
+    return "ok";
+  };
+
   describe("interactive transaction timeout", () => {
-    it("a ~6s transaction succeeds with the Glantri defaults", async () => {
-      const prisma = make(true);
-      await expect(
-        prisma.$transaction(async (tx) => {
-          await tx.$queryRaw`SELECT pg_sleep(3)::text`;
-          await tx.$queryRaw`SELECT pg_sleep(3)::text`;
-          return "ok";
-        }),
-      ).resolves.toBe("ok");
+    it("a ~6s transaction fails under Prisma's default 5s timeout", async () => {
+      await expect(prisma.$transaction(slow)).rejects.toThrow(/Transaction already closed/);
     }, 40_000);
 
-    it("a per-call timeout still overrides the client default", async () => {
-      const prisma = make(true);
-      await expect(
-        prisma.$transaction(
-          async (tx) => {
-            await tx.$queryRaw`SELECT pg_sleep(3)::text`;
-          },
-          { timeout: 1000 },
-        ),
-      ).rejects.toThrow(/Transaction already closed|expired/);
+    it("a ~6s transaction succeeds with the Glantri default options", async () => {
+      await expect(prisma.$transaction(slow, buildTransactionOptions({}))).resolves.toBe("ok");
+    }, 40_000);
+
+    it("an explicit per-call timeout still overrides", async () => {
+      await expect(prisma.$transaction(slow, { timeout: 1000 })).rejects.toThrow(
+        /Transaction already closed/,
+      );
     }, 40_000);
   });
 }
