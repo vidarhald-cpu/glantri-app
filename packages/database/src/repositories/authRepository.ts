@@ -27,7 +27,7 @@ export interface AuthRepository {
   listUsers(): Promise<AuthUser[]>;
   replaceUserRoles(userId: string, roles: AuthRole[]): Promise<AuthUser | null>;
   findUserCredentialByEmail(
-    email: string
+    email: string,
   ): Promise<{ passwordHash: string; user: AuthUser } | null>;
 }
 
@@ -64,83 +64,86 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
             some: {
               role: {
                 name: {
-                  in: getStoredPrivilegedRoleNames()
-                }
-              }
-            }
-          }
-        }
+                  in: getStoredPrivilegedRoleNames(),
+                },
+              },
+            },
+          },
+        },
       });
 
       return privilegedUserCount > 0;
     },
     async atomicBootstrapGameMaster(userId) {
       try {
-        return await prisma.$transaction(async (tx) => {
-          const count = await tx.user.count({
-            where: {
-              roles: {
-                some: {
-                  role: {
-                    name: {
-                      in: getStoredPrivilegedRoleNames()
-                    }
-                  }
-                }
-              }
+        return await prisma.$transaction(
+          async (tx) => {
+            const count = await tx.user.count({
+              where: {
+                roles: {
+                  some: {
+                    role: {
+                      name: {
+                        in: getStoredPrivilegedRoleNames(),
+                      },
+                    },
+                  },
+                },
+              },
+            });
+
+            if (count > 0) {
+              return null;
             }
-          });
 
-          if (count > 0) {
-            return null;
-          }
+            const targetUser = await tx.user.findUnique({
+              select: { id: true },
+              where: { id: userId },
+            });
 
-          const targetUser = await tx.user.findUnique({
-            select: { id: true },
-            where: { id: userId }
-          });
+            if (!targetUser) {
+              return null;
+            }
 
-          if (!targetUser) {
-            return null;
-          }
+            const gmRole = await tx.role.upsert({
+              create: { name: "game_master" },
+              update: {},
+              where: { name: "game_master" },
+            });
 
-          const gmRole = await tx.role.upsert({
-            create: { name: "game_master" },
-            update: {},
-            where: { name: "game_master" }
-          });
+            // Alpha bootstrap simplification (#1089): the one-time claim also grants admin.
+            const adminRole = await tx.role.upsert({
+              create: { name: "admin" },
+              update: {},
+              where: { name: "admin" },
+            });
 
-          // Alpha bootstrap simplification (#1089): the one-time claim also grants admin.
-          const adminRole = await tx.role.upsert({
-            create: { name: "admin" },
-            update: {},
-            where: { name: "admin" }
-          });
+            await tx.userRole.deleteMany({ where: { userId } });
+            await tx.userRole.createMany({
+              data: [
+                { roleId: gmRole.id, userId },
+                { roleId: adminRole.id, userId },
+              ],
+            });
 
-          await tx.userRole.deleteMany({ where: { userId } });
-          await tx.userRole.createMany({
-            data: [
-              { roleId: gmRole.id, userId },
-              { roleId: adminRole.id, userId }
-            ]
-          });
+            const user = await tx.user.findUnique({
+              include: { roles: { include: { role: true } } },
+              where: { id: userId },
+            });
 
-          const user = await tx.user.findUnique({
-            include: { roles: { include: { role: true } } },
-            where: { id: userId }
-          });
+            if (!user) {
+              return null;
+            }
 
-          if (!user) {
-            return null;
-          }
-
-          return {
-            displayName: user.displayName ?? undefined,
-            email: user.email,
-            id: user.id,
-            roles: mapRoles(user.roles)
-          };
-        }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+            return {
+              displayName: user.displayName ?? undefined,
+              email: user.email,
+              id: user.id,
+              roles: mapRoles(user.roles),
+            };
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
       } catch {
         return null;
       }
@@ -150,26 +153,26 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         data: {
           expiresAt: new Date(input.expiresAt),
           tokenHash: input.tokenHash,
-          userId: input.userId
-        }
+          userId: input.userId,
+        },
       });
 
       return {
         expiresAt: session.expiresAt.toISOString(),
         id: session.id,
         tokenHash: session.tokenHash,
-        userId: session.userId
+        userId: session.userId,
       };
     },
     async createUser(input) {
       const playerRole = await prisma.role.upsert({
         create: {
-          name: "player"
+          name: "player",
         },
         update: {},
         where: {
-          name: "player"
-        }
+          name: "player",
+        },
       });
 
       const user = await prisma.user.create({
@@ -179,41 +182,41 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
           passwordHash: input.passwordHash,
           roles: {
             create: {
-              roleId: playerRole.id
-            }
-          }
+              roleId: playerRole.id,
+            },
+          },
         },
         include: {
           roles: {
             include: {
-              role: true
-            }
-          }
-        }
+              role: true,
+            },
+          },
+        },
       });
 
       return {
         displayName: user.displayName ?? undefined,
         email: user.email,
         id: user.id,
-        roles: mapRoles(user.roles)
+        roles: mapRoles(user.roles),
       };
     },
     async deleteSessionByTokenHash(tokenHash) {
       await prisma.session.deleteMany({
         where: {
-          tokenHash
-        }
+          tokenHash,
+        },
       });
     },
     async findSessionByTokenHash(tokenHash) {
       const session = await prisma.session.findFirst({
         where: {
           expiresAt: {
-            gt: new Date()
+            gt: new Date(),
           },
-          tokenHash
-        }
+          tokenHash,
+        },
       });
 
       if (!session) {
@@ -224,7 +227,7 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         expiresAt: session.expiresAt.toISOString(),
         id: session.id,
         tokenHash: session.tokenHash,
-        userId: session.userId
+        userId: session.userId,
       };
     },
     async findUserById(id) {
@@ -232,13 +235,13 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         include: {
           roles: {
             include: {
-              role: true
-            }
-          }
+              role: true,
+            },
+          },
         },
         where: {
-          id
-        }
+          id,
+        },
       });
 
       if (!user) {
@@ -249,7 +252,7 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         displayName: user.displayName ?? undefined,
         email: user.email,
         id: user.id,
-        roles: mapRoles(user.roles)
+        roles: mapRoles(user.roles),
       };
     },
     async findUserByEmail(email) {
@@ -257,13 +260,13 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         include: {
           roles: {
             include: {
-              role: true
-            }
-          }
+              role: true,
+            },
+          },
         },
         where: {
-          email
-        }
+          email,
+        },
       });
 
       if (!user) {
@@ -274,7 +277,7 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         displayName: user.displayName ?? undefined,
         email: user.email,
         id: user.id,
-        roles: mapRoles(user.roles)
+        roles: mapRoles(user.roles),
       };
     },
     async listUsers() {
@@ -282,20 +285,20 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         include: {
           roles: {
             include: {
-              role: true
-            }
-          }
+              role: true,
+            },
+          },
         },
         orderBy: {
-          email: "asc"
-        }
+          email: "asc",
+        },
       });
 
       return users.map((user) => ({
         displayName: user.displayName ?? undefined,
         email: user.email,
         id: user.id,
-        roles: mapRoles(user.roles)
+        roles: mapRoles(user.roles),
       }));
     },
     async replaceUserRoles(userId, roles) {
@@ -304,36 +307,38 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         normalizedRoles.map((roleName) =>
           prisma.role.upsert({
             create: {
-              name: roleName
+              name: roleName,
             },
             update: {},
             where: {
-              name: roleName
-            }
+              name: roleName,
+            },
           }),
         ),
       );
 
-      const user = await prisma.user.update({
-        data: {
-          roles: {
-            deleteMany: {},
-            create: roleRecords.map((role) => ({
-              roleId: role.id
-            }))
-          }
-        },
-        include: {
-          roles: {
-            include: {
-              role: true
-            }
-          }
-        },
-        where: {
-          id: userId
-        }
-      }).catch(() => null);
+      const user = await prisma.user
+        .update({
+          data: {
+            roles: {
+              deleteMany: {},
+              create: roleRecords.map((role) => ({
+                roleId: role.id,
+              })),
+            },
+          },
+          include: {
+            roles: {
+              include: {
+                role: true,
+              },
+            },
+          },
+          where: {
+            id: userId,
+          },
+        })
+        .catch(() => null);
 
       if (!user) {
         return null;
@@ -343,7 +348,7 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         displayName: user.displayName ?? undefined,
         email: user.email,
         id: user.id,
-        roles: mapRoles(user.roles)
+        roles: mapRoles(user.roles),
       };
     },
     async findUserCredentialByEmail(email) {
@@ -351,13 +356,13 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
         include: {
           roles: {
             include: {
-              role: true
-            }
-          }
+              role: true,
+            },
+          },
         },
         where: {
-          email
-        }
+          email,
+        },
       });
 
       if (!user) {
@@ -370,9 +375,9 @@ export function createPrismaAuthRepository(client?: PrismaClient): AuthRepositor
           displayName: user.displayName ?? undefined,
           email: user.email,
           id: user.id,
-          roles: mapRoles(user.roles)
-        }
+          roles: mapRoles(user.roles),
+        },
       };
-    }
+    },
   };
 }
