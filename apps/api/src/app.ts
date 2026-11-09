@@ -30,12 +30,13 @@ export function buildApiServer() {
   // with no `try`) must not reach the client through Fastify's default handler, which echoes
   // `error.message`. Internal failures get the fixed body; every other error is delegated to
   // Fastify's own default handler unchanged, so validation 400s, 404s, 413s etc. keep their shape.
-  const defaultErrorHandler = app.errorHandler;
-  app.setErrorHandler((error, request, reply) => {
+  // Re-sending the error lets Fastify run its stock handling (and logging) exactly once; calling
+  // the default handler directly would log every such error a second time.
+  app.setErrorHandler((error, _request, reply) => {
     if (isInternalServerError(error)) {
       return sendInternalServerError(error, reply);
     }
-    return defaultErrorHandler.call(app, error, request, reply);
+    return reply.send(error);
   });
 
   applyLocalCors(app);

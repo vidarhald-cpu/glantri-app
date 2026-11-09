@@ -1,3 +1,6 @@
+import { Writable } from "node:stream";
+
+import { encounterSessionSchema } from "@glantri/domain";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +48,12 @@ const initFailure = () =>
     undefined,
     `Invalid \`prisma.session.findFirst()\` invocation in ${LEAK_PATH}\n\nCan't reach database server`,
   );
+
+function zodFixture(): Error {
+  const result = encounterSessionSchema.safeParse({ id: 7 });
+  if (result.success) throw new Error("expected a ZodError fixture");
+  return result.error;
+}
 
 const FIXED = { error: CLIENT_SAFE_INTERNAL_ERROR_MESSAGE };
 
@@ -150,5 +159,69 @@ describe("app-level error handler (#1048 A1)", () => {
     expect((await app.inject({ method: "GET", url: "/probe/validation" })).statusCode).toBe(400);
     expect((await app.inject({ method: "GET", url: "/no/such/route" })).statusCode).toBe(404);
     await baseline.close();
+  });
+  it("logs exactly one error record per request, matching stock Fastify", async () => {
+    const attach = (instance: FastifyInstance, records: unknown[][]) => {
+      instance.addHook("onRequest", (request, _reply, done) => {
+        for (const level of ["error", "warn", "info"] as const) {
+          const original = request.log[level].bind(request.log) as (...args: unknown[]) => void;
+          (request.log as unknown as Record<string, unknown>)[level] = (...args: unknown[]) => {
+            const first = args[0] as { err?: unknown } | undefined;
+            if (first && typeof first === "object" && "err" in first) records.push(args);
+            original(...args);
+          };
+        }
+        done();
+      });
+      instance.get("/probe/status/:code", async (request) => {
+        const code = Number((request.params as { code: string }).code);
+        throw Object.assign(new Error(`boom ${code}`), { statusCode: code });
+      });
+      instance.get("/probe/plain", async () => {
+        throw new Error("plain error");
+      });
+      instance.get("/probe/zod", async () => {
+        throw zodFixture();
+      });
+      instance.post("/probe/json", async () => ({ ok: true }));
+    };
+    const stockRecords: unknown[][] = [];
+    const appRecords: unknown[][] = [];
+    const stock = Fastify({
+      logger: { level: "debug", stream: new Writable({ write: (_c, _e, cb) => cb() }) },
+    });
+    attach(stock, stockRecords);
+    attach(app, appRecords);
+
+    const requests = [
+      { method: "GET", url: "/probe/status/400" },
+      { method: "GET", url: "/probe/status/413" },
+      { method: "GET", url: "/probe/status/415" },
+      { method: "GET", url: "/probe/status/503" },
+      { method: "GET", url: "/probe/plain" },
+      { method: "GET", url: "/probe/zod" },
+      {
+        method: "POST",
+        url: "/probe/json",
+        payload: "{bad",
+        headers: { "content-type": "application/json" },
+      },
+    ] as const;
+    for (const request of requests) {
+      stockRecords.length = 0;
+      appRecords.length = 0;
+      await stock.inject(request);
+      await app.inject(request);
+      expect(stockRecords, `stock ${request.url}`).toHaveLength(1);
+      expect(appRecords, `app ${request.url}`).toHaveLength(1);
+    }
+    await stock.close();
+
+    appRecords.length = 0;
+    mocks.requireAuthenticatedUser.mockRejectedValue(connectionFailure());
+    const internal = await app.inject({ method: "GET", url: "/characters" });
+    expect(internal.statusCode).toBe(500);
+    expect(appRecords).toHaveLength(1);
+    expect(appRecords[0]?.[0]).toMatchObject({ category: "api_route_internal_error" });
   });
 });
