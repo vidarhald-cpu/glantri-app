@@ -30,7 +30,8 @@ import { findDerivedRelationshipGrantErrors } from "./validateTargetChargenBuild
  * 2. The Chargen spending totals are frozen: "Original" skill points never change after Chargen.
  * 3. Original stats are locked after Chargen; permanent change is Developed, temporary is Current.
  * 6. Only a GM or admin may type values. Any other writer may change a stat or a skill value
- *    only through resolved Progression backed by a GM-approved check.
+ *    only through resolved Progression backed by a GM-approved check, and may not change the
+ *    civilization, society, social class or Profession those values derive from.
  *
  * Structural integrity still holds for target Characters: every competency id exists in the
  * approved target catalogue, saved definitions are intact, there are no duplicates, rank totals
@@ -50,6 +51,9 @@ export interface ValidatePostChargenBuildInput {
 
 export const OWNER_DIRECT_VALUE_CHANGE_MESSAGE =
   "Only a GM or admin can change stats or skill values directly; players improve through resolved Progression.";
+
+export const OWNER_IDENTITY_CHANGE_MESSAGE =
+  "Only a GM or admin can change a Character's civilization, society, social class or Profession after Chargen.";
 
 /** Structural equality for JSON-shaped build data; key order is irrelevant. */
 function isDeepStrictEqual(left: unknown, right: unknown): boolean {
@@ -225,6 +229,41 @@ function statSignature(build: CharacterBuild) {
   };
 }
 
+/**
+ * The Chargen identity a Character's skill values are derived from (ruling 6, #1068 QA findings
+ * A3 and B1). Civilization sets the mother tongue, social class sets its education grant, and the
+ * Profession sets the Progression prices and target metadata, so changing any of them changes
+ * skill values or what improving them costs without any resolved Progression. The target
+ * metadata digests are left out: the server re-derives them from the Profession on every save.
+ */
+function identitySignature(build: CharacterBuild) {
+  return {
+    civilizationId: build.civilizationId,
+    professionId: build.professionId,
+    socialClass: build.socialClass,
+    socialClassEducationValue: build.profile.socialClassEducationValue,
+    socialClassResult: build.profile.socialClassResult,
+    socialClassRoll: build.profile.socialClassRoll,
+    socialClassTableId: build.profile.socialClassTableId,
+    societyId: build.societyId,
+    societyLevel: build.societyLevel,
+    profileSocietyLevel: build.profile.societyLevel,
+    targetChargen: build.targetChargen
+      ? {
+          familyId: build.targetChargen.familyId,
+          professionName: build.targetChargen.professionName,
+          trackId: build.targetChargen.trackId,
+        }
+      : undefined,
+  };
+}
+
+function findOwnerIdentityErrors(build: CharacterBuild, storedBuild: CharacterBuild): string[] {
+  return isDeepStrictEqual(identitySignature(build), identitySignature(storedBuild))
+    ? []
+    : [OWNER_IDENTITY_CHANGE_MESSAGE];
+}
+
 function sameTarget(
   left: { targetId: string; targetType: ProgressionTargetType },
   right: { targetId: string; targetType: ProgressionTargetType },
@@ -332,8 +371,10 @@ function findOwnerDirectValueErrors(input: {
 export function validatePostChargenBuild(input: ValidatePostChargenBuildInput): string[] {
   const { build, content, storedBuild } = input;
   const errors: string[] = [];
-  if (storedBuild && !input.directValueEdit)
+  if (storedBuild && !input.directValueEdit) {
+    errors.push(...findOwnerIdentityErrors(build, storedBuild));
     errors.push(...findOwnerDirectValueErrors({ build, content, storedBuild }));
+  }
   if (!isTargetBuild(build, content) && !(storedBuild && isTargetBuild(storedBuild, content)))
     return errors;
   errors.push(...findStatErrors(build, storedBuild));

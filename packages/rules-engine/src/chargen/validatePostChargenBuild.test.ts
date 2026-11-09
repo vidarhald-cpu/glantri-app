@@ -18,6 +18,7 @@ import {
 } from "./primaryAllocation";
 import {
   OWNER_DIRECT_VALUE_CHANGE_MESSAGE,
+  OWNER_IDENTITY_CHANGE_MESSAGE,
   validatePostChargenBuild,
 } from "./validatePostChargenBuild";
 import { validateTargetChargenBuild } from "./validateTargetChargenBuild";
@@ -223,6 +224,54 @@ describe("validatePostChargenBuild (#1068)", () => {
     const renamed = structuredClone(stored);
     renamed.name = "Renamed by the owner";
     expect(post(renamed, stored, false)).toEqual([]);
+  });
+
+  it("refuses an owner's change of civilization, society, social class or Profession (ruling 6, QA A3/B1)", () => {
+    const stored = chargenBuild();
+    stored.civilizationId ??= "scythians";
+    stored.socialClass ??= "commoner";
+    stored.profile.socialClassEducationValue ??= 2;
+    const edits: Array<[string, (build: CharacterBuild) => void]> = [
+      ["civilizationId", (b) => void (b.civilizationId = "scandians")],
+      ["societyId", (b) => void (b.societyId = "urban_city_state")],
+      ["societyLevel", (b) => void (b.societyLevel = (b.societyLevel ?? 0) + 1)],
+      ["socialClass", (b) => void (b.socialClass = "aristocrat")],
+      [
+        "profile.socialClassEducationValue",
+        (b) =>
+          void (b.profile.socialClassEducationValue =
+            (b.profile.socialClassEducationValue ?? 0) + 6),
+      ],
+      ["profile.socialClassResult", (b) => void (b.profile.socialClassResult = "Aristocrat")],
+      ["profile.socialClassRoll", (b) => void (b.profile.socialClassRoll = 20)],
+      ["profile.socialClassTableId", (b) => void (b.profile.socialClassTableId = "other-table")],
+      ["profile.societyLevel", (b) => void (b.profile.societyLevel += 1)],
+      ["professionId", (b) => void (b.professionId = "profession:hunter_trapper")],
+      [
+        "targetChargen.familyId",
+        (b) => void (b.targetChargen!.familyId = "profession:hunter_trapper"),
+      ],
+      ["targetChargen.professionName", (b) => void (b.targetChargen!.professionName = "Hunter")],
+      ["targetChargen.trackId", (b) => void (b.targetChargen!.trackId = "profession:other_track")],
+      ["targetChargen removed", (b) => void delete b.targetChargen],
+    ];
+    expect(stored.targetChargen).toBeDefined();
+    for (const [field, edit] of edits) {
+      const changed = structuredClone(stored);
+      edit(changed);
+      expect(post(changed, stored, false), field).toContain(OWNER_IDENTITY_CHANGE_MESSAGE);
+      // The GM may still correct it; the identity freeze is for non-GM writers only.
+      expect(post(changed, stored, true), field).not.toContain(OWNER_IDENTITY_CHANGE_MESSAGE);
+    }
+    // A GM correction of the social class stores cleanly.
+    const gmSocialClass = structuredClone(stored);
+    gmSocialClass.socialClass = "aristocrat";
+    gmSocialClass.profile.socialClassEducationValue! += 1;
+    expect(post(gmSocialClass, stored, true)).toEqual([]);
+    // The digests the server re-derives are not identity: an otherwise unchanged owner save passes.
+    const digest = structuredClone(stored);
+    digest.targetChargen!.sourceDigest = "re-derived-by-server";
+    expect(post(digest, stored, false)).toEqual([]);
   });
 
   describe("an owner's resolved Progression", () => {

@@ -6,7 +6,7 @@ import {
   type Browser,
   type Page,
 } from "@playwright/test";
-import { defaultCanonicalContent } from "@glantri/content";
+import { defaultCanonicalContent, getApprovedV2RuntimeContent } from "@glantri/content";
 import { characterBuildSchema, type CharacterBuild } from "@glantri/domain";
 import { buildCharacterSheetSummary, buildCombatStateCharacterInputs } from "@glantri/rules-engine";
 
@@ -143,7 +143,11 @@ async function admitToScenario(input: {
       data: { characterId: input.characterId, controlledByUserId: input.playerUserId },
     }),
   );
-  return { participantId: participant.participant.id, scenarioId: scenario.scenario.id };
+  return {
+    campaignId: campaign.campaign.id,
+    participantId: participant.participant.id,
+    scenarioId: scenario.scenario.id,
+  };
 }
 
 async function getCharacter(request: APIRequestContext, id: string): Promise<ServerCharacter> {
@@ -246,7 +250,7 @@ interface Fixture {
   character: ServerCharacter;
   id: string;
   playerPage: Page;
-  scenario: { participantId: string; scenarioId: string };
+  scenario: { campaignId: string; participantId: string; scenarioId: string };
 }
 
 async function setUp(browser: Browser, gm: APIRequestContext, label: string): Promise<Fixture> {
@@ -570,4 +574,327 @@ test.describe("GM editing and Progression change the played Character (#1068)", 
     expect(combat.inputs.brawlingCombatSkillXp).toBe(brawlingBefore.effectiveSkillNumber + 1);
     await playerPage.context().close();
   });
+  test("the owning player cannot change civilization, social class or Profession; the GM can (ruling 6)", async ({
+    browser,
+    page,
+  }) => {
+    const fixture = await setUp(browser, page.request, "identity");
+    const { id, playerPage } = fixture;
+    const read = await getCharacter(playerPage.request, id);
+    const content = getApprovedV2RuntimeContent();
+    const otherCivilization = content.civilizations?.find(
+      (civilization) => civilization.id !== read.build.civilizationId,
+    )?.id;
+    const otherProfession = content.professions.find(
+      (profession) =>
+        profession.id !== read.build.professionId && profession.id.startsWith("profession:"),
+    )?.id;
+    expect(otherCivilization).toBeTruthy();
+    expect(otherProfession).toBeTruthy();
+    const ownerEdits: Array<[string, (build: CharacterBuild) => void]> = [
+      ["civilization", (b) => void (b.civilizationId = otherCivilization)],
+      ["profession", (b) => void (b.professionId = otherProfession)],
+      [
+        "social class education",
+        (b) =>
+          void (b.profile.socialClassEducationValue =
+            (b.profile.socialClassEducationValue ?? 0) + 6),
+      ],
+      ["society level", (b) => void (b.societyLevel = (b.societyLevel ?? 0) + 3)],
+    ];
+    for (const [label, edit] of ownerEdits) {
+      const build = structuredClone(read.build);
+      edit(build);
+      const refusal = await playerPage.request.put(`${API_URL}/characters/${id}`, {
+        data: { build, expectedUpdatedAt: read.updatedAt },
+      });
+      expect.soft(refusal.status(), label).toBe(400);
+      expect.soft(await refusal.text(), label).toContain(OWNER_REFUSAL);
+    }
+    // Nothing was stored.
+    expect((await getCharacter(page.request, id)).updatedAt).toBe(read.updatedAt);
+
+    // The GM may still correct the social class and the civilization.
+    const corrected = structuredClone(read.build);
+    corrected.profile.socialClassEducationValue =
+      (corrected.profile.socialClassEducationValue ?? 0) + 1;
+    corrected.civilizationId = otherCivilization;
+    const gmSave = await page.request.put(`${API_URL}/characters/${id}`, {
+      data: { build: corrected, expectedUpdatedAt: read.updatedAt },
+    });
+    expect(gmSave.status(), await gmSave.text()).toBe(200);
+    const stored = await getCharacter(page.request, id);
+    expect(stored.build.civilizationId).toBe(otherCivilization);
+    expect(stored.build.profile.socialClassEducationValue).toBe(
+      corrected.profile.socialClassEducationValue,
+    );
+    await playerPage.context().close();
+  });
+
+  test("a GM edit reaches combat only through a refresh between rounds, never mid-round (ruling 8)", async ({
+    browser,
+    page,
+  }) => {
+    const gm = page.request;
+    const fixture = await setUp(browser, gm, "round");
+    const { id, scenario } = fixture;
+
+    // A second combatant, so the round is under way (one Combat Experience check rolled) while
+    // this Character's own check is still to come.
+    const otherId = `issue1068-round-other-${Date.now()}`;
+    await json(await gm.post(`${API_URL}/characters`, { data: { build: legacyBuild(otherId) } }));
+    await json(
+      await gm.post(`${API_URL}/campaigns/${scenario.campaignId}/roster`, {
+        data: { category: "pc", sourceId: otherId, sourceType: "character" },
+      }),
+    );
+    const other = await json<{ participant: { id: string } }>(
+      await gm.post(`${API_URL}/scenarios/${scenario.scenarioId}/participants/character`, {
+        data: { characterId: otherId },
+      }),
+    );
+    const members = [
+      { characterId: otherId, participantId: other.participant.id },
+      { characterId: id, participantId: scenario.participantId },
+    ];
+
+    const ceTotalOf = (build: CharacterBuild) =>
+      summarize(build).draftView.skills.find((skill) => /combat_experience/.test(skill.skillId))!
+        .totalSkill;
+    const snapshotBuild = async () => {
+      const participants = await json<{
+        participants: Array<{ id: string; snapshot: { build: unknown } }>;
+      }>(await gm.get(`${API_URL}/scenarios/${scenario.scenarioId}/participants`));
+      return characterBuildSchema.parse(
+        participants.participants.find((p) => p.id === scenario.participantId)?.snapshot.build,
+      );
+    };
+    const refresh = async () =>
+      gm.post(
+        `${API_URL}/scenarios/${scenario.scenarioId}/participants/${scenario.participantId}/refresh-character-equipment`,
+        { data: {} },
+      );
+    const ceBefore = ceTotalOf(fixture.character.build);
+
+    // Round 1 of an Encounter: the other combatant's Combat Experience check is rolled.
+    const first = await startEncounter(gm, scenario, members, "first");
+    expect((await rollOneCombatExperience(gm, first)).scenarioParticipantId).toBe(
+      other.participant.id,
+    );
+
+    // Mid-round, the GM raises this Character's Combat Experience by 3 and saves.
+    const read = await getCharacter(gm, id);
+    const edited = structuredClone(read.build);
+    const ceRow = edited.progression.skills.find((skill) =>
+      /combat_experience/.test(skill.skillId),
+    )!;
+    ceRow.grantedRanks += 3;
+    ceRow.ranks += 3;
+    const save = await gm.put(`${API_URL}/characters/${id}`, {
+      data: { build: edited, expectedUpdatedAt: read.updatedAt },
+    });
+    expect(save.status(), await save.text()).toBe(200);
+    const ceAfter = ceTotalOf((await getCharacter(gm, id)).build);
+    expect(ceAfter).toBe(ceBefore + 3);
+
+    // A2: this Character's check in the same round still uses the participant's build.
+    const own = await rollOneCombatExperience(gm, first);
+    expect(own.scenarioParticipantId).toBe(scenario.participantId);
+    expect.soft(own.skillTotal, "mid-round Combat Experience roll").toBe(ceBefore);
+
+    // A1: a GM refresh while the round is under way reconciles equipment but keeps the build.
+    const midRound = await refresh();
+    expect(midRound.status(), await midRound.text()).toBe(200);
+    expect.soft(ceTotalOf(await snapshotBuild()), "mid-round refresh").toBe(ceBefore);
+
+    // Once no round is under way, the refresh copies the build and the next roll uses it.
+    await setEncounterStatus(gm, first, "paused");
+    await setEncounterStatus(gm, first, "completed");
+    const between = await refresh();
+    expect(between.status(), await between.text()).toBe(200);
+    expect(ceTotalOf(await snapshotBuild())).toBe(ceAfter);
+    const second = await startEncounter(gm, scenario, members, "second");
+    await rollOneCombatExperience(gm, second);
+    const next = await rollOneCombatExperience(gm, second);
+    expect(next.scenarioParticipantId).toBe(scenario.participantId);
+    expect(next.skillTotal).toBe(ceAfter);
+    await fixture.playerPage.context().close();
+  });
 });
+
+/** A minimal legacy-shaped Character, built through the API, to be a second combatant. */
+function legacyBuild(id: string) {
+  const stats = {
+    cha: 10,
+    com: 10,
+    con: 10,
+    dex: 10,
+    health: 10,
+    int: 10,
+    lck: 10,
+    pow: 10,
+    siz: 10,
+    str: 12,
+    will: 10,
+  };
+  return {
+    currentStatModifiers: {},
+    developedStatModifiers: {},
+    equipment: { items: [] },
+    id,
+    name: `Issue 1068 second combatant ${id}`,
+    profile: {
+      description: "",
+      distractionLevel: 3,
+      id: `profile-${id}`,
+      label: "Profile",
+      resolvedStats: stats,
+      rolledStats: stats,
+      societyLevel: 0,
+      statLayerVersion: 1,
+    },
+    progression: {
+      chargenMode: "standard",
+      educationPoints: 0,
+      flexiblePointFactor: 1,
+      level: 1,
+      primaryPoolSpent: 0,
+      primaryPoolTotal: 60,
+      secondaryPoolSpent: 0,
+      secondaryPoolTotal: 0,
+      skillGroups: [],
+      skills: [],
+      specializations: [],
+    },
+    progressionState: { availablePoints: 0, checks: [], history: [], pendingAttempts: [] },
+  };
+}
+
+interface EncounterHandle {
+  encounterId: string;
+  rows: Array<{ id: string; scenarioParticipantId: string }>;
+}
+
+async function readEncounter(gm: APIRequestContext, encounterId: string) {
+  return (
+    await json<{ encounter: { combatRoundState?: unknown; updatedAt: string } }>(
+      await gm.get(`${API_URL}/encounters/${encounterId}`),
+    )
+  ).encounter;
+}
+
+async function setEncounterStatus(gm: APIRequestContext, handle: EncounterHandle, status: string) {
+  const current = await readEncounter(gm, handle.encounterId);
+  await json(
+    await gm.patch(`${API_URL}/encounters/${handle.encounterId}/status`, {
+      data: {
+        expectedRevision: current.updatedAt,
+        ...(status === "completed" ? { playerOutcome: "Issue 1068 round ended." } : {}),
+        status,
+      },
+    }),
+  );
+}
+
+/** The GM creates an Encounter with an explicit roster and activates it. */
+async function startEncounter(
+  gm: APIRequestContext,
+  scenario: { campaignId: string; scenarioId: string },
+  members: Array<{ characterId: string; participantId: string }>,
+  tag: string,
+): Promise<EncounterHandle> {
+  const now = () => new Date().toISOString();
+  const encounterId = `issue1068-${tag}-${Date.now()}`;
+  const rows = members.map((member, index) => ({
+    characterId: member.characterId,
+    id: `${encounterId}-ep${index}`,
+    label: `Combatant ${index + 1}`,
+    participantType: "scenario" as const,
+    scenarioParticipantId: member.participantId,
+  }));
+  await json(
+    await gm.post(`${API_URL}/scenarios/${scenario.scenarioId}/encounters`, {
+      data: {
+        session: {
+          campaignId: scenario.campaignId,
+          createdAt: now(),
+          id: encounterId,
+          kind: "combat",
+          participantMembershipMode: "explicit",
+          participants: rows,
+          scenarioId: scenario.scenarioId,
+          status: "draft",
+          title: `Issue 1068 ${tag}`,
+          updatedAt: now(),
+        },
+      },
+    }),
+  );
+  const handle = { encounterId, rows };
+  await setEncounterStatus(gm, handle, "active");
+  return handle;
+}
+
+/**
+ * Rolls the next Combat Experience check through the server route the GM's round manager uses,
+ * setting the difficulty first when the round asks for it, and returns the skill total the
+ * server recorded for that roll.
+ */
+async function rollOneCombatExperience(gm: APIRequestContext, handle: EncounterHandle) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const encounter = await readEncounter(gm, handle.encounterId);
+    const probe = await gm.post(
+      `${API_URL}/encounters/${handle.encounterId}/combat-round/advance-deterministic`,
+      {
+        data: {
+          executionGroupId: "issue1068",
+          expectedRevision: encounter.updatedAt,
+          taskId: "issue1068",
+        },
+      },
+    );
+    const task = (
+      (await probe.json()) as {
+        actualTask?: { executionGroupId: string; kind: string; taskId: string };
+      }
+    ).actualTask;
+    expect(task?.kind).toBe("combat_experience");
+    if (task!.taskId.includes(":stage:difficulty:")) {
+      await json(
+        await gm.post(
+          `${API_URL}/encounters/${handle.encounterId}/combat-round/combat-experience-difficulty`,
+          {
+            data: {
+              difficulty: 50,
+              executionGroupId: task!.executionGroupId,
+              expectedRevision: encounter.updatedAt,
+              taskId: task!.taskId,
+            },
+          },
+        ),
+      );
+      continue;
+    }
+    const encounterParticipantId = task!.taskId.slice(task!.taskId.lastIndexOf(":") + 1);
+    const row = handle.rows.find((candidate) => candidate.id === encounterParticipantId)!;
+    const rolled = await json<{ combatExperience: { skillTotal: number } }>(
+      await gm.post(
+        `${API_URL}/encounters/${handle.encounterId}/combat-round/roll-combat-experience`,
+        {
+          data: {
+            difficulty: 50,
+            executionGroupId: task!.executionGroupId,
+            expectedRevision: encounter.updatedAt,
+            scenarioParticipantId: row.scenarioParticipantId,
+            taskId: task!.taskId,
+          },
+        },
+      ),
+    );
+    return {
+      scenarioParticipantId: row.scenarioParticipantId,
+      skillTotal: rolled.combatExperience.skillTotal,
+    };
+  }
+  throw new Error("No Combat Experience check became due.");
+}
