@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { CharacterBuild, SkillDefinition, SkillGroupDefinition } from "@glantri/domain";
-import { glantriCharacteristicLabels, glantriCharacteristicOrder } from "@glantri/domain";
+import {
+  deriveCharacterStatLayers,
+  glantriCharacteristicLabels,
+  glantriCharacteristicOrder,
+} from "@glantri/domain";
 
 import {
   addCharacterSkillGroup,
@@ -18,7 +22,7 @@ import {
   setCharacterName,
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
-  setCharacterOriginalStatValue,
+  setCharacterDevelopedStatValue,
   setCharacterNotes,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp,
@@ -260,18 +264,26 @@ describe("characterEdit helpers", () => {
     });
   });
 
-  it("edits Original without rewriting the rolled/base value or changing Current", () => {
+  it("edits Developed as a permanent modifier without touching Original (#1068 ruling 3)", () => {
     const withCurrentChange = setCharacterCurrentStatValue(baseBuild, "str", 14);
-    const updatedBuild = setCharacterOriginalStatValue(withCurrentChange, "str", 12);
+    const updatedBuild = setCharacterDevelopedStatValue(withCurrentChange, "str", 12);
     const summary = getCharacterEditSheetSummary(updatedBuild, content);
 
     expect(updatedBuild.profile.rolledStats.str).toBe(11);
-    expect(updatedBuild.profile.resolvedStats?.str).toBe(12);
+    expect(updatedBuild.profile.resolvedStats).toEqual(baseBuild.profile.resolvedStats);
+    expect(updatedBuild.developedStatModifiers?.str).toBe(1);
+    // Current keeps its temporary +3 on top of the new Developed value.
     expect(summary.statLayers).toMatchObject({
-      current: { str: 14 },
+      current: { str: 15 },
       developed: { str: 12 },
-      original: { str: 12 },
+      original: { str: 11 },
     });
+    expect(setCharacterDevelopedStatValue(updatedBuild, "str", 11).developedStatModifiers).toEqual(
+      {},
+    );
+    expect(
+      deriveCharacterStatLayers(setCharacterDevelopedStatValue(baseBuild, "str", 99)).developed.str,
+    ).toBe(25);
   });
 
   it("includes distraction in profile stat rows and persists distraction edits", () => {
@@ -576,6 +588,37 @@ describe("characterEdit helpers", () => {
       grantedXp: 5,
       totalXp: 5,
     });
+  });
+
+  it("keeps the mother-tongue grant as a floor and records a GM raise above it (#1068)", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 11,
+            groupId: "awareness",
+            languageName: "Scythian",
+            level: 0,
+            primaryRanks: 0,
+            ranks: 11,
+            secondaryRanks: 0,
+            skillId: skills[0]!.id,
+            sourceTag: "mother-tongue",
+          },
+        ],
+      },
+    };
+    const raised = setCharacterSkillXp({ build, content, skill: skills[0]!, xp: 12 });
+    expect(raised.progression.skills[0]).toMatchObject({
+      grantedRanks: 11,
+      primaryRanks: 1,
+      ranks: 12,
+    });
+    const lowered = setCharacterSkillXp({ build: raised, content, skill: skills[0]!, xp: 5 });
+    expect(lowered.progression.skills[0]).toMatchObject({ grantedRanks: 11, primaryRanks: 0 });
   });
 
   it("edits Longbow as an ordinary Skill row and not as a Specialization row", () => {

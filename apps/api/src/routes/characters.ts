@@ -15,7 +15,7 @@ import {
 } from "@glantri/domain";
 
 import { requireAuthenticatedUser } from "../lib/sessionAuth";
-import { loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
+import { canEditCharacterInApi, loadAccessibleCharacterInApi } from "../lib/characterEditAccess";
 import {
   loadReadableCharacterInApi,
   projectCharacterForReadGrant,
@@ -349,6 +349,8 @@ export const charactersRoutes: FastifyPluginAsync = async (app) => {
       const character = await characterService.saveExistingCharacter({
         build,
         characterId,
+        // Forgejo #1068 ruling 6: only a GM or admin types stat and skill values directly.
+        directValueEdit: canEditCharacterInApi(user),
         expectedUpdatedAt,
       });
 

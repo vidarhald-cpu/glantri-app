@@ -36,7 +36,7 @@ import {
   removeCharacterSkill,
   setCharacterDistractionLevel,
   setCharacterCurrentStatValue,
-  setCharacterOriginalStatValue,
+  setCharacterDevelopedStatValue,
   setCharacterSpecializationXp,
   setCharacterSkillGroupLevel,
   setCharacterSkillXp,
@@ -222,9 +222,15 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     }
 
     const existingSkillIds = new Set(build.progression.skills.map((skill) => skill.skillId));
+    // Forgejo #1068: a target Character is offered only its own approved catalogue.
+    const catalogueSkillIds = content.chargenCatalogue?.skillIds;
 
     return [...content.skills]
-      .filter((skill) => !existingSkillIds.has(skill.id))
+      .filter(
+        (skill) =>
+          !existingSkillIds.has(skill.id) &&
+          (!catalogueSkillIds || catalogueSkillIds.includes(skill.id)),
+      )
       .sort(
         (left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name),
       );
@@ -356,9 +362,9 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
     setFeedback("Current server Character restored. The retained draft is still available.");
   }
 
-  function updateOriginalStat(stat: GlantriCharacteristicKey, value: string) {
+  function updateDevelopedStat(stat: GlantriCharacteristicKey, value: string) {
     setBuild((current) =>
-      current ? setCharacterOriginalStatValue(current, stat, parseWholeNumber(value)) : current,
+      current ? setCharacterDevelopedStatValue(current, stat, parseWholeNumber(value)) : current,
     );
   }
 
@@ -967,19 +973,32 @@ export default function CharacterEditPage({ id }: CharacterEditPageProps) {
                 <tr key={row.stat} style={{ borderBottom: "1px solid #eee8dc" }}>
                   <td style={{ padding: "0.6rem 0.75rem 0.6rem 0" }}>{row.label}</td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                    <input
-                      onChange={(event) =>
-                        row.stat === "distraction"
-                          ? updateDistraction(event.target.value)
-                          : updateOriginalStat(row.stat, event.target.value)
-                      }
-                      style={numericInputStyle}
-                      type="number"
-                      value={row.originalValue}
-                    />
+                    {row.stat === "distraction" ? (
+                      <input
+                        onChange={(event) => updateDistraction(event.target.value)}
+                        style={numericInputStyle}
+                        type="number"
+                        value={row.originalValue}
+                      />
+                    ) : (
+                      row.originalValue
+                    )}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
-                    {row.developedValue}
+                    {row.stat === "distraction" ? (
+                      row.developedValue
+                    ) : (
+                      <input
+                        onChange={(event) => {
+                          if (row.stat !== "distraction") {
+                            updateDevelopedStat(row.stat, event.target.value);
+                          }
+                        }}
+                        style={numericInputStyle}
+                        type="number"
+                        value={row.developedValue}
+                      />
+                    )}
                   </td>
                   <td style={{ padding: "0.6rem 0.75rem", textAlign: "right" }}>
                     {row.isDirectEdit ? (
