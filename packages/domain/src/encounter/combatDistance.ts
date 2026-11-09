@@ -356,7 +356,12 @@ export function ensureDistanceEdgesForParticipantPairs(input: {
   state?: CombatDistanceState;
   weaponsByParticipantId?: Record<string, readonly (CombatDistanceWeaponLike | undefined | null)[]>;
 }): CombatDistanceState {
-  let nextState = combatDistanceStateSchema.parse(input.state ?? {});
+  const parsedState = combatDistanceStateSchema.parse(input.state ?? {});
+  // Accumulate in one local copy and parse at most once at the end; re-parsing the whole
+  // record per added edge made this function O(N^4) (#1047). Edge insertion/replacement
+  // order matches the previous per-edge spread.
+  const edges: Record<string, CombatDistanceEdge> = { ...parsedState.edges };
+  let changed = false;
 
   for (let leftIndex = 0; leftIndex < input.participantIds.length; leftIndex += 1) {
     for (
@@ -373,7 +378,7 @@ export function ensureDistanceEdgesForParticipantPairs(input: {
 
       const pairKey = makeDistancePairKey(participantAId, participantBId);
 
-      const existingEdge = nextState.edges[pairKey];
+      const existingEdge = edges[pairKey];
 
       if (
         existingEdge &&
@@ -393,14 +398,10 @@ export function ensureDistanceEdgesForParticipantPairs(input: {
         participantBWeapons: input.weaponsByParticipantId?.[participantBId],
       });
 
-      nextState = combatDistanceStateSchema.parse({
-        edges: {
-          ...nextState.edges,
-          [edge.pairKey]: edge,
-        },
-      });
+      edges[edge.pairKey] = edge;
+      changed = true;
     }
   }
 
-  return nextState;
+  return changed ? combatDistanceStateSchema.parse({ edges }) : parsedState;
 }
