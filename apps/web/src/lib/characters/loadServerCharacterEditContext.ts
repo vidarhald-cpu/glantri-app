@@ -1,4 +1,5 @@
 import type { CanonicalContent } from "@glantri/content";
+import { resolveRetainedTargetCharacterContent } from "@glantri/rules-engine";
 
 import { loadServerCharacterById, type ServerCharacterRecord } from "../api/characterClient";
 import { loadCanonicalContent } from "../content/loadCanonicalContent";
@@ -44,7 +45,9 @@ export async function loadServerCharacterEditContext(
 
   return {
     canonicalRecord,
-    content,
+    // Forgejo #1068: Edit Character uses the catalogue the Character was built from — the same
+    // approved target content Chargen, the server, the Sheet and combat use.
+    content: resolveRetainedTargetCharacterContent(serverRecord.build, content),
     expectedUpdatedAt: serverRecord.updatedAt,
     hasRevisionConflict:
       localHasPendingChanges &&

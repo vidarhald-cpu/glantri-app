@@ -99,7 +99,9 @@ describe("synthetic target and historical Chargen drafts", () => {
         characters.save({
           build: { ...targetBuild, progression: { ...bought.progression, primaryPoolSpent: 0 } },
         }),
-      ).rejects.toThrow("authoritative purchase prices");
+        // Forgejo #1068: a save of an existing Character is a post-Chargen save, where the
+        // Chargen totals are frozen rather than re-priced.
+      ).rejects.toThrow("The Chargen skill-point totals cannot change after Chargen.");
       expect((await characters.get(targetId))?.build.progression).toEqual(targetBuild.progression);
       const loaded = await repository.getForOwner(targetOwnerId);
       expect(loaded?.selectedProfessionId).toBe("profession:soldier");

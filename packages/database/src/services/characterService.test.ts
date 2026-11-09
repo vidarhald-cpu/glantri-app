@@ -308,6 +308,39 @@ describe("CharacterService edit persistence", () => {
     });
   });
 
+  it("lets only a GM or admin writer change a value directly (#1068 ruling 6)", async () => {
+    const existingCharacter: CharacterRecord = {
+      build: baseBuild,
+      createdAt: "2026-04-14T00:00:00.000Z",
+      id: "character-1",
+      level: 2,
+      name: "Edited Character",
+      ownerId: "owner-1",
+      updatedAt: "2026-04-14T00:00:00.000Z",
+    };
+    const raised: CharacterBuild = { ...baseBuild, developedStatModifiers: { str: 2 } };
+
+    const owner = createRepositoryStub(existingCharacter);
+    const ownerSave = new CharacterService(owner.repository).saveExistingCharacter({
+      build: raised,
+      characterId: "character-1",
+      expectedUpdatedAt: existingCharacter.updatedAt,
+    });
+    await expect(ownerSave).rejects.toMatchObject({
+      issues: [expect.stringContaining("Only a GM or admin can change")],
+    });
+    expect(owner.calls.updateVersioned).toHaveLength(0);
+
+    const gm = createRepositoryStub(existingCharacter);
+    await new CharacterService(gm.repository).saveExistingCharacter({
+      build: raised,
+      characterId: "character-1",
+      directValueEdit: true,
+      expectedUpdatedAt: existingCharacter.updatedAt,
+    });
+    expect(gm.calls.updateVersioned[0]?.build.developedStatModifiers).toEqual({ str: 2 });
+  });
+
   it("rejects a stale edit without invoking the repository update", async () => {
     const existingCharacter: CharacterRecord = {
       build: baseBuild,

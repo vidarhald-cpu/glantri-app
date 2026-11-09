@@ -64,3 +64,9 @@ export * from "./stats/characteristicGms";
 export * from "./validation/validateCharacterBuild";
 
 export { validateTargetChargenBuild } from "./chargen/validateTargetChargenBuild";
+export {
+  OWNER_DIRECT_VALUE_CHANGE_MESSAGE,
+  OWNER_IDENTITY_CHANGE_MESSAGE,
+  validatePostChargenBuild,
+  type ValidatePostChargenBuildInput,
+} from "./chargen/validatePostChargenBuild";
