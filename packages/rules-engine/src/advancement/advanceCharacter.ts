@@ -387,8 +387,9 @@ function ensureSpecializationExists(
  * It raises the competency's value by one rank **without touching the Chargen purchase fields**
  * (`primaryRanks` / `secondaryRanks` on skills and groups) or the Chargen spending totals, so the
  * Sheet keeps "Original N" frozen and reads the gain from the progression history. Skills and
- * Learning Groups record it in `grantedRanks`, the rank field that is not a Chargen purchase. A
- * Specialization row has no such field (`ranks = secondaryRanks + relationshipGrantedRanks`), so
+ * Learning Groups record it in `grantedRanks`, the rank field that is not a Chargen purchase. The
+ * mother tongue is the exception: its `grantedRanks` is re-derived from education on every read,
+ * so its gain is recorded in `primaryRanks`. A Specialization row has no such field (`ranks = secondaryRanks + relationshipGrantedRanks`), so
  * its increase stays in `secondaryRanks`. The server replays this same function to check a
  * player's resolved successes (`validatePostChargenBuild`).
  */
@@ -417,7 +418,13 @@ export function applySuccessfulProgressionIncrease(input: {
     }
 
     const skill = ensureSkillExists(progression, skillDefinition);
-    skill.grantedRanks += 1;
+    if (skill.sourceTag === "mother-tongue") {
+      // The mother-tongue grant is re-derived from education on every read
+      // (`syncChargenMotherTongueSkillRow`), so a gain above it must live in a rank field.
+      skill.primaryRanks += 1;
+    } else {
+      skill.grantedRanks += 1;
+    }
     skill.ranks =
       skill.grantedRanks +
       skill.primaryRanks +

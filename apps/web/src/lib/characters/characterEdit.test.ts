@@ -590,6 +590,37 @@ describe("characterEdit helpers", () => {
     });
   });
 
+  it("keeps the mother-tongue grant as a floor and records a GM raise above it (#1068)", () => {
+    const build: CharacterBuild = {
+      ...baseBuild,
+      progression: {
+        ...baseBuild.progression,
+        skills: [
+          {
+            category: "ordinary",
+            grantedRanks: 11,
+            groupId: "awareness",
+            languageName: "Scythian",
+            level: 0,
+            primaryRanks: 0,
+            ranks: 11,
+            secondaryRanks: 0,
+            skillId: skills[0]!.id,
+            sourceTag: "mother-tongue",
+          },
+        ],
+      },
+    };
+    const raised = setCharacterSkillXp({ build, content, skill: skills[0]!, xp: 12 });
+    expect(raised.progression.skills[0]).toMatchObject({
+      grantedRanks: 11,
+      primaryRanks: 1,
+      ranks: 12,
+    });
+    const lowered = setCharacterSkillXp({ build: raised, content, skill: skills[0]!, xp: 5 });
+    expect(lowered.progression.skills[0]).toMatchObject({ grantedRanks: 11, primaryRanks: 0 });
+  });
+
   it("edits Longbow as an ordinary Skill row and not as a Specialization row", () => {
     /* Rule decision 0010 ruling 2 makes Longbow a base combat Skill and ruling 5 deletes the bridge
        that used to project it as a Specialization receiving derived XP from Bow. Buying Bow now

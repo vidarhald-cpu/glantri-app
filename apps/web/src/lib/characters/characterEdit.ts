@@ -96,10 +96,32 @@ function cloneBuild(build: CharacterBuild): CharacterBuild {
  * Chargen spending totals are never touched, so the Sheet's "Original" skill points stay frozen.
  */
 function setOwnedRanks(
-  row: { grantedRanks: number; primaryRanks: number; secondaryRanks: number },
+  row: {
+    grantedRanks: number;
+    primaryRanks: number;
+    secondaryRanks: number;
+    sourceTag?: string;
+  },
   value: number,
 ): void {
   const purchased = row.primaryRanks + row.secondaryRanks;
+
+  if (row.sourceTag === "mother-tongue") {
+    // The mother-tongue grant is re-derived from education on every read
+    // (`syncChargenMotherTongueSkillRow`), so it is a floor here and the GM's value above it
+    // lives in the rank fields.
+    const target = Math.max(0, value - row.grantedRanks);
+    if (target >= purchased) {
+      row.primaryRanks += target - purchased;
+      return;
+    }
+    let excess = purchased - target;
+    const fromSecondary = Math.min(row.secondaryRanks, excess);
+    row.secondaryRanks -= fromSecondary;
+    excess -= fromSecondary;
+    row.primaryRanks -= excess;
+    return;
+  }
 
   if (value >= purchased) {
     row.grantedRanks = value - purchased;
