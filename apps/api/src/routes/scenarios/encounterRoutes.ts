@@ -403,6 +403,7 @@ import {
   resolveCombatDisarmRoll,
 } from "@glantri/rules-engine";
 
+import { isInternalServerError, sendInternalServerError } from "../../lib/errors";
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
 import {
   instrumentCombatService,
@@ -8274,6 +8275,8 @@ export const encounterRoutes: FastifyPluginAsync = async (app) => {
 
       return { encounter: normalizedEncounter };
     } catch (error) {
+      // Forgejo #1048: a persistence or internal failure must not echo its Prisma text or path.
+      if (isInternalServerError(error)) return sendInternalServerError(error, reply);
       return reply.code(400).send({
         error: error instanceof Error ? error.message : "Unable to load encounter.",
       });

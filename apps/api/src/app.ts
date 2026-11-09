@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 
+import { isInternalServerError, sendInternalServerError } from "./lib/errors";
 import { applyLocalCors } from "./lib/sessionAuth";
 import {
   finishCombatPerformanceRequest,
@@ -21,8 +22,21 @@ const isProduction = process.env.NODE_ENV === "production";
 export function buildApiServer() {
   const app = Fastify({
     logger: {
-      level: process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug")
+      level: process.env.LOG_LEVEL ?? (isProduction ? "info" : "debug"),
+    },
+  });
+
+  // Forgejo #1048 (A1): errors that escape a route (auth lookups before a route's `try`, routes
+  // with no `try`) must not reach the client through Fastify's default handler, which echoes
+  // `error.message`. Internal failures get the fixed body; every other error is delegated to
+  // Fastify's own default handler unchanged, so validation 400s, 404s, 413s etc. keep their shape.
+  // Re-sending the error lets Fastify run its stock handling (and logging) exactly once; calling
+  // the default handler directly would log every such error a second time.
+  app.setErrorHandler((error, _request, reply) => {
+    if (isInternalServerError(error)) {
+      return sendInternalServerError(error, reply);
     }
+    return reply.send(error);
   });
 
   applyLocalCors(app);
@@ -36,7 +50,7 @@ export function buildApiServer() {
 
   app.get("/health", async () => ({
     service: "@glantri/api",
-    status: "ok"
+    status: "ok",
   }));
 
   app.get("/ready", async (_request, reply) => {
@@ -45,14 +59,14 @@ export function buildApiServer() {
     if (readiness.status === "ready") {
       return {
         service: "@glantri/api",
-        status: "ready"
+        status: "ready",
       };
     }
 
     return reply.code(503).send({
       service: "@glantri/api",
       status: "not_ready",
-      reason: readiness.reason
+      reason: readiness.reason,
     });
   });
 
