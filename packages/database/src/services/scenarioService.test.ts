@@ -135,6 +135,54 @@ describe("ScenarioService controller assignment", () => {
     expect(refreshed.state.health.currentHp).toBe(4);
   });
 
+  it("refreshes the participant's build so a GM edit reaches combat (#1068 ruling 8)", async () => {
+    const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
+    scenario.status = "live";
+    const character = createCharacterRecord({ id: "character-1", name: "Scyrian" });
+    rosterCharacters(rosterEntries, character.id);
+    const service = new ScenarioService(
+      repository,
+      { getCharacterById: async () => character } as never,
+      {
+        getCharacterEquipmentState: async () => ({
+          activeLoadoutByCharacterId: {},
+          itemsById: {},
+          locationsById: {},
+          templatesById: {},
+        }),
+      } as never,
+      undefined,
+      createEquipmentWriteStub(),
+    );
+    const original = await service.addCharacterParticipant({
+      characterId: character.id,
+      joinSource: "gm_added",
+      scenarioId: "scenario-1",
+    });
+    await repository.updateScenarioParticipantState(original.id, {
+      ...original.state,
+      health: { ...original.state.health, currentHp: 4 },
+    });
+    character.build = {
+      ...character.build,
+      developedStatModifiers: { str: 2 },
+      profile: { ...character.build.profile, notes: "Owner-only notes" },
+    };
+    character.updatedAt = "2026-04-21T01:00:00.000Z";
+
+    const refreshed = await service.refreshCharacterParticipantEquipmentSnapshot({
+      participantId: original.id,
+      scenarioId: "scenario-1",
+    });
+
+    expect(original.snapshot.build).not.toHaveProperty("developedStatModifiers.str", 2);
+    expect(refreshed.snapshot.build).toMatchObject({ developedStatModifiers: { str: 2 } });
+    // The private projection still applies, and live participant state survives the refresh.
+    expect(refreshed.snapshot.build).not.toHaveProperty("profile.notes");
+    expect(refreshed.snapshot.sourceUpdatedAt).toBe("2026-04-21T01:00:00.000Z");
+    expect(refreshed.state.health.currentHp).toBe(4);
+  });
+
   it("prevents one player from being assigned to two active player characters in the same scenario", async () => {
     const { repository, rosterEntries, scenario } = createScenarioRepositoryStub();
     scenario.status = "live";
