@@ -138,18 +138,18 @@ provider**. The Azure-backed provider is **not** an Alpha prerequisite.
 
 **What that means in practice** (verified at source on 2026-10-12):
 
-- The provider is resolved in `apps/api/src/artifacts/artifactStorageConfig.ts` (lines 38 to 46).
+- The provider is resolved in `apps/api/src/artifacts/artifactStorageConfig.ts` (lines 38 to 49).
   When `ARTIFACT_STORAGE_PROVIDER` is unset, it defaults to `local` whenever `NODE_ENV` is not
   `production`, and in that case storage is **enabled**, with its root defaulting to
   `glantri-artifacts-local` under the operating system's temporary directory (overridable with
   `ARTIFACT_LOCAL_ROOT`).
-- The `azure` provider (lines 51 to 58) is enabled only when **both** `ARTIFACT_AZURE_ACCOUNT_URL` and
-  `ARTIFACT_AZURE_CONTAINER` are set; otherwise the resolver returns `{ enabled: false }` (line 62).
+- The `azure` provider (lines 63 to 72) is enabled only when **both** `ARTIFACT_AZURE_ACCOUNT_URL` and
+  `ARTIFACT_AZURE_CONTAINER` are set; otherwise the resolver returns `{ enabled: false }` (line 74).
 - `apps/api/src/routes/scenarios/mapRoutes.ts` (line 133) is the single storage gate on the map
   background route: when storage is not enabled it answers 404.
 
 **In-house hosting on the Mac Studio (production build).** A production build enables local storage
-only with an explicit opt-in, and only when **all three** hold: `ARTIFACT_STORAGE_PROVIDER=local`,
+only with an explicit opt-in (`artifactStorageConfig.ts`, lines 51 to 61), and only when **all three** hold: `ARTIFACT_STORAGE_PROVIDER=local`,
 `ARTIFACT_LOCAL_ALLOW_PRODUCTION=true` (exact value), and `ARTIFACT_LOCAL_ROOT` set to an **absolute**
 path. If any is missing, storage stays disabled (`{ enabled: false }`); production never falls back to
 the temporary directory. Azure production does not set these variables and is unaffected.
