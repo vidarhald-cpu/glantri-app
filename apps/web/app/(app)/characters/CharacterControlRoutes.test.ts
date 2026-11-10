@@ -28,8 +28,9 @@ describe("character control routes", () => {
     expect(sharedViewSource).toContain("liveCombatModifiers");
     expect(sharedViewSource).toContain("calculateCharacterGeneralHitpoints");
     expect(sharedViewSource).toContain("saveCombatEffect");
-    expect(sharedViewSource).toContain("applyCombatEffectDraft");
-    expect(sharedViewSource).toContain("removeCombatEffect");
+    // #1126: edits leave as changes the server applies to the stored state.
+    expect(sharedViewSource).toContain("buildCombatEffectDraftChange");
+    expect(sharedViewSource).toContain("buildCombatEffectRemovalChange");
 
     // #1118: the add/remove effect logic is shared with the GM NPC Physical state view.
     const combatEffectEditsSource = readFileSync(

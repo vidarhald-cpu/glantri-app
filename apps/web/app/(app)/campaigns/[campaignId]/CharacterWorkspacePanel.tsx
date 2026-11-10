@@ -10,11 +10,16 @@ import {
   buildGmCharacterScreenCandidates,
   resolvePlayerCharacterWorkspaceCandidate,
 } from "@/lib/campaigns/characterWorkspace";
-import { applyCombatEffectDraft, removeCombatEffect } from "@/lib/characters/combatEffectEdits";
-import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 import {
+  buildCombatEffectDraftChange,
+  buildCombatEffectRemovalChange,
+} from "@/lib/characters/combatEffectEdits";
+import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
+import { ApiRequestError } from "@/lib/api/apiClient";
+import {
+  changeScenarioParticipantCombatEffectsOnServer,
   refreshScenarioParticipantEquipmentOnServer,
-  updateScenarioParticipantStateOnServer,
+  type ParticipantCombatEffectsChange,
 } from "@/lib/api/scenarioClient";
 import CharacterLoadoutView from "../../characters/[id]/components/CharacterLoadoutView";
 import WorkspaceParticipantInspectionHeader from "./WorkspaceParticipantInspectionHeader";
@@ -64,6 +69,18 @@ export function buildPlayerCharacterCanonicalDetailLinks(
     { href: `/characters/${characterId}`, label: "Open the full character sheet" },
     { href: `/characters/${characterId}/equipment`, label: "Open the full equipment inventory" },
   ];
+}
+
+function readChangedParticipant(error: unknown): ScenarioParticipant | undefined {
+  if (!(error instanceof ApiRequestError) || error.status !== 409) {
+    return undefined;
+  }
+
+  const payload = error.payload as { code?: unknown; participant?: ScenarioParticipant } | null;
+
+  return payload?.code === "participant_state_changed" && payload.participant
+    ? payload.participant
+    : undefined;
 }
 
 export default function CharacterWorkspacePanel({
@@ -142,27 +159,32 @@ export default function CharacterWorkspacePanel({
     }
   }
 
-  async function updateSelectedCombatEffects(
-    nextCombatEffects: NonNullable<ScenarioParticipant["state"]["combatEffects"]>,
-  ) {
+  // The server applies the change to the participant as stored (#1126), so combat writes that
+  // landed while this screen was open are kept, and the response carries them.
+  async function updateSelectedCombatEffects(change: ParticipantCombatEffectsChange) {
     if (!isGameMaster || !scenarioId || !selectedCandidate) {
       return;
     }
 
     try {
-      const participant = await updateScenarioParticipantStateOnServer({
+      const participant = await changeScenarioParticipantCombatEffectsOnServer({
+        change,
         participantId: selectedCandidate.scenarioParticipant.id,
         scenarioId,
-        state: {
-          ...selectedCandidate.scenarioParticipant.state,
-          combatEffects: nextCombatEffects,
-        },
       });
 
       onScenarioParticipantUpdated?.(participant);
       setSaveError(undefined);
       setSaveFeedback(undefined);
     } catch (caughtError) {
+      // The edited effect changed meanwhile: nothing was saved, and the refusal carries the
+      // participant as it is now so the screen shows it before the GM applies the change again.
+      const currentParticipant = readChangedParticipant(caughtError);
+
+      if (currentParticipant) {
+        onScenarioParticipantUpdated?.(currentParticipant);
+      }
+
       setSaveError(
         caughtError instanceof Error ? caughtError.message : "Unable to save combat effects.",
       );
@@ -252,13 +274,11 @@ export default function CharacterWorkspacePanel({
                 currentRoundNumber={currentRoundNumber}
                 model={npcPhysicalStateModel}
                 onDeleteCombatEffect={(effectId) =>
-                  updateSelectedCombatEffects(
-                    removeCombatEffect(selectedNpcParticipant.state.combatEffects, effectId),
-                  )
+                  updateSelectedCombatEffects(buildCombatEffectRemovalChange(effectId))
                 }
                 onSaveCombatEffect={(draft) =>
                   updateSelectedCombatEffects(
-                    applyCombatEffectDraft({
+                    buildCombatEffectDraftChange({
                       combatEffects: selectedNpcParticipant.state.combatEffects,
                       draft,
                       encounterId: activeEncounter?.id,

@@ -270,6 +270,19 @@ export function createScenarioRepositoryStub() {
       participant.updatedAt = "2026-04-21T00:00:00.000Z";
       return participant;
     },
+    updateScenarioParticipantStateFromCurrent: async (input) => {
+      const participant = participants.find(
+        (entry) => entry.id === input.participantId && entry.scenarioId === input.scenarioId,
+      );
+
+      if (!participant) {
+        throw new Error("Scenario participant not found.");
+      }
+
+      participant.state = input.update(participant);
+      participant.updatedAt = "2026-04-21T00:00:00.000Z";
+      return participant;
+    },
     updateScenarioParticipantMetadata: async (input) => {
       const participant = participants.find((entry) => entry.id === input.participantId);
 

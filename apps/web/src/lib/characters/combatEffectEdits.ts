@@ -1,11 +1,13 @@
 import type { CombatEffect, CombatEffectEvent, CombatEffectsState } from "@glantri/domain";
 
 import type { CombatEffectEditorDraft } from "@/features/equipment/components/PhysicalStateSection";
+import type { ParticipantCombatEffectsChange } from "@/lib/api/scenarioClient";
 
 /**
  * Shared Physical state combat-effect edits (add/edit and remove), used by the
  * Character loadout view and by the GM-only NPC Physical state view (#1118).
- * Both callers persist the returned state through the participant-state route.
+ * Both callers send the returned change through the participant-state route, which
+ * applies it to the participant's state as stored (#1126).
  */
 
 function createCombatEffectId(prefix: string): string {
@@ -65,13 +67,18 @@ function buildCombatEffectsFromDraft(input: {
   });
 }
 
-export function applyCombatEffectDraft(input: {
+/**
+ * The change one saved draft makes: its effects and event, plus the effect and event it edits as
+ * the screen shows them (`combatEffects`), so the server can refuse an edit of a record that
+ * changed meanwhile.
+ */
+export function buildCombatEffectDraftChange(input: {
   combatEffects?: CombatEffectsState;
   draft: CombatEffectEditorDraft;
   encounterId?: string;
   scenarioId?: string;
   targetParticipantId: string;
-}): CombatEffectsState {
+}): ParticipantCombatEffectsChange {
   const { draft, targetParticipantId } = input;
   const now = new Date().toISOString();
   const currentCombatEffects = input.combatEffects ?? { effects: [], events: [] };
@@ -95,36 +102,22 @@ export function applyCombatEffectDraft(input: {
   const existingEffect = draft.effectId
     ? currentCombatEffects.effects.find((effect) => effect.id === draft.effectId)
     : undefined;
-  const nextEffectsFromDraft = buildCombatEffectsFromDraft({
-    draft,
-    eventId,
-    existingEffect,
-    now,
-    targetParticipantId,
-  });
 
   return {
-    effects: existingEffect
-      ? currentCombatEffects.effects.flatMap((effect) =>
-          effect.id === existingEffect.id ? nextEffectsFromDraft : [effect],
-        )
-      : [...currentCombatEffects.effects, ...nextEffectsFromDraft],
-    events: existingEvent
-      ? currentCombatEffects.events.map((event) =>
-          event.id === existingEvent.id ? nextEvent : event,
-        )
-      : [...currentCombatEffects.events, nextEvent],
+    effects: buildCombatEffectsFromDraft({
+      draft,
+      eventId,
+      existingEffect,
+      now,
+      targetParticipantId,
+    }),
+    event: nextEvent,
+    kind: "save_effect",
+    previousEffect: existingEffect,
+    previousEvent: existingEvent,
   };
 }
 
-export function removeCombatEffect(
-  combatEffects: CombatEffectsState | undefined,
-  effectId: string,
-): CombatEffectsState {
-  const currentCombatEffects = combatEffects ?? { effects: [], events: [] };
-
-  return {
-    ...currentCombatEffects,
-    effects: currentCombatEffects.effects.filter((effect) => effect.id !== effectId),
-  };
+export function buildCombatEffectRemovalChange(effectId: string): ParticipantCombatEffectsChange {
+  return { effectId, kind: "remove_effect" };
 }
