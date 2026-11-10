@@ -1291,6 +1291,7 @@ export default function ScenarioDetailPageContent({
         temporaryActorCount={temporaryActorCount}
         temporaryActorName={temporaryActorName}
         temporaryActorRole={temporaryActorRole}
+        hasHiddenArchetypeTemplates={fieldableTemplateSources.length < templateSources.length}
         templateSources={fieldableTemplateSources}
       />
 

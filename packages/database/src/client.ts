@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
+import { buildTransactionOptions } from "./transactionOptions";
 import { assertWorktreeDatabaseRuntimeSafety } from "./worktreeDatabaseRuntimeSafety";
 
 assertWorktreeDatabaseRuntimeSafety();
@@ -12,6 +13,7 @@ export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
     log: ["warn", "error"],
+    transactionOptions: buildTransactionOptions(),
   });
 
 if (process.env.NODE_ENV !== "production") {

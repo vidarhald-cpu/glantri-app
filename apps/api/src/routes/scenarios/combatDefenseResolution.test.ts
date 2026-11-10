@@ -939,3 +939,130 @@ describe("#694 GM-facing wording for a defense that cannot be resolved", () => {
     );
   });
 });
+
+/**
+ * #1103. A generated NPC has no Character and no persistent Item record, so its Items carry no
+ * `revision`. Its armed shape mirrors `buildArmedParticipant`, without a participant `characterId`
+ * and with every Item revision removed, as Generate NPC writes it.
+ */
+function buildGeneratedNpcParticipant(): ScenarioParticipant {
+  const armed = buildArmedParticipant();
+  const state = getArmedEquipmentState(armed);
+  return {
+    ...armed,
+    characterId: undefined,
+    snapshot: {
+      ...armed.snapshot,
+      equipmentState: {
+        ...state,
+        itemsById: Object.fromEntries(
+          Object.entries(state.itemsById).map(([itemId, { revision: _revision, ...item }]) => [
+            itemId,
+            item,
+          ]),
+        ),
+      },
+    },
+    sourceType: "reusable_entity",
+  } as unknown as ScenarioParticipant;
+}
+
+function commitDefenseFor(defender: ScenarioParticipant) {
+  return buildCanonicalCombatDefenseSnapshot({
+    attacker: buildArmedParticipant(),
+    attackerCombatantId: "attacker",
+    attackId: "1:opportunity:attack-1",
+    attackOpportunityId: "opportunity-1",
+    aware: true,
+    defender,
+    defenderCombatantId: "defender",
+    phase: "phase1",
+    reviewedAt: "2026-08-07T10:05:00.000Z",
+    reviewedByUserId: "user-gm",
+    roundNumber: 1,
+    sourceSelections: [],
+  });
+}
+
+describe("#1103 defense review for an armed participant without a Character", () => {
+  it("reads a missing Item revision as the participant snapshot's version", () => {
+    const context = resolveCanonicalParticipantCalculationContext(buildGeneratedNpcParticipant());
+
+    expect(context.completeness).toBe("complete");
+    if (context.completeness !== "complete") return;
+    expect(context.itemsById.get("item-primary")?.revision).toBe("2026-08-07T09:00:00.000Z");
+    expect(context.primaryWeaponTemplate?.name).toBe("Long sword");
+  });
+
+  it("falls back to the participant's createdAt when the snapshot has no sourceUpdatedAt", () => {
+    const npc = buildGeneratedNpcParticipant();
+    const context = resolveCanonicalParticipantCalculationContext({
+      ...npc,
+      snapshot: { ...npc.snapshot, sourceUpdatedAt: undefined },
+    } as ScenarioParticipant);
+
+    expect(context.completeness).toBe("complete");
+    if (context.completeness !== "complete") return;
+    expect(context.itemsById.get("item-primary")?.revision).toBe("2026-08-07T10:00:00.000Z");
+  });
+
+  it("commits the defense review with the weapon Parry and verifies it against the same revision", () => {
+    const defender = buildGeneratedNpcParticipant();
+    const snapshot = commitDefenseFor(defender);
+
+    expect(snapshot.status).toBe("committed");
+    expect(snapshot.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          itemId: "item-primary",
+          itemRevision: "2026-08-07T09:00:00.000Z",
+        }),
+      ]),
+    );
+    expect(
+      resolveCanonicalParryBaseForDefenseSnapshot({
+        attackId: snapshot.attackId,
+        attackOpportunityId: snapshot.attackOpportunityId,
+        attackerCombatantId: snapshot.attackerParticipantId,
+        defender,
+        defenderCombatantId: snapshot.defenderParticipantId,
+        phase: snapshot.phase,
+        snapshot,
+      }),
+    ).toMatchObject({ completeness: "complete", parrySourceLabel: "Long sword + Dagger" });
+  });
+
+  it("keeps an Item revision the participant already carries", () => {
+    const armed = buildArmedParticipant();
+    const context = resolveCanonicalParticipantCalculationContext({
+      ...armed,
+      characterId: undefined,
+    } as ScenarioParticipant);
+
+    expect(context.completeness).toBe("complete");
+    if (context.completeness !== "complete") return;
+    expect(context.itemsById.get("item-primary")?.revision).toBe("2026-08-07T09:00:00.000Z");
+  });
+
+  it("keeps a Character participant's missing Item revision a refusal", () => {
+    const character = buildArmedParticipant();
+    const state = getArmedEquipmentState(character);
+    const withoutRevision = {
+      ...character,
+      snapshot: {
+        ...character.snapshot,
+        equipmentState: {
+          ...state,
+          itemsById: Object.fromEntries(
+            Object.entries(state.itemsById).map(([itemId, { revision: _revision, ...item }]) => [
+              itemId,
+              item,
+            ]),
+          ),
+        },
+      },
+    } as unknown as ScenarioParticipant;
+
+    expect(() => commitDefenseFor(withoutRevision)).toThrow(/Defense sources changed/);
+  });
+});

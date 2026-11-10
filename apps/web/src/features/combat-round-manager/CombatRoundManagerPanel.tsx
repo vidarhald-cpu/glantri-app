@@ -288,6 +288,7 @@ import {
   getCombatDeclarationAttackSourceRequiredMessage,
   getScenarioCombatEquipmentStatus,
   isEquipmentFeatureState,
+  normalizeCombatEquipmentFeatureState,
   resolveCombatFeintDeclarationRequestTarget,
   resolveCombatFeintWeaponSkill,
   resolveCanonicalCombatTargetIdentity,
@@ -621,8 +622,12 @@ function buildCombatDefenseReviewSourceOptions(input: {
   participant?: ScenarioParticipant;
   resolvedEquipmentState?: EquipmentFeatureState;
 }): CombatDefenseReviewSourceOption[] {
-  const state = input.resolvedEquipmentState ?? input.participant?.snapshot.equipmentState;
-  if (!isEquipmentFeatureState(state)) return [];
+  // #1103: a generated NPC's snapshot stores its templates flat (`templatesById`); normalise it so
+  // its weapon or shield is offered as the defence source the server applies.
+  const state = normalizeCombatEquipmentFeatureState(
+    input.resolvedEquipmentState ?? input.participant?.snapshot.equipmentState,
+  );
+  if (!state) return [];
   const characterId =
     input.participant?.characterId ?? Object.keys(state.activeLoadoutByCharacterId)[0];
   const loadout = characterId ? state.activeLoadoutByCharacterId[characterId] : undefined;
