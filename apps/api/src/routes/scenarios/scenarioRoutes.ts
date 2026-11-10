@@ -123,10 +123,12 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       );
       if (!access) return reply.code(404).send({ error: "Scenario not found." });
 
+      // #1136: finished Encounters are read without their combat rounds, which this projection
+      // does not read; the poll no longer grows with every finished fight.
       const [scenario, participants, encounters, eventLogs] = await Promise.all([
         scenarioService.getScenarioById(scenarioId),
         scenarioService.listScenarioParticipants(scenarioId),
-        encounterService.listEncountersByScenario(scenarioId),
+        encounterService.listScenarioSessionEncounters(scenarioId),
         scenarioService.listScenarioEventLogs(scenarioId),
       ]);
       if (!scenario) return reply.code(404).send({ error: "Scenario not found." });
@@ -306,8 +308,9 @@ export const scenarioRoutes: FastifyPluginAsync = async (app) => {
       const participants = await scenarioService.listScenarioParticipants(scenarioId);
       // Issue #798: this projection holds no Encounters, so the viewer's
       // effective participant visibility is resolved here from the Encounter
-      // matrix the GM's hide control writes and passed in as a resolved set.
-      const encounters = await encounterService.listEncountersByScenario(scenarioId);
+      // matrix the GM's hide control writes and passed in as a resolved set. #1136: the
+      // disclosure reads rosters and visibility only, so finished Encounters come without combat.
+      const encounters = await encounterService.listScenarioSessionEncounters(scenarioId);
       const disclosure = resolveScenarioParticipantDisclosure({
         encounters,
         participants,

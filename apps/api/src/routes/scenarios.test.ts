@@ -199,6 +199,7 @@ const mocks = vi.hoisted(() => {
     resolveDisarmDeclaration: vi.fn(),
   };
   const updateEncounter = vi.fn();
+  const listEncountersByScenario = vi.fn();
   const encounterService = {
     commitCombatParticipantStateMutation: vi.fn(),
     commitCombatParticipantStateMutations: vi.fn(),
@@ -208,7 +209,13 @@ const mocks = vi.hoisted(() => {
     getEncounterById: vi.fn(),
     getEncounterSummaryById: vi.fn(),
     listEncounterSummariesByScenario: vi.fn(),
-    listEncountersByScenario: vi.fn(),
+    listEncountersByScenario,
+    // #1136. The Scenario session projections read through their own listing. These route tests
+    // hand it the stored Encounters unchanged, so every projection case sees what it saw before;
+    // what the listing itself returns is measured against the database in the repository tests.
+    listScenarioSessionEncounters: vi.fn((scenarioId: string) =>
+      listEncountersByScenario(scenarioId),
+    ),
     updateCombatEncounter: updateEncounter,
     updateEncounter,
     updateScenarioParticipantState: vi.fn(),
@@ -7072,6 +7079,10 @@ describe("scenarios route contract", () => {
         expect(response.body).not.toContain(hidden);
       }
     }
+    // #1136: every session poll reads its Encounters through the session listing only.
+    expect(mocks.encounterService.listScenarioSessionEncounters).toHaveBeenCalledTimes(3);
+    expect(mocks.encounterService.listScenarioSessionEncounters).toHaveBeenCalledWith("scenario-1");
+    expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledTimes(3);
   });
 
   it("publishes only player-safe Combat outcomes in the Activity payload, per viewer", async () => {
@@ -7452,6 +7463,11 @@ describe("scenarios route contract", () => {
           (participant: { displayName: string }) => participant.displayName,
         ),
     ).toEqual(["Player A", "Visible Ally", "Hidden Steward", "GM Only Witness"]);
+    // #1136: the projection reads its Encounters through the session listing only.
+    expect(mocks.encounterService.listScenarioSessionEncounters).toHaveBeenCalledWith("scenario-1");
+    expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledTimes(
+      mocks.encounterService.listScenarioSessionEncounters.mock.calls.length,
+    );
   });
 
   it("allows completed Scenario projection read-only access for players", async () => {

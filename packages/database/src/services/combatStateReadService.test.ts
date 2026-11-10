@@ -12,6 +12,7 @@ describe("CombatStateReadService", () => {
       getEncounterMetadataById: vi.fn().mockResolvedValue(null),
       getFullEncounterById: vi.fn().mockResolvedValue(null),
       listEncounterAccessMetadataByScenario: vi.fn().mockResolvedValue([]),
+      listFinishedEncounterSessionSummaries: vi.fn().mockResolvedValue(new Map()),
       listScenarioEncounterManagementProjections: vi.fn().mockResolvedValue([]),
     } satisfies CombatStateReadRepository;
     const service = new CombatStateReadService(repository);
