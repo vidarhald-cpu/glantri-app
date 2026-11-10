@@ -48,6 +48,18 @@ export function createArtifactStorageRuntime(
     };
   }
 
+  if (provider === "local" && environment.NODE_ENV === "production") {
+    // Explicit in-house opt-in only; never fall back to the temporary directory.
+    const root = environment.ARTIFACT_LOCAL_ROOT;
+    if (
+      environment.ARTIFACT_LOCAL_ALLOW_PRODUCTION === "true" &&
+      root !== undefined &&
+      path.isAbsolute(root)
+    ) {
+      return { enabled: true, store: new LocalArtifactBinaryStore(root) };
+    }
+  }
+
   if (provider === "azure") {
     const accountUrl = environment.ARTIFACT_AZURE_ACCOUNT_URL?.trim();
     const containerName = environment.ARTIFACT_AZURE_CONTAINER?.trim();
