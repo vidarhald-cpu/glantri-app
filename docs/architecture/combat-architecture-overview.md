@@ -499,7 +499,7 @@ Combat work must preserve all of the following:
 - descriptor-first, fail-closed command execution;
 - strict optimistic concurrency and monotonic client adoption;
 - no cursor, inspector, display label, or latest-state authorization fallback;
-- immutable archived rounds, except exact transactional boundary undo;
+- immutable archived rounds, never removed by undo (#1135);
 - active reads and ordinary writes independent of archive size;
 - explicit, schema-validated read models;
 - revision- and perspective-keyed history;

@@ -663,7 +663,7 @@ describe("combatStatePersistenceRepository", () => {
     expect(client.encounterArchivedCombatRound.deleteMany).not.toHaveBeenCalled();
   });
 
-  it("exposes no ordinary archive update path", () => {
+  it("exposes no ordinary archive update or removal path", () => {
     const source = readFileSync(
       new URL("./combatStatePersistenceRepository.ts", import.meta.url),
       "utf8",
@@ -672,7 +672,8 @@ describe("combatStatePersistenceRepository", () => {
     expect(source).not.toContain("encounterArchivedCombatRound.update");
     expect(source).not.toContain("encounterArchivedCombatRound.updateMany");
     expect(source).toContain("encounterArchivedCombatRound.create");
-    expect(source).toContain("encounterArchivedCombatRound.deleteMany");
+    // #1135: undo never goes back to a previous round, so no combat write removes an archive.
+    expect(source).not.toContain("encounterArchivedCombatRound.delete");
     expect(source).toContain('error.code === "P2034"');
     expect(source).not.toContain("catch (error) {\n          if (error instanceof Error)");
   });
