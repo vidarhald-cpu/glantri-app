@@ -425,4 +425,119 @@ describe("an Encounter roster holding an inactive Scenario participant (#845)", 
     );
     expect(mocks.prisma.encounter.update).not.toHaveBeenCalled();
   });
+
+  it("does not read participant snapshots when every roster participant is active", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.scenarioParticipant.findMany.mockImplementation(
+      async (args: { select: Record<string, boolean> }) => [
+        {
+          id: "participant-a",
+          isActive: true,
+          ...(args.select.snapshotJson ? { snapshotJson: {} } : {}),
+        },
+      ],
+    );
+    mocks.prisma.encounter.updateMany.mockResolvedValue({ count: 1 });
+
+    await repository
+      .updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        scenarioId: "scenario-1",
+        session: active,
+      })
+      .catch(() => undefined);
+
+    expect(mocks.prisma.scenarioParticipant.findMany).toHaveBeenCalled();
+    for (const [args] of mocks.prisma.scenarioParticipant.findMany.mock.calls) {
+      expect(args.select).not.toHaveProperty("snapshotJson");
+    }
+  });
+
+  it("names one inactive combatant, reading the snapshot only for the refusal", async () => {
+    const repository = createPrismaEncounterRepository();
+    mocks.prisma.scenarioParticipant.findMany.mockImplementation(
+      async (args: { select: Record<string, boolean> }) => [
+        {
+          id: "participant-a",
+          isActive: false,
+          ...(args.select.snapshotJson ? { snapshotJson: { displayName: "Glim Fairwater" } } : {}),
+        },
+      ],
+    );
+    const error = await repository
+      .updateCombatEncounter({
+        encounterId: active.id,
+        expectedRevision: active.updatedAt,
+        scenarioId: "scenario-1",
+        session: active,
+      })
+      .then(
+        () => undefined,
+        (caught: unknown) => caught as EncounterPresenceError,
+      );
+
+    expect(error?.message).toBe(
+      "Glim Fairwater is not an active participant in this Scenario, so this Encounter cannot " +
+        "run with them on its roster. Either make them active in the Scenario again, or take " +
+        "them out of the Encounter roster.",
+    );
+  });
+
+  it("names several inactive combatants as 'A, B and C', falling back to the id", async () => {
+    const repository = createPrismaEncounterRepository();
+    const three = encounterSessionSchema.parse({
+      ...active,
+      participants: ["a", "b", "c"].map((letter) => ({
+        id: `encounter-participant-${letter}`,
+        label: letter,
+        participantType: "scenario",
+        scenarioParticipantId: `participant-${letter}`,
+      })),
+    });
+    mocks.prisma.encounter.findUniqueOrThrow.mockResolvedValue({
+      activeCombatState: null,
+      archivedCombatRounds: [],
+      campaignId: "campaign-1",
+      combatArchiveCount: 0,
+      combatStorageMode: "legacy",
+      createdAt: new Date(three.createdAt),
+      id: three.id,
+      name: three.title,
+      scenarioId: "scenario-1",
+      sessionJson: three,
+      status: "active",
+      updatedAt: new Date(three.updatedAt),
+    });
+    const snapshots: Record<string, unknown> = {
+      "participant-a": { displayName: "Alder" },
+      "participant-b": { displayName: "   " },
+      "participant-c": { displayName: "Cask" },
+    };
+    mocks.prisma.scenarioParticipant.findMany.mockImplementation(
+      async (args: { select: Record<string, boolean> }) =>
+        Object.keys(snapshots).map((id) => ({
+          id,
+          isActive: false,
+          ...(args.select.snapshotJson ? { snapshotJson: snapshots[id] } : {}),
+        })),
+    );
+    const error = await repository
+      .updateCombatEncounter({
+        encounterId: three.id,
+        expectedRevision: three.updatedAt,
+        scenarioId: "scenario-1",
+        session: three,
+      })
+      .then(
+        () => undefined,
+        (caught: unknown) => caught as EncounterPresenceError,
+      );
+
+    expect(error?.message).toBe(
+      "Alder, participant-b and Cask are not active participants in this Scenario, so this " +
+        "Encounter cannot run with them on its roster. Either make them active in the Scenario " +
+        "again, or take them out of the Encounter roster.",
+    );
+  });
 });

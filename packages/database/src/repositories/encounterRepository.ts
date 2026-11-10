@@ -231,11 +231,10 @@ async function assertActiveEncounterPresence(input: {
       "The parent Scenario must be active before this Encounter can be active.",
     );
   }
-  // Read every roster participant's activity and name rather than counting the active ones, so the
-  // refusal can say who is inactive. The row set is the roster, so this is the same single indexed
-  // read it was before.
+  // Read only each roster participant's id and activity: a character snapshot is large and the
+  // success path never needs it. Names are read below, only when the refusal is about to be thrown.
   const rosterParticipants = await input.transaction.scenarioParticipant.findMany({
-    select: { id: true, isActive: true, snapshotJson: true },
+    select: { id: true, isActive: true },
     where: { id: { in: participantIds }, scenarioId: input.scenarioId },
   });
   const inactiveParticipants = rosterParticipants.filter((participant) => !participant.isActive);
@@ -254,8 +253,21 @@ async function assertActiveEncounterPresence(input: {
     // are looking at is already correct — and spoke of "starting the Encounter" even when the
     // refused write was a step in a round already under way. It names the combatants and the
     // remedies instead.
+    const inactiveWithSnapshots = await input.transaction.scenarioParticipant.findMany({
+      select: { id: true, snapshotJson: true },
+      where: {
+        id: { in: inactiveParticipants.map((participant) => participant.id) },
+        scenarioId: input.scenarioId,
+      },
+    });
+    const snapshotById = new Map(
+      inactiveWithSnapshots.map((participant) => [participant.id, participant.snapshotJson]),
+    );
     const names = inactiveParticipants.map((participant) => {
-      const snapshot = participant.snapshotJson as { displayName?: unknown } | null | undefined;
+      const snapshot = snapshotById.get(participant.id) as
+        | { displayName?: unknown }
+        | null
+        | undefined;
       return typeof snapshot?.displayName === "string" && snapshot.displayName.trim().length > 0
         ? snapshot.displayName
         : participant.id;
