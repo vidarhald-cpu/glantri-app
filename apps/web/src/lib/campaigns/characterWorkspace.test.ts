@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { EncounterParticipant, EncounterSession, ScenarioParticipant } from "@glantri/domain";
 
 import {
+  buildGmCharacterScreenCandidates,
   buildGmCharacterWorkspaceCandidates,
   resolvePlayerCharacterWorkspaceCandidate,
 } from "./characterWorkspace";
@@ -221,5 +222,81 @@ describe("character workspace read model", () => {
     });
 
     expect(candidates.map((candidate) => candidate.label)).toEqual(["The Gladiator"]);
+  });
+});
+
+describe("GM Character screen candidates (#1118)", () => {
+  const gladiator = participant({
+    characterId: "character-gladiator",
+    controlledByUserId: "player-1",
+    id: "participant-gladiator",
+    name: "The Gladiator",
+  });
+  // A generated NPC: no Character record, and (as in the Product Owner's data) controlled by the GM.
+  const garrisonSoldier = participant({
+    controlledByUserId: "gm-1",
+    displayOrder: 1,
+    id: "participant-garrison-soldier",
+    name: "Garrison Soldier 248",
+    role: "npc",
+    sourceType: "entity",
+  });
+  const inactiveNpc = participant({
+    displayOrder: 2,
+    id: "participant-inactive-npc",
+    isActive: false,
+    name: "Departed bandit",
+    role: "npc",
+    sourceType: "entity",
+  });
+
+  it("admits a generated NPC without a Character record, keeping the Character's characterId", () => {
+    const candidates = buildGmCharacterScreenCandidates({
+      activeEncounter: encounter({
+        participantIds: [gladiator.id, garrisonSoldier.id, inactiveNpc.id],
+        participantMembershipMode: "explicit",
+      }),
+      scenarioParticipants: [gladiator, garrisonSoldier, inactiveNpc],
+    });
+
+    expect(candidates.map((candidate) => [candidate.label, candidate.characterId ?? null])).toEqual(
+      [
+        ["The Gladiator", "character-gladiator"],
+        ["Garrison Soldier 248", null],
+      ],
+    );
+  });
+
+  it("admits active NPCs in the Scenario when no Encounter is active", () => {
+    const candidates = buildGmCharacterScreenCandidates({
+      scenarioId: "scenario-1",
+      scenarioParticipants: [
+        gladiator,
+        garrisonSoldier,
+        inactiveNpc,
+        participant({ id: "participant-elsewhere", name: "Elsewhere", scenarioId: "scenario-2" }),
+      ],
+    });
+
+    expect(candidates.map((candidate) => candidate.label)).toEqual([
+      "The Gladiator",
+      "Garrison Soldier 248",
+    ]);
+  });
+
+  it("leaves the shared GM workspace builder and the player resolver Character-only", () => {
+    const scenarioParticipants = [gladiator, garrisonSoldier];
+
+    expect(
+      buildGmCharacterWorkspaceCandidates({ scenarioParticipants }).map(
+        (candidate) => candidate.id,
+      ),
+    ).toEqual(["participant-gladiator"]);
+    expect(
+      resolvePlayerCharacterWorkspaceCandidate({ scenarioParticipants, userId: "gm-1" }),
+    ).toBeUndefined();
+    expect(
+      resolvePlayerCharacterWorkspaceCandidate({ scenarioParticipants, userId: "player-1" })?.id,
+    ).toBe("participant-gladiator");
   });
 });

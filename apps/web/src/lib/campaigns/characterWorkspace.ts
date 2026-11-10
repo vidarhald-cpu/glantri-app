@@ -9,6 +9,15 @@ export interface CharacterWorkspaceCandidate {
   scenarioParticipant: ScenarioParticipant;
 }
 
+/**
+ * GM-only Character-screen candidate (#1118). Like `CharacterWorkspaceCandidate`, but
+ * `characterId` is absent for an active participant without a Character record, such as
+ * a generated NPC. Never build these for a player.
+ */
+export type GmCharacterScreenCandidate = Omit<CharacterWorkspaceCandidate, "characterId"> & {
+  characterId?: string;
+};
+
 function getParticipantLabel(participant: ScenarioParticipant): string {
   return participant.snapshot.displayName || participant.id;
 }
@@ -17,9 +26,7 @@ function isActiveCharacterParticipant(
   participant: ScenarioParticipant | undefined,
 ): participant is ScenarioParticipant & { characterId: string } {
   return Boolean(
-    participant?.isActive &&
-      participant.characterId &&
-      participant.sourceType === "character",
+    participant?.isActive && participant.characterId && participant.sourceType === "character",
   );
 }
 
@@ -38,11 +45,27 @@ function toCandidate(
   };
 }
 
-function uniqueCandidates(
-  candidates: Array<CharacterWorkspaceCandidate | undefined>,
-): CharacterWorkspaceCandidate[] {
+function toGmCharacterScreenCandidate(
+  participant: ScenarioParticipant | undefined,
+): GmCharacterScreenCandidate | undefined {
+  if (!participant?.isActive) {
+    return undefined;
+  }
+
+  return (
+    toCandidate(participant) ?? {
+      id: participant.id,
+      label: getParticipantLabel(participant),
+      scenarioParticipant: participant,
+    }
+  );
+}
+
+function uniqueCandidates<Candidate extends GmCharacterScreenCandidate>(
+  candidates: Array<Candidate | undefined>,
+): Candidate[] {
   const seen = new Set<string>();
-  const unique: CharacterWorkspaceCandidate[] = [];
+  const unique: Candidate[] = [];
 
   for (const candidate of candidates) {
     if (!candidate || seen.has(candidate.id)) {
@@ -56,8 +79,7 @@ function uniqueCandidates(
   return unique.sort(
     (left, right) =>
       (left.scenarioParticipant.displayOrder ?? 0) -
-        (right.scenarioParticipant.displayOrder ?? 0) ||
-      left.label.localeCompare(right.label),
+        (right.scenarioParticipant.displayOrder ?? 0) || left.label.localeCompare(right.label),
   );
 }
 
@@ -85,18 +107,21 @@ function findScenarioParticipantForEncounterParticipant(input: {
   return undefined;
 }
 
-export function buildGmCharacterWorkspaceCandidates(input: {
-  activeEncounter?: EncounterSession;
-  scenarioId?: string;
-  scenarioParticipants: ScenarioParticipant[];
-}): CharacterWorkspaceCandidate[] {
+function buildGmCandidates<Candidate extends GmCharacterScreenCandidate>(
+  input: {
+    activeEncounter?: EncounterSession;
+    scenarioId?: string;
+    scenarioParticipants: ScenarioParticipant[];
+  },
+  toEntry: (participant: ScenarioParticipant | undefined) => Candidate | undefined,
+): Candidate[] {
   if (input.activeEncounter) {
     return uniqueCandidates(
       getScenarioParticipantFallbackEncounterParticipants({
         encounter: input.activeEncounter,
         scenarioParticipants: input.scenarioParticipants,
       }).map((participant) =>
-        toCandidate(
+        toEntry(
           findScenarioParticipantForEncounterParticipant({
             characterId: participant.characterId,
             scenarioParticipantId: participant.scenarioParticipantId,
@@ -110,8 +135,29 @@ export function buildGmCharacterWorkspaceCandidates(input: {
   return uniqueCandidates(
     input.scenarioParticipants
       .filter((participant) => !input.scenarioId || participant.scenarioId === input.scenarioId)
-      .map((participant) => toCandidate(participant)),
+      .map((participant) => toEntry(participant)),
   );
+}
+
+export function buildGmCharacterWorkspaceCandidates(input: {
+  activeEncounter?: EncounterSession;
+  scenarioId?: string;
+  scenarioParticipants: ScenarioParticipant[];
+}): CharacterWorkspaceCandidate[] {
+  return buildGmCandidates(input, toCandidate);
+}
+
+/**
+ * GM-only candidates for the Encounter Character screen (#1118): every active participant,
+ * including generated NPCs without a Character record. The shared Character predicate and
+ * the player resolver are deliberately unchanged.
+ */
+export function buildGmCharacterScreenCandidates(input: {
+  activeEncounter?: EncounterSession;
+  scenarioId?: string;
+  scenarioParticipants: ScenarioParticipant[];
+}): GmCharacterScreenCandidate[] {
+  return buildGmCandidates(input, toGmCharacterScreenCandidate);
 }
 
 export function resolvePlayerCharacterWorkspaceCandidate(input: {
