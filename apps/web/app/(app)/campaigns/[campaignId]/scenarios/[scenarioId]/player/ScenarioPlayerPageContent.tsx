@@ -79,9 +79,9 @@ export default function ScenarioPlayerPageContent({
       }
     }
 
-    void refresh(true);
     const polling = startGuardedPolling({
       intervalMs: 4_000,
+      initialRefresh: () => refresh(true),
       refresh: () => refresh(false),
     });
     return () => {

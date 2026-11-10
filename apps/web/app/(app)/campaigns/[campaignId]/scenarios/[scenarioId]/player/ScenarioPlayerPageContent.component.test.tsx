@@ -72,4 +72,25 @@ describe("ScenarioPlayerPageContent polling", () => {
     expect(loadScenarioSession).toHaveBeenCalledTimes(4);
     view.unmount();
   });
+
+  it("starts no second request while the mount request is still pending", async () => {
+    let release: (value: unknown) => void = () => undefined;
+    loadScenarioSession.mockImplementation(() => new Promise((resolve) => (release = resolve)));
+    const view = render(<ScenarioPlayerPageContent scenarioId="s1" />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(loadScenarioSession).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(loadScenarioSession).toHaveBeenCalledTimes(1);
+    loadScenarioSession.mockResolvedValue(session);
+    await act(async () => {
+      release(session);
+      await vi.advanceTimersByTimeAsync(4_000);
+    });
+    expect(loadScenarioSession).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
 });

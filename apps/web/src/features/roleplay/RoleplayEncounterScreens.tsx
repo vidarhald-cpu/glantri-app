@@ -1909,10 +1909,9 @@ export function PlayerRoleplayingEncounterScreen({
       }
     }
 
-    void refreshRoleplayEncounter({ showLoading: true });
-
     const polling = startGuardedPolling({
       intervalMs: 5000,
+      initialRefresh: () => refreshRoleplayEncounter({ showLoading: true }),
       refresh: () => refreshRoleplayEncounter(),
     });
 
