@@ -148,6 +148,12 @@ provider**. The Azure-backed provider is **not** an Alpha prerequisite.
 - `apps/api/src/routes/scenarios/mapRoutes.ts` (line 133) is the single storage gate on the map
   background route: when storage is not enabled it answers 404.
 
+**In-house hosting on the Mac Studio (production build).** A production build enables local storage
+only with an explicit opt-in, and only when **all three** hold: `ARTIFACT_STORAGE_PROVIDER=local`,
+`ARTIFACT_LOCAL_ALLOW_PRODUCTION=true` (exact value), and `ARTIFACT_LOCAL_ROOT` set to an **absolute**
+path. If any is missing, storage stays disabled (`{ enabled: false }`); production never falls back to
+the temporary directory. Azure production does not set these variables and is unaffected.
+
 **The consequence runs against the natural assumption.** In an ordinary development run, Maps artifact
 storage enables itself with no environment setup at all. A Maps failure in such a run is therefore a
 **real defect, not a provisioning gap**. "The environment is not provisioned" is an available
