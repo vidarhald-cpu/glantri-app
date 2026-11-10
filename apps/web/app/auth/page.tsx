@@ -177,11 +177,14 @@ export default function AuthPage() {
         <label style={{ display: "grid", gap: "0.25rem" }}>
           Password
           <input
+            aria-describedby="register-password-hint"
+            minLength={8}
             onChange={(event) => setPassword(event.target.value)}
             style={{ padding: "0.5rem" }}
             type="password"
             value={password}
           />
+          <small id="register-password-hint">Use at least 8 characters.</small>
         </label>
         <div>
           <button onClick={() => void handleRegister()} type="button">
