@@ -5,10 +5,13 @@ import { useMemo, useState } from "react";
 
 import type { EncounterSession, ScenarioParticipant } from "@glantri/domain";
 
+import { PhysicalStateSection } from "@/features/equipment/components/PhysicalStateSection";
 import {
-  buildGmCharacterWorkspaceCandidates,
+  buildGmCharacterScreenCandidates,
   resolvePlayerCharacterWorkspaceCandidate,
 } from "@/lib/campaigns/characterWorkspace";
+import { applyCombatEffectDraft, removeCombatEffect } from "@/lib/characters/combatEffectEdits";
+import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 import {
   refreshScenarioParticipantEquipmentOnServer,
   updateScenarioParticipantStateOnServer,
@@ -76,7 +79,7 @@ export default function CharacterWorkspacePanel({
 }: CharacterWorkspacePanelProps) {
   const gmCandidates = useMemo(
     () =>
-      buildGmCharacterWorkspaceCandidates({
+      buildGmCharacterScreenCandidates({
         activeEncounter,
         scenarioId,
         scenarioParticipants,
@@ -96,6 +99,22 @@ export default function CharacterWorkspacePanel({
   const selectedGmCandidate =
     gmCandidates.find((candidate) => candidate.id === selectedParticipantId) ?? gmCandidates[0];
   const selectedCandidate = isGameMaster ? selectedGmCandidate : playerCandidate;
+  // A GM-selected participant without a Character record (a generated NPC, #1118) shows only
+  // its Physical state from the Scenario participant; loadout and equipment are Character-based.
+  const selectedNpcParticipant =
+    isGameMaster && selectedCandidate && !selectedCandidate.characterId
+      ? selectedCandidate.scenarioParticipant
+      : undefined;
+  const npcPhysicalStateModel = useMemo(
+    () =>
+      selectedNpcParticipant
+        ? buildCharacterPhysicalStateView({
+            combatEffects: selectedNpcParticipant.state.combatEffects,
+            generalHitpoints: selectedNpcParticipant.state.health.maxHp,
+          })
+        : null,
+    [selectedNpcParticipant],
+  );
   const [saveError, setSaveError] = useState<string>();
   const [saveFeedback, setSaveFeedback] = useState<string>();
 
@@ -185,11 +204,11 @@ export default function CharacterWorkspacePanel({
         selectedCandidate={selectedCandidate}
       />
 
-      {!isGameMaster && selectedCandidate ? (
+      {!isGameMaster && playerCandidate ? (
         <nav aria-label="Character detail" data-testid="character-play-canonical-detail">
           <section style={canonicalDetailNavStyle}>
             <span>Full detail lives on your Character pages.</span>
-            {buildPlayerCharacterCanonicalDetailLinks(selectedCandidate.characterId).map((link) => (
+            {buildPlayerCharacterCanonicalDetailLinks(playerCandidate.characterId).map((link) => (
               <Link href={link.href} key={link.href}>
                 {link.label}
               </Link>
@@ -226,23 +245,52 @@ export default function CharacterWorkspacePanel({
               {saveFeedback}
             </section>
           ) : null}
-          <CharacterLoadoutView
-            canEditCombatEffects={isGameMaster}
-            characterId={selectedCandidate.characterId}
-            onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}
-            onEquipmentStateChange={isGameMaster ? refreshSelectedScenarioEquipment : undefined}
-            physicalStateCombatContext={
-              selectedCandidate.scenarioParticipant.state.combat.combatContext
-            }
-            physicalStateCombatEffects={selectedCandidate.scenarioParticipant.state.combatEffects}
-            physicalStateCurrentRoundNumber={currentRoundNumber}
-            physicalStateEncounterId={activeEncounter?.id}
-            physicalStateGeneralHitpoints={selectedCandidate.scenarioParticipant.state.health.maxHp}
-            physicalStateScenarioId={scenarioId}
-            physicalStateTargetParticipantId={selectedCandidate.scenarioParticipant.id}
-            preferCurrentCharacterRecord
-            showPhysicalState
-          />
+          {selectedNpcParticipant && npcPhysicalStateModel ? (
+            <section data-testid="character-npc-physical-state" style={{ maxWidth: 1240 }}>
+              <PhysicalStateSection
+                canEditCombatEffects
+                currentRoundNumber={currentRoundNumber}
+                model={npcPhysicalStateModel}
+                onDeleteCombatEffect={(effectId) =>
+                  updateSelectedCombatEffects(
+                    removeCombatEffect(selectedNpcParticipant.state.combatEffects, effectId),
+                  )
+                }
+                onSaveCombatEffect={(draft) =>
+                  updateSelectedCombatEffects(
+                    applyCombatEffectDraft({
+                      combatEffects: selectedNpcParticipant.state.combatEffects,
+                      draft,
+                      encounterId: activeEncounter?.id,
+                      scenarioId,
+                      targetParticipantId: selectedNpcParticipant.id,
+                    }),
+                  )
+                }
+              />
+            </section>
+          ) : null}
+          {selectedCandidate.characterId ? (
+            <CharacterLoadoutView
+              canEditCombatEffects={isGameMaster}
+              characterId={selectedCandidate.characterId}
+              onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}
+              onEquipmentStateChange={isGameMaster ? refreshSelectedScenarioEquipment : undefined}
+              physicalStateCombatContext={
+                selectedCandidate.scenarioParticipant.state.combat.combatContext
+              }
+              physicalStateCombatEffects={selectedCandidate.scenarioParticipant.state.combatEffects}
+              physicalStateCurrentRoundNumber={currentRoundNumber}
+              physicalStateEncounterId={activeEncounter?.id}
+              physicalStateGeneralHitpoints={
+                selectedCandidate.scenarioParticipant.state.health.maxHp
+              }
+              physicalStateScenarioId={scenarioId}
+              physicalStateTargetParticipantId={selectedCandidate.scenarioParticipant.id}
+              preferCurrentCharacterRecord
+              showPhysicalState
+            />
+          ) : null}
         </>
       ) : null}
     </section>

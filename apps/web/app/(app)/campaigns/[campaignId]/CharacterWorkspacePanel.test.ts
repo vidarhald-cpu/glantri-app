@@ -87,10 +87,10 @@ describe("CharacterWorkspacePanel canonical Character click-through", () => {
   it("renders the click-through for the player perspective only, leaving the GM view unchanged", () => {
     const source = readSource();
 
-    expect(source).toContain("{!isGameMaster && selectedCandidate ? (");
+    expect(source).toContain("{!isGameMaster && playerCandidate ? (");
     expect(source).toContain('aria-label="Character detail"');
     expect(source).toContain(
-      "buildPlayerCharacterCanonicalDetailLinks(selectedCandidate.characterId)",
+      "buildPlayerCharacterCanonicalDetailLinks(playerCandidate.characterId)",
     );
   });
 

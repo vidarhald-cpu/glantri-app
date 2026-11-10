@@ -28,11 +28,19 @@ describe("character control routes", () => {
     expect(sharedViewSource).toContain("liveCombatModifiers");
     expect(sharedViewSource).toContain("calculateCharacterGeneralHitpoints");
     expect(sharedViewSource).toContain("saveCombatEffect");
-    expect(sharedViewSource).toContain("draft.sourceEventId");
-    expect(sharedViewSource).toContain("existingEvent");
-    expect(sharedViewSource).toContain("buildCombatEffectsFromDraft");
-    expect(sharedViewSource).toContain("draft.locationIds.length > 0");
-    expect(sharedViewSource).toContain("generalDamage: isGeneralDamage ? draft.damage : 0");
+    expect(sharedViewSource).toContain("applyCombatEffectDraft");
+    expect(sharedViewSource).toContain("removeCombatEffect");
+
+    // #1118: the add/remove effect logic is shared with the GM NPC Physical state view.
+    const combatEffectEditsSource = readFileSync(
+      join(routePath, "../../../src/lib/characters/combatEffectEdits.ts"),
+      "utf8",
+    );
+    expect(combatEffectEditsSource).toContain("draft.sourceEventId");
+    expect(combatEffectEditsSource).toContain("existingEvent");
+    expect(combatEffectEditsSource).toContain("buildCombatEffectsFromDraft");
+    expect(combatEffectEditsSource).toContain("draft.locationIds.length > 0");
+    expect(combatEffectEditsSource).toContain("generalDamage: isGeneralDamage ? draft.damage : 0");
     expect(sharedViewSource).toContain("physicalStateCurrentRoundNumber");
     expect(sharedViewSource).toContain("beforeEquipmentChoices=");
     expect(sharedViewSource).toContain("showPhysicalState ? 1240 : 900");
