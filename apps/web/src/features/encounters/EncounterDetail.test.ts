@@ -29,7 +29,7 @@ describe("EncounterDetail table rendering", () => {
     expect(source).toContain('encounter.kind === "roleplay"');
     expect(source).toContain("onPersist={persistEncounter}");
     expect(source).toContain('encounter?.kind !== "roleplay"');
-    expect(source).toContain("window.setInterval");
+    expect(source).toContain("startGuardedPolling");
     expect(source).toContain("loadEncounterById(id)");
   });
 
