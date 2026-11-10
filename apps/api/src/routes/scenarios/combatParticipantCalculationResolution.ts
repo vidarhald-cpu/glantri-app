@@ -106,6 +106,36 @@ function getItemTemplate(input: {
 }
 
 /**
+ * #1103. Items of a participant without a Character (for example a generated NPC) have no
+ * persistent Item record, so nothing supplies the `revision` that persistent Item authority writes
+ * for Character Items. For such a participant, an Item without a `revision` is read with the
+ * participant snapshot's own version (`snapshot.sourceUpdatedAt`, else `createdAt`) as an ISO
+ * datetime. That value is stable for the fielded snapshot, so a defence snapshot committed from
+ * this context and its later verification read the same revision. Character participants are not
+ * touched: their Items keep failing closed on a missing revision.
+ */
+function withNonCharacterItemRevisions(
+  participant: ScenarioParticipant,
+  itemsValue: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!itemsValue || participant.characterId) return itemsValue;
+  const derivedRevision = [participant.snapshot.sourceUpdatedAt, participant.createdAt]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => Date.parse(value))
+    .find((time) => Number.isFinite(time));
+  if (derivedRevision === undefined) return itemsValue;
+  const revision = new Date(derivedRevision).toISOString();
+  return Object.fromEntries(
+    Object.entries(itemsValue).map(([itemId, item]) => [
+      itemId,
+      isRecord(item) && (item["revision"] === undefined || item["revision"] === null)
+        ? { ...item, revision }
+        : item,
+    ]),
+  );
+}
+
+/**
  * Parses the bounded canonical build/loadout snapshot shared by live server combat resolvers.
  * It deliberately returns calculation inputs, never a web presentation summary.
  */
@@ -169,7 +199,7 @@ export function resolveCanonicalParticipantCalculationContext(
   };
   const parsedItems = parseRecordValues<EquipmentItem>({
     parse: (value) => EquipmentItemSchema.safeParse(value),
-    values: itemsValue,
+    values: withNonCharacterItemRevisions(participant, itemsValue),
   });
   const parsedLocations = parseRecordValues<StorageLocation>({
     parse: (value) => StorageLocationSchema.safeParse(value),
