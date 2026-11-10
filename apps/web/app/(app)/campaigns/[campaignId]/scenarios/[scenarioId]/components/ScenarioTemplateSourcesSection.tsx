@@ -1,10 +1,12 @@
 "use client";
 
 import type { ScenarioParticipant } from "@glantri/domain";
+import Link from "next/link";
 
 import type { TemplateSource } from "./scenarioScreenTypes";
 
 interface ScenarioTemplateSourcesSectionProps {
+  hasHiddenArchetypeTemplates?: boolean;
   onCreateTemporaryActor: () => void;
   onSelectedTemplateSourceIdChange: (value: string) => void;
   onTemporaryActorCountChange: (value: number) => void;
@@ -18,6 +20,7 @@ interface ScenarioTemplateSourcesSectionProps {
 }
 
 export function ScenarioTemplateSourcesSection({
+  hasHiddenArchetypeTemplates = false,
   onCreateTemporaryActor,
   onSelectedTemplateSourceIdChange,
   onTemporaryActorCountChange,
@@ -27,7 +30,7 @@ export function ScenarioTemplateSourcesSection({
   temporaryActorCount,
   temporaryActorName,
   temporaryActorRole,
-  templateSources
+  templateSources,
 }: ScenarioTemplateSourcesSectionProps) {
   return (
     <section
@@ -36,7 +39,7 @@ export function ScenarioTemplateSourcesSection({
         borderRadius: 12,
         display: "grid",
         gap: "0.75rem",
-        padding: "1rem"
+        padding: "1rem",
       }}
     >
       <h2 style={{ margin: 0 }}>Template sources</h2>
@@ -44,6 +47,12 @@ export function ScenarioTemplateSourcesSection({
         Templates create scenario-local temporary actors. The template itself is not an active
         scenario participant.
       </p>
+      {hasHiddenArchetypeTemplates ? (
+        <p style={{ margin: 0 }}>
+          Page-authored Templates are used through Generate NPC on the{" "}
+          <Link href="/templates">Templates page</Link>.
+        </p>
+      ) : null}
       {templateSources.length > 0 ? (
         <div
           style={{
@@ -51,7 +60,7 @@ export function ScenarioTemplateSourcesSection({
             flexWrap: "wrap",
             gap: "0.75rem",
             maxHeight: "28rem",
-            overflowY: "auto"
+            overflowY: "auto",
           }}
         >
           <select
@@ -72,7 +81,9 @@ export function ScenarioTemplateSourcesSection({
             value={temporaryActorName}
           />
           <select
-            onChange={(event) => onTemporaryActorRoleChange(event.target.value as ScenarioParticipant["role"])}
+            onChange={(event) =>
+              onTemporaryActorRoleChange(event.target.value as ScenarioParticipant["role"])
+            }
             value={temporaryActorRole}
           >
             <option value="npc">NPC</option>
@@ -89,7 +100,9 @@ export function ScenarioTemplateSourcesSection({
               max={1}
               min={1}
               onChange={(event) =>
-                onTemporaryActorCountChange(Math.min(1, Math.max(1, Number(event.target.value) || 1)))
+                onTemporaryActorCountChange(
+                  Math.min(1, Math.max(1, Number(event.target.value) || 1)),
+                )
               }
               style={{ width: "4rem" }}
               title="Bulk temporary actor creation is planned; this pass supports one actor at a time."

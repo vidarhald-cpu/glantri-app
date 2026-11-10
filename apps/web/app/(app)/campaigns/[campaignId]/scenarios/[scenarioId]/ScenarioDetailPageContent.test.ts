@@ -113,6 +113,17 @@ describe("ScenarioDetailPageContent GM scenario manager UI", () => {
     expect(source).toContain("fieldableTemplateSources.find(");
   });
 
+  it("signposts hidden archetype Templates to Generate NPC on the Templates page (#1094)", () => {
+    const source = readScenarioDetailSources();
+
+    expect(source).toContain(
+      "hasHiddenArchetypeTemplates={fieldableTemplateSources.length < templateSources.length}",
+    );
+    expect(source).toContain("Page-authored Templates are used through Generate NPC on the");
+    expect(source).toContain('<Link href="/templates">Templates page</Link>');
+    expect(source).toContain("No template sources are available.");
+  });
+
   it("assigns encounter participants from concrete scenario participant rows", () => {
     const source = readScenarioDetailSources();
     const assignmentSource = readComponentSource("ScenarioEncounterAssignmentSection.tsx");
