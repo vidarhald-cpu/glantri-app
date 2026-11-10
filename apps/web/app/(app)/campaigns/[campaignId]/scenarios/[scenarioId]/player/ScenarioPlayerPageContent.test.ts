@@ -17,8 +17,8 @@ describe("ScenarioPlayerPageContent Scenario session", () => {
     expect(source).toContain("ScenarioSituationView");
     expect(source).toContain("pickUpScenarioAvailableItemOnServer");
     expect(source).toContain("shouldAcceptScenarioSessionResponse");
-    expect(source).toContain('window.addEventListener("focus"');
-    expect(source).toContain("window.setInterval");
+    expect(source).toContain("startGuardedPolling");
+    expect(source).toContain("intervalMs: 4_000");
     expect(source).not.toContain("loadScenarioParticipants");
     expect(source).not.toContain("loadScenarioPlayerProjection");
     expect(source).not.toContain("Combat status:");

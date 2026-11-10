@@ -13,6 +13,7 @@ import {
   loadScenarioSession,
   pickUpScenarioAvailableItemOnServer,
 } from "@/lib/api/localServiceClient";
+import { startGuardedPolling } from "@/lib/browser/guardedPolling";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { shouldAcceptScenarioSessionResponse } from "@/lib/campaigns/scenarioSessionRefresh";
 
@@ -78,14 +79,14 @@ export default function ScenarioPlayerPageContent({
       }
     }
 
-    void refresh(true);
-    const interval = window.setInterval(() => void refresh(false), 4_000);
-    const handleFocus = () => void refresh(false);
-    window.addEventListener("focus", handleFocus);
+    const polling = startGuardedPolling({
+      intervalMs: 4_000,
+      initialRefresh: () => refresh(true),
+      refresh: () => refresh(false),
+    });
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
+      polling.stop();
     };
   }, [currentUser, scenarioId, sessionLoading]);
 
