@@ -96,6 +96,7 @@ import type {
   RoleplayRollDraft,
   SkillOption,
 } from "./components/roleplayRollTypes";
+import { startGuardedPolling } from "@/lib/browser/guardedPolling";
 
 interface GmRoleplayingEncounterScreenProps {
   campaignId?: string;
@@ -1910,30 +1911,14 @@ export function PlayerRoleplayingEncounterScreen({
 
     void refreshRoleplayEncounter({ showLoading: true });
 
-    const intervalId = window.setInterval(() => {
-      if (cancelled) {
-        return;
-      }
-
-      void refreshRoleplayEncounter();
-    }, 5000);
-
-    function refreshOnFocus() {
-      if (cancelled || document.visibilityState === "hidden") {
-        return;
-      }
-
-      void refreshRoleplayEncounter();
-    }
-
-    window.addEventListener("focus", refreshOnFocus);
-    document.addEventListener("visibilitychange", refreshOnFocus);
+    const polling = startGuardedPolling({
+      intervalMs: 5000,
+      refresh: () => refreshRoleplayEncounter(),
+    });
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
+      polling.stop();
     };
   }, [fetchRoleplayEncounter]);
 

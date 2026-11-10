@@ -53,6 +53,7 @@ import {
   UNNAMED_CHARACTER_PLACEHOLDER,
 } from "@/lib/offline/repositories/localCharacterRepository";
 import { GmRoleplayingEncounterScreen } from "@/features/roleplay/RoleplayEncounterScreens";
+import { startGuardedPolling } from "@/lib/browser/guardedPolling";
 import { CompletedEncounterHistory } from "./CompletedEncounterHistory";
 
 interface EncounterDetailProps {
@@ -201,23 +202,11 @@ export default function EncounterDetail({
       }
     }
 
-    const intervalId = window.setInterval(() => {
-      void refreshEncounter();
-    }, 5000);
-    const refreshOnFocus = () => {
-      if (document.visibilityState !== "hidden") {
-        void refreshEncounter();
-      }
-    };
-
-    window.addEventListener("focus", refreshOnFocus);
-    document.addEventListener("visibilitychange", refreshOnFocus);
+    const polling = startGuardedPolling({ intervalMs: 5000, refresh: refreshEncounter });
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshOnFocus);
-      document.removeEventListener("visibilitychange", refreshOnFocus);
+      polling.stop();
     };
   }, [campaignId, encounter?.kind, id, scenarioId]);
 
