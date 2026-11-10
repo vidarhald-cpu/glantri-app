@@ -5,11 +5,44 @@ import type { ScenarioParticipant } from "@glantri/domain";
 
 const mocks = vi.hoisted(() => ({
   refreshEquipment: vi.fn(),
+  updateState: vi.fn(),
 }));
 
 vi.mock("@/lib/api/scenarioClient", () => ({
   refreshScenarioParticipantEquipmentOnServer: mocks.refreshEquipment,
-  updateScenarioParticipantStateOnServer: vi.fn(),
+  updateScenarioParticipantStateOnServer: mocks.updateState,
+}));
+
+vi.mock("@/features/equipment/components/PhysicalStateSection", () => ({
+  PhysicalStateSection: (props: {
+    canEditCombatEffects?: boolean;
+    model: { generalHitpoints?: number | null };
+    onDeleteCombatEffect?: (effectId: string) => Promise<void> | void;
+    onSaveCombatEffect?: (draft: unknown) => Promise<void> | void;
+  }) => (
+    <div
+      data-can-edit-combat-effects={String(Boolean(props.canEditCombatEffects))}
+      data-testid="npc-physical-state-section"
+    >
+      <button
+        onClick={() =>
+          void props.onSaveCombatEffect?.({
+            damage: 3,
+            effectGroup: "damage",
+            locationIds: ["chest"],
+            status: "active",
+            type: "physical_damage",
+          })
+        }
+        type="button"
+      >
+        Save effect
+      </button>
+      <button onClick={() => void props.onDeleteCombatEffect?.("effect-old")} type="button">
+        Delete effect
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("../../characters/[id]/components/CharacterLoadoutView", () => ({
@@ -43,7 +76,20 @@ vi.mock("../../characters/[id]/components/CharacterLoadoutView", () => ({
 }));
 
 vi.mock("./WorkspaceParticipantInspectionHeader", () => ({
-  default: () => <div>Character participant</div>,
+  // Like the real header, the selector is rendered only for the GM.
+  default: (props: {
+    candidates?: Array<{ id: string; label: string }>;
+    isGameMaster: boolean;
+  }) => (
+    <div data-testid="inspection-header">
+      Character participant
+      {(props.isGameMaster ? (props.candidates ?? []) : []).map((candidate) => (
+        <span data-testid="inspection-candidate" key={candidate.id}>
+          {candidate.label}
+        </span>
+      ))}
+    </div>
+  ),
 }));
 
 import CharacterWorkspacePanel from "./CharacterWorkspacePanel";
@@ -256,5 +302,127 @@ describe("CharacterWorkspacePanel canonical Character click-through", () => {
       "href",
       "/characters/character-scyrian/equipment",
     );
+  });
+});
+
+describe("CharacterWorkspacePanel GM review of a generated NPC (#1118)", () => {
+  function makeNpc(): ScenarioParticipant {
+    const base = makeParticipant();
+    return makeParticipant({
+      characterId: null,
+      controlledByUserId: "gm-1",
+      displayOrder: 1,
+      id: "scenario-participant-garrison",
+      role: "npc",
+      snapshot: { ...base.snapshot, displayName: "Garrison Soldier 248" },
+      sourceType: "entity",
+      state: {
+        ...base.state,
+        combatEffects: {
+          effects: [{ id: "effect-old", type: "physical_damage" }],
+          events: [],
+        },
+        health: { currentHp: 12, maxHp: 12 },
+      },
+    } as unknown as Partial<ScenarioParticipant>);
+  }
+
+  it("lists the NPC for the GM and shows only its Physical state, with no loadout", () => {
+    const character = makeParticipant();
+    const npc = makeNpc();
+
+    render(
+      <CharacterWorkspacePanel
+        isGameMaster
+        scenarioId="scenario-1"
+        scenarioParticipants={[character, npc]}
+        selectedParticipantId={npc.id}
+      />,
+    );
+
+    expect(screen.getAllByTestId("inspection-candidate").map((node) => node.textContent)).toEqual([
+      "Scyrian cavalry guy",
+      "Garrison Soldier 248",
+    ]);
+    expect(screen.getByTestId("npc-physical-state-section")).toHaveAttribute(
+      "data-can-edit-combat-effects",
+      "true",
+    );
+    expect(screen.queryByTestId("loadout-view")).toBeNull();
+  });
+
+  it("saves and removes NPC combat effects through the participant-state route", async () => {
+    const npc = makeNpc();
+    const onScenarioParticipantUpdated = vi.fn();
+    mocks.updateState.mockReset();
+    mocks.updateState.mockImplementation(
+      async (input: { state: ScenarioParticipant["state"] }) => ({
+        ...npc,
+        state: input.state,
+      }),
+    );
+
+    render(
+      <CharacterWorkspacePanel
+        activeEncounter={{ id: "encounter-1", participants: [], scenarioId: "scenario-1" } as never}
+        isGameMaster
+        onScenarioParticipantUpdated={onScenarioParticipantUpdated}
+        scenarioId="scenario-1"
+        scenarioParticipants={[npc]}
+        selectedParticipantId={npc.id}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save effect" }));
+    await waitFor(() => expect(mocks.updateState).toHaveBeenCalledTimes(1));
+    const saved = mocks.updateState.mock.calls[0]![0] as {
+      participantId: string;
+      scenarioId: string;
+      state: ScenarioParticipant["state"];
+    };
+    expect(saved.participantId).toBe("scenario-participant-garrison");
+    expect(saved.scenarioId).toBe("scenario-1");
+    expect(saved.state.health.maxHp).toBe(12);
+    expect(saved.state.combatEffects?.effects).toHaveLength(2);
+    expect(saved.state.combatEffects?.effects[1]).toMatchObject({
+      damage: 3,
+      location: "chest",
+      targetParticipantId: "scenario-participant-garrison",
+    });
+    expect(saved.state.combatEffects?.events[0]).toMatchObject({
+      encounterId: "encounter-1",
+      scenarioId: "scenario-1",
+      targetParticipantId: "scenario-participant-garrison",
+    });
+    expect(onScenarioParticipantUpdated).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete effect" }));
+    await waitFor(() => expect(mocks.updateState).toHaveBeenCalledTimes(2));
+    const removed = mocks.updateState.mock.calls[1]![0] as {
+      state: ScenarioParticipant["state"];
+    };
+    expect(removed.state.combatEffects?.effects).toEqual([]);
+  });
+
+  it("never offers a player the NPC, even when the NPC is controlled by their user id", () => {
+    const character = makeParticipant();
+    const npc = makeNpc();
+
+    for (const userId of ["player-scyrian", "gm-1"]) {
+      const view = render(
+        <CharacterWorkspacePanel
+          currentUserId={userId}
+          isGameMaster={false}
+          scenarioId="scenario-1"
+          scenarioParticipants={[character, npc]}
+          selectedParticipantId={npc.id}
+        />,
+      );
+
+      expect(screen.queryByTestId("inspection-candidate")).toBeNull();
+      expect(screen.queryByTestId("npc-physical-state-section")).toBeNull();
+      expect(screen.queryByText("Garrison Soldier 248")).toBeNull();
+      view.unmount();
+    }
   });
 });

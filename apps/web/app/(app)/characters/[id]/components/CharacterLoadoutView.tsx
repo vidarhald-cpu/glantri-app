@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   calculateCharacterGeneralHitpoints,
-  type CombatEffect,
-  type CombatEffectEvent,
   type CombatEffectsState,
   type ScenarioParticipantCombatContext,
 } from "@glantri/domain";
@@ -32,6 +30,7 @@ import {
   loadCurrentCharacterContext,
   loadLocalCharacterContext,
 } from "@/lib/characters/loadLocalCharacterContext";
+import { applyCombatEffectDraft, removeCombatEffect } from "@/lib/characters/combatEffectEdits";
 import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
@@ -249,110 +248,20 @@ export default function CharacterLoadoutView({
       .sort((left, right) => left.label.localeCompare(right.label));
   }, [activeMissileTemplate, characterId, state]);
 
-  function createCombatEffectId(prefix: string): string {
-    return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
-  }
-
-  function buildCombatEffectSourceLabel(draft: CombatEffectEditorDraft): string {
-    if (draft.sourceLabel?.trim()) {
-      return draft.sourceLabel.trim();
-    }
-
-    const roundLabel = draft.roundNumber ? `R${draft.roundNumber}` : "Manual";
-    const detail =
-      draft.eventDescription?.trim() ||
-      draft.description?.trim() ||
-      draft.type.replaceAll("_", " ");
-
-    return `${roundLabel} · ${detail}`;
-  }
-
-  function buildCombatEffectsFromDraft(input: {
-    draft: CombatEffectEditorDraft;
-    eventId: string;
-    existingEffect?: CombatEffect;
-    now: string;
-  }): CombatEffect[] {
-    const { draft, eventId, existingEffect, now } = input;
-    const selectedLocations = draft.locationIds.length > 0 ? draft.locationIds : [""];
-
-    return selectedLocations.map((selectedLocation, index) => {
-      const isGeneralDamage = selectedLocation === "general";
-      const isBodyLocation = Boolean(selectedLocation && selectedLocation !== "general");
-      const effectType =
-        isGeneralDamage && draft.type === "physical_damage" ? "general_damage" : draft.type;
-      const reusableExistingEffect = index === 0 ? existingEffect : undefined;
-
-      return {
-        checkRequired: reusableExistingEffect?.checkRequired,
-        checkSkillOrStat: reusableExistingEffect?.checkSkillOrStat,
-        combatModifierBucket: draft.combatModifierBucket,
-        createdAt: reusableExistingEffect?.createdAt ?? now,
-        damage: isBodyLocation ? draft.damage : 0,
-        description: draft.description,
-        duration: draft.duration,
-        effectGroup: draft.effectGroup,
-        expiresAtRound: reusableExistingEffect?.expiresAtRound,
-        generalDamage: isGeneralDamage ? draft.damage : 0,
-        id: reusableExistingEffect?.id ?? createCombatEffectId("combat-effect"),
-        location: isBodyLocation ? selectedLocation : undefined,
-        modifierValue: draft.modifierValue,
-        roundNumber: draft.roundNumber,
-        sourceEventId: eventId,
-        status: draft.status,
-        targetParticipantId: physicalStateTargetParticipantId ?? "",
-        type: effectType,
-        updatedAt: now,
-      };
-    });
-  }
-
   async function saveCombatEffect(draft: CombatEffectEditorDraft) {
     if (!physicalStateTargetParticipantId || !onCombatEffectsChange) {
       return;
     }
 
-    const now = new Date().toISOString();
-    const currentCombatEffects = physicalStateCombatEffects ?? { effects: [], events: [] };
-    const eventId = draft.sourceEventId ?? createCombatEffectId("combat-event");
-    const existingEvent = currentCombatEffects.events.find((event) => event.id === eventId);
-    const nextEvent: CombatEffectEvent = {
-      createdAt: existingEvent?.createdAt ?? now,
-      createdByUserId: existingEvent?.createdByUserId,
-      description: draft.eventDescription ?? existingEvent?.description ?? "",
-      encounterId: physicalStateEncounterId || undefined,
-      id: eventId,
-      phase: existingEvent?.phase,
-      roundNumber: draft.roundNumber,
-      scenarioId: physicalStateScenarioId || undefined,
-      sourceActorId: existingEvent?.sourceActorId,
-      sourceLabel: buildCombatEffectSourceLabel(draft),
-      sourceType: existingEvent?.sourceType ?? "manual",
-      targetParticipantId: physicalStateTargetParticipantId,
-    };
-
-    const existingEffect = draft.effectId
-      ? currentCombatEffects.effects.find((effect) => effect.id === draft.effectId)
-      : undefined;
-    const nextEffectsFromDraft = buildCombatEffectsFromDraft({
-      draft,
-      eventId,
-      existingEffect,
-      now,
-    });
-
-    await onCombatEffectsChange({
-      effects: existingEffect
-        ? currentCombatEffects.effects.flatMap((effect) =>
-            effect.id === existingEffect.id ? nextEffectsFromDraft : [effect],
-          )
-        : [...currentCombatEffects.effects, ...nextEffectsFromDraft],
-      events: existingEvent
-        ? currentCombatEffects.events.map((event) =>
-            event.id === existingEvent.id ? nextEvent : event,
-          )
-        : [...currentCombatEffects.events, nextEvent],
-    });
+    await onCombatEffectsChange(
+      applyCombatEffectDraft({
+        combatEffects: physicalStateCombatEffects,
+        draft,
+        encounterId: physicalStateEncounterId,
+        scenarioId: physicalStateScenarioId,
+        targetParticipantId: physicalStateTargetParticipantId,
+      }),
+    );
   }
 
   async function deleteCombatEffect(effectId: string) {
@@ -360,12 +269,7 @@ export default function CharacterLoadoutView({
       return;
     }
 
-    const currentCombatEffects = physicalStateCombatEffects ?? { effects: [], events: [] };
-
-    await onCombatEffectsChange({
-      ...currentCombatEffects,
-      effects: currentCombatEffects.effects.filter((effect) => effect.id !== effectId),
-    });
+    await onCombatEffectsChange(removeCombatEffect(physicalStateCombatEffects, effectId));
   }
 
   async function applySelection(input: {

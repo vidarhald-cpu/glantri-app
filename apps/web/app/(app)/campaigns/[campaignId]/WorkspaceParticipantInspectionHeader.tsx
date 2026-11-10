@@ -1,13 +1,13 @@
 "use client";
 
-import type { CharacterWorkspaceCandidate } from "@/lib/campaigns/characterWorkspace";
+import type { GmCharacterScreenCandidate } from "@/lib/campaigns/characterWorkspace";
 
 interface WorkspaceParticipantInspectionHeaderProps {
-  candidates?: CharacterWorkspaceCandidate[];
+  candidates?: GmCharacterScreenCandidate[];
   isGameMaster: boolean;
   onSelectParticipantId?: (participantId: string) => void;
   screenName: string;
-  selectedCandidate?: CharacterWorkspaceCandidate;
+  selectedCandidate?: GmCharacterScreenCandidate;
   selectorLabel?: string;
 }
 
