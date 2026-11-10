@@ -272,14 +272,16 @@ export function createPrismaCombatStatePersistenceRepository(
 
             await input.beforePersist?.(transaction, input.session);
 
+            // #1135: an archived round is never removed again. Undo does not go back to a previous
+            // round (Product Owner ruling of 2026-11-10), so a combat write may only append the next
+            // boundary archive or leave the archives as they are.
             if (
-              (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 &&
-                ![-1, 0, 1].includes(archiveDelta)) ||
+              (storageMode === COMBAT_STORAGE_MODE_SPLIT_V1 && ![0, 1].includes(archiveDelta)) ||
               (storageMode === COMBAT_STORAGE_MODE_LEGACY && archiveDelta < 0)
             ) {
               throw new CombatPersistenceError(
                 "archive_delta_invalid",
-                "Combat persistence may append or remove only the exact boundary archive.",
+                "Combat persistence may only append the exact boundary archive.",
               );
             }
 
@@ -345,19 +347,6 @@ export function createPrismaCombatStatePersistenceRepository(
                   sourceRevision: updatedAt,
                 },
               });
-            } else if (archiveDelta === -1) {
-              const removed = await transaction.encounterArchivedCombatRound.deleteMany({
-                where: {
-                  encounterId: input.encounterId,
-                  roundNumber: priorArchiveCount,
-                },
-              });
-              if (removed.count !== 1) {
-                throw new CombatPersistenceError(
-                  "malformed_split_storage",
-                  "The archived round required by boundary undo was not present.",
-                );
-              }
             }
 
             for (const participantStateUpdate of input.participantStateUpdates ?? []) {

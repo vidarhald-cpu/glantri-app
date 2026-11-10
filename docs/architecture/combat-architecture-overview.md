@@ -146,12 +146,16 @@ The encounter active-state row is therefore not permission to duplicate those fa
 
 Each completed round is an immutable, independently stored
 `CompletedCombatRound`. An archive contains the exact snapshots, commands, events,
-and results required for reload, history, and inspection.
+and results required for reload, history, and inspection. It does not keep undo
+data: when the round end is committed, each archived command drops the facts that
+only an in-round undo reads (`ARCHIVED_COMBAT_ROUND_UNDO_ONLY_COMMAND_FACT_KEYS`,
+for example `previousStepSnapshots`), #1135. Rows archived before that change still
+carry them, and readers ignore them.
 
 Ordinary combat commands never update or rewrite archived rows. A round transition
-appends exactly one bounded archive row. The only normal exception is explicit
-cross-boundary undo, which may remove the exact tail archive and restore the prior
-active state atomically. Generic archive update and delete operations are forbidden.
+appends exactly one bounded archive row. Undo never goes back to a previous round
+(Product Owner ruling, #1135), so no combat write removes an archived row. Generic
+archive update and delete operations are forbidden.
 
 ### History projection
 
@@ -348,9 +352,10 @@ Compact initiative-commit undo is the implemented reference pattern. Legacy
 initiative commands with `facts.previousState` remain readable and undoable, but new
 commands never write that shape.
 
-In-round undo changes active state only. Cross-boundary undo removes the exact tail
-archive and restores active state in one canonical transaction. Reload followed by
-undo must be behaviorally identical to undo without reload.
+Undo is in-round only and changes active state only. It never reaches a previous
+round: a new round starts with no commands, and no combat write removes an archived
+round (#1135). Reload followed by undo must be behaviorally identical to undo
+without reload.
 
 ## 11. Initiative-group and effect timing
 

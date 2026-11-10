@@ -19691,6 +19691,86 @@ function filterCombatDistanceStateForParticipantIds(input: {
   return combatDistanceStateSchema.parse({ edges });
 }
 
+/**
+ * #1135, Product Owner ruling of 2026-11-10: "unnecessary to store undo data from previous rounds
+ * … discard it after the round end is committed", and "Undo will not go back to a previous round".
+ *
+ * These command-fact keys exist only so an in-round undo can restore the state the command
+ * replaced. Every reader of each key is an in-round undo: an `undo…CommandAtIndex` function, or
+ * the Clear current step route restoring a participant from the commands it has just removed
+ * (`modifierReviewUndo`). In-round undo reads only the active round's `commands`, which start
+ * empty in every new round. Nothing that reads an archived round (history, Combat Log, player
+ * projection, Last action, the NPC declaration proposal, item-interaction retries, the read models)
+ * reads any of them, so they are dropped from each command when the round is archived.
+ * `previousStepSnapshots` (a full copy of the round's step snapshots on every boundary advance) is
+ * most of an archived round's size.
+ *
+ * Kept, although undo also reads them, because something other than undo reads them too:
+ * `taskUndo`, `previousMissileReadiness`, `previousDisarmAttempts`, `previousContinuedContact`,
+ * `previousProposal`, `previousEffect`, `previousCombatExperienceDue`,
+ * `previousCriticalBleedAccumulator`, the feint combat contexts,
+ * `previousAttackPhaseDefensivePenalties`, `previousReadiness` and the item-interaction
+ * `thrownWeaponUndo`, `missileAmmoUndo` and `disarmItemUndo`.
+ *
+ * Archived rows written before this change still carry these keys; readers ignore them.
+ */
+export const ARCHIVED_COMBAT_ROUND_UNDO_ONLY_COMMAND_FACT_KEYS = [
+  "bulkStepUndo",
+  "initiativeCommitUndo",
+  "modifierReviewUndo",
+  "observationUndoFacts",
+  "participantReviewEventPreviousIndex",
+  "participantReviewEventPreviousStatus",
+  "previousActionStepStatus",
+  "previousAttackOpportunity",
+  "previousAttackPhaseDefensiveCombatModifiers",
+  "previousAttackPhaseDefensivePenalty",
+  "previousAttackPhaseDefensivePhaseModifiers",
+  "previousAttackResult",
+  "previousAttempt",
+  "previousBreakOffProposals",
+  "previousCombatExperience",
+  "previousContest",
+  "previousContinuedContacts",
+  "previousCurrentCursor",
+  "previousCurrentStep",
+  "previousDeclaration",
+  "previousDistanceProposals",
+  "previousDistanceState",
+  "previousEdge",
+  "previousEngagements",
+  "previousGmBacktrackHold",
+  "previousModifierReviewStepStatus",
+  "previousPhaseActionStepStatus",
+  "previousPhaseResolutionCursor",
+  "previousPhaseResolutionStatus",
+  "previousPhaseResolutionStatuses",
+  "previousSelectedParticipantId",
+  "previousSelectedStep",
+  "previousStepSnapshots",
+  "previousStepStatus",
+  "previousUnbalancedCondition",
+  "previousUnbalancedConditions",
+] as const;
+
+const ARCHIVED_COMBAT_ROUND_UNDO_ONLY_COMMAND_FACT_KEY_SET: ReadonlySet<string> = new Set(
+  ARCHIVED_COMBAT_ROUND_UNDO_ONLY_COMMAND_FACT_KEYS,
+);
+
+function withoutArchivedCombatRoundUndoOnlyFacts(command: CombatRoundCommand): CombatRoundCommand {
+  const entries = Object.entries(command.facts);
+  const kept = entries.filter(
+    ([key, value]) =>
+      !ARCHIVED_COMBAT_ROUND_UNDO_ONLY_COMMAND_FACT_KEY_SET.has(key) &&
+      // A legacy initiative command's `previousState` is a whole round-state copy kept for its
+      // undo. The same key on `transition_critical_bleed` is the bleed's prior control state, a
+      // string the round's record keeps.
+      !(key === "previousState" && typeof value === "object" && value !== null),
+  );
+
+  return kept.length === entries.length ? command : { ...command, facts: Object.fromEntries(kept) };
+}
+
 function buildCompletedCombatRound(input: {
   completedAt?: string;
   completedByUserId?: string;
@@ -19702,7 +19782,8 @@ function buildCompletedCombatRound(input: {
     adjustDistanceProposals: normalized.adjustDistanceProposals,
     activeParticipantId: normalized.activeParticipantId,
     breakOffProposals: normalized.breakOffProposals,
-    commands: normalized.commands,
+    // #1135: the archive keeps every command and its record facts, without its undo data.
+    commands: normalized.commands.map(withoutArchivedCombatRoundUndoOnlyFacts),
     committedInitiativeOrders: normalized.committedInitiativeOrders,
     continuedContacts: normalized.continuedContacts,
     disarmAttempts: normalized.disarmAttempts,

@@ -433,22 +433,24 @@ describe("combatStatePersistenceRepository", () => {
     });
   });
 
-  it("cross-boundary undo removes only the exact last archive row", async () => {
+  it("never removes an archived round: a write with one archive fewer is refused (#1135)", async () => {
     const client = createClientFixture({
       archiveCount: 2,
       storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
     });
     const repository = createPrismaCombatStatePersistenceRepository(client as never);
 
-    await repository.updateCombatEncounter({
-      encounterId: "encounter-1",
-      expectedRevision: revision1,
-      session: buildSession(1),
-    });
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(1),
+      }),
+    ).rejects.toMatchObject({ code: "archive_delta_invalid" });
 
-    expect(client.encounterArchivedCombatRound.deleteMany).toHaveBeenCalledWith({
-      where: { encounterId: "encounter-1", roundNumber: 2 },
-    });
+    expect(client.encounter.updateMany).not.toHaveBeenCalled();
+    expect(client.encounterActiveCombatState.upsert).not.toHaveBeenCalled();
+    expect(client.encounterArchivedCombatRound.deleteMany).not.toHaveBeenCalled();
     expect(client.encounterArchivedCombatRound.create).not.toHaveBeenCalled();
   });
 
