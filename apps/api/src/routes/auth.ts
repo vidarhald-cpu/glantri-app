@@ -19,6 +19,33 @@ import {
 
 const authService = new AuthService();
 
+const registerFieldMessages: Record<string, string> = {
+  displayName: "Display name cannot be empty.",
+  email: "Enter a valid email address.",
+  password: "Password must be at least 8 characters.",
+};
+
+// Messages are fixed per field so the submitted values (notably the password) are never echoed.
+function describeRegisterIssues(paths: ReadonlyArray<PropertyKey | undefined>) {
+  const fields: Record<string, string> = {};
+
+  for (const path of paths) {
+    const field = typeof path === "string" ? path : "";
+    const message = registerFieldMessages[field];
+
+    if (message) {
+      fields[field] = message;
+    }
+  }
+
+  const messages = Object.values(fields);
+
+  return {
+    error: messages.length > 0 ? messages.join(" ") : "Enter a valid email address and password.",
+    fields,
+  };
+}
+
 export const authRoutes: FastifyPluginAsync = async (app) => {
   app.get("/me", async (request) => {
     const user = await getAuthenticatedUser(request, authService);
@@ -37,7 +64,15 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/register", async (request, reply) => {
-    const input = credentialRegisterInputSchema.parse(request.body);
+    const parsedInput = credentialRegisterInputSchema.safeParse(request.body);
+
+    if (!parsedInput.success) {
+      return reply
+        .code(400)
+        .send(describeRegisterIssues(parsedInput.error.issues.map((issue) => issue.path[0])));
+    }
+
+    const input = parsedInput.data;
     const existingUser = await authService.findUserByEmail(input.email);
 
     if (existingUser) {
@@ -117,8 +152,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       return;
     }
 
-    const candidate = request.body as { role?: unknown };
-    const role = authRoleSchema.parse(candidate.role);
+    const candidate = request.body as { role?: unknown } | null | undefined;
+    const parsedRole = authRoleSchema.safeParse(candidate?.role);
+
+    if (!parsedRole.success) {
+      return reply.code(400).send({
+        error: "Choose a valid role.",
+      });
+    }
+
+    const role = parsedRole.data;
     const targetUserId = (request.params as { id?: string }).id;
 
     if (!targetUserId) {
