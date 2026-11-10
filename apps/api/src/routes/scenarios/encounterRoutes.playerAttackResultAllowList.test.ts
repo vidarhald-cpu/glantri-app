@@ -48,6 +48,7 @@ import {
 const mocks = vi.hoisted(() => {
   const adminUser = { email: "gm@example.test", id: "gm-1", roles: ["game_master"] };
   const playerUser = { email: "player@example.test", id: "player-1", roles: ["player"] };
+  const listEncountersByScenario = vi.fn();
   return {
     adminUser,
     campaignService: { getCampaignById: vi.fn(), listCampaignsByUserAccess: vi.fn() },
@@ -58,7 +59,12 @@ const mocks = vi.hoisted(() => {
       commitCombatParticipantStateMutation: vi.fn(),
       commitCombatParticipantStateMutations: vi.fn(),
       getEncounterById: vi.fn(),
-      listEncountersByScenario: vi.fn(),
+      listEncountersByScenario,
+      // #1136: the Scenario session projections read through their own listing; here it returns
+      // the stored Encounter unchanged, so each read sees what it saw before.
+      listScenarioSessionEncounters: vi.fn((scenarioId: string) =>
+        listEncountersByScenario(scenarioId),
+      ),
       updateCombatEncounter: vi.fn(),
       updateEncounter: vi.fn(),
       updateScenarioParticipantState: vi.fn(),
