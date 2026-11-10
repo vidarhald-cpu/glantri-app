@@ -8,6 +8,7 @@ import {
 } from "./lib/combatPerformance";
 import { registerCombatPerformanceCaptureRoute } from "./lib/combatPerformanceCapture";
 import { checkReadiness } from "./lib/readiness";
+import { registerResponseCompression } from "./lib/responseCompression";
 import { adminContentRoutes } from "./routes/adminContent";
 import { authRoutes } from "./routes/auth";
 import { characterEquipmentRoutes } from "./routes/characterEquipment";
@@ -40,6 +41,7 @@ export function buildApiServer() {
   });
 
   applyLocalCors(app);
+  registerResponseCompression(app);
   app.addHook("onRequest", (request, _reply, done) => {
     runCombatPerformanceRequest(request, done);
   });
