@@ -578,10 +578,16 @@ export interface ScenarioRepository {
     summary: string;
     targetCharacterId: string;
   }): Promise<{ idempotent: boolean; item: CanonicalEquipmentItem; scenario: Scenario }>;
-  updateScenarioParticipantState(
-    participantId: string,
-    state: ScenarioParticipantState,
-  ): Promise<ScenarioParticipant>;
+  /**
+   * Replaces the state of the participant `participantId` of the Scenario `scenarioId`. A
+   * participant of any other Scenario is not written: it throws "Scenario participant not found."
+   * (#1140).
+   */
+  updateScenarioParticipantState(input: {
+    participantId: string;
+    scenarioId: string;
+    state: ScenarioParticipantState;
+  }): Promise<ScenarioParticipant>;
   /**
    * Reads the participant as stored, under a row lock held until the write commits, and stores
    * the state `update` derives from it. A change applied this way cannot overwrite a write that
@@ -1466,15 +1472,24 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
         throw error;
       }
     },
-    async updateScenarioParticipantState(participantId, state) {
-      const record = await prisma.scenarioParticipant.update({
-        data: {
-          stateJson: asJson(state),
-        },
-        where: { id: participantId },
-      });
+    async updateScenarioParticipantState(input) {
+      // The Scenario is part of the row's identity here, so a participant id from another
+      // Scenario matches no row and nothing is written (#1140).
+      try {
+        const record = await prisma.scenarioParticipant.update({
+          data: {
+            stateJson: asJson(input.state),
+          },
+          where: { id: input.participantId, scenarioId: input.scenarioId },
+        });
 
-      return mapScenarioParticipant(record);
+        return mapScenarioParticipant(record);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+          throw new Error("Scenario participant not found.");
+        }
+        throw error;
+      }
     },
     async updateScenarioParticipantStateFromCurrent(input) {
       return prisma.$transaction(async (transaction) => {
