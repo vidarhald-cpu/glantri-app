@@ -7,6 +7,7 @@ import {
   type APIRequestContext,
   type APIResponse,
   type Page,
+  type Response,
 } from "@playwright/test";
 
 import { createCharacterForE2e } from "./character-fixture";
@@ -74,7 +75,7 @@ async function expectCryptoSurface(page: Page, mode: Mode): Promise<void> {
   }
 }
 
-async function json<T>(response: APIResponse): Promise<T> {
+async function json<T>(response: APIResponse | Response): Promise<T> {
   if (!response.ok()) throw new Error(`${response.status()} ${await response.text()}`);
   return response.json() as Promise<T>;
 }
