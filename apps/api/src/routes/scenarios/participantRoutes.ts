@@ -23,6 +23,12 @@ import {
 
 import { requireAdminUser, requireAuthenticatedUser } from "../../lib/sessionAuth";
 import { resolveScenarioWorkspaceAccess } from "./access";
+import {
+  applyParticipantCombatEffectsChange,
+  ParticipantCombatEffectsChangeConflict,
+  PARTICIPANT_STATE_CHANGED_MESSAGE,
+  parseParticipantCombatEffectsChange,
+} from "./participantCombatEffectsChange";
 import { canEditCharacterInApi } from "../../lib/characterEditAccess";
 import {
   parseBodyObject,
@@ -374,7 +380,20 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
       const scenarioId = parseId(request.params, "scenarioId", "Scenario id");
       const participantId = parseId(request.params, "participantId", "Participant id");
       const body = parseBodyObject(request.body, "Participant state payload");
-      const submittedState = scenarioParticipantStateSchema.parse(body.state);
+
+      if (body.combatEffectsChange !== undefined && body.state !== undefined) {
+        throw new Error("Send either state or combatEffectsChange, not both.");
+      }
+
+      // The GM's Character-screen edit arrives as the change itself (#1126); every other caller
+      // still replaces the whole state.
+      const submitted =
+        body.combatEffectsChange === undefined
+          ? { kind: "state" as const, state: scenarioParticipantStateSchema.parse(body.state) }
+          : {
+              change: parseParticipantCombatEffectsChange(body.combatEffectsChange),
+              kind: "combat_effects_change" as const,
+            };
       const access = await resolveScenarioWorkspaceAccess(
         { campaignService, scenarioService },
         { scenarioId, userId: user.id, userRoles: user.roles },
@@ -400,6 +419,46 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
           .send({ error: "Scenario is not currently open for live participant updates." });
       }
 
+      if (submitted.kind === "combat_effects_change") {
+        if (access.mode !== "gm") {
+          return reply.code(403).send({ error: "Only GM users can edit combat effects." });
+        }
+
+        try {
+          const participant = await encounterService.updateScenarioParticipantState({
+            participantId,
+            scenarioId,
+            update: (current) =>
+              scenarioParticipantStateSchema.parse({
+                ...current.state,
+                combatEffects: attachCanonicalPersistentEffectLifecycles({
+                  combatEffects: applyParticipantCombatEffectsChange({
+                    change: submitted.change,
+                    combatEffects: current.state.combatEffects,
+                  }),
+                }),
+              }),
+          });
+
+          return { participant };
+        } catch (error) {
+          if (!(error instanceof ParticipantCombatEffectsChangeConflict)) {
+            throw error;
+          }
+
+          // Nothing was written. The current participant lets the screen refresh in place.
+          return reply.code(409).send({
+            code: "participant_state_changed",
+            error: PARTICIPANT_STATE_CHANGED_MESSAGE,
+            participant: await scenarioService.getScenarioParticipantById(
+              participantId,
+              scenarioId,
+            ),
+          });
+        }
+      }
+
+      const submittedState = submitted.state;
       let acceptedState = submittedState;
 
       if (access.mode === "player") {

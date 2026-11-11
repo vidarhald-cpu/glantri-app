@@ -30,14 +30,18 @@ import {
   loadCurrentCharacterContext,
   loadLocalCharacterContext,
 } from "@/lib/characters/loadLocalCharacterContext";
-import { applyCombatEffectDraft, removeCombatEffect } from "@/lib/characters/combatEffectEdits";
+import {
+  buildCombatEffectDraftChange,
+  buildCombatEffectRemovalChange,
+} from "@/lib/characters/combatEffectEdits";
+import type { ParticipantCombatEffectsChange } from "@/lib/api/scenarioClient";
 import { buildCharacterPhysicalStateView } from "@/lib/characters/physicalState";
 import { buildEncounterLiveCombatModifierSummary } from "@/lib/campaigns/liveCombatModifiers";
 
 interface CharacterLoadoutViewProps {
   canEditCombatEffects?: boolean;
   characterId: string;
-  onCombatEffectsChange?: (nextState: CombatEffectsState) => Promise<void> | void;
+  onCombatEffectsChange?: (change: ParticipantCombatEffectsChange) => Promise<void> | void;
   onEquipmentStateChange?: (nextState: EquipmentFeatureState) => Promise<void> | void;
   physicalStateCombatContext?: ScenarioParticipantCombatContext;
   physicalStateCombatEffects?: CombatEffectsState;
@@ -254,7 +258,7 @@ export default function CharacterLoadoutView({
     }
 
     await onCombatEffectsChange(
-      applyCombatEffectDraft({
+      buildCombatEffectDraftChange({
         combatEffects: physicalStateCombatEffects,
         draft,
         encounterId: physicalStateEncounterId,
@@ -269,7 +273,7 @@ export default function CharacterLoadoutView({
       return;
     }
 
-    await onCombatEffectsChange(removeCombatEffect(physicalStateCombatEffects, effectId));
+    await onCombatEffectsChange(buildCombatEffectRemovalChange(effectId));
   }
 
   async function applySelection(input: {

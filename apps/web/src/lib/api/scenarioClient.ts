@@ -1,5 +1,7 @@
 import type {
   CampaignAsset,
+  CombatEffect,
+  CombatEffectEvent,
   JoinableScenarioRecord,
   Scenario,
   ScenarioAvailableObjectReference,
@@ -272,6 +274,40 @@ export async function updateScenarioParticipantStateOnServer(input: {
     {
       body: JSON.stringify({
         state: input.state,
+      }),
+      method: "PUT",
+    },
+  );
+
+  return payload.participant;
+}
+
+/**
+ * A GM's combat-effect edit, sent as the change itself so the server applies it to the
+ * participant's state as stored (#1126). `previousEffect` / `previousEvent` are the edited records
+ * as the screen showed them; the server refuses the save with 409 `participant_state_changed`,
+ * carrying the current participant, when either changed meanwhile.
+ */
+export type ParticipantCombatEffectsChange =
+  | {
+      effects: CombatEffect[];
+      event: CombatEffectEvent;
+      kind: "save_effect";
+      previousEffect?: CombatEffect;
+      previousEvent?: CombatEffectEvent;
+    }
+  | { effectId: string; kind: "remove_effect" };
+
+export async function changeScenarioParticipantCombatEffectsOnServer(input: {
+  change: ParticipantCombatEffectsChange;
+  participantId: string;
+  scenarioId: string;
+}): Promise<ScenarioParticipant> {
+  const payload = await sendJson<{ participant: ScenarioParticipant }>(
+    `/scenarios/${input.scenarioId}/participants/${input.participantId}/state`,
+    {
+      body: JSON.stringify({
+        combatEffectsChange: input.change,
       }),
       method: "PUT",
     },
