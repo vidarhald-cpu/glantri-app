@@ -14,6 +14,7 @@ import {
   pickUpScenarioAvailableItemOnServer,
 } from "@/lib/api/localServiceClient";
 import { startGuardedPolling } from "@/lib/browser/guardedPolling";
+import { randomId } from "@/lib/browser/randomId";
 import { useSessionUser } from "@/lib/auth/SessionUserContext";
 import { shouldAcceptScenarioSessionResponse } from "@/lib/campaigns/scenarioSessionRefresh";
 
@@ -97,7 +98,7 @@ export default function ScenarioPlayerPageContent({
       const result = await pickUpScenarioAvailableItemOnServer({
         availabilityId,
         expectedRevision: session.revision,
-        requestId: crypto.randomUUID(),
+        requestId: randomId(),
         scenarioId,
         targetParticipantId,
       });

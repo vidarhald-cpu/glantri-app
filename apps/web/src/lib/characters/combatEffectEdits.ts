@@ -2,6 +2,7 @@ import type { CombatEffect, CombatEffectEvent, CombatEffectsState } from "@glant
 
 import type { CombatEffectEditorDraft } from "@/features/equipment/components/PhysicalStateSection";
 import type { ParticipantCombatEffectsChange } from "@/lib/api/scenarioClient";
+import { randomId } from "@/lib/browser/randomId";
 
 /**
  * Shared Physical state combat-effect edits (add/edit and remove), used by the
@@ -11,7 +12,7 @@ import type { ParticipantCombatEffectsChange } from "@/lib/api/scenarioClient";
  */
 
 function createCombatEffectId(prefix: string): string {
-  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+  return `${prefix}-${randomId()}`;
 }
 
 function buildCombatEffectSourceLabel(draft: CombatEffectEditorDraft): string {

@@ -1,6 +1,7 @@
 "use client";
 
 import { API_BASE_URL } from "../api/apiConfig";
+import { randomId } from "../browser/randomId";
 
 type CombatPerformanceInteraction = {
   command: string;
@@ -30,7 +31,6 @@ type CombatPerformanceRecord = {
 } & Record<string, boolean | number | string | undefined>;
 
 let activeInteraction: CombatPerformanceInteraction | undefined;
-let fallbackCorrelationSequence = 0;
 
 export function isCombatPerformanceEnabled(): boolean {
   return (
@@ -43,11 +43,7 @@ export function combatPerformanceNow(): number {
 }
 
 function createCorrelationId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  fallbackCorrelationSequence += 1;
-  return `combat-perf-${Date.now()}-${fallbackCorrelationSequence}`;
+  return randomId();
 }
 
 function writeRecord(
@@ -377,5 +373,4 @@ function flushCombatPerformanceCapture(interaction: CombatPerformanceInteraction
 
 export function resetCombatPerformanceForTests(): void {
   activeInteraction = undefined;
-  fallbackCorrelationSequence = 0;
 }
