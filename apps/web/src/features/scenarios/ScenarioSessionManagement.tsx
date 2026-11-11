@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import type { ScenarioAvailableObjectReference, ScenarioSessionView } from "@glantri/domain";
 
+import { randomId } from "@/lib/browser/randomId";
+
 import { ScenarioSessionPanel } from "./ScenarioSessionPanel";
 
 export interface ScenarioAvailableSourceOption {
@@ -52,7 +54,7 @@ export function ScenarioSessionManagement({
       ...current,
       {
         addedAt: new Date().toISOString(),
-        id: crypto.randomUUID(),
+        id: randomId(),
         sourceId: source.sourceId,
         sourceKind: source.sourceKind,
         visibility: "players",
