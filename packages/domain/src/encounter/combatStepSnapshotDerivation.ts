@@ -8,7 +8,7 @@ import {
 import { canonicalCombatModifierEffectSchema } from "./combatModifierLifecycle";
 import {
   buildCombatRoundPhaseResolutionResult,
-  combatRoundStateSchema,
+  parseCombatRoundState,
   getCombatRoundDisplayIncomingAttackResultForParticipantPhase,
   getCombatRoundInitiativeRanks,
   getCombatRoundModifierPhaseForStep,
@@ -226,7 +226,7 @@ function deriveDeclarationSummary(
 export function deriveCombatRoundStepSnapshots(
   input: DeriveCombatRoundStepSnapshotsInput,
 ): CombatRoundStepSnapshot[] {
-  const state = combatRoundStateSchema.parse(input.state);
+  const state = parseCombatRoundState(input.state);
   const step = input.step ?? state.currentStep;
   const phase = getCombatRoundModifierPhaseForStep(step);
   const attackPhase = getCombatAttackPhaseForStep(step);
@@ -397,8 +397,8 @@ export interface WithDerivedCombatRoundStepSnapshotsInput extends Omit<
 export function withDerivedCombatRoundStepSnapshots(
   input: WithDerivedCombatRoundStepSnapshotsInput,
 ): CombatRoundState {
-  const previousState = combatRoundStateSchema.parse(input.previousState);
-  const nextState = combatRoundStateSchema.parse(input.nextState);
+  const previousState = parseCombatRoundState(input.previousState);
+  const nextState = parseCombatRoundState(input.nextState);
   const startsNextRound = nextState.roundNumber > previousState.roundNumber;
   const steps = getCommittedCombatRoundSteps({
     nextStep: nextState.currentStep,
@@ -424,7 +424,7 @@ export function withDerivedCombatRoundStepSnapshots(
   // The completed round is archived with its own snapshots and the live round restarts empty, so
   // the records go into the archived round rather than the fresh one.
   const completedRoundNumber = previousState.roundNumber;
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...nextState,
     rounds: nextState.rounds.map((round) =>
       round.roundNumber === completedRoundNumber

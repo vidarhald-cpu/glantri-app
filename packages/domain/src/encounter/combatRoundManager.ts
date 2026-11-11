@@ -2154,7 +2154,7 @@ function findCombatRoundPendingPhaseAttackCandidate(input: {
       step: "A1" | "A2";
     }
   | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -2219,7 +2219,7 @@ function getCombatRoundPendingAttackRequiredFunctions(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): readonly ("arm" | "hand")[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -3257,6 +3257,49 @@ export const combatRoundStateSchema: z.ZodType<CombatRoundState, z.ZodTypeDef, u
     }),
   );
 
+/**
+ * #1145. The exact objects `parseCombatRoundState` has returned in this process. Keyed by identity
+ * and held weakly, so an entry lives only as long as the state object itself.
+ */
+const parsedCombatRoundStates = new WeakSet<object>();
+
+/**
+ * #1145. `combatRoundStateSchema.parse`, without re-walking a state this function has itself
+ * just produced.
+ *
+ * Inside one command the same parsed state is handed from helper to helper, and most helpers
+ * begin by normalising their input. Re-parsing an object that is already a parse result walks the
+ * whole fight (every archived round, command and step snapshot) only to return a deep copy equal
+ * to it, and doing that inside per-participant and per-phase loops dominated large fights.
+ *
+ * - Anything this function did not itself return — a state read from the database, a client
+ *   payload, or a new object built by spreading a parsed state — is parsed in full exactly as
+ *   before, with the same defaults, stripping and errors.
+ * - Only the identical object returned by an earlier call comes back as it is, instead of as a
+ *   deep copy. Parsing is idempotent on its own output, and the combat engine never changes a
+ *   state in place (every change builds a new object), so the copy and the original are equal.
+ */
+export function parseCombatRoundState(input: unknown): CombatRoundState {
+  if (typeof input === "object" && input !== null && parsedCombatRoundStates.has(input)) {
+    return input as CombatRoundState;
+  }
+  const parsed = combatRoundStateSchema.parse(input);
+  parsedCombatRoundStates.add(parsed);
+  return parsed;
+}
+
+/** #1145. `combatRoundStateSchema.safeParse` with the same shortcut as `parseCombatRoundState`. */
+export function safeParseCombatRoundState(
+  input: unknown,
+): z.SafeParseReturnType<unknown, CombatRoundState> {
+  if (typeof input === "object" && input !== null && parsedCombatRoundStates.has(input)) {
+    return { data: input as CombatRoundState, success: true };
+  }
+  const result = combatRoundStateSchema.safeParse(input);
+  if (result.success) parsedCombatRoundStates.add(result.data);
+  return result;
+}
+
 export type CombatRoundStepStatus = z.infer<typeof combatRoundStepStatusSchema>;
 export type CombatRoundDeclaration = z.infer<typeof combatRoundDeclarationSchema>;
 export type CombatRoundPhaseContexts = z.infer<typeof combatRoundPhaseContextsSchema>;
@@ -3366,7 +3409,7 @@ export interface PendingCombatObservationAttempt {
 export function getPendingCombatObservationAttempts(
   state: CombatRoundState,
 ): PendingCombatObservationAttempt[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const results = getCombatRoundAttackResults(normalized);
 
   return normalized.participants.flatMap((observer) => {
@@ -3422,7 +3465,7 @@ export function getPendingCombatObservationAttempts(
 export function getCombatObservationManualReviews(
   state: CombatRoundState,
 ): CombatObservationManualReview[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   return normalized.observationManualReviews.filter(
     (review) => review.roundNumber === normalized.roundNumber,
   );
@@ -3440,7 +3483,7 @@ export function getCombatObservationManualReviews(
 export function getBlockingCombatObservationAttempts(
   state: CombatRoundState,
 ): PendingCombatObservationAttempt[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const marked = new Set(
     getCombatObservationManualReviews(normalized).map((review) => review.attemptId),
   );
@@ -3482,7 +3525,7 @@ function withRefreshedCombatRoundEndCursor(state: CombatRoundState): CombatRound
   ) {
     return state;
   }
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...state,
     currentCursor: nextCursor,
     selectedParticipantId: nextCursor.participantId,
@@ -3511,7 +3554,7 @@ export function markCombatObservationManualReviewRequired(input: {
   reason: CombatObservationManualReviewReason;
   state: CombatRoundState;
 }): { changed: boolean; review: CombatObservationManualReview; state: CombatRoundState } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const pending = getPendingCombatObservationAttempts(normalized).find(
     (attempt) => attempt.attemptId === input.attemptId,
   );
@@ -3544,7 +3587,7 @@ export function markCombatObservationManualReviewRequired(input: {
     changed: true,
     review,
     state: withRefreshedCombatRoundEndCursor(
-      combatRoundStateSchema.parse({
+      parseCombatRoundState({
         ...normalized,
         observationManualReviews: existing
           ? normalized.observationManualReviews.map((entry) =>
@@ -3583,7 +3626,7 @@ export function recordCombatObservationRoll(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const pending = getPendingCombatObservationAttempts(normalized).find(
     (attempt) =>
       attempt.attemptId === input.observationAttemptId &&
@@ -3637,7 +3680,7 @@ export function recordCombatObservationRoll(input: {
     ? orderedEventsBeforeRoll.findIndex((event) => event.id === participantReviewEvent.id)
     : undefined;
   const participantReviewEventPreviousStatus = participantReviewEvent?.status;
-  let nextState = combatRoundStateSchema.parse({
+  let nextState = parseCombatRoundState({
     ...normalized,
     observationAttempts: [...normalized.observationAttempts, attempt],
     // #948. The attempt is now resolved, so its manual-review marker is dropped: a resolved
@@ -3682,7 +3725,7 @@ export function recordCombatObservationRoll(input: {
     step: "SU",
     type: "roll_observation",
   });
-  nextState = combatRoundStateSchema.parse({
+  nextState = parseCombatRoundState({
     ...nextState,
     commands: [...nextState.commands, command],
     currentCursor: afterCursor,
@@ -3763,7 +3806,7 @@ export function recordCombatObservationRoll(input: {
     );
     const deferredReview = orderedEvents.find((event) => event.id === participantReviewEvent.id);
     const withoutReview = orderedEvents.filter((event) => event.id !== participantReviewEvent.id);
-    nextState = combatRoundStateSchema.parse({
+    nextState = parseCombatRoundState({
       ...nextState,
       events: deferredReview
         ? [
@@ -3787,7 +3830,7 @@ function appendCombatObservationRoundStatusEvents(input: {
   observerParticipantId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attackResults = getCombatRoundAttackResults(normalized);
   const pendingAttempts = getPendingCombatObservationAttempts(normalized);
   let nextState = normalized;
@@ -3865,7 +3908,7 @@ export function resolveCombatObservationRoundBoundary(input: { state: CombatRoun
   state: CombatRoundState;
   undoFacts: CombatObservationRoundUndoFact[];
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const results = getCombatRoundAttackResults(normalized);
   const relationships = [...normalized.observationRelationships];
   const undoFacts: CombatObservationRoundUndoFact[] = [];
@@ -3929,7 +3972,7 @@ export function resolveCombatObservationRoundBoundary(input: { state: CombatRoun
   }
 
   return {
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...normalized,
       observationRelationships: relationships,
     }),
@@ -3960,7 +4003,7 @@ function appendCombatRoundEventForCommand(input: {
   draft: CanonicalCombatStepEventDraft;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   if (!normalized.encounterId) {
     return normalized;
@@ -3985,7 +4028,7 @@ function removeCombatRoundEventsForCommand(input: {
   commandId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return {
     ...normalized,
@@ -4619,7 +4662,7 @@ function moveCombatRoundToPhaseCompletion(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const currentCursor = getCombatRoundPhaseCompletionCursor({
     phase: input.phase,
     state: normalized,
@@ -4722,7 +4765,7 @@ export function recordCombatCriticalBleedTreatmentCommand(input: {
   scenarioParticipantId: string;
   state: CombatRoundState;
 }): { command: CombatRoundCommand; state: CombatRoundState } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousEffect = combatEffectSchema.parse(input.previousEffect);
   const nextEffect = combatEffectSchema.parse(input.nextEffect);
   const previousBleed = previousEffect.criticalRuntime;
@@ -4828,7 +4871,7 @@ export function recordCombatCriticalBleedTreatmentCommand(input: {
 
   return {
     command,
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...normalized,
       commands: [...normalized.commands, command],
       events: [...normalized.events, event],
@@ -4846,7 +4889,7 @@ export function recordCombatRoundGlobalParticipantCommand(input: {
   step: CombatRoundStep;
   type?: CombatRoundCommandType;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const commandType = input.type ?? getCombatRoundGlobalCommandTypeForStep(input.step);
 
   if (!commandType || !isGlobalCombatRoundStep(input.step)) {
@@ -4929,7 +4972,7 @@ export function getCombatRoundCombatExperienceDue(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatRoundCombatExperienceDue | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return normalized.participants.find((entry) => entry.participantId === input.participantId)
     ?.combatExperienceDue;
@@ -4943,7 +4986,7 @@ export function isCombatRoundCombatExperienceDue(input: {
   participantId: string;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const due = getCombatRoundCombatExperienceDue({
     participantId: input.participantId,
     state: normalized,
@@ -4953,7 +4996,7 @@ export function isCombatRoundCombatExperienceDue(input: {
 }
 
 export function getCombatRoundCombatExperienceDueParticipantIds(state: CombatRoundState): string[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
   return normalized.participants
     .filter((participant) =>
@@ -4970,9 +5013,9 @@ function withCombatRoundCombatExperienceDue(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     participants: normalized.participants.map((participant) =>
       participant.participantId === input.participantId
@@ -4992,7 +5035,7 @@ export function markCombatRoundCombatExperienceResetDue(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -5021,7 +5064,7 @@ function applyCombatExperienceScheduleAfterRoll(input: {
   result: CombatRoundCombatExperienceResult;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const dueFromRoundNumber = getCombatExperienceNextCheckRoundNumber({
     durationRounds: input.result.durationRounds,
     roundNumber: input.result.roundNumber,
@@ -5045,7 +5088,7 @@ export function isCombatStartExperienceRollRequired(input: {
   participantId: string;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -5081,19 +5124,19 @@ export function isCombatStartExperienceRollRequired(input: {
 }
 
 export function getCombatRoundCombatExperienceDifficulty(state: CombatRoundState): number {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
   return normalized.combatExperienceDifficulty ?? COMBAT_EXPERIENCE_DEFAULT_DIFFICULTY;
 }
 
 export function isCombatRoundCombatExperienceWindowOpen(state: CombatRoundState): boolean {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
   return normalized.combatExperienceDifficulty !== undefined;
 }
 
 export function hasCombatRoundCombatExperienceRoll(state: CombatRoundState): boolean {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
   return normalized.participants.some(
     (participant) =>
@@ -5106,7 +5149,7 @@ export function setCombatRoundCombatExperienceDifficulty(input: {
   difficulty: number;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const difficulty = Math.trunc(input.difficulty);
 
   if (!Number.isInteger(difficulty) || difficulty <= 0) {
@@ -5129,7 +5172,7 @@ export function setCombatRoundCombatExperienceDifficulty(input: {
     );
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     combatExperienceDifficulty: difficulty,
   });
@@ -5140,7 +5183,7 @@ export function getCombatRoundDistanceEdge(input: {
   participantBId: string;
   state: CombatRoundState;
 }): CombatDistanceEdge | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return getDistanceEdgeBetween(
     normalized.distanceState,
@@ -5161,7 +5204,7 @@ export function setCombatRoundPairDistance(input: {
   source?: CombatDistanceSource;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participantIds = new Set(
     normalized.participants.map((participant) => participant.participantId),
   );
@@ -5191,7 +5234,7 @@ export function setCombatRoundPairDistance(input: {
     input.participantAId,
     input.participantBId,
   );
-  const stateWithDistance = combatRoundStateSchema.parse({
+  const stateWithDistance = parseCombatRoundState({
     ...normalized,
     distanceState: nextDistanceState,
   });
@@ -5236,7 +5279,7 @@ export function setCombatRoundPairDistance(input: {
     type: commandType,
   });
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...stateWithDistance,
     commands: [...stateWithDistance.commands, command],
     currentCursor: command.afterCursor,
@@ -5256,7 +5299,7 @@ export function getFirstCombatRoundPendingModifierReviewParticipantId(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): string | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const step = input.phase === "phase1" ? "review_action_modifiers" : "review_phase_2_modifiers";
   const completedStatuses = new Set<CombatRoundStepStatus>([
     "complete",
@@ -5365,7 +5408,7 @@ function getCombatRoundParticipantByTargetId(input: {
   state: CombatRoundState;
   targetParticipantId?: string;
 }): CombatRoundParticipantState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   if (!input.targetParticipantId) {
     return undefined;
@@ -5422,7 +5465,7 @@ function combatRoundParticipantHasPendingExecutablePhaseAttack(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -5476,7 +5519,7 @@ export function getCombatRoundPhaseInitiativeChoice(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundPhaseInitiativeChoice | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   for (let index = normalized.commands.length - 1; index >= 0; index -= 1) {
     const command = normalized.commands[index];
@@ -5521,7 +5564,7 @@ export function getCombatRoundPhaseAttackBackOutOpportunity(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatRoundPhaseAttackBackOutOpportunity | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -5649,7 +5692,7 @@ export function getCombatRoundPhaseCombatExperienceRequirement(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatRoundPhaseCombatExperienceRequirement | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   if (
     combatRoundPhaseInitiativeChoiceSubmitted({
@@ -5687,7 +5730,7 @@ export function getCombatRoundPhaseCombatExperienceDetectionReport(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatRoundPhaseCombatExperienceDetectionParticipantReport[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return normalized.participants.map((participant) => {
     const phaseTargetId =
@@ -5806,7 +5849,7 @@ export function canBackOutCombatRoundPhaseAttack(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
 
   return Boolean(
@@ -5836,7 +5879,7 @@ export function getCombatRoundPhaseCombatExperienceRequiredParticipantIds(input:
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): string[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return getCombatRoundPhaseResolutionOrder({
     phase: input.phase,
@@ -5866,7 +5909,7 @@ export function getCombatRoundPhaseInitiativeChoiceStatuses(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatRoundPhaseInitiativeChoiceStatus[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return getCombatRoundPhaseResolutionOrder({
     phase: input.phase,
@@ -5917,7 +5960,7 @@ export function isCombatRoundPhaseInitiativeResolutionOpen(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return (
     normalized.currentStep === getCombatRoundPhaseInitiativeStepForPhase(input.phase) &&
@@ -5936,7 +5979,7 @@ export function getFirstCombatRoundPhaseCombatExperienceRequiredParticipantId(in
 export function getFirstCombatStartExperienceRequiredParticipantId(
   state: CombatRoundState,
 ): string | undefined {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
   return normalized.participants.find((participant) =>
     isCombatStartExperienceRollRequired({
@@ -5951,7 +5994,7 @@ export function getCombatRoundRequiredCombatExperienceTrigger(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatExperienceTrigger | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const trigger = getCombatRoundCombatExperienceTriggerForStep(normalized.currentStep);
 
   if (!trigger) {
@@ -6023,7 +6066,7 @@ function isCombatRoundDeclarationComplete(participant: CombatRoundParticipantSta
 export function getFirstCombatRoundDeclarationRequiredParticipantId(
   state: CombatRoundState,
 ): string | undefined {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
   return normalized.participants.find(
     (participant) => !isCombatRoundDeclarationComplete(participant),
@@ -6201,7 +6244,7 @@ export function rollCombatRoundCombatExperience(input: {
   result: CombatRoundCombatExperienceResult;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -6508,7 +6551,7 @@ export function rollCombatRoundCombatExperience(input: {
         })
       : currentCombatEffects;
 
-  const stateWithCommand = combatRoundStateSchema.parse({
+  const stateWithCommand = parseCombatRoundState({
     ...stateAfterResult,
     commands: [...normalized.commands, command],
     combatExperienceDifficulty: difficulty,
@@ -6795,7 +6838,7 @@ function clearCombatRoundParticipantOutgoingResolutionState(input: {
   phase?: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const outgoingResults = normalized.participants
     .filter((participant) => participant.participantId === input.participantId)
     .flatMap((participant) => Object.values(participant.attackResultsByOpportunity ?? {}))
@@ -7196,7 +7239,7 @@ export function getCombatRoundAttackResultsForParticipantPhase(input: {
   incoming: CombatRoundAttackRollResult[];
   outgoing?: CombatRoundAttackRollResult;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const resultsForParticipant = (participant: CombatRoundParticipantState) => {
     return Object.values(participant.attackResultsByOpportunity ?? {})
       .filter((result) => result.phase === input.phase)
@@ -7265,7 +7308,7 @@ export function getCombatRoundDisplayIncomingAttackResultForParticipantPhase(inp
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundAttackRollResult | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const incoming = getCombatRoundIncomingAttackResultsForParticipantPhase({
     participantId: input.participantId,
     phase: input.phase,
@@ -7289,7 +7332,7 @@ export function getCombatRoundPendingDefenseAttackResult(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundAttackRollResult | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return [
     ...getCombatRoundIncomingAttackResultsForParticipantPhase({
       participantId: input.participantId,
@@ -7360,7 +7403,7 @@ export function isCombatPhaseActionOpen(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return (
     COMBAT_ROUND_STEPS.indexOf(normalized.currentStep) >=
     COMBAT_ROUND_STEPS.indexOf(getCombatRoundPhaseActionStepForPhase(input.phase))
@@ -7604,7 +7647,7 @@ export function getCombatRoundPhaseAttackCandidates(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): Array<CombatRoundAttackOpportunity & { participantId: string }> {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return normalized.participants.flatMap((participant) => {
     if (!participant.declaration) {
@@ -7643,7 +7686,7 @@ export function combatRoundParticipantHasPhaseAttack(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return getCombatRoundPhaseAttackCandidates({ phase: input.phase, state: normalized }).some(
     (candidate) => candidate.participantId === input.participantId,
   );
@@ -7654,7 +7697,7 @@ export function combatRoundParticipantHasExecutablePhaseAttack(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -7704,7 +7747,7 @@ export function getCombatRoundFeintProposal(input: {
   attackerParticipantId: string;
   state: CombatRoundState;
 }): CombatFeintProposal | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return normalized.feintProposals.find(
     (proposal) =>
       proposal.roundNumber === normalized.roundNumber &&
@@ -7716,7 +7759,7 @@ export function getCombatRoundAdjustDistanceProposal(input: {
   attackerParticipantId: string;
   state: CombatRoundState;
 }): CombatAdjustDistanceProposal | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return normalized.adjustDistanceProposals.find(
     (proposal) =>
       proposal.roundNumber === normalized.roundNumber &&
@@ -7730,9 +7773,9 @@ export function getCombatEngagementBetween(input: {
   state: CombatRoundState;
 }): CombatEngagement | undefined {
   const pairKey = makeDistancePairKey(input.participantAId, input.participantBId);
-  return combatRoundStateSchema
-    .parse(input.state)
-    .engagements.find((engagement) => engagement.pairKey === pairKey);
+  return parseCombatRoundState(input.state).engagements.find(
+    (engagement) => engagement.pairKey === pairKey,
+  );
 }
 
 /** Missing legacy edges are ordinary engaged pairs until a canonical transition says otherwise. */
@@ -7748,7 +7791,7 @@ export function getCombatRoundBreakOffProposals(input: {
   escapeeParticipantId: string;
   state: CombatRoundState;
 }): CombatBreakOffProposal[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return normalized.breakOffProposals.filter(
     (proposal) =>
       proposal.roundNumber === normalized.roundNumber &&
@@ -7960,7 +8003,7 @@ export function getNextCombatRoundPhaseActionParticipantId(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): string | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const currentGroup = getCombatRoundCurrentInitiativeExecutionGroup({
     phase: input.phase,
     state: normalized,
@@ -8000,7 +8043,7 @@ export function isCombatRoundPhaseResolutionComplete(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return (
     isCombatPhaseActionOpen({ phase: input.phase, state: normalized }) &&
@@ -8081,7 +8124,7 @@ function combatRoundParticipantPhaseActionHasCompletionEvidence(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -8135,7 +8178,7 @@ function getEffectiveCombatRoundPhaseResolutionStatus(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundPhaseResolutionParticipantStatus {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -8173,7 +8216,7 @@ function clearUnsupportedCombatRoundPhaseActionProgress(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
   let changed = false;
   const phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses = {
@@ -8217,7 +8260,7 @@ function clearUnsupportedCombatRoundPhaseActionProgress(input: {
   });
 
   return changed
-    ? combatRoundStateSchema.parse({
+    ? parseCombatRoundState({
         ...normalized,
         participants,
         phaseResolutionStatuses,
@@ -8278,7 +8321,7 @@ export function getCombatRoundPhaseResolutionStatus(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundPhaseResolutionParticipantStatus {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return (
     normalized.phaseResolutionStatuses[input.participantId]?.[input.phase] ?? {
@@ -8292,7 +8335,7 @@ export function getCombatRoundParticipantPhaseStepStatus(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): CombatRoundStepStatus {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const phase =
     getCombatRoundAttackPhaseForStep(input.step) ??
     getCombatRoundResolutionPhaseForStep(input.step);
@@ -8461,7 +8504,7 @@ function setCombatRoundPhaseResolutionStatus(input: {
   state: CombatRoundState;
   status: CombatRoundPhaseResolutionParticipantStatus;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return {
     ...normalized,
@@ -8496,7 +8539,7 @@ function moveCombatRoundToPhaseInitiativeResolution(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const initiativeStep = getCombatRoundPhaseInitiativeStepForPhase(input.phase);
   const participantId =
     input.participantId ??
@@ -8508,7 +8551,7 @@ function moveCombatRoundToPhaseInitiativeResolution(input: {
     normalized.selectedParticipantId ??
     normalized.participants[0]?.participantId;
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     currentCursor: {
       participantId,
@@ -8527,9 +8570,9 @@ function moveCombatRoundAfterCompletedPhaseInitiative(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const initiativeStep = getCombatRoundPhaseInitiativeStepForPhase(input.phase);
-  const baseState = combatRoundStateSchema.parse({
+  const baseState = parseCombatRoundState({
     ...normalized,
     currentCursor: getDefaultCombatRoundCursor({
       participantId: normalized.currentCursor?.participantId ?? normalized.selectedParticipantId,
@@ -8594,7 +8637,7 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
   state: CombatRoundState;
   visibility?: CombatRoundVisibility;
 }): CombatRoundState {
-  const withParticipantResult = combatRoundStateSchema.parse({
+  const withParticipantResult = parseCombatRoundState({
     ...input.state,
     participants: input.state.participants.map((entry) =>
       entry.participantId === input.participantId
@@ -8629,7 +8672,7 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
       : "select_actions";
     const cursorParticipantId = nextRequiredParticipantId ?? input.participantId;
 
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...withParticipantResult,
       currentCursor: getDefaultCombatRoundCursor({
         participantId: cursorParticipantId,
@@ -8657,7 +8700,7 @@ function moveCombatRoundAfterCombatExperienceResult(input: {
   });
 
   if (nextParticipantId) {
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...withPhaseOutcome,
       currentCursor: getDefaultCombatRoundCursor({
         participantId: nextParticipantId,
@@ -8866,7 +8909,7 @@ export function advanceCombatRoundPhaseResolutionSubstepForParticipant(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const currentStatus = getCombatRoundPhaseResolutionStatus({
     participantId: input.participantId,
     phase: input.phase,
@@ -8929,7 +8972,7 @@ export function completeCombatRoundPhaseResolutionForParticipant(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   if (
     getCombatRoundPhaseResolutionStatus({
       participantId: input.participantId,
@@ -9006,7 +9049,7 @@ function recordCombatRoundPhaseActionSkipCommand(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.participantId,
     roundNumber: normalized.roundNumber,
@@ -9073,7 +9116,7 @@ export function skipCombatRoundCurrentPhaseAction(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.participantId,
@@ -9152,7 +9195,7 @@ export function skipCombatRoundCurrentPhaseAction(input: {
       })
     : previousAttackPhaseDefensivePenalties;
   const withCanonicalSkip = skippedAttackPhaseDefensivePenalty
-    ? combatRoundStateSchema.parse({
+    ? parseCombatRoundState({
         ...withSkippedAction,
         participants: withSkippedAction.participants.map((entry) =>
           entry.participantId === input.participantId && entry.declaration
@@ -9218,7 +9261,7 @@ export function skipCombatRoundCurrentPhaseAction(input: {
     step: beforeCursor.step,
     type: commandType,
   });
-  const stateForAfterCursor = combatRoundStateSchema.parse({
+  const stateForAfterCursor = parseCombatRoundState({
     ...withCanonicalSkip,
     commands: [
       ...withCanonicalSkip.commands.filter((command) => command.id !== commandId),
@@ -9246,7 +9289,7 @@ export function skipCombatRoundCurrentPhaseAction(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...withCanonicalSkip,
     commands: [
       ...withCanonicalSkip.commands.filter((existingCommand) => existingCommand.id !== commandId),
@@ -9284,7 +9327,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -9479,7 +9522,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   });
   const stateWithCanonicalBackOut =
     input.choice === "back_out" && participant.declaration && canonicalOpportunity
-      ? combatRoundStateSchema.parse({
+      ? parseCombatRoundState({
           ...normalized,
           participants: normalized.participants.map((entry) =>
             entry.participantId === input.participantId && entry.declaration
@@ -9520,7 +9563,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
           ),
         })
       : normalized;
-  const stateWithCommandShell = combatRoundStateSchema.parse({
+  const stateWithCommandShell = parseCombatRoundState({
     ...stateWithCanonicalBackOut,
     commands: [
       ...stateWithCanonicalBackOut.commands.filter(
@@ -9544,7 +9587,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
     visibility: input.visibility,
   });
   const stateAfterChoice = nextParticipantId
-    ? combatRoundStateSchema.parse({
+    ? parseCombatRoundState({
         ...stateWithOutcome,
         currentCursor: getDefaultCombatRoundCursor({
           participantId: nextParticipantId,
@@ -9582,7 +9625,7 @@ function submitCombatRoundPhaseInitiativeChoiceCommand(input: {
   return {
     combatContext: softenedModifierResult.combatContext,
     command,
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...stateAfterChoice,
       commands: [
         ...stateAfterChoice.commands.filter((existingCommand) => existingCommand.id !== commandId),
@@ -9903,7 +9946,7 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const initiativeStep = getCombatRoundPhaseInitiativeStepForPhase(input.phase);
 
   if (normalized.currentStep !== initiativeStep) {
@@ -9995,7 +10038,7 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
     step: getCombatRoundPhaseInitiativeCursorStepForPhase(input.phase),
     type: "commit_phase_initiative_resolution",
   });
-  const stateWithCommit = combatRoundStateSchema.parse({
+  const stateWithCommit = parseCombatRoundState({
     ...stateAfterPhaseOpen,
     commands: [...stateAfterPhaseOpen.commands, command],
   });
@@ -10029,7 +10072,7 @@ export function commitCombatRoundPhaseInitiativeResolution(input: {
   return {
     combatContextsByParticipantId: {},
     command: committedCommand,
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...stateAfterPhaseOpen,
       commands: [...stateAfterPhaseOpen.commands, committedCommand],
       // #875: the commit is the only writer of a committed order, and it appends rather than
@@ -10112,7 +10155,7 @@ export function recordCombatRoundNoAttackPhaseReview(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const hasPhaseAttack = combatRoundParticipantHasPhaseAttack({
     participantId: input.participantId,
     phase: input.phase,
@@ -10198,7 +10241,7 @@ export function getCombatRoundOffensiveParryAttemptIdentity(input: {
   attackResult: CombatRoundAttackRollResult;
   state: CombatRoundState;
 }): CombatRoundOffensiveParryAttemptIdentity | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const opportunityId = input.attackResult.attackOpportunityId;
   if (!opportunityId) return undefined;
   const storedAttack = getCombatRoundAttackResultForOpportunity({
@@ -10274,7 +10317,7 @@ export function getCombatRoundParryDisarmAttemptIdentity(input: {
       parrySourceId: string;
     }
   | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const defender = normalized.participants.find(
     (participant) => participant.participantId === input.attackResult.defenderParticipantId,
   );
@@ -10374,7 +10417,7 @@ export function getCombatRoundAttackDistanceModifierDetail(input: {
   result: CombatRoundAttackRollResult;
   state: CombatRoundState;
 }): CombatRoundAttackDistanceModifierDetail | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attackResultId = getCombatRoundAttackResultId({
     result: input.result,
     roundNumber: normalized.roundNumber,
@@ -10466,7 +10509,7 @@ export function getCombatRoundPhaseResolutionResultForAttack(input: {
   attackResult: CombatRoundAttackRollResult;
   state: CombatRoundState;
 }): CombatRoundPhaseResolutionResult | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attackResultId = getCombatRoundAttackResultId({
     result: input.attackResult,
     roundNumber: normalized.roundNumber,
@@ -10496,7 +10539,7 @@ function getReactiveAttackPhase2InitiativeModifierForIncomingAttack(input: {
   attackResult: CombatRoundAttackRollResult;
   state: CombatRoundState;
 }): ReactiveAttackPhase2InitiativeModifier {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attackResultId = getCombatRoundAttackResultId({
     result: input.attackResult,
     roundNumber: normalized.roundNumber,
@@ -10563,7 +10606,7 @@ export function getReactiveAttackPhase2InitiativeModifier(input: {
   participantId: string;
   state: CombatRoundState;
 }): ReactiveAttackPhase2InitiativeModifier | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -10608,7 +10651,7 @@ export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
   participantId: string;
   state: CombatRoundState;
 }): ScenarioCombatModifierEntry | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const modifier = getReactiveAttackPhase2InitiativeModifier(input);
 
   if (modifier) {
@@ -10642,9 +10685,9 @@ export function buildReactiveAttackPhase2InitiativeModifierEntry(input: {
 function refreshCombatRoundReactiveAttackPhase2InitiativeModifiers(
   state: CombatRoundState,
 ): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     participants: normalized.participants.map((participant) => {
       const declaration = participant.declaration;
@@ -10693,7 +10736,7 @@ export function getCombatRoundDisplayPhaseResolutionResultForParticipantPhase(in
   state: CombatRoundState;
   updatedAt?: string;
 }): CombatRoundPhaseResolutionResult | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attackResult = getCombatRoundDisplayAttackResultForParticipantPhase({
     participantId: input.participantId,
     phase: input.phase,
@@ -10722,7 +10765,7 @@ function upsertCombatRoundPhaseResolutionResults(input: {
   results: CombatRoundPhaseResolutionResult[];
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const nextResults = input.results.map((result) =>
     combatRoundPhaseResolutionResultSchema.parse(result),
   );
@@ -10744,7 +10787,7 @@ export function ensureCombatRoundPhaseResolutionResultsForPhase(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const results = normalized.participants
     .flatMap((participant) =>
       Object.values(participant.attackResultsByOpportunity ?? {}).filter(
@@ -10782,7 +10825,7 @@ export function recordCombatRoundParryResolution(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const parryResolution = combatRoundParryResolutionSchema.parse(input.parryResolution);
   const existing =
     getCombatRoundPhaseResolutionResultForAttack({
@@ -10897,7 +10940,7 @@ function recordCombatRoundParryCommand(input: {
   parryResolution: CombatRoundParryResolution;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.attackResult.defenderParticipantId,
     roundNumber: normalized.roundNumber,
@@ -11064,7 +11107,7 @@ export function recordCombatRoundParryResult(input: {
       contest.status === "awaiting_rolls",
   );
   const nextRoundState: CombatRoundState = offensiveParryContest
-    ? combatRoundStateSchema.parse({
+    ? parseCombatRoundState({
         ...withOffensiveParryContest,
         currentCursor: {
           participantId: offensiveParryContest.controllerParticipantId,
@@ -11105,7 +11148,7 @@ export function recordCombatRoundParryResult(input: {
   const defenderOwnedNextRoundState: CombatRoundState =
     parryResolution.success === true || !input.attackResult.hit
       ? nextRoundState
-      : combatRoundStateSchema.parse({
+      : parseCombatRoundState({
           ...nextRoundState,
           phaseResolutionCursor: {
             participantId: input.attackResult.defenderParticipantId,
@@ -11187,7 +11230,7 @@ export function hasNoEligibleParrySourceForAttack(input: {
   state: CombatRoundState;
 }): boolean {
   if (!input.attackResult.hit) return false;
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attackResultId = getCombatRoundAttackResultId({
     result: input.attackResult,
     roundNumber: normalized.roundNumber,
@@ -11252,7 +11295,7 @@ export function recordCombatRoundNoEligibleParrySource(input: {
     parryResolution: {
       attackResultId: getCombatRoundAttackResultId({
         result: input.attackResult,
-        roundNumber: combatRoundStateSchema.parse(input.state).roundNumber,
+        roundNumber: parseCombatRoundState(input.state).roundNumber,
       }),
       noEligibleParrySource: true,
       notes:
@@ -11281,7 +11324,7 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
   parryResolution: CombatRoundParryResolution;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   if (
     input.parryResolution.status !== "resolved" ||
     input.parryResolution.success !== true ||
@@ -11331,7 +11374,7 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
     throw new RangeError("A successful Offensive Parry requires its canonical parry margin.");
   }
   const quality = resolveOffensiveParryQualityModifier(total - targetNumber);
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     offensiveParryContests: [
       ...normalized.offensiveParryContests,
@@ -11357,9 +11400,9 @@ function openOffensiveParryContestAfterSuccessfulParry(input: {
 }
 
 export function getOffensiveParryContest(input: { contestId: string; state: CombatRoundState }) {
-  return combatRoundStateSchema
-    .parse(input.state)
-    .offensiveParryContests.find((contest) => contest.id === input.contestId);
+  return parseCombatRoundState(input.state).offensiveParryContests.find(
+    (contest) => contest.id === input.contestId,
+  );
 }
 
 export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
@@ -11383,7 +11426,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const contest = normalized.offensiveParryContests.find((entry) => entry.id === input.contestId);
   if (!contest || contest.status !== "awaiting_rolls") {
     throw new RangeError("The Offensive Parry Brawling contest is not awaiting rolls.");
@@ -11566,7 +11609,7 @@ export function recordCombatRoundOffensiveParryBrawlingRoll(input: {
     step: input.phase === "phase1" ? "P1" : "P2",
     type: "roll_offensive_parry_brawling",
   });
-  let nextState = combatRoundStateSchema.parse({
+  let nextState = parseCombatRoundState({
     ...normalized,
     commands: [...normalized.commands, command],
     continuedContacts: nextContacts,
@@ -12679,7 +12722,7 @@ function recordCombatRoundDamageResolution(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const existing =
     getCombatRoundPhaseResolutionResultForAttack({
       attackResult: input.attackResult,
@@ -12732,7 +12775,7 @@ function recordCombatRoundResolveDamageCommand(input: {
   damageResult: CombatRoundDamageResult;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.attackResult.defenderParticipantId,
     roundNumber: normalized.roundNumber,
@@ -12865,7 +12908,7 @@ function recordCombatRoundHitLocationRollCommand(input: {
   hitLocationRoll: CombatRoundHitLocationRollResult;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.attackResult.defenderParticipantId,
     roundNumber: normalized.roundNumber,
@@ -12975,7 +13018,7 @@ export function recordCombatRoundHitLocationRoll(input: {
   targetLocation?: CombatRoundDamageResult["targetLocation"];
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const resolution = getCombatRoundPhaseResolutionResultForAttack({
     attackResult: input.attackResult,
     state: normalized,
@@ -13096,7 +13139,7 @@ export function recordCombatRoundDamageResult(input: {
   updatedAt: string;
   weaponArmorClass?: CombatArmorModifierClass;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const resolution = getCombatRoundPhaseResolutionResultForAttack({
     attackResult: input.attackResult,
     state: normalized,
@@ -13186,7 +13229,7 @@ export function reviewCombatRoundDamageResult(input: {
   rng?: () => number;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const nextReview = enforceCombatRoundCriticalSourceConflictRejections(
     combatRoundDamageResultSchema.shape.review.unwrap().parse({
       ...input.review,
@@ -13243,7 +13286,7 @@ export function reviewCombatRoundDamageResult(input: {
     });
   });
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     phaseResolutionResults: nextResults,
   });
@@ -13268,7 +13311,7 @@ function recordCombatRoundCriticalRollCommand(input: {
   secondaryCritical?: CombatRoundSecondaryCriticalResult;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.attackResult.defenderParticipantId,
     roundNumber: normalized.roundNumber,
@@ -13406,7 +13449,7 @@ export function recordCombatRoundCriticalRoll(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const resolution = getCombatRoundPhaseResolutionResultForAttack({
     attackResult: input.attackResult,
     state: normalized,
@@ -14766,7 +14809,7 @@ export function getNextCombatRoundEndTask(input: {
   roundEndReview?: CombatRoundEndReview;
   state: CombatRoundState;
 }): CombatRoundEndTask | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const roundEndReview = input.roundEndReview ?? normalized.roundEndReview;
 
   if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
@@ -15220,7 +15263,7 @@ export function getConflictingContinuedContactIds(state: CombatRoundState): Read
 function buildContinuedContactMaintenanceContests(
   state: CombatRoundState,
 ): ContinuedContactMaintenanceContest[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const conflictingContactIds = getConflictingContinuedContactIds(normalized);
   for (const condition of normalized.unbalancedConditions) {
     if (
@@ -15285,7 +15328,7 @@ export function wasCombatRoundPairDistanceResolvedDuringRound(input: {
   roundNumber: number;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   if (
     normalized.adjustDistanceProposals.some(
       (proposal) =>
@@ -15318,7 +15361,7 @@ function buildCombatRoundEndDistanceProposals(input: {
   participantInputs?: Record<string, CombatRoundEndDistanceControlParticipantInput>;
   state: CombatRoundState;
 }): CombatRoundEndDistanceProposal[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const preferencesByPair = new Map<string, CombatRoundEndDistancePreferenceAccumulator>();
 
   for (const contact of normalized.continuedContacts) {
@@ -15928,7 +15971,7 @@ function buildCombatRoundEndParticipantReview(input: {
 }
 
 export function isCombatRoundEndReviewComplete(state: CombatRoundState): boolean {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const review = normalized.roundEndReview;
 
   if (!review || review.roundNumber !== normalized.roundNumber) {
@@ -15958,7 +16001,7 @@ export function getCombatRoundEndDistanceControlPendingRollCount(input: {
   participantId: string;
   state: CombatRoundState;
 }): number {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const review = normalized.roundEndReview;
 
   if (!review || review.roundNumber !== normalized.roundNumber) {
@@ -15985,7 +16028,7 @@ export function getCombatRoundEndHealthCheckPendingRolls(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatRoundEndHealthRollProposal[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const review = normalized.roundEndReview;
   const participantReview = review?.participantReviews[input.participantId];
 
@@ -16018,7 +16061,7 @@ export function getCombatRoundEndHealthAutomationReviewDisposition(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatRoundEndHealthAutomationReviewDisposition {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const review = normalized.roundEndReview?.participantReviews[input.participantId];
   const canonical = review?.canonicalReview;
   if (!review || !canonical) return "incomplete_legacy_state";
@@ -16055,7 +16098,7 @@ export function getCombatRoundEndHealthAutomationReviewDisposition(input: {
 }
 
 export function getCombatRoundStartNextRoundBlocker(state: CombatRoundState): string | undefined {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const review = normalized.roundEndReview;
 
   if (!review || review.roundNumber !== normalized.roundNumber) {
@@ -16136,7 +16179,7 @@ export function prepareCombatRoundEndReview(input: {
   >;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   if (normalized.currentStep !== "round_summary") {
     throw new RangeError("Round-end review can only be prepared at SU.");
@@ -16221,7 +16264,7 @@ export function prepareCombatRoundEndReview(input: {
       })
     : undefined;
 
-  let nextState = combatRoundStateSchema.parse({
+  let nextState = parseCombatRoundState({
     ...normalized,
     commands: command ? [...normalized.commands, command] : normalized.commands,
     currentCursor: afterCursor,
@@ -16286,7 +16329,7 @@ export function ensureCombatRoundEndReviewPrepared(input: {
   >;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   if (normalized.currentStep !== "round_summary") {
     return normalized;
@@ -16322,7 +16365,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const review = normalized.roundEndReview;
   if (!review || review.roundNumber !== normalized.roundNumber) {
     throw new RangeError("Round-end review has not been prepared.");
@@ -16475,7 +16518,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
   const nextContests = review.continuedContactMaintenanceContests.map((entry) =>
     entry.id === resolved.id ? resolved : entry,
   );
-  let nextState = combatRoundStateSchema.parse({
+  let nextState = parseCombatRoundState({
     ...normalized,
     continuedContacts: nextContacts,
     roundEndReview: {
@@ -16485,7 +16528,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
     unbalancedConditions: nextConditions,
   });
   if (nextContests.every((entry) => entry.status !== "awaiting_rolls")) {
-    nextState = combatRoundStateSchema.parse({
+    nextState = parseCombatRoundState({
       ...nextState,
       roundEndReview: {
         ...nextState.roundEndReview!,
@@ -16536,7 +16579,7 @@ export function recordContinuedContactMaintenanceRoll(input: {
     step: "SU",
     type: "roll_continued_contact_maintenance",
   });
-  nextState = combatRoundStateSchema.parse({
+  nextState = parseCombatRoundState({
     ...nextState,
     commands: [...nextState.commands, command],
     currentCursor: afterCursor,
@@ -16900,7 +16943,7 @@ export function commitCombatRoundEndParticipantReview(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const roundEndReview = normalized.roundEndReview;
   const participantReview = roundEndReview?.participantReviews[input.participantId];
 
@@ -17037,7 +17080,7 @@ export function commitCombatRoundEndParticipantReview(input: {
     },
   });
 
-  let nextState = combatRoundStateSchema.parse({
+  let nextState = parseCombatRoundState({
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: afterCursor,
@@ -17218,7 +17261,7 @@ export function rollCombatRoundEndHealthCheck(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const currentCombatEffects = combatEffectsStateSchema.parse(input.combatEffects);
   const roundEndReview = normalized.roundEndReview;
   const participantReview = roundEndReview?.participantReviews[input.participantId];
@@ -17498,7 +17541,7 @@ export function rollCombatRoundEndHealthCheck(input: {
         step: "round_summary",
         type: "health_check",
       },
-      state: combatRoundStateSchema.parse({
+      state: parseCombatRoundState({
         ...normalized,
         commands: [...normalized.commands, command],
         currentCursor: afterCursor,
@@ -17589,7 +17632,7 @@ export function rollCombatRoundEndDistanceControl(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const roundEndReview = normalized.roundEndReview;
 
   if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
@@ -17734,7 +17777,7 @@ export function rollCombatRoundEndDistanceControl(input: {
           : distanceProposal.participantAId,
       type: "distance_control_roll",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...normalized,
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
@@ -17803,7 +17846,7 @@ export function commitCombatRoundEndDistanceControl(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const roundEndReview = normalized.roundEndReview;
 
   if (!roundEndReview || roundEndReview.roundNumber !== normalized.roundNumber) {
@@ -17959,7 +18002,7 @@ export function commitCombatRoundEndDistanceControl(input: {
     type: commandType,
   });
 
-  let stateWithEvents = combatRoundStateSchema.parse({
+  let stateWithEvents = parseCombatRoundState({
     ...normalized,
     commands: [...normalized.commands, command],
     currentCursor: afterCursor,
@@ -18119,7 +18162,7 @@ function buildCombatRoundOperationalCancelledActions(input: {
   damageResult: CombatRoundDamageResult;
   state: CombatRoundState;
 }): CombatRoundOperationalCancelledAction[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const sourceInitiativeGroup = getCombatRoundCurrentInitiativeExecutionGroup({
     phase: input.damageResult.phase,
     state: normalized,
@@ -18288,10 +18331,10 @@ function applyCombatRoundOperationalActionCancellations(input: {
   updatedAt: string;
 }): CombatRoundState {
   if (input.cancelledActions.length === 0) {
-    return combatRoundStateSchema.parse(input.state);
+    return parseCombatRoundState(input.state);
   }
 
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const cancelledByParticipant = new Map<string, CombatRoundOperationalCancelledAction[]>();
   const phaseResolutionStatuses: CombatRoundPhaseResolutionStatuses = {
     ...normalized.phaseResolutionStatuses,
@@ -18311,7 +18354,7 @@ function applyCombatRoundOperationalActionCancellations(input: {
     };
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     phaseResolutionCursor:
       normalized.phaseResolutionCursor &&
@@ -18537,7 +18580,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const initiativeGroup = getCombatRoundCurrentInitiativeExecutionGroup({
     phase: input.damageResult.phase,
     state: normalized,
@@ -18580,7 +18623,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
     });
   const stateForCompletion =
     cancelledActions.length > 0
-      ? combatRoundStateSchema.parse({
+      ? parseCombatRoundState({
           ...stateWithOperationalCancellations,
           commands: [
             ...stateWithOperationalCancellations.commands.filter(
@@ -18877,7 +18920,7 @@ function recordCombatRoundCommitPhaseDamageCommand(input: {
       targetParticipantId: input.damageResult.defenderParticipantId,
       type: "damage_committed",
     },
-    state: combatRoundStateSchema.parse(stateWithCommittedProposal),
+    state: parseCombatRoundState(stateWithCommittedProposal),
   });
 
   return {
@@ -18891,7 +18934,7 @@ function getCombatRoundAttackResultForAttackResultId(input: {
   attackResultId: string;
   state: CombatRoundState;
 }): CombatRoundAttackRollResult | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   return getCombatRoundAttackResultById({
     attackResultId: input.attackResultId,
     state: normalized,
@@ -18906,7 +18949,7 @@ function getCombatRoundPhaseDamageCommitTarget(input: {
   damageResult?: CombatRoundDamageResult;
   resolution?: CombatRoundPhaseResolutionResult;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   if (input.attackResultId) {
     const resolution = normalized.phaseResolutionResults.find(
@@ -19001,7 +19044,7 @@ function getCombatRoundPhaseDamageCommitReadinessDetail(input: {
   damageResult?: CombatRoundDamageResult;
   resolution?: CombatRoundPhaseResolutionResult;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const target = getCombatRoundPhaseDamageCommitTarget({
     attackResultId: input.attackResultId,
     state: normalized,
@@ -19167,7 +19210,7 @@ export function commitCombatRoundPhaseDamage(input: {
   command: CombatRoundCommand;
   state: CombatRoundState;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const readiness = getCombatRoundPhaseDamageCommitReadinessDetail({
     attackResultId: input.attackResultId,
     state: normalized,
@@ -19218,7 +19261,7 @@ function recordCombatRoundDamageReviewCommand(input: {
   };
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.attackResult.defenderParticipantId,
     roundNumber: normalized.roundNumber,
@@ -19288,7 +19331,7 @@ export function recordCombatRoundDamageReviewPlaceholder(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const resolution = getCombatRoundPhaseResolutionResultForAttack({
     attackResult: input.attackResult,
     state: normalized,
@@ -19776,7 +19819,7 @@ function buildCompletedCombatRound(input: {
   completedByUserId?: string;
   state: CombatRoundState;
 }): CompletedCombatRound {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return completedCombatRoundSchema.parse({
     adjustDistanceProposals: normalized.adjustDistanceProposals,
@@ -19857,7 +19900,7 @@ function getUnsupportedCombatRoundPhaseStepRecoveryCursor(input: {
     return undefined;
   }
 
-  const recoveryState = combatRoundStateSchema.parse({
+  const recoveryState = parseCombatRoundState({
     commands: input.commands,
     currentCursor: input.currentCursor,
     currentStep: input.currentStep,
@@ -19948,7 +19991,7 @@ export function initializeCombatRoundState(input: {
   weaponsByParticipantId?: Record<string, readonly (CombatDistanceWeaponLike | undefined | null)[]>;
 }): CombatRoundState {
   const parsedExisting = input.encounter.combatRoundState
-    ? combatRoundStateSchema.parse(input.encounter.combatRoundState)
+    ? parseCombatRoundState(input.encounter.combatRoundState)
     : undefined;
   const existing =
     parsedExisting?.encounterId && parsedExisting.encounterId !== input.encounter.id
@@ -20180,7 +20223,7 @@ export function initializeCombatRoundState(input: {
       ? getCombatRoundCursorForPhaseResolutionCursor({
           cursor: existingPhaseResolutionCursor,
           roundNumber,
-          state: combatRoundStateSchema.parse({
+          state: parseCombatRoundState({
             ...existing,
             commands,
             currentStep,
@@ -20364,7 +20407,7 @@ export function upsertCombatRoundStepSnapshots(input: {
   snapshots: CombatRoundStepSnapshot[];
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const nextSnapshots = input.snapshots.map((snapshot) =>
     combatRoundStepSnapshotSchema.parse(snapshot),
   );
@@ -20389,7 +20432,7 @@ export function getCombatRoundStepSnapshot(input: {
   state: CombatRoundState;
   step?: CombatRoundStep;
 }): CombatRoundStepSnapshot | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participantId = input.participantId ?? normalized.selectedParticipantId;
   const roundNumber = input.roundNumber ?? normalized.roundNumber;
   const step = input.step ?? normalized.selectedStep ?? normalized.currentStep;
@@ -20458,7 +20501,7 @@ export function advanceCombatRoundStep(
     visibility?: CombatRoundVisibility;
   } = {},
 ): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const advanceCommand = input.command;
   const startsNextRound = normalized.currentStep === "round_summary";
 
@@ -20495,7 +20538,7 @@ export function advanceCombatRoundStep(
       getFirstCombatStartExperienceRequiredParticipantId(normalized);
 
     if (combatExperienceParticipantId) {
-      return combatRoundStateSchema.parse({
+      return parseCombatRoundState({
         ...normalized,
         currentCursor: getDefaultCombatRoundCursor({
           participantId: combatExperienceParticipantId,
@@ -20512,7 +20555,7 @@ export function advanceCombatRoundStep(
       getFirstCombatRoundDeclarationRequiredParticipantId(normalized);
 
     if (declarationParticipantId) {
-      return combatRoundStateSchema.parse({
+      return parseCombatRoundState({
         ...normalized,
         currentCursor: getDefaultCombatRoundCursor({
           participantId: declarationParticipantId,
@@ -20600,7 +20643,7 @@ export function advanceCombatRoundStep(
   const nextGlobalParticipantId = withSnapshots.participants[0]?.participantId;
 
   if (startsNextRound) {
-    const completedRoundState = combatRoundStateSchema.parse({
+    const completedRoundState = parseCombatRoundState({
       ...withSnapshots,
       currentCursor:
         withSnapshots.currentCursor ??
@@ -20632,7 +20675,7 @@ export function advanceCombatRoundStep(
     );
     const nextParticipantId = nextParticipants[0]?.participantId;
 
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...completedRoundState,
       activeParticipantId: undefined,
       combatExperienceDifficulty: undefined,
@@ -20784,7 +20827,7 @@ function interruptParticipantMissileReadinessForSubstantialAction(input: {
   const previousIds = new Set(previousReadiness.map((entry) => entry.id));
   return {
     previousReadiness,
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...input.state,
       missileReadiness: input.state.missileReadiness.map((entry) =>
         previousIds.has(entry.id)
@@ -20838,7 +20881,7 @@ export function recordCombatRoundDeclaration(input: {
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
-  const normalizedInput = combatRoundStateSchema.parse(input.state);
+  const normalizedInput = parseCombatRoundState(input.state);
   const previousParticipant = normalizedInput.participants.find(
     (participant) => participant.participantId === input.participantId,
   );
@@ -20888,7 +20931,7 @@ export function recordCombatRoundDeclaration(input: {
       : withStatus;
   }
 
-  const normalized = combatRoundStateSchema.parse(withStatus);
+  const normalized = parseCombatRoundState(withStatus);
   const declaration = synchronizeCombatRoundAdjustDistanceDeclarationTarget(
     synchronizeCombatRoundFeintDeclarationTarget(
       combatRoundDeclarationSchema.parse({
@@ -21142,7 +21185,7 @@ function replaceCombatRoundFeintProposal(input: {
   proposal: CombatFeintProposal;
   state: CombatRoundState;
 }): CombatRoundState {
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...input.state,
     feintProposals: [
       ...input.state.feintProposals.filter((proposal) => proposal.id !== input.proposal.id),
@@ -21179,7 +21222,7 @@ function replaceCombatRoundAdjustDistanceProposal(input: {
   proposal: CombatAdjustDistanceProposal;
   state: CombatRoundState;
 }): CombatRoundState {
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...input.state,
     adjustDistanceProposals: [
       ...input.state.adjustDistanceProposals.filter(
@@ -21212,7 +21255,7 @@ function replaceCombatRoundBreakOffProposal(input: {
   proposal: CombatBreakOffProposal;
   state: CombatRoundState;
 }): CombatRoundState {
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...input.state,
     breakOffProposals: input.state.breakOffProposals.map((proposal) =>
       proposal.id === input.proposal.id ? input.proposal : proposal,
@@ -21231,7 +21274,7 @@ function openCombatRoundBreakOffForActionTurn(input: {
   if (!proposals.some((proposal) => proposal.status === "awaiting_action_turn")) {
     return input.state;
   }
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...input.state,
     breakOffProposals: input.state.breakOffProposals.map((proposal) =>
       proposal.escapeeParticipantId === input.participantId &&
@@ -21317,7 +21360,7 @@ function recordCombatRoundBreakOffCommand(input: {
       targetParticipantId: input.proposal.attackerParticipantId,
       type: input.eventType,
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...input.state,
       commands: [...input.state.commands, command],
       currentCursor: afterCursor,
@@ -21336,7 +21379,7 @@ export function reviewCombatRoundBreakOff(input: {
   proposalId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.breakOffProposals.find(
     (proposal) => proposal.id === input.proposalId,
   );
@@ -21376,7 +21419,7 @@ export function recordCombatRoundBreakOffRoll(input: {
   result: CombatBreakOffRoll;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.breakOffProposals.find(
     (proposal) => proposal.id === input.proposalId,
   );
@@ -21474,7 +21517,7 @@ export function commitCombatRoundBreakOff(input: {
   proposalId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.breakOffProposals.find(
     (proposal) => proposal.id === input.proposalId,
   );
@@ -21538,7 +21581,7 @@ export function commitCombatRoundBreakOff(input: {
   let next = replaceCombatRoundBreakOffProposal({ proposal, state: normalized });
   if (result.escaped) {
     const [participantAId, participantBId] = proposal.pairKey.split("::");
-    next = combatRoundStateSchema.parse({
+    next = parseCombatRoundState({
       ...next,
       engagements: [
         ...next.engagements.filter((engagement) => engagement.pairKey !== proposal.pairKey),
@@ -21651,7 +21694,7 @@ export function getCombatBreakOffPairConsequence(input: {
   defenderParticipantId: string;
   state: CombatRoundState;
 }): { attackerObModifier: number; defenderDbParryModifier: number; disengaged: boolean } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const pairKey = makeDistancePairKey(input.attackerParticipantId, input.defenderParticipantId);
   const committed = normalized.breakOffProposals.find(
     (proposal) =>
@@ -21675,7 +21718,7 @@ function replaceCombatRoundDisarmAttempt(input: {
   attempt: CombatDisarmAttempt;
   state: CombatRoundState;
 }): CombatRoundState {
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...input.state,
     disarmAttempts: input.state.disarmAttempts.map((attempt) =>
       attempt.id === input.attempt.id ? input.attempt : attempt,
@@ -21751,7 +21794,7 @@ function recordCombatRoundDisarmCommand(input: {
       targetParticipantId: input.attempt.resistingParticipantId,
       type: input.eventType,
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...input.state,
       commands: [...input.state.commands, command],
     }),
@@ -21767,7 +21810,7 @@ export function openCombatRoundDisarmAfterContact(input: {
   parryResultId?: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAttempt = normalized.disarmAttempts.find(
     (attempt) => attempt.id === input.attemptId,
   );
@@ -21825,7 +21868,7 @@ export function cancelCombatRoundDisarmWithoutContact(input: {
   reason: "no_incoming_attack" | "parry_failed" | "proactive_attack_missed";
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAttempt = normalized.disarmAttempts.find(
     (attempt) => attempt.id === input.attemptId,
   );
@@ -21875,7 +21918,7 @@ export function recordCombatRoundDisarmRoll(input: {
   result: CombatDisarmRoll;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAttempt = normalized.disarmAttempts.find(
     (attempt) => attempt.id === input.attemptId,
   );
@@ -21972,7 +22015,7 @@ export function commitCombatRoundDisarm(input: {
   command: { commandId?: string; createdAt: string; createdByUserId?: string };
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAttempt = normalized.disarmAttempts.find(
     (attempt) => attempt.id === input.attemptId,
   );
@@ -21996,7 +22039,7 @@ export function commitCombatRoundDisarm(input: {
         status: "active",
       })
     : undefined;
-  const next = combatRoundStateSchema.parse({
+  const next = parseCombatRoundState({
     ...replaceCombatRoundDisarmAttempt({ attempt, state: normalized }),
     disarmUnbalancedConditions: condition
       ? [
@@ -22149,7 +22192,7 @@ export function respondCombatRoundAdjustDistance(input: {
   response: "oppose" | "allow";
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.adjustDistanceProposals.find(
     (p) => p.id === input.proposalId,
   );
@@ -22211,7 +22254,7 @@ export function respondCombatRoundAdjustDistance(input: {
       step: "phase_1_actions",
       type: "adjust_distance_response",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...replaceCombatRoundAdjustDistanceProposal({ proposal, state: normalized }),
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
@@ -22230,7 +22273,7 @@ export function reviewCombatRoundAdjustDistanceRollAdjustment(input: {
   state: CombatRoundState;
   value: number;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.adjustDistanceProposals.find(
     (p) => p.id === input.proposalId,
   );
@@ -22311,9 +22354,7 @@ function recordAdjustDistanceCommand(input: {
     roundNumber: input.state.roundNumber,
     step: "A1" as const,
   };
-  const resultState = input.resultState
-    ? combatRoundStateSchema.parse(input.resultState)
-    : input.state;
+  const resultState = input.resultState ? parseCombatRoundState(input.resultState) : input.state;
   const afterCursor = resultState.currentCursor ?? {
     ...beforeCursor,
     participantId: input.participantId,
@@ -22363,7 +22404,7 @@ function recordAdjustDistanceCommand(input: {
       step: "phase_1_actions",
       type: input.draftType,
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...replaceCombatRoundAdjustDistanceProposal({ proposal: input.proposal, state: resultState }),
       commands: [...input.state.commands, command],
       currentCursor: afterCursor,
@@ -22380,7 +22421,7 @@ export function recordCombatRoundAdjustDistanceRoll(input: {
   result: CombatAdjustDistanceRollResult;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.adjustDistanceProposals.find(
     (p) => p.id === input.proposalId,
   );
@@ -22502,7 +22543,7 @@ export function commitCombatRoundAdjustDistance(input: {
   proposalId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.adjustDistanceProposals.find(
     (p) => p.id === input.proposalId,
   );
@@ -22517,7 +22558,7 @@ export function commitCombatRoundAdjustDistance(input: {
     status: "committed",
   });
   let nextState = replaceCombatRoundAdjustDistanceProposal({ proposal, state: normalized });
-  nextState = combatRoundStateSchema.parse({
+  nextState = parseCombatRoundState({
     ...nextState,
     distanceState: setDistanceBetween({
       distance: committedDistance,
@@ -22598,7 +22639,7 @@ export function reviewCombatRoundFeintFeasibility(input: {
   proposalId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.feintProposals.find(
     (proposal) => proposal.id === input.proposalId,
   );
@@ -22627,7 +22668,7 @@ export function reviewCombatRoundFeintFeasibility(input: {
           state: nextState,
           updatedAt: input.command.createdAt,
         })
-      : combatRoundStateSchema.parse({
+      : parseCombatRoundState({
           ...nextState,
           currentCursor: {
             participantId: proposal.attackerParticipantId,
@@ -22685,7 +22726,7 @@ export function reviewCombatRoundFeintFeasibility(input: {
       step: "phase_1_actions",
       type: input.feasibility === "impossible" ? "feint_impossible" : "feint_feasibility",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...nextState,
       commands: [...nextState.commands, command],
     }),
@@ -22699,7 +22740,7 @@ export function recordCombatRoundFeintRoll(input: {
   state: CombatRoundState;
   tableResult?: CombatFeintTableResult;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.feintProposals.find(
     (proposal) => proposal.id === input.proposalId,
   );
@@ -22789,7 +22830,7 @@ export function recordCombatRoundFeintRoll(input: {
     type: "roll_feint",
   });
   let nextState = replaceCombatRoundFeintProposal({ proposal, state: normalized });
-  nextState = combatRoundStateSchema.parse({
+  nextState = parseCombatRoundState({
     ...nextState,
     commands: [...nextState.commands, command],
     currentCursor: afterCursor,
@@ -22958,7 +22999,7 @@ export function commitCombatRoundFeintResult(input: {
   proposalId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousProposal = normalized.feintProposals.find(
     (proposal) => proposal.id === input.proposalId,
   );
@@ -23012,7 +23053,7 @@ export function commitCombatRoundFeintResult(input: {
         }
       : participant;
   let nextState = replaceCombatRoundFeintProposal({ proposal, state: normalized });
-  nextState = combatRoundStateSchema.parse({
+  nextState = parseCombatRoundState({
     ...nextState,
     participants: nextState.participants.map((participant) =>
       participant.participantId === proposal.attackerParticipantId
@@ -23141,7 +23182,7 @@ export function commitCombatRoundFeintResult(input: {
       step: "phase_1_actions",
       type: "feint_committed",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...nextState,
       commands: [...nextState.commands, command],
     }),
@@ -23152,7 +23193,7 @@ export function getCombatRoundDoubleAttackPhase2Decision(input: {
   participantId: string;
   state: CombatRoundState;
 }): "continue" | "cancel" | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   for (let index = normalized.commands.length - 1; index >= 0; index -= 1) {
     const command = normalized.commands[index];
     if (
@@ -23172,7 +23213,7 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
   participantId: string;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -23330,7 +23371,7 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
   const reofferModifierReview = supersededModifierRowIds.length > 0;
   const previousModifierReviewStepStatus = participant.stepStatuses.review_phase_2_modifiers;
   const stateWithReofferedReview = reofferModifierReview
-    ? combatRoundStateSchema.parse({
+    ? parseCombatRoundState({
         ...normalized,
         participants: normalized.participants.map((entry) =>
           entry.participantId === input.participantId
@@ -23387,7 +23428,7 @@ export function decideCombatRoundDoubleAttackPhase2(input: {
     type: "decide_double_attack_phase2",
   });
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...stateWithReofferedReview,
     commands: [...normalized.commands, command],
     currentCursor: afterCursor,
@@ -23464,7 +23505,7 @@ function appendCombatRoundInitiativeEvent(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const initiative = normalized.participants.find(
     (participant) => participant.participantId === input.participantId,
   )?.initiatives[input.phase];
@@ -23592,7 +23633,7 @@ export function recordCombatRoundInitiative(input: {
   });
   const selectedStep = getCombatRoundStepForCursorStep(command.afterCursor.step);
 
-  const stateWithCommand = combatRoundStateSchema.parse({
+  const stateWithCommand = parseCombatRoundState({
     ...stateAfterCompletedInitiative,
     commands: [...withStatus.commands, command],
     currentCursor: command.afterCursor,
@@ -23637,7 +23678,7 @@ function recordCombatRoundAttackCommand(input: {
   result: CombatRoundAttackRollResult;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const beforeCursor = combatRoundCursorSchema.parse({
     participantId: input.participantId,
     roundNumber: normalized.roundNumber,
@@ -23808,7 +23849,7 @@ export function getCombatRoundPendingMissileIncomingAttack(input: {
   opportunityId: string;
   state: CombatRoundState;
 }): CombatMissileIncomingAttack | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   for (const command of [...normalized.commands].reverse()) {
     if (
       command.roundNumber !== normalized.roundNumber ||
@@ -23827,7 +23868,7 @@ export function getCombatRoundPendingMissileIncomingAttackById(input: {
   attackId: string;
   state: CombatRoundState;
 }): CombatMissileIncomingAttack | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   for (const command of [...normalized.commands].reverse()) {
     if (command.roundNumber !== normalized.roundNumber || command.type !== "roll_attack") {
       continue;
@@ -23852,7 +23893,7 @@ export function getCombatRoundPendingMissileIncomingAttackForParticipantPhase(in
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatMissileIncomingAttack | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   for (let index = normalized.commands.length - 1; index >= 0; index -= 1) {
     const command = normalized.commands[index];
     if (command?.type !== "roll_attack") continue;
@@ -23922,7 +23963,7 @@ function replaceCombatRoundAttackResultInAuthority(input: {
     throw new RangeError("Reviewed attack result identity changed during defense review.");
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...input.state,
     participants: input.state.participants.map((participant) => {
       if (participant.participantId !== input.previous.attackerParticipantId) return participant;
@@ -24071,7 +24112,7 @@ function recordCombatRoundPhaseResolutionMissWithoutReview(input: {
       updatedAt: input.updatedAt,
     }),
   );
-  const withResolution = combatRoundStateSchema.parse({
+  const withResolution = parseCombatRoundState({
     ...input.state,
     phaseResolutionResults: [
       ...input.state.phaseResolutionResults.filter(
@@ -24108,7 +24149,7 @@ export function recordCombatRoundDefenseReview(input: {
   snapshot: CombatDefenseSnapshot;
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const snapshot = combatDefenseSnapshotSchema.parse({
     ...input.snapshot,
     eventSequence: getCombatRoundNextEventSequence(normalized),
@@ -24187,7 +24228,7 @@ export function recordCombatRoundDefenseReview(input: {
     defenseSnapshotId: snapshot.id,
     updatedAt: snapshot.reviewedAt,
   });
-  const withReview = combatRoundStateSchema.parse({
+  const withReview = parseCombatRoundState({
     ...withAttackResult,
     defenseSnapshots: [...withAttackResult.defenseSnapshots, snapshot],
     phaseResolutionResults: [
@@ -24239,7 +24280,7 @@ export function recordCombatRoundDefenseReview(input: {
               substep: nextSubstep,
             }),
           });
-          return combatRoundStateSchema.parse({
+          return parseCombatRoundState({
             ...state,
             currentCursor: cursor,
             currentStep: getCombatRoundStepForCursorStep(cursor.step),
@@ -24320,7 +24361,7 @@ export function recordCombatRoundDefenseReview(input: {
       targetParticipantId: snapshot.attackerParticipantId,
       type: "attack",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...withNextState,
       commands: [...withNextState.commands, command],
     }),
@@ -24340,7 +24381,7 @@ export function recordCombatRoundMissileShot(input: {
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const attack = combatMissileIncomingAttackSchema.parse(input.attack);
   if (attack.attackerParticipantId !== input.participantId) {
     throw new RangeError("Missile shot attacker does not match the acting participant.");
@@ -24383,7 +24424,7 @@ export function recordCombatRoundMissileShot(input: {
   const previousAttackPhaseDefensivePenalties = normalized.participants.find(
     (participant) => participant.participantId === input.participantId,
   )?.declaration?.attackPhaseDefensivePenalties;
-  const withReadiness = combatRoundStateSchema.parse({
+  const withReadiness = parseCombatRoundState({
     ...normalized,
     missileReadiness: readinessAfterShot,
     participants: normalized.participants.map((participant) =>
@@ -24493,7 +24534,7 @@ export function recordCombatRoundMissileShot(input: {
       targetParticipantId: attack.defenderParticipantId,
       type: "attack",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...advanced,
       commands: [...advanced.commands, command],
       currentCursor: afterCursor,
@@ -24527,7 +24568,7 @@ export function recordCombatRoundAttackResult(input: {
   submittedBy: "gm" | "player";
 }): CombatRoundState {
   const attackStep = input.result.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const opportunity = input.result.attackOpportunityId
     ? getCombatRoundPhaseAttackCandidates({
         phase: input.result.phase,
@@ -24726,7 +24767,7 @@ export function interruptCombatRoundMissileReadiness(input: {
   state: CombatRoundState;
   weaponItemId?: string;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousReadiness = normalized.missileReadiness.filter(
     (entry) =>
       entry.participantId === input.participantId &&
@@ -24798,7 +24839,7 @@ export function interruptCombatRoundMissileReadiness(input: {
       step: normalized.currentStep,
       type: "missile_readiness",
     },
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...normalized,
       commands: [...normalized.commands, command],
       missileReadiness: normalized.missileReadiness.map((entry) =>
@@ -24817,7 +24858,7 @@ export function progressCombatRoundMissileReadiness(input: {
   state: CombatRoundState;
   submittedBy: "gm" | "player";
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const opportunity = getCombatRoundPhaseAttackCandidates({
     phase: input.phase,
     state: normalized,
@@ -24870,7 +24911,7 @@ export function progressCombatRoundMissileReadiness(input: {
   const previousActionStepStatus = normalized.participants.find(
     (participant) => participant.participantId === input.participantId,
   )?.stepStatuses[actionStep];
-  const withReadiness = combatRoundStateSchema.parse({
+  const withReadiness = parseCombatRoundState({
     ...normalized,
     missileReadiness: [
       ...normalized.missileReadiness.filter((candidate) => candidate.id !== readiness.id),
@@ -24958,7 +24999,7 @@ export function progressCombatRoundMissileReadiness(input: {
       targetParticipantId: readiness.targetParticipantId,
       type: "missile_readiness",
     },
-    state: combatRoundStateSchema.parse({ ...advanced, commands: [...advanced.commands, command] }),
+    state: parseCombatRoundState({ ...advanced, commands: [...advanced.commands, command] }),
   });
 }
 
@@ -25196,7 +25237,7 @@ export function completeRemainingCombatRoundStep(input: {
   playerOwnedParticipantIds?: ReadonlySet<string>;
   state: CombatRoundState;
 }): CombatRoundBulkStepCompletionResult {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const modifierStep =
     input.phase === "phase1" ? "review_action_modifiers" : "review_phase_2_modifiers";
   const initiativeStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
@@ -25382,7 +25423,7 @@ export function completeRemainingCombatRoundStep(input: {
     blocker,
     command,
     completedParticipantIds,
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...normalized,
       commands: [...normalized.commands, command],
       currentCursor: afterCursor,
@@ -25504,7 +25545,7 @@ function clearCombatRoundStepLegacy(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): CombatRoundState {
-  const parsed = combatRoundStateSchema.parse(input.state);
+  const parsed = parseCombatRoundState(input.state);
   const selectedParticipantId =
     parsed.selectedParticipantId &&
     parsed.participants.some(
@@ -25861,7 +25902,7 @@ export function undoLatestCombatRoundGlobalParticipantCommand(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const commandType = getCombatRoundGlobalCommandTypeForStep(input.step);
   const participantId =
     input.participantId ??
@@ -25932,7 +25973,7 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -25972,7 +26013,7 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
     const previousGmBacktrackHold = combatRoundGmBacktrackHoldSchema.safeParse(
       command.facts.previousGmBacktrackHold,
     );
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...baseState,
       gmBacktrackHold: previousGmBacktrackHold.success ? previousGmBacktrackHold.data : undefined,
       participants: previousDeclaration.success
@@ -25999,7 +26040,7 @@ function undoCombatRoundGlobalCommandAtIndex(input: {
   const previousDisarmAttempts = z
     .array(combatDisarmAttemptSchema)
     .safeParse(command.facts.previousDisarmAttempts);
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...baseState,
     breakOffProposals: previousBreakOffProposals.success
       ? [
@@ -26050,7 +26091,7 @@ function undoCombatRoundAttackCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26134,7 +26175,7 @@ function undoCombatRoundMissileReadinessInterruptionCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (!command || command.type !== "interrupt_missile_readiness") return undefined;
   const previousReadiness = z
@@ -26146,7 +26187,7 @@ function undoCombatRoundMissileReadinessInterruptionCommandAtIndex(input: {
     commandId: command.id,
     state: normalized,
   });
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...withoutEvents,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -26161,7 +26202,7 @@ function undoCombatRoundMissileReadinessCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -26186,7 +26227,7 @@ function undoCombatRoundMissileReadinessCommandAtIndex(input: {
     commandId: command.id,
     state: normalized,
   });
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...withoutEvents,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -26231,7 +26272,7 @@ function undoCombatRoundDoubleAttackPhase2DecisionCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -26249,7 +26290,7 @@ function undoCombatRoundDoubleAttackPhase2DecisionCommandAtIndex(input: {
   const previousModifierReviewStepStatus = combatRoundStepStatusSchema
     .nullable()
     .safeParse(command.facts.previousModifierReviewStepStatus);
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -26281,7 +26322,7 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26370,7 +26411,7 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
   const outstandingCombatExperienceParticipantId =
     restoresCombatExperienceDue && normalized.roundNumber > 1
       ? getFirstCombatStartExperienceRequiredParticipantId(
-          combatRoundStateSchema.parse({
+          parseCombatRoundState({
             ...normalized,
             currentStep: "pre_declaration",
             participants: participantsAfterUndo,
@@ -26381,7 +26422,7 @@ function undoCombatRoundCombatExperienceCommandAtIndex(input: {
     ? "pre_declaration"
     : selectedStep;
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: outstandingCombatExperienceParticipantId
@@ -26410,7 +26451,7 @@ function undoCombatRoundPairDistanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26442,7 +26483,7 @@ function undoCombatRoundPairDistanceCommandAtIndex(input: {
 
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -26459,7 +26500,7 @@ function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26485,7 +26526,7 @@ function undoCombatRoundPhaseInitiativeChoiceCommandAtIndex(input: {
     command.facts.previousAttackPhaseDefensivePenalty,
   );
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -26563,7 +26604,7 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26651,7 +26692,7 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
       return restored;
     };
 
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...normalized,
       adjustDistanceProposals: restoreProposalOrder(
         normalized.adjustDistanceProposals,
@@ -26682,7 +26723,7 @@ function undoCombatRoundPhaseInitiativeResolutionCommitCommandAtIndex(input: {
 
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     // #875: as above — the record goes with the command it was written by.
@@ -26701,7 +26742,7 @@ function undoCombatRoundBulkStepCompletionCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26749,7 +26790,7 @@ function undoCombatRoundBulkStepCompletionCommandAtIndex(input: {
     return { ...participant, declaration, initiatives, stepStatuses };
   });
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: undo.navigation.currentCursor ?? undefined,
@@ -26764,7 +26805,7 @@ function undoCombatRoundPhaseActionSkipCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26908,7 +26949,7 @@ function undoCombatRoundBackOutPhaseAttackCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -26961,7 +27002,7 @@ function undoCombatRoundBackOutPhaseAttackCommandAtIndex(input: {
     };
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -27006,7 +27047,7 @@ function undoCombatRoundParryCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (!command || command.roundNumber !== normalized.roundNumber || command.type !== "roll_parry") {
@@ -27111,7 +27152,7 @@ function undoCombatRoundDefenseReviewCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -27189,7 +27230,7 @@ function undoCombatRoundDefenseReviewCommandAtIndex(input: {
           : resolution,
       );
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...withoutEvents,
     commands: withoutEvents.commands.filter((candidate) => candidate.id !== command.id),
     currentCursor: command.beforeCursor,
@@ -27223,7 +27264,7 @@ function undoCombatRoundDamageReviewCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27345,7 +27386,7 @@ function undoCombatRoundHitLocationRollCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27425,7 +27466,7 @@ function undoCombatRoundCriticalRollCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27523,7 +27564,7 @@ function undoCombatRoundCommittedDamageCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27655,7 +27696,7 @@ function undoCombatRoundResolvedDamageCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27762,7 +27803,7 @@ function undoCombatRoundEndReviewPrepareCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27773,7 +27814,7 @@ function undoCombatRoundEndReviewPrepareCommandAtIndex(input: {
     return undefined;
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -27795,7 +27836,7 @@ function undoCombatRoundEndParticipantReviewCommitCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27865,7 +27906,7 @@ function undoCombatRoundEndParticipantReviewCommitCommandAtIndex(input: {
     }
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -27900,7 +27941,7 @@ function undoCombatRoundEndHealthCheckCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27937,7 +27978,7 @@ function undoCombatRoundEndHealthCheckCommandAtIndex(input: {
     status: "health_roll_pending",
   });
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -27969,7 +28010,7 @@ function undoCombatRoundEndDistanceControlCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -27997,7 +28038,7 @@ function undoCombatRoundEndDistanceControlCommandAtIndex(input: {
     proposal.id === distanceProposalId ? previousProposal.data : proposal,
   );
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28026,7 +28067,7 @@ function undoCombatRoundEndDistanceControlCommitCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (
@@ -28068,7 +28109,7 @@ function undoCombatRoundEndDistanceControlCommitCommandAtIndex(input: {
     delete distanceEdges[pairKey];
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28088,7 +28129,7 @@ function undoCombatRoundEndDistanceControlCommitCommandAtIndex(input: {
 export function undoLatestCombatRoundGlobalCommand(input: {
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const commandIndex = getLatestCombatRoundGlobalCommandIndex({
     roundNumber: normalized.roundNumber,
     state: normalized,
@@ -28109,7 +28150,7 @@ function undoCombatRoundFeintCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -28143,7 +28184,7 @@ function undoCombatRoundFeintCommandAtIndex(input: {
       }),
     };
   };
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28183,7 +28224,7 @@ function undoCombatRoundAdjustDistanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -28203,7 +28244,7 @@ function undoCombatRoundAdjustDistanceCommandAtIndex(input: {
   const previousDistanceState = combatDistanceStateSchema.safeParse(
     command.facts.previousDistanceState,
   );
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28239,7 +28280,7 @@ function undoCombatRoundBreakOffCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -28273,7 +28314,7 @@ function undoCombatRoundBreakOffCommandAtIndex(input: {
     commandId: command.id,
     state: normalized,
   });
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...stateWithoutEvents,
     breakOffProposals: normalized.breakOffProposals.map((proposal) =>
       proposal.id === previousProposal.data.id ? previousProposal.data : proposal,
@@ -28312,7 +28353,7 @@ function undoCombatRoundDisarmCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (
     !command ||
@@ -28328,7 +28369,7 @@ function undoCombatRoundDisarmCommandAtIndex(input: {
     commandId: command.id,
     state: normalized,
   });
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...stateWithoutEvents,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28351,7 +28392,7 @@ function undoCombatRoundOffensiveParryBrawlingCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (!command || command.type !== "roll_offensive_parry_brawling") return undefined;
 
@@ -28381,7 +28422,7 @@ function undoCombatRoundOffensiveParryBrawlingCommandAtIndex(input: {
       ? command.facts.previousSelectedParticipantId
       : undefined;
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     continuedContacts: normalized.continuedContacts.filter(
@@ -28412,7 +28453,7 @@ function undoContinuedContactMaintenanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (!command || command.type !== "roll_continued_contact_maintenance") return undefined;
   const previousContest = continuedContactMaintenanceContestSchema.safeParse(
@@ -28437,7 +28478,7 @@ function undoContinuedContactMaintenanceCommandAtIndex(input: {
   ) {
     return undefined;
   }
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     continuedContacts: normalized.continuedContacts.map((contact) =>
@@ -28464,7 +28505,7 @@ function undoCombatObservationCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (!command || command.type !== "roll_observation") return undefined;
   const relationshipId =
@@ -28520,7 +28561,7 @@ function undoCombatObservationCommandAtIndex(input: {
       );
     }
   }
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...stateWithoutRollEvents,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28539,7 +28580,7 @@ function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (!command || command.type !== "advance_combat_boundary") return undefined;
 
@@ -28554,7 +28595,7 @@ function undoCombatProgressionBoundaryAdvanceCommandAtIndex(input: {
     command.facts.previousGmBacktrackHold,
   );
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,
@@ -28571,7 +28612,7 @@ function undoCombatRoundCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
 
   if (!command) {
@@ -28789,7 +28830,7 @@ function undoCombatRoundCommandAtIndex(input: {
 
   if (command.type === "transition_critical_bleed") {
     const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...normalized,
       commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
       currentCursor: command.beforeCursor,
@@ -28850,7 +28891,7 @@ function undoCombatRoundCommandAtIndex(input: {
 export function undoLatestCombatRoundCommand(input: {
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const commandIndex = getLatestCombatRoundUndoableCommandIndex({
     roundNumber: normalized.roundNumber,
     state: normalized,
@@ -28871,7 +28912,7 @@ function combatRoundSelectedStepHasClearableState(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const selectedParticipant = normalized.participants.find(
     (participant) => participant.participantId === normalized.selectedParticipantId,
   );
@@ -28939,7 +28980,7 @@ export function canClearCombatRoundStep(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const commandIndex = getLatestCombatRoundUndoableCommandIndex({
     roundNumber: normalized.roundNumber,
     state: normalized,
@@ -28958,7 +28999,7 @@ export function clearCombatRoundStep(input: {
   state: CombatRoundState;
   step: CombatRoundStep;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const commandUndoneState = undoLatestCombatRoundCommand({ state: normalized });
 
   if (commandUndoneState) {
@@ -28977,7 +29018,7 @@ export function holdCombatRoundForGmBacktrack(input: {
   state: CombatRoundState;
   step?: CombatRoundStep;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const step = input.step ?? normalized.currentStep;
   const participantId =
     input.participantId ??
@@ -28992,7 +29033,7 @@ export function holdCombatRoundForGmBacktrack(input: {
     throw new RangeError("The GM backtrack participant is not in the active combat round.");
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     gmBacktrackHold: {
       participantId,
@@ -29003,7 +29044,7 @@ export function holdCombatRoundForGmBacktrack(input: {
 }
 
 export function clearCurrentCombatRoundStepAndRewind(state: CombatRoundState): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const commandIndex = getLatestCombatRoundUndoableCommandIndex({
     roundNumber: normalized.roundNumber,
     state: normalized,
@@ -29037,7 +29078,7 @@ export function canPlayerSubmitCombatDeclaration(input: {
   participantId: string;
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
   );
@@ -29075,7 +29116,7 @@ export function canPlayerRollCombatInitiative(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const requiredStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
   const participant = normalized.participants.find(
     (entry) => entry.participantId === input.participantId,
@@ -29094,7 +29135,7 @@ export function isCombatRoundPhaseInitiativeComplete(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const requiredStep = input.phase === "phase1" ? "initiative_phase_1" : "initiative_phase_2";
 
   return normalized.participants.every((participant) => {
@@ -29118,7 +29159,7 @@ export function isCombatRoundPhaseInitiativeCommitted(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return normalized.commands.some(
     (command) =>
@@ -29133,7 +29174,7 @@ export function canPlayerRollCombatAttack(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): boolean {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const requiredStep = input.phase === "phase1" ? "phase_1_actions" : "phase_2_actions";
   const requiredCursorStep = input.phase === "phase1" ? "A1" : "A2";
   const existingAttackResult = getCombatRoundOutgoingAttackResultForParticipantPhase({
@@ -29241,7 +29282,7 @@ function getCurrentCursorIncomingAttackContext(input: {
       resolution: CombatRoundPhaseResolutionResult;
     }
   | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const participantId = normalized.currentCursor?.participantId;
 
   if (!participantId) {
@@ -29282,7 +29323,7 @@ export function getPlayerCombatCurrentRollAction(input: {
   participantId: string;
   state: CombatRoundState;
 }): PlayerCombatCurrentRollAction | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const cursor = normalized.currentCursor;
 
   if (!cursor || cursor.roundNumber !== normalized.roundNumber) {
@@ -29389,7 +29430,7 @@ export function setCombatRoundActiveParticipant(
   state: CombatRoundState,
   participantId?: string,
 ): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const hasParticipant = normalized.participants.some(
     (participant) => participant.participantId === participantId,
   );
@@ -29406,7 +29447,7 @@ export function setCombatRoundSelection(input: {
   state: CombatRoundState;
   step?: CombatRoundStep;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const hasParticipant = normalized.participants.some(
     (participant) => participant.participantId === input.participantId,
   );
@@ -29424,7 +29465,7 @@ export function setCombatRoundParticipantInitiative(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const initiative = normalizeCombatRoundInitiativeResult(input.initiative);
 
   return {
@@ -29449,7 +29490,7 @@ export function setCombatRoundParticipantStepStatus(input: {
   status: CombatRoundStepStatus;
   step: CombatRoundStep;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
 
   return {
     ...normalized,
@@ -29471,7 +29512,7 @@ export function sortCombatRoundParticipantsByInitiative(input: {
   phase: "phase1" | "phase2";
   state: CombatRoundState;
 }): CombatRoundParticipantState[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const originalIndexByParticipantId = new Map(
     normalized.participants.map((participant, index) => [participant.participantId, index]),
   );
@@ -29580,7 +29621,7 @@ export function getCombatRoundInitiativeExecutionGroups(input: {
   phase: CombatRoundPhase;
   state: CombatRoundState;
 }): CombatRoundInitiativeExecutionGroup[] {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const candidates = getCombatRoundPhaseAttackCandidates({
     phase: input.phase,
     state: normalized,
@@ -29656,7 +29697,7 @@ export function buildCombatRoundInspector(input: {
   status?: CombatRoundStepStatus;
   step: CombatRoundStep;
 } {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const step = input.step ?? normalized.selectedStep ?? normalized.currentStep;
   const participant = input.participantId
     ? normalized.participants.find((entry) => entry.participantId === input.participantId)
@@ -30564,7 +30605,7 @@ export function getLatestCombatEventSummary(input: {
   state: CombatRoundState;
   viewer: CombatRoundCommandEnvelopeViewer;
 }): CombatRoundLatestEventSummary | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const timelineStates = getCombatRoundTimelineRoundStates(normalized);
   const viewer = input.viewer;
   const labelByParticipantId = new Map<string, string>();
@@ -30622,7 +30663,7 @@ export function buildCombatRoundCommandEnvelope(input: {
   viewer: CombatRoundCommandEnvelopeViewer;
   warnings?: string[];
 }): CombatRoundCommandEnvelope {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const currentCursor = normalized.currentCursor;
 
   return {
@@ -30643,12 +30684,12 @@ export function buildCombatRoundCommandEnvelope(input: {
 }
 
 export function getCombatRoundTimelineRoundStates(state: CombatRoundState): CombatRoundState[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const completedRounds = normalized.rounds
     .filter((round) => round.roundNumber !== normalized.roundNumber)
     .sort((left, right) => left.roundNumber - right.roundNumber)
     .map((round) =>
-      combatRoundStateSchema.parse({
+      parseCombatRoundState({
         adjustDistanceProposals: round.adjustDistanceProposals,
         activeParticipantId: round.activeParticipantId,
         breakOffProposals: round.breakOffProposals,
@@ -30683,7 +30724,7 @@ export function getCombatRoundTimelineRoundStates(state: CombatRoundState): Comb
 
   return [
     ...completedRounds,
-    combatRoundStateSchema.parse({
+    parseCombatRoundState({
       ...normalized,
       rounds: [],
     }),
@@ -30799,7 +30840,7 @@ function applyCombatTaskCommand(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const actionStep = getCombatRoundPhaseActionStepForPhase(input.phase);
   const previousAction = combatGenericActionSchema.parse(input.previousAction);
   const previousParticipant = normalized.participants.find(
@@ -30848,7 +30889,7 @@ function applyCombatTaskCommand(input: {
     version: 1,
   });
 
-  const withActions = combatRoundStateSchema.parse({
+  const withActions = parseCombatRoundState({
     ...normalized,
     genericActions: input.nextActions,
   });
@@ -30896,7 +30937,7 @@ function applyCombatTaskCommand(input: {
   return {
     action: nextAction,
     command,
-    state: combatRoundStateSchema.parse({
+    state: parseCombatRoundState({
       ...advanced,
       commands: [...advanced.commands, command],
       // The declaration boundary changes the task and nothing else: no cursor, no selected step,
@@ -30931,7 +30972,7 @@ export function reviewCombatTaskAtOpportunity(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAction = requireCombatRoundOpenPerformTask({
     actionId: input.actionId,
     participantId: input.participantId,
@@ -30992,7 +31033,7 @@ export function rollCombatTaskAtOpportunity(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAction = requireCombatRoundOpenPerformTask({
     actionId: input.actionId,
     participantId: input.participantId,
@@ -31036,7 +31077,7 @@ export function advanceCombatTaskAtOpportunity(input: {
   submittedBy: "gm" | "player";
   updatedAt: string;
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAction = requireCombatRoundOpenPerformTask({
     actionId: input.actionId,
     participantId: input.participantId,
@@ -31085,7 +31126,7 @@ export function resolveCombatTaskAtOpportunity(input: {
   updatedAt: string;
   visibleToParticipantIds: readonly string[];
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAction = requireCombatRoundOpenPerformTask({
     actionId: input.actionId,
     participantId: input.participantId,
@@ -31194,7 +31235,7 @@ export function finishCombatTaskAtOpportunity(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAction = requireCombatRoundOpenPerformTask({
     actionId: input.actionId,
     participantId: input.participantId,
@@ -31250,7 +31291,7 @@ export function cancelCombatTaskAtDeclarationBoundary(input: {
   state: CombatRoundState;
   updatedAt: string;
 }): CombatTaskCommandOutcome {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const previousAction = normalized.genericActions.find(
     (candidate) =>
       candidate.id === input.actionId &&
@@ -31305,7 +31346,7 @@ function undoCombatTaskCommandAtIndex(input: {
   commandIndex: number;
   state: CombatRoundState;
 }): CombatRoundState | undefined {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const command = normalized.commands[input.commandIndex];
   if (!command || command.roundNumber !== normalized.roundNumber) return undefined;
 
@@ -31342,7 +31383,7 @@ function undoCombatTaskCommandAtIndex(input: {
   // command and restores the task's own fields. Touching the cursor, the phase-resolution status
   // or the participant's step statuses here would introduce a change the command never made.
   if (undo.boundary === "declaration") {
-    return combatRoundStateSchema.parse({
+    return parseCombatRoundState({
       ...normalized,
       commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
       genericActions,
@@ -31355,7 +31396,7 @@ function undoCombatTaskCommandAtIndex(input: {
   };
   const selectedStep = getCombatRoundStepForCursorStep(command.beforeCursor.step);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     commands: normalized.commands.filter((_, index) => index !== input.commandIndex),
     currentCursor: command.beforeCursor,

@@ -13,7 +13,7 @@ import {
 import { buildCombatRoundEndProcessPlan } from "../combatRoundEndProcesses";
 import {
   activeCombatRoundStateSchema,
-  combatRoundStateSchema,
+  parseCombatRoundState,
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundPhaseCombatExperienceRequirement,
   getCombatRoundPhaseInitiativeChoice,
@@ -1287,7 +1287,7 @@ export function projectCombatParticipation(
   input: CombatParticipationProjectionInput,
 ): CombatParticipationProjection {
   const active = activeCombatRoundStateSchema.parse(input.state);
-  const state = combatRoundStateSchema.parse({ ...active, rounds: [] });
+  const state = parseCombatRoundState({ ...active, rounds: [] });
   if (!state.encounterId) throw new Error("Combat participation requires an encounter identity.");
   if (!input.encounterRevision)
     throw new Error("Combat participation requires a canonical revision.");
