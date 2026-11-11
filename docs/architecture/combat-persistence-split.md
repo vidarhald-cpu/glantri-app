@@ -20,7 +20,6 @@ unchanged.
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Active combat only   | declaration, modifier review, initiative, CE, attacks, parry, hit location, critical, damage/effect review, Brawling, Continued Contact, distance, health, SU | revision-guarded `Encounter` metadata/reduced session update plus active-state upsert |
 | Round boundary       | finalize SU and open the next round                                                                                                                           | the active write plus one immutable archive insert                                    |
-| Cross-boundary undo  | undo reopening the prior round                                                                                                                                | the active write plus deletion of the exact last archive row                          |
 | Non-combat encounter | title/status/participants/roleplay                                                                                                                            | reduced session/metadata update; existing active/archive payloads are preserved       |
 | Creation             | new encounter                                                                                                                                                 | legacy-compatible `sessionJson`; first combat write materializes `split_v1`           |
 | Deletion             | encounter deletion                                                                                                                                            | database cascades active/archive rows                                                 |
@@ -48,8 +47,8 @@ persistence-only slice.
 
 `EncounterArchivedCombatRound` stores one strict `CompletedCombatRound` per
 encounter/round. `(encounterId, roundNumber)` is unique and indexed. The normal
-repository exposes insert only; deletion is limited to exact cross-boundary undo or
-encounter cascade. No ordinary update path exists.
+repository exposes insert only; an archive row is deleted only by encounter cascade.
+No ordinary update path exists.
 
 ## Canonical revision and transactions
 
@@ -62,7 +61,7 @@ Every combat save runs in one serializable transaction:
 3. update `Encounter` with a `WHERE id + updatedAt` optimistic-concurrency guard;
 4. read the newly committed revision inside the transaction;
 5. upsert active state with that same revision;
-6. insert or remove at most the exact boundary archive;
+6. insert at most the exact boundary archive;
 7. commit.
 
 A zero-row metadata update throws typed `stale_revision`. A malformed storage mode,
@@ -129,10 +128,16 @@ Ordinary commands may not update or rewrite archive rows. A normal round transit
 adds exactly one next-numbered row. Duplicate retries fail the revision guard and the
 unique archive key.
 
-Existing cross-boundary undo is represented explicitly as a one-row tail removal
-plus replacement active state in the same transaction. In-round undo changes active
-state only. Compact initiative undo facts and legacy `previousState` parsing remain
-domain concerns and are unchanged.
+Undo never goes back to a previous round (Product Owner ruling, #1135). A combat
+write whose archive count is lower than the stored count fails closed with
+`archive_delta_invalid`; no write removes an archive row. In-round undo changes
+active state only. Compact initiative undo facts and legacy `previousState` parsing
+remain domain concerns of the active round.
+
+An archived round keeps no undo data. When the round end is committed the domain
+drops, from each archived command, the facts that only an in-round undo reads
+(`ARCHIVED_COMBAT_ROUND_UNDO_ONLY_COMMAND_FACT_KEYS`). Rows archived before #1135
+still carry them; they are left as they are and readers ignore them.
 
 ## Backups, migration, and recovery
 
