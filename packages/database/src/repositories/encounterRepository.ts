@@ -4,6 +4,7 @@ import {
   encounterRosterScenarioIdentityRefusal,
   encounterSessionSchema,
   encounterSessionSummarySchema,
+  encounterStatusSchema,
   isCombatStepEventPublishedToActivity,
   type CombatLogSummaryFacts,
   type EncounterSession,
@@ -78,6 +79,17 @@ export interface EncounterRepository {
   getEncounterSummaryById(encounterId: string): Promise<EncounterSessionSummary | null>;
   listEncountersByScenario(scenarioId: string): Promise<EncounterSession[]>;
   listEncounterSummariesByScenario(scenarioId: string): Promise<EncounterSessionSummary[]>;
+  /**
+   * Forgejo #1136. The Encounters of a Scenario as the Scenario session projections read them
+   * (`GET /scenarios/:id/session`, `GET /scenarios/:id/player-projection`), in the order of
+   * `listEncountersByScenario`.
+   *
+   * Draft, active and paused Encounters are read in full, exactly as `listEncountersByScenario`
+   * reads them. Finished (`completed`/`archived`) Encounters are read without their combat rounds:
+   * see `listFinishedEncounterSessionSummaries` in `combatStateReadRepository.ts` for what such an
+   * entry carries. Only those projections may take Encounters from here.
+   */
+  listScenarioSessionEncounters(scenarioId: string): Promise<EncounterSession[]>;
   updateEncounter(input: {
     objectiveEvent?: {
       actorUserId?: string | null;
@@ -393,6 +405,33 @@ export function createPrismaEncounterRepository(
         records.map((record) => combatReadRepository.getFullEncounterById(record.id)),
       );
       return encounters.flatMap((view) => (view ? [view.encounter] : []));
+    },
+    async listScenarioSessionEncounters(scenarioId) {
+      const records = await client.encounter.findMany({
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, status: true },
+        where: { scenarioId },
+      });
+      const isFinished = (status: string) => {
+        const parsed = encounterStatusSchema.safeParse(status);
+        return parsed.success && (parsed.data === "completed" || parsed.data === "archived");
+      };
+      const readFull = async (encounterId: string) =>
+        (await combatReadRepository.getFullEncounterById(encounterId))?.encounter ?? null;
+      const summaries = combatReadRepository.listFinishedEncounterSessionSummaries({
+        encounterIds: records.filter((record) => isFinished(record.status)).map(({ id }) => id),
+        scenarioId,
+      });
+
+      const encounters = await Promise.all(
+        records.map(async (record) => {
+          if (!isFinished(record.status)) return readFull(record.id);
+          // A finished Encounter the summary read does not cover — one still in legacy storage —
+          // is read in full, as before.
+          return (await summaries).get(record.id) ?? readFull(record.id);
+        }),
+      );
+      return encounters.flatMap((encounter) => (encounter ? [encounter] : []));
     },
     async listEncounterSummariesByScenario(scenarioId) {
       const records = await client.encounter.findMany({

@@ -160,6 +160,14 @@ export class EncounterService {
     return this.encounterRepository.listEncounterSummariesByScenario(scenarioId);
   }
 
+  /**
+   * Forgejo #1136. For the Scenario session projections only: finished Encounters come without
+   * their combat rounds. See `EncounterRepository.listScenarioSessionEncounters`.
+   */
+  async listScenarioSessionEncounters(scenarioId: string): Promise<EncounterSession[]> {
+    return this.encounterRepository.listScenarioSessionEncounters(scenarioId);
+  }
+
   async updateEncounter(input: {
     objectiveEvent?: {
       actorUserId?: string | null;

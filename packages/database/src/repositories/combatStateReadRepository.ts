@@ -10,12 +10,15 @@ import {
   buildScenarioEncounterManagementProjectionFromPersistedSession,
   buildEncounterMetadataView,
   buildFullEncounterReadView,
+  COMBAT_ACTIVITY_ITEM_RESOLUTION_EVENT_KIND,
   encounterSessionSchema,
+  encounterStatusSchema,
   type ActiveCombatStateView,
   type ArchivedCombatRoundsView,
   type CombatHistorySourceView,
   type EncounterAccessMetadataView,
   type EncounterMetadataView,
+  type EncounterSession,
   type FullEncounterReadView,
   type ScenarioEncounterManagementProjection,
 } from "@glantri/domain";
@@ -151,12 +154,195 @@ function mapLegacyEncounterRecord(record: {
   });
 }
 
+function isFinishedEncounterStatus(status: string): boolean {
+  const parsed = encounterStatusSchema.safeParse(status);
+  return parsed.success && (parsed.data === "completed" || parsed.data === "archived");
+}
+
+/**
+ * The actions a stored combat-state document holds under `genericActions` whose id is one of
+ * `actionIds`, in stored order. PostgreSQL does the selection, so the document never leaves it.
+ */
+function genericActionsNamed(column: Prisma.Sql, actionIds: readonly string[]): Prisma.Sql {
+  return Prisma.sql`
+    COALESCE(
+      (
+        SELECT jsonb_agg(action.value ORDER BY action.ordinality)
+        FROM jsonb_array_elements(
+          CASE
+            WHEN jsonb_typeof(${column} -> 'genericActions') = 'array'
+              THEN ${column} -> 'genericActions'
+            ELSE '[]'::jsonb
+          END
+        ) WITH ORDINALITY AS action(value, ordinality)
+        WHERE action.value ->> 'id' = ANY(${[...actionIds]}::text[])
+      ),
+      '[]'::jsonb
+    )`;
+}
+
+/**
+ * Forgejo #1136. Reads finished split-storage Encounters for the Scenario session projections
+ * (`buildScenarioSessionView`, `resolveScenarioParticipantDisclosure`) without composing their
+ * archived combat rounds. A round is 1–3 MB of JSON, and parsing every archived round of every
+ * Encounter on every `/session` poll is what made that poll grow with each finished fight (#1131).
+ *
+ * Each entry is the stored session — title, status, kind, outcome text, roster, membership mode and
+ * the GM's visibility matrix, which is everything those readers take from a finished Encounter —
+ * plus, only where it is read, a **reduced** `combatRoundState`:
+ *
+ * - The one combat read those projections make is the past Item-outcome check
+ *   (`canViewCurrentItemOutcome` in `scenarioSession.ts`). It looks up the action an
+ *   `item_resolution` Activity row names, first in the active state and then in the archived
+ *   rounds in ascending order, and reads only that action.
+ * - So `combatRoundState` is present only for an Encounter that such a row names, and holds only
+ *   the actions such rows name, from the active state and from each archived round, each in stored
+ *   order, with every other field at its schema default. An action carried forward into a later
+ *   round keeps every copy, so the lookup finds the same copy it finds in the full state.
+ * - Every other finished Encounter has no `combatRoundState`, and its combat documents are not
+ *   read at all, not even inside PostgreSQL.
+ *
+ * This is a projection for those readers only. A reader of combat state must not take a finished
+ * Encounter from here; `getFullEncounterById` stays the reading of one Encounter.
+ *
+ * The full read's split-storage agreement checks still run, on counts and revisions, so
+ * inconsistent stored rows still fail closed where the full read would.
+ */
+async function readFinishedEncounterSessionSummaries(
+  snapshot: TransactionClient,
+  input: { encounterIds: readonly string[]; scenarioId: string },
+): Promise<Map<string, EncounterSession>> {
+  const summaries = new Map<string, EncounterSession>();
+  if (input.encounterIds.length === 0) return summaries;
+
+  const records = await snapshot.encounter.findMany({
+    select: {
+      ...encounterSessionJsonSelect,
+      _count: { select: { archivedCombatRounds: true } },
+      activeCombatState: { select: { revision: true } },
+      combatArchiveCount: true,
+    },
+    where: { id: { in: [...input.encounterIds] }, scenarioId: input.scenarioId },
+  });
+  // Anything else — not finished in this snapshot, or not in split storage — is left to the
+  // caller's full read, which keeps its own behaviour for it.
+  const finished = records.filter(
+    (record) =>
+      record.combatStorageMode === COMBAT_STORAGE_MODE_SPLIT_V1 &&
+      isFinishedEncounterStatus(record.status),
+  );
+  for (const record of finished) {
+    assertSplitConsistency({
+      activeCombatState: record.activeCombatState,
+      archivedRoundCount: record._count.archivedCombatRounds,
+      checkActiveState: true,
+      combatArchiveCount: record.combatArchiveCount,
+      metadataRevision: record.updatedAt,
+    });
+  }
+  if (finished.length === 0) return summaries;
+
+  // The (Encounter, action) pairs this Scenario's `item_resolution` Activity rows name. The check
+  // reads `payload.encounterId` and `payload.actionId` of such a row, so these are its inputs.
+  const references = await snapshot.$queryRaw<Array<{ actionId: string; encounterId: string }>>(
+    Prisma.sql`
+      SELECT DISTINCT
+        log."payloadJson" ->> 'encounterId' AS "encounterId",
+        log."payloadJson" ->> 'actionId' AS "actionId"
+      FROM "ScenarioEventLog" AS log
+      WHERE log."scenarioId" = ${input.scenarioId}
+        AND log."payloadJson" ->> 'eventKind' = ${COMBAT_ACTIVITY_ITEM_RESOLUTION_EVENT_KIND}
+        AND log."payloadJson" ->> 'actionId' IS NOT NULL
+        AND log."payloadJson" ->> 'encounterId' = ANY(${finished.map((record) => record.id)}::text[])
+    `,
+  );
+  const referencedEncounterIds = [...new Set(references.map((row) => row.encounterId))];
+  const referencedActionIds = [...new Set(references.map((row) => row.actionId))];
+  const isReferenced = (encounterId: string, action: unknown) =>
+    references.some(
+      (row) =>
+        row.encounterId === encounterId && row.actionId === (action as { id?: unknown } | null)?.id,
+    );
+
+  const activeRows =
+    referencedEncounterIds.length === 0
+      ? []
+      : await snapshot.$queryRaw<
+          Array<{ encounterId: string; genericActions: unknown[]; roundNumber: unknown }>
+        >(Prisma.sql`
+          SELECT
+            state."encounterId" AS "encounterId",
+            state."stateJson" -> 'roundNumber' AS "roundNumber",
+            ${genericActionsNamed(Prisma.sql`state."stateJson"`, referencedActionIds)}
+              AS "genericActions"
+          FROM "EncounterActiveCombatState" AS state
+          WHERE state."encounterId" = ANY(${referencedEncounterIds}::text[])
+        `);
+  const archivedRows =
+    referencedEncounterIds.length === 0
+      ? []
+      : await snapshot.$queryRaw<
+          Array<{ encounterId: string; genericActions: unknown[]; roundNumber: number }>
+        >(Prisma.sql`
+          SELECT
+            round."encounterId" AS "encounterId",
+            round."roundNumber" AS "roundNumber",
+            ${genericActionsNamed(Prisma.sql`round."roundJson"`, referencedActionIds)}
+              AS "genericActions"
+          FROM "EncounterArchivedCombatRound" AS round
+          WHERE round."encounterId" = ANY(${referencedEncounterIds}::text[])
+          ORDER BY round."roundNumber" ASC
+        `);
+
+  const activeByEncounterId = new Map(activeRows.map((row) => [row.encounterId, row]));
+  for (const record of finished) {
+    const active = activeByEncounterId.get(record.id);
+    const named = (actions: unknown[]) =>
+      actions.filter((action) => isReferenced(record.id, action));
+    summaries.set(
+      record.id,
+      composeEncounterSessionFromSplitCombatPersistence({
+        activeCombatState: active
+          ? {
+              genericActions: named(active.genericActions),
+              ...(active.roundNumber == null ? {} : { roundNumber: active.roundNumber }),
+            }
+          : undefined,
+        archivedRounds: active
+          ? archivedRows
+              .filter((row) => row.encounterId === record.id)
+              .map((row) => ({
+                genericActions: named(row.genericActions),
+                roundNumber: row.roundNumber,
+              }))
+              .filter((round) => round.genericActions.length > 0)
+          : [],
+        metadata: metadataInput(record),
+        sessionWithoutCombatState: record.sessionJson,
+      }),
+    );
+  }
+  return summaries;
+}
+
 export interface CombatStateReadRepository {
   getActiveCombatStateById(encounterId: string): Promise<ActiveCombatStateView | null>;
   getArchivedCombatRoundsById(encounterId: string): Promise<ArchivedCombatRoundsView | null>;
   getCombatHistorySourceById(encounterId: string): Promise<CombatHistorySourceView | null>;
   getEncounterMetadataById(encounterId: string): Promise<EncounterMetadataView | null>;
   getFullEncounterById(encounterId: string): Promise<FullEncounterReadView | null>;
+  /**
+   * Forgejo #1136. The Scenario-session reading of **finished** Encounters, without their combat.
+   *
+   * See `readFinishedEncounterSessionSummaries` below for what each entry carries and what it does
+   * not. Only an Encounter that is, in the read's own snapshot, finished (`completed` or
+   * `archived`) and stored in split mode has an entry; every other id is left out, and the caller
+   * reads it in full.
+   */
+  listFinishedEncounterSessionSummaries(input: {
+    encounterIds: readonly string[];
+    scenarioId: string;
+  }): Promise<Map<string, EncounterSession>>;
   listEncounterAccessMetadataByScenario(scenarioId: string): Promise<EncounterAccessMetadataView[]>;
   listScenarioEncounterManagementProjections(
     scenarioId: string,
@@ -342,6 +528,12 @@ export function createPrismaCombatStateReadRepository(
           metadata: metadataInput(record),
           sessionWithoutCombatState: record.sessionJson,
         }),
+      );
+    },
+    async listFinishedEncounterSessionSummaries(input) {
+      if (input.encounterIds.length === 0) return new Map();
+      return readSplitSnapshot(client, (snapshot) =>
+        readFinishedEncounterSessionSummaries(snapshot, input),
       );
     },
     async listEncounterAccessMetadataByScenario(scenarioId) {

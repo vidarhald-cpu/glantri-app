@@ -622,6 +622,71 @@ if (!hasTaskApplicationDatabase) {
      * throughout, and read the recipient's raw 200 body. The recipient's participation, control
      * and visibility rows are never touched.
      */
+    /** Every viewer's raw `/session` and `/player-projection` bodies, at HTTP 200. */
+    async function projectionBodies(current: Awaited<ReturnType<typeof seed>>) {
+      const bodies: Record<string, string> = {};
+      for (const [viewer, cookie] of Object.entries(current.cookies)) {
+        for (const route of ["session", "player-projection"]) {
+          const response = await app.inject({
+            headers: { cookie, origin },
+            method: "GET",
+            url: `/scenarios/${current.scenario.id}/${route}`,
+          });
+          expect(response.statusCode, response.body).toBe(200);
+          bodies[`${viewer} ${route}`] = response.body;
+        }
+      }
+      return bodies;
+    }
+
+    /**
+     * Forgejo #1136. `/session` and `/player-projection` read finished Encounters without their
+     * archived combat rounds. The one combat read they make of a finished Encounter is this file's
+     * check, so the measurement is taken here: with the Encounter closed and then archived, every
+     * viewer's raw body equals the body the same request returns when the route reads every
+     * Encounter in full, as it did before.
+     */
+    it("reads a finished Encounter's past Item outcome identically without its combat rounds (#1136)", async () => {
+      const current = await seed();
+      await resolveItemPass(current);
+      await completeRound(current);
+
+      // The product's own lifecycle: pause, close, archive.
+      for (const status of ["paused", "completed", "archived"] as const) {
+        const before = await encounterRevision(current.encounterId);
+        await current.encounterService.updateEncounter({
+          campaignId: current.campaign.id,
+          encounterId: current.encounterId,
+          expectedRevision: before.updatedAt,
+          scenarioId: current.scenario.id,
+          session: { ...before, status },
+        });
+        expect(
+          (await encounterRevision(current.encounterId)).combatRoundState!.rounds,
+        ).toHaveLength(1);
+
+        const throughSessionListing = await projectionBodies(current);
+        const fullReads = vi
+          .spyOn(EncounterService.prototype, "listScenarioSessionEncounters")
+          .mockImplementation(function (this: EncounterService, scenarioId: string) {
+            return this.listEncountersByScenario(scenarioId);
+          });
+        const throughFullReads = await projectionBodies(current);
+        expect(fullReads).toHaveBeenCalled();
+        fullReads.mockRestore();
+
+        expect(throughSessionListing).toEqual(throughFullReads);
+        // Not vacuous: the outcome is still delivered to its audience and withheld from others.
+        const recipient = await itemOutcomeRows(current.cookies.recipient, current.scenario.id);
+        const bystander = await itemOutcomeRows(current.cookies.bystander, current.scenario.id);
+        expect({ bystander: bystander.itemRows, status }).toEqual({ bystander: [], status });
+        expect(throughSessionListing["recipient session"]).toBe(recipient.raw);
+        if (status !== "archived") {
+          expect(recipient.itemRows.map((row) => row.summary)).toEqual([RESULT_TEXT]);
+        }
+      }
+    });
+
     describe("a row that is not the actor's never answers for the actor's recorded id", () => {
       /** Hide the acting combatant from the recipient, and never lift it. */
       async function hideOwnerFromRecipient(current: Awaited<ReturnType<typeof seed>>) {
