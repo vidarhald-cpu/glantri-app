@@ -3,10 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CurrentActionCommandDescriptor } from "@/features/combat-history";
 import { createEmptyPlayerEncounterCombatContext } from "@/lib/campaigns/playerEncounter";
 
-import {
-  discardCombatModifierReviewInputSnapshot,
-  getOrCreateCombatModifierReviewInputSnapshot,
-} from "./modifierReviewInputSnapshot";
+import { getOrCreateCombatModifierReviewInputSnapshot } from "./modifierReviewInputSnapshot";
 
 function descriptor(
   overrides: Partial<CurrentActionCommandDescriptor> = {},
@@ -70,9 +67,10 @@ describe("modifier review input snapshots", () => {
     expect(next?.expectedParticipantRevision).toBe("participant-revision-2");
   });
 
-  // #1145 repair cycle 1 (C1): a refused commit leaves the key unchanged, so without a discard the
-  // refreshed participant revision could never replace the refused one.
-  it("captures the refreshed participant revision after a refused snapshot is discarded", () => {
+  // #1145 repair cycle 1 (C1): a refused commit leaves the key unchanged, so the panel deletes the
+  // refused snapshot after its conflict refresh; the next render must then capture the refreshed
+  // participant revision and review input under the same key.
+  it("captures the refreshed participant revision once the refused snapshot is deleted", () => {
     const snapshots = new Map();
     const refused = getOrCreateCombatModifierReviewInputSnapshot({
       combatContext: createEmptyPlayerEncounterCombatContext(),
@@ -81,7 +79,7 @@ describe("modifier review input snapshots", () => {
       participantId: "participant-1",
       snapshots,
     })!;
-    discardCombatModifierReviewInputSnapshot({ snapshot: refused, snapshots });
+    snapshots.delete(refused.key);
     const rebuilt = getOrCreateCombatModifierReviewInputSnapshot({
       combatContext: { ...createEmptyPlayerEncounterCombatContext(), selectedOpponentId: "fresh" },
       descriptor: descriptor({ commandType: "review_modifiers_phase2" }),
@@ -94,27 +92,5 @@ describe("modifier review input snapshots", () => {
     expect(rebuilt?.key).toBe(refused.key);
     expect(rebuilt?.expectedParticipantRevision).toBe("participant-revision-2");
     expect(rebuilt?.combatContext.selectedOpponentId).toBe("fresh");
-  });
-
-  it("discards only the refused snapshot object", () => {
-    const snapshots = new Map();
-    const refused = getOrCreateCombatModifierReviewInputSnapshot({
-      combatContext: createEmptyPlayerEncounterCombatContext(),
-      descriptor: descriptor(),
-      expectedParticipantRevision: "participant-revision-1",
-      participantId: "participant-1",
-      snapshots,
-    })!;
-    discardCombatModifierReviewInputSnapshot({ snapshot: refused, snapshots });
-    const current = getOrCreateCombatModifierReviewInputSnapshot({
-      combatContext: createEmptyPlayerEncounterCombatContext(),
-      descriptor: descriptor(),
-      expectedParticipantRevision: "participant-revision-2",
-      participantId: "participant-1",
-      snapshots,
-    })!;
-    discardCombatModifierReviewInputSnapshot({ snapshot: refused, snapshots });
-
-    expect(snapshots.get(current.key)).toBe(current);
   });
 });

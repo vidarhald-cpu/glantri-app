@@ -381,10 +381,7 @@ import {
   getInspectedDeclarationParticipantAliases,
   resolveInspectedDeclarationCommandDescriptor,
 } from "./view-models/inspectedDeclarationCommand";
-import {
-  discardCombatModifierReviewInputSnapshot,
-  getOrCreateCombatModifierReviewInputSnapshot,
-} from "./view-models/modifierReviewInputSnapshot";
+import { getOrCreateCombatModifierReviewInputSnapshot } from "./view-models/modifierReviewInputSnapshot";
 import { buildCombatStepWorkflowStatusPresentation } from "./view-models/combatStepWorkflowStatus";
 import { resolveEffectiveScenarioParticipants } from "./view-models/effectiveScenarioParticipants";
 import {
@@ -10200,10 +10197,7 @@ export default function CombatRoundManagerPanel({
           modifierReviewInputSnapshot &&
           getCombatMutationConflictCode(caughtError) === "stale_revision"
         ) {
-          discardCombatModifierReviewInputSnapshot({
-            snapshot: modifierReviewInputSnapshot,
-            snapshots: modifierReviewInputSnapshotsRef.current,
-          });
+          modifierReviewInputSnapshotsRef.current.delete(modifierReviewInputSnapshot.key);
         }
       } else {
         setSaveError(

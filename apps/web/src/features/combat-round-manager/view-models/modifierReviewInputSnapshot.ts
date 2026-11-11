@@ -66,20 +66,3 @@ export function getOrCreateCombatModifierReviewInputSnapshot(input: {
   input.snapshots.set(key, snapshot);
   return snapshot;
 }
-
-/**
- * #1145 repair cycle 1 (QA finding C1). Releases one modifier-review snapshot after the server
- * refused its commit as stale. The refused commit leaves the encounter revision, task and
- * participant unchanged, so the snapshot key is unchanged too; without this, the conflict refresh
- * reloads the participant but every retry keeps sending the refused participant revision until
- * the page is reloaded. Released here, the next render captures the refreshed participant
- * revision and review input as a new snapshot. Only the refused snapshot object is removed.
- */
-export function discardCombatModifierReviewInputSnapshot(input: {
-  readonly snapshot: CombatModifierReviewInputSnapshot;
-  readonly snapshots: Map<string, CombatModifierReviewInputSnapshot>;
-}): void {
-  if (input.snapshots.get(input.snapshot.key) === input.snapshot) {
-    input.snapshots.delete(input.snapshot.key);
-  }
-}
