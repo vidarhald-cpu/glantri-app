@@ -33890,6 +33890,30 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
           "createdByUserId",
         ]);
       });
+
+      it("refuses the GM's whole state for a participant outside the URL's Scenario (#1140)", async () => {
+        const stored = storedParticipant("player-1");
+        setupScenarioAccess();
+        mocks.requireAuthenticatedUser.mockResolvedValue(mocks.adminUser);
+        // The participant id names no participant of `scenario-1`.
+        mocks.scenarioService.getScenarioParticipantById.mockResolvedValue(null);
+        mocks.encounterService.updateScenarioParticipantState.mockReset();
+        const app = await buildScenarioTestApp();
+        const response = await app.inject({
+          method: "PUT",
+          payload: { state: stored.state },
+          url: "/scenarios/scenario-1/participants/participant-1/state",
+        });
+        await app.close();
+
+        expect(response.statusCode, response.body).toBe(404);
+        expect(response.json()).toEqual({ error: "Scenario participant not found." });
+        expect(mocks.scenarioService.getScenarioParticipantById).toHaveBeenCalledWith(
+          "participant-1",
+          "scenario-1",
+        );
+        expect(mocks.encounterService.updateScenarioParticipantState).not.toHaveBeenCalled();
+      });
     });
 
     describe("PUT /scenarios/:scenarioId/participants/:participantId/state with a combat-effects change (#1126)", () => {

@@ -1,5 +1,7 @@
 import { type ArtifactKind, type ArtifactMediaType } from "@glantri/domain";
 
+import { sha256Hex } from "@/lib/browser/sha256";
+
 /**
  * The single place where Glantri derives technical facts about a chosen file.
  *
@@ -51,8 +53,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export async function digestFile(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return sha256Hex(await file.arrayBuffer());
 }
 
 /**

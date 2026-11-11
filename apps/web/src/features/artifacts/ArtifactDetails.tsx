@@ -7,7 +7,9 @@ import {
   stageArtifactPackage,
   type ArtifactHistory,
 } from "@/lib/api/artifactClient";
+import { randomId } from "@/lib/browser/randomId";
 import { ArtifactImportReview } from "./ArtifactImportPanel";
+import { digestFile } from "./artifactPackageDerivation";
 export function ArtifactDetails({
   campaignId,
   artifact,
@@ -118,15 +120,11 @@ export function ArtifactDetails({
                 try {
                   if (!file.size || file.size > 25 * 1024 * 1024)
                     throw new Error("Choose media no larger than 25 MiB.");
-                  const digest = Array.from(
-                    new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())),
-                  )
-                    .map((x) => x.toString(16).padStart(2, "0"))
-                    .join("");
+                  const digest = await digestFile(file);
                   const manifest: ArtifactPackage = {
                     schemaVersion: 1,
                     producer: "local-gm",
-                    packageId: crypto.randomUUID(),
+                    packageId: randomId(),
                     version: "1",
                     title: `New version of ${artifact.title}`,
                     objects: [

@@ -498,10 +498,11 @@ export class EncounterService {
           update: (current) =>
             refreshScenarioParticipantPersistentCombatModifiers({ state: update(current) }),
         })
-      : await this.scenarioRepository.updateScenarioParticipantState(
-          input.participantId,
-          replacementState!,
-        );
+      : await this.scenarioRepository.updateScenarioParticipantState({
+          participantId: input.participantId,
+          scenarioId: input.scenarioId,
+          state: replacementState!,
+        });
     const scenario = await this.scenarioRepository.getScenarioById(input.scenarioId);
 
     await this.scenarioRepository.createScenarioEventLog({

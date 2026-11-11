@@ -8,6 +8,7 @@ import type {
 } from "@glantri/domain";
 
 import type { CharacterPhysicalStateView, HitLogEntryView } from "@/lib/characters/physicalState";
+import { randomId } from "@/lib/browser/randomId";
 
 export interface CombatEffectEditorDraft {
   combatModifierBucket?: CombatEffectModifierBucket;
@@ -156,7 +157,7 @@ const physicalStatePanelStyle = {
 } as const;
 
 function createLocalId(prefix: string): string {
-  return `${prefix}-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+  return `${prefix}-${randomId()}`;
 }
 
 function formatEffectType(type: CombatEffectType): string {
