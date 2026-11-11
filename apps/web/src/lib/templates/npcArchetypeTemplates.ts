@@ -14,6 +14,8 @@ import {
 import { resolveGlantriCharacterStats } from "@glantri/rules-engine";
 import type { EquipmentTemplate } from "@glantri/domain/equipment";
 
+import { randomId } from "../browser/randomId";
+
 export interface SocietyOption {
   civilizationNames: string[];
   professionIds: string[];
@@ -169,11 +171,7 @@ export interface ParsedGeneratedHumanoidNpcSummary {
 }
 
 function createGeneratedNpcActorId(): string {
-  if (globalThis.crypto && "randomUUID" in globalThis.crypto) {
-    return `generated-npc-${globalThis.crypto.randomUUID()}`;
-  }
-
-  return `generated-npc-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+  return `generated-npc-${randomId()}`;
 }
 
 const DEFAULT_BASE_STAT = 10;

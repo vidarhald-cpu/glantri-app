@@ -25,6 +25,7 @@ import {
   loadCampaignMaps,
   saveCampaignMap,
 } from "@/lib/api/mapClient";
+import { randomId } from "@/lib/browser/randomId";
 
 /** Grid children must be allowed to shrink; no Alpha primitive covers this. */
 const minWidthZero = { minWidth: 0 } as const;
@@ -57,7 +58,7 @@ function cloneGmMap(map: CampaignMapGmDto): CampaignMapGmDto {
 }
 
 function makeId(prefix: string): string {
-  return `${prefix}-${crypto.randomUUID()}`;
+  return `${prefix}-${randomId()}`;
 }
 
 /**

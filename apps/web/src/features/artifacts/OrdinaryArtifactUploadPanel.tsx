@@ -9,6 +9,7 @@ import {
   type ArtifactPackage,
 } from "@glantri/domain";
 import { cleanupArtifactImport, stageArtifactPackage } from "@/lib/api/artifactClient";
+import { randomId } from "@/lib/browser/randomId";
 import { ArtifactImportReview } from "./ArtifactImportPanel";
 import {
   deriveArtifactPackageResources,
@@ -30,7 +31,7 @@ export async function buildOrdinaryArtifactPackage(
   const manifest = artifactPackageSchema.parse({
     schemaVersion: 1,
     producer: ORDINARY_ARTIFACT_UPLOAD_PRODUCER,
-    packageId: `ordinary-${crypto.randomUUID()}`,
+    packageId: `ordinary-${randomId()}`,
     version: "1",
     title: drafts.length === 1 ? "Artifact upload" : `${drafts.length} Artifact uploads`,
     resources,
@@ -115,7 +116,7 @@ export function OrdinaryArtifactUploadPanel({
           artifactKind: mediaType === "application/pdf" ? "document" : "image",
           description: "",
           file,
-          id: crypto.randomUUID(),
+          id: randomId(),
           mediaType,
           title: titleFromFilename(file.name),
         };

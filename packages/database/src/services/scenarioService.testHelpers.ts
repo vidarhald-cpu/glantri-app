@@ -259,14 +259,16 @@ export function createScenarioRepositoryStub() {
     pickUpScenarioAvailableItem: async () => {
       throw new Error("Not implemented in test stub.");
     },
-    updateScenarioParticipantState: async (participantId, state) => {
-      const participant = participants.find((entry) => entry.id === participantId);
+    updateScenarioParticipantState: async (input) => {
+      const participant = participants.find(
+        (entry) => entry.id === input.participantId && entry.scenarioId === input.scenarioId,
+      );
 
       if (!participant) {
         throw new Error("Scenario participant not found.");
       }
 
-      participant.state = state;
+      participant.state = input.state;
       participant.updatedAt = "2026-04-21T00:00:00.000Z";
       return participant;
     },

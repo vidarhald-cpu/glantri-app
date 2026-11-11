@@ -10,6 +10,7 @@ import {
   type ArtifactPackage,
 } from "@glantri/domain";
 
+import { randomId } from "@/lib/browser/randomId";
 import {
   deriveArtifactPackageResources,
   MAX_FILE_BYTES,
@@ -173,7 +174,7 @@ export async function buildIntakeProposal(
 
   const manifest = artifactPackageSchema.parse({
     objects,
-    packageId: `ai-intake-${crypto.randomUUID()}`,
+    packageId: `ai-intake-${randomId()}`,
     producer: AI_INTAKE_PRODUCER,
     resources,
     schemaVersion: 1,

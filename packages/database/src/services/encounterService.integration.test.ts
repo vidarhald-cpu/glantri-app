@@ -619,6 +619,93 @@ if (!process.env.DATABASE_URL_TEST) {
       ).rejects.toThrow("Scenario participant not found.");
     });
 
+    it("replaces a participant's whole state only through the Scenario it belongs to (#1140)", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const otherGm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const character = await createTestCharacter(prisma!, gm.id, { name: "Target" });
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const campaignService = new CampaignService(scenarioRepository, characterService);
+      const scenarioService = new ScenarioService(
+        scenarioRepository,
+        characterService,
+        new CharacterEquipmentReadModelService(createPrismaCharacterEquipmentRepository(prisma!)),
+        prisma!,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Target campaign",
+        status: "active",
+      });
+      const otherCampaign = await campaignService.createCampaign({
+        gmUserId: otherGm.id,
+        name: "Other campaign",
+        status: "active",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "Target scenario",
+        status: "live",
+      });
+      const otherScenario = await scenarioService.createScenario({
+        campaignId: otherCampaign.id,
+        name: "Other scenario",
+        status: "live",
+      });
+      const target = await scenarioService.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: gm.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const service = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        scenarioRepository,
+      );
+      const misdirected = scenarioParticipantStateSchema.parse({
+        ...target.state,
+        combat: { ...target.state.combat, lastDeclarationNotes: "misdirected" },
+      });
+      const eventCount = () => prisma!.scenarioEventLog.count();
+      const eventsBefore = await eventCount();
+
+      // Through another Campaign's live Scenario: refused by the service, nothing written or logged.
+      await expect(
+        service.updateScenarioParticipantState({
+          participantId: target.id,
+          scenarioId: otherScenario.id,
+          state: misdirected,
+        }),
+      ).rejects.toThrow("Scenario participant not found.");
+      // And by the repository on its own.
+      await expect(
+        scenarioRepository.updateScenarioParticipantState({
+          participantId: target.id,
+          scenarioId: otherScenario.id,
+          state: misdirected,
+        }),
+      ).rejects.toThrow("Scenario participant not found.");
+      expect(await scenarioRepository.getScenarioParticipantById(target.id, scenario.id)).toEqual(
+        target,
+      );
+      expect(await eventCount()).toBe(eventsBefore);
+
+      // Through its own Scenario the same write is stored and logged, as before.
+      const written = await service.updateScenarioParticipantState({
+        participantId: target.id,
+        scenarioId: scenario.id,
+        state: misdirected,
+      });
+      expect(written.state.combat.lastDeclarationNotes).toBe("misdirected");
+      expect(await eventCount()).toBe(eventsBefore + 1);
+    });
+
     it("atomically persists and reloads C1 source state, roll-once rate, and exact remainder", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const owner = await createTestUser(prisma!);

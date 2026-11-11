@@ -215,6 +215,7 @@ import {
   settleCombatPerformanceInteraction,
 } from "@/lib/performance/combatPerformance";
 import { loadScenarioParticipants } from "@/lib/api/scenarioClient";
+import { randomId } from "@/lib/browser/randomId";
 import {
   loadCharacterEquipmentState,
   loadServerCharacterById,
@@ -1916,7 +1917,7 @@ const COMBAT_DAMAGE_REVIEW_EFFECT_PHASES = [
 function createCombatDamageReviewEffectDraft(
   kind: "modifier" | "note",
 ): CombatDamageReviewAdditionalEffectDraft {
-  const id = `review-effect-${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`;
+  const id = `review-effect-${randomId()}`;
 
   if (kind === "modifier") {
     return {
@@ -12299,7 +12300,7 @@ export default function CombatRoundManagerPanel({
         expectedStep: roundState.currentStep,
         expectedTaskId: descriptor.taskId,
         operationFamily,
-        runId: crypto.randomUUID(),
+        runId: randomId(),
       });
       if (participants.length > 0) {
         setScenarioParticipantOverrides((current) => ({
