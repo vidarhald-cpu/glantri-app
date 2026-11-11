@@ -77,9 +77,10 @@ describe("ScenarioService controller assignment", () => {
       joinSource: "gm_added",
       scenarioId: "scenario-1",
     });
-    await repository.updateScenarioParticipantState(original.id, {
-      ...original.state,
-      health: { ...original.state.health, currentHp: 4 },
+    await repository.updateScenarioParticipantState({
+      participantId: original.id,
+      scenarioId: "scenario-1",
+      state: { ...original.state, health: { ...original.state.health, currentHp: 4 } },
     });
     equipmentState = {
       activeLoadoutByCharacterId: {
@@ -188,9 +189,10 @@ describe("ScenarioService controller assignment", () => {
         scenarioId: "scenario-1",
       });
       sessions.push(...input.encounterSessions(original.id));
-      await repository.updateScenarioParticipantState(original.id, {
-        ...original.state,
-        health: { ...original.state.health, currentHp: 4 },
+      await repository.updateScenarioParticipantState({
+        participantId: original.id,
+        scenarioId: "scenario-1",
+        state: { ...original.state, health: { ...original.state.health, currentHp: 4 } },
       });
       // The GM edits the Character, and its equipment changes, after it joined the Scenario.
       character.build = {

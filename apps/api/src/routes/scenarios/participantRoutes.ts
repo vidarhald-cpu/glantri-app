@@ -482,6 +482,11 @@ export const participantRoutes: FastifyPluginAsync = async (app) => {
         }
 
         acceptedState = mergedState;
+      } else if (!(await scenarioService.getScenarioParticipantById(participantId, scenarioId))) {
+        // #1140: the GM is authorized for the Scenario in the URL, and only for its participants.
+        // A participant of any other Scenario — in another GM's Campaign, or in another Scenario of
+        // this Campaign, paused or not — is not found here, so nothing is written or logged.
+        return reply.code(404).send({ error: "Scenario participant not found." });
       }
 
       const nextState = scenarioParticipantStateSchema.parse({
