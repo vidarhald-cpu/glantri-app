@@ -582,6 +582,16 @@ export interface ScenarioRepository {
     participantId: string,
     state: ScenarioParticipantState,
   ): Promise<ScenarioParticipant>;
+  /**
+   * Reads the participant as stored, under a row lock held until the write commits, and stores
+   * the state `update` derives from it. A change applied this way cannot overwrite a write that
+   * landed after the caller last read the participant (#1126).
+   */
+  updateScenarioParticipantStateFromCurrent(input: {
+    participantId: string;
+    scenarioId: string;
+    update: (current: ScenarioParticipant) => ScenarioParticipantState;
+  }): Promise<ScenarioParticipant>;
   updateScenarioParticipantSnapshotAndState(
     participantId: string,
     snapshot: ScenarioParticipantSnapshot,
@@ -1465,6 +1475,30 @@ export function createPrismaScenarioRepository(client?: PrismaClient): ScenarioR
       });
 
       return mapScenarioParticipant(record);
+    },
+    async updateScenarioParticipantStateFromCurrent(input) {
+      return prisma.$transaction(async (transaction) => {
+        // Any other writer of this row waits for the commit. Combat's revision-checked writes
+        // then find `updatedAt` moved and refuse rather than overwrite.
+        await transaction.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "ScenarioParticipant" WHERE "id" = ${input.participantId} AND "scenarioId" = ${input.scenarioId} FOR UPDATE`,
+        );
+        const record = await transaction.scenarioParticipant.findFirst({
+          where: { id: input.participantId, scenarioId: input.scenarioId },
+        });
+
+        if (!record) {
+          throw new Error("Scenario participant not found.");
+        }
+
+        const state = input.update(mapScenarioParticipant(record));
+        const updated = await transaction.scenarioParticipant.update({
+          data: { stateJson: asJson(state) },
+          where: { id: record.id },
+        });
+
+        return mapScenarioParticipant(updated);
+      });
     },
     async updateScenarioParticipantSnapshotAndState(participantId, snapshot, state) {
       const record = await prisma.scenarioParticipant.update({

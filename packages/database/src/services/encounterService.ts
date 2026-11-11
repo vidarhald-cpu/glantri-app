@@ -160,6 +160,14 @@ export class EncounterService {
     return this.encounterRepository.listEncounterSummariesByScenario(scenarioId);
   }
 
+  /**
+   * Forgejo #1136. For the Scenario session projections only: finished Encounters come without
+   * their combat rounds. See `EncounterRepository.listScenarioSessionEncounters`.
+   */
+  async listScenarioSessionEncounters(scenarioId: string): Promise<EncounterSession[]> {
+    return this.encounterRepository.listScenarioSessionEncounters(scenarioId);
+  }
+
   async updateEncounter(input: {
     objectiveEvent?: {
       actorUserId?: string | null;
@@ -462,25 +470,44 @@ export class EncounterService {
     return scenario;
   }
 
-  async updateScenarioParticipantState(input: {
-    participantId: string;
-    scenarioId: string;
-    state: ScenarioParticipantState;
-  }): Promise<ScenarioParticipant> {
+  async updateScenarioParticipantState(
+    input: {
+      participantId: string;
+      scenarioId: string;
+    } & (
+      | { state: ScenarioParticipantState; update?: never }
+      /**
+       * Derives the next state from the participant as stored at write time, under its row lock,
+       * instead of replacing the whole state with one read earlier (#1126). An error it throws
+       * aborts the write.
+       */
+      | { state?: never; update: (current: ScenarioParticipant) => ScenarioParticipantState }
+    ),
+  ): Promise<ScenarioParticipant> {
     await this.assertScenarioAllowsLiveMutation(input.scenarioId);
     // This is the shared persisted-state boundary for participant effect mutations from
     // combat commands, undo, round-end duration changes, and direct GM effect editing.
-    const state = refreshScenarioParticipantPersistentCombatModifiers({ state: input.state });
-    const participant = await this.scenarioRepository.updateScenarioParticipantState(
-      input.participantId,
-      state,
-    );
+    const update = input.update;
+    const replacementState = update
+      ? undefined
+      : refreshScenarioParticipantPersistentCombatModifiers({ state: input.state! });
+    const participant = update
+      ? await this.scenarioRepository.updateScenarioParticipantStateFromCurrent({
+          participantId: input.participantId,
+          scenarioId: input.scenarioId,
+          update: (current) =>
+            refreshScenarioParticipantPersistentCombatModifiers({ state: update(current) }),
+        })
+      : await this.scenarioRepository.updateScenarioParticipantState(
+          input.participantId,
+          replacementState!,
+        );
     const scenario = await this.scenarioRepository.getScenarioById(input.scenarioId);
 
     await this.scenarioRepository.createScenarioEventLog({
       eventType: "participant_state_updated",
       participantId: input.participantId,
-      payload: state,
+      payload: replacementState ?? participant.state,
       phase: scenario?.liveState?.phase,
       roundNumber: scenario?.liveState?.roundNumber,
       scenarioId: input.scenarioId,

@@ -3,14 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ScenarioParticipant } from "@glantri/domain";
 
+import { ApiRequestError } from "@/lib/api/apiClient";
+
 const mocks = vi.hoisted(() => ({
+  changeCombatEffects: vi.fn(),
   refreshEquipment: vi.fn(),
-  updateState: vi.fn(),
 }));
 
 vi.mock("@/lib/api/scenarioClient", () => ({
+  changeScenarioParticipantCombatEffectsOnServer: mocks.changeCombatEffects,
   refreshScenarioParticipantEquipmentOnServer: mocks.refreshEquipment,
-  updateScenarioParticipantStateOnServer: mocks.updateState,
 }));
 
 vi.mock("@/features/equipment/components/PhysicalStateSection", () => ({
@@ -26,13 +28,16 @@ vi.mock("@/features/equipment/components/PhysicalStateSection", () => ({
     >
       <button
         onClick={() =>
-          void props.onSaveCombatEffect?.({
-            damage: 3,
-            effectGroup: "damage",
-            locationIds: ["chest"],
-            status: "active",
-            type: "physical_damage",
-          })
+          // Like the real section, a refused save leaves the draft in place.
+          void Promise.resolve(
+            props.onSaveCombatEffect?.({
+              damage: 3,
+              effectGroup: "damage",
+              locationIds: ["chest"],
+              status: "active",
+              type: "physical_damage",
+            }),
+          ).catch(() => undefined)
         }
         type="button"
       >
@@ -351,16 +356,11 @@ describe("CharacterWorkspacePanel GM review of a generated NPC (#1118)", () => {
     expect(screen.queryByTestId("loadout-view")).toBeNull();
   });
 
-  it("saves and removes NPC combat effects through the participant-state route", async () => {
+  it("sends NPC combat-effect saves and removals as changes to the stored state", async () => {
     const npc = makeNpc();
     const onScenarioParticipantUpdated = vi.fn();
-    mocks.updateState.mockReset();
-    mocks.updateState.mockImplementation(
-      async (input: { state: ScenarioParticipant["state"] }) => ({
-        ...npc,
-        state: input.state,
-      }),
-    );
+    mocks.changeCombatEffects.mockReset();
+    mocks.changeCombatEffects.mockResolvedValue(npc);
 
     render(
       <CharacterWorkspacePanel
@@ -374,34 +374,70 @@ describe("CharacterWorkspacePanel GM review of a generated NPC (#1118)", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Save effect" }));
-    await waitFor(() => expect(mocks.updateState).toHaveBeenCalledTimes(1));
-    const saved = mocks.updateState.mock.calls[0]![0] as {
+    await waitFor(() => expect(mocks.changeCombatEffects).toHaveBeenCalledTimes(1));
+    const saved = mocks.changeCombatEffects.mock.calls[0]![0] as {
+      change: { effects: unknown[]; event: unknown; kind: string; previousEffect?: unknown };
       participantId: string;
       scenarioId: string;
-      state: ScenarioParticipant["state"];
+      state?: unknown;
     };
     expect(saved.participantId).toBe("scenario-participant-garrison");
     expect(saved.scenarioId).toBe("scenario-1");
-    expect(saved.state.health.maxHp).toBe(12);
-    expect(saved.state.combatEffects?.effects).toHaveLength(2);
-    expect(saved.state.combatEffects?.effects[1]).toMatchObject({
-      damage: 3,
-      location: "chest",
-      targetParticipantId: "scenario-participant-garrison",
-    });
-    expect(saved.state.combatEffects?.events[0]).toMatchObject({
+    // Only the new effect and its event travel; the stored effect-old is not resent.
+    expect(saved.state).toBeUndefined();
+    expect(saved.change.kind).toBe("save_effect");
+    expect(saved.change.previousEffect).toBeUndefined();
+    expect(saved.change.effects).toEqual([
+      expect.objectContaining({
+        damage: 3,
+        location: "chest",
+        targetParticipantId: "scenario-participant-garrison",
+      }),
+    ]);
+    expect(saved.change.event).toMatchObject({
       encounterId: "encounter-1",
       scenarioId: "scenario-1",
       targetParticipantId: "scenario-participant-garrison",
     });
-    expect(onScenarioParticipantUpdated).toHaveBeenCalled();
+    expect(onScenarioParticipantUpdated).toHaveBeenCalledWith(npc);
 
     fireEvent.click(screen.getByRole("button", { name: "Delete effect" }));
-    await waitFor(() => expect(mocks.updateState).toHaveBeenCalledTimes(2));
-    const removed = mocks.updateState.mock.calls[1]![0] as {
-      state: ScenarioParticipant["state"];
-    };
-    expect(removed.state.combatEffects?.effects).toEqual([]);
+    await waitFor(() => expect(mocks.changeCombatEffects).toHaveBeenCalledTimes(2));
+    expect(mocks.changeCombatEffects.mock.calls[1]![0]).toEqual({
+      change: { effectId: "effect-old", kind: "remove_effect" },
+      participantId: "scenario-participant-garrison",
+      scenarioId: "scenario-1",
+    });
+  });
+
+  it("shows the participant as it is now, and the message, when the server refuses a stale edit", async () => {
+    const npc = makeNpc();
+    const current = { ...npc, updatedAt: "2026-07-15T12:05:00.000Z" } as ScenarioParticipant;
+    const message =
+      "This combatant changed meanwhile; the screen has been refreshed, please apply your change again.";
+    const onScenarioParticipantUpdated = vi.fn();
+    mocks.changeCombatEffects.mockReset();
+    mocks.changeCombatEffects.mockRejectedValue(
+      new ApiRequestError(message, 409, {
+        code: "participant_state_changed",
+        error: message,
+        participant: current,
+      }),
+    );
+
+    render(
+      <CharacterWorkspacePanel
+        isGameMaster
+        onScenarioParticipantUpdated={onScenarioParticipantUpdated}
+        scenarioId="scenario-1"
+        scenarioParticipants={[npc]}
+        selectedParticipantId={npc.id}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save effect" }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(onScenarioParticipantUpdated).toHaveBeenCalledWith(current);
   });
 
   it("never offers a player the NPC, even when the NPC is controlled by their user id", () => {

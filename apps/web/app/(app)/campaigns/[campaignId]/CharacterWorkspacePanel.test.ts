@@ -37,8 +37,10 @@ describe("CharacterWorkspacePanel", () => {
   it("enables manual combat effect editing only for the GM character workspace", () => {
     const source = readSource();
 
-    expect(source).toContain("updateScenarioParticipantStateOnServer");
-    expect(source).toContain("combatEffects: nextCombatEffects");
+    // The edit is sent as a change the server applies to the stored state (#1126), never as a
+    // whole replacement state built from this screen's copy.
+    expect(source).toContain("changeScenarioParticipantCombatEffectsOnServer");
+    expect(source).not.toContain("updateScenarioParticipantStateOnServer");
     expect(source).toContain("canEditCombatEffects={isGameMaster}");
     expect(source).toContain(
       "onCombatEffectsChange={isGameMaster ? updateSelectedCombatEffects : undefined}",

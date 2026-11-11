@@ -433,22 +433,24 @@ describe("combatStatePersistenceRepository", () => {
     });
   });
 
-  it("cross-boundary undo removes only the exact last archive row", async () => {
+  it("never removes an archived round: a write with one archive fewer is refused (#1135)", async () => {
     const client = createClientFixture({
       archiveCount: 2,
       storageMode: COMBAT_STORAGE_MODE_SPLIT_V1,
     });
     const repository = createPrismaCombatStatePersistenceRepository(client as never);
 
-    await repository.updateCombatEncounter({
-      encounterId: "encounter-1",
-      expectedRevision: revision1,
-      session: buildSession(1),
-    });
+    await expect(
+      repository.updateCombatEncounter({
+        encounterId: "encounter-1",
+        expectedRevision: revision1,
+        session: buildSession(1),
+      }),
+    ).rejects.toMatchObject({ code: "archive_delta_invalid" });
 
-    expect(client.encounterArchivedCombatRound.deleteMany).toHaveBeenCalledWith({
-      where: { encounterId: "encounter-1", roundNumber: 2 },
-    });
+    expect(client.encounter.updateMany).not.toHaveBeenCalled();
+    expect(client.encounterActiveCombatState.upsert).not.toHaveBeenCalled();
+    expect(client.encounterArchivedCombatRound.deleteMany).not.toHaveBeenCalled();
     expect(client.encounterArchivedCombatRound.create).not.toHaveBeenCalled();
   });
 
@@ -661,7 +663,7 @@ describe("combatStatePersistenceRepository", () => {
     expect(client.encounterArchivedCombatRound.deleteMany).not.toHaveBeenCalled();
   });
 
-  it("exposes no ordinary archive update path", () => {
+  it("exposes no ordinary archive update or removal path", () => {
     const source = readFileSync(
       new URL("./combatStatePersistenceRepository.ts", import.meta.url),
       "utf8",
@@ -670,7 +672,8 @@ describe("combatStatePersistenceRepository", () => {
     expect(source).not.toContain("encounterArchivedCombatRound.update");
     expect(source).not.toContain("encounterArchivedCombatRound.updateMany");
     expect(source).toContain("encounterArchivedCombatRound.create");
-    expect(source).toContain("encounterArchivedCombatRound.deleteMany");
+    // #1135: undo never goes back to a previous round, so no combat write removes an archive.
+    expect(source).not.toContain("encounterArchivedCombatRound.delete");
     expect(source).toContain('error.code === "P2034"');
     expect(source).not.toContain("catch (error) {\n          if (error instanceof Error)");
   });

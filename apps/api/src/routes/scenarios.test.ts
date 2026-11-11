@@ -199,6 +199,7 @@ const mocks = vi.hoisted(() => {
     resolveDisarmDeclaration: vi.fn(),
   };
   const updateEncounter = vi.fn();
+  const listEncountersByScenario = vi.fn();
   const encounterService = {
     commitCombatParticipantStateMutation: vi.fn(),
     commitCombatParticipantStateMutations: vi.fn(),
@@ -208,7 +209,13 @@ const mocks = vi.hoisted(() => {
     getEncounterById: vi.fn(),
     getEncounterSummaryById: vi.fn(),
     listEncounterSummariesByScenario: vi.fn(),
-    listEncountersByScenario: vi.fn(),
+    listEncountersByScenario,
+    // #1136. The Scenario session projections read through their own listing. These route tests
+    // hand it the stored Encounters unchanged, so every projection case sees what it saw before;
+    // what the listing itself returns is measured against the database in the repository tests.
+    listScenarioSessionEncounters: vi.fn((scenarioId: string) =>
+      listEncountersByScenario(scenarioId),
+    ),
     updateCombatEncounter: updateEncounter,
     updateEncounter,
     updateScenarioParticipantState: vi.fn(),
@@ -7072,6 +7079,10 @@ describe("scenarios route contract", () => {
         expect(response.body).not.toContain(hidden);
       }
     }
+    // #1136: every session poll reads its Encounters through the session listing only.
+    expect(mocks.encounterService.listScenarioSessionEncounters).toHaveBeenCalledTimes(3);
+    expect(mocks.encounterService.listScenarioSessionEncounters).toHaveBeenCalledWith("scenario-1");
+    expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledTimes(3);
   });
 
   it("publishes only player-safe Combat outcomes in the Activity payload, per viewer", async () => {
@@ -7452,6 +7463,11 @@ describe("scenarios route contract", () => {
           (participant: { displayName: string }) => participant.displayName,
         ),
     ).toEqual(["Player A", "Visible Ally", "Hidden Steward", "GM Only Witness"]);
+    // #1136: the projection reads its Encounters through the session listing only.
+    expect(mocks.encounterService.listScenarioSessionEncounters).toHaveBeenCalledWith("scenario-1");
+    expect(mocks.encounterService.listEncountersByScenario).toHaveBeenCalledTimes(
+      mocks.encounterService.listScenarioSessionEncounters.mock.calls.length,
+    );
   });
 
   it("allows completed Scenario projection read-only access for players", async () => {
@@ -33873,6 +33889,189 @@ describe("#502 privacy hardening Tier 1 — converted player boundaries", () => 
           "privateDiagnostic",
           "createdByUserId",
         ]);
+      });
+    });
+
+    describe("PUT /scenarios/:scenarioId/participants/:participantId/state with a combat-effects change (#1126)", () => {
+      const NOW = "2026-11-10T20:00:00.000Z";
+      const MESSAGE =
+        "This combatant changed meanwhile; the screen has been refreshed, please apply your change again.";
+
+      function effect(id: string, overrides: Record<string, unknown> = {}) {
+        return {
+          createdAt: NOW,
+          damage: 2,
+          effectGroup: "none",
+          generalDamage: 0,
+          id,
+          location: "chest",
+          sourceEventId: `${id}-event`,
+          status: "active",
+          targetParticipantId: "participant-1",
+          type: "physical_damage",
+          updatedAt: NOW,
+          ...overrides,
+        };
+      }
+
+      function event(id: string, overrides: Record<string, unknown> = {}) {
+        return {
+          createdAt: NOW,
+          description: id,
+          id,
+          sourceLabel: id,
+          sourceType: "manual",
+          targetParticipantId: "participant-1",
+          ...overrides,
+        };
+      }
+
+      /**
+       * Sends `payload` as `user`. The screen loaded `stored`; by the time the write runs, combat has
+       * added `combat-hit` to it, and the write derives its state from that.
+       */
+      async function sendChange(
+        user: typeof mocks.playerUser | typeof mocks.adminUser,
+        payload: Record<string, unknown>,
+        options: { scenarioStatus?: string } = {},
+      ) {
+        const stored = storedParticipant("player-1");
+        const storedEffects = stored.state.combatEffects ?? { effects: [], events: [] };
+        const atWrite = {
+          ...stored,
+          state: {
+            ...stored.state,
+            combatEffects: {
+              ...storedEffects,
+              effects: [...storedEffects.effects, effect("combat-hit")],
+              events: [...storedEffects.events, event("combat-hit-event")],
+            },
+          },
+          updatedAt: "2026-11-10T20:00:05.000Z",
+        } as unknown as ScenarioParticipant;
+        setupScenarioAccess();
+        if (options.scenarioStatus) {
+          mocks.scenarioService.getScenarioById.mockResolvedValue({
+            campaignId: "campaign-1",
+            id: "scenario-1",
+            kind: "combat",
+            name: "Bridge Ambush",
+            status: options.scenarioStatus,
+          });
+        }
+        mocks.requireAuthenticatedUser.mockResolvedValue(user);
+        mocks.scenarioService.getScenarioParticipantById.mockResolvedValue(atWrite);
+        mocks.encounterService.updateScenarioParticipantState.mockReset();
+        mocks.encounterService.updateScenarioParticipantState.mockImplementation(
+          async (input: {
+            state?: unknown;
+            update?: (current: ScenarioParticipant) => ScenarioParticipant["state"];
+          }) => ({ ...atWrite, state: input.update ? input.update(atWrite) : input.state }),
+        );
+        const app = await buildScenarioTestApp();
+        const response = await app.inject({
+          method: "PUT",
+          payload,
+          url: "/scenarios/scenario-1/participants/participant-1/state",
+        });
+        await app.close();
+        const calls = mocks.encounterService.updateScenarioParticipantState.mock.calls;
+        return { atWrite, calls, response };
+      }
+
+      const effectIds = (response: { json: () => unknown }) =>
+        (
+          response.json() as { participant: ScenarioParticipant }
+        ).participant.state.combatEffects?.effects.map((entry) => entry.id);
+
+      it("adds the GM's effect to the state as stored, keeping the combat write the screen never saw", async () => {
+        const { atWrite, calls, response } = await sendChange(mocks.adminUser, {
+          combatEffectsChange: {
+            effects: [effect("gm-effect")],
+            event: event("gm-effect-event"),
+            kind: "save_effect",
+          },
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]![0]).not.toHaveProperty("state");
+        expect(effectIds(response)).toEqual([
+          ...atWrite.state.combatEffects!.effects.map((entry) => entry.id),
+          "gm-effect",
+        ]);
+        expect(effectIds(response)).toContain("combat-hit");
+        expect(
+          (
+            response.json() as { participant: ScenarioParticipant }
+          ).participant.state.combatEffects?.events.map((entry) => entry.id),
+        ).toEqual(expect.arrayContaining(["combat-hit-event", "gm-effect-event"]));
+        // The rest of the state is the stored one: the change carries none of it.
+        expect(
+          (response.json() as { participant: ScenarioParticipant }).participant.state.combat
+            .declarationSubmittedByUserId,
+        ).toBe("SECRET_DECLARING_USER");
+      });
+
+      it("removes only the named effect and keeps the combat write", async () => {
+        const { atWrite, response } = await sendChange(mocks.adminUser, {
+          combatEffectsChange: { effectId: "private-row", kind: "remove_effect" },
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(effectIds(response)).toEqual(
+          atWrite.state
+            .combatEffects!.effects.map((entry) => entry.id)
+            .filter((id) => id !== "private-row"),
+        );
+        expect(effectIds(response)).toContain("combat-hit");
+      });
+
+      it("refuses an edit of an effect that changed meanwhile with 409, the message and the current participant", async () => {
+        const { atWrite, response } = await sendChange(mocks.adminUser, {
+          combatEffectsChange: {
+            effects: [effect("combat-hit", { damage: 5 })],
+            event: event("combat-hit-event"),
+            kind: "save_effect",
+            previousEffect: effect("combat-hit", { damage: 1 }),
+            previousEvent: event("combat-hit-event"),
+          },
+        });
+
+        expect(response.statusCode, response.body).toBe(409);
+        expect(response.json()).toMatchObject({
+          code: "participant_state_changed",
+          error: MESSAGE,
+          participant: { id: atWrite.id, updatedAt: atWrite.updatedAt },
+        });
+      });
+
+      it("keeps the GM-only, live-update gating and its messages", async () => {
+        const change = {
+          combatEffectsChange: { effectId: "private-row", kind: "remove_effect" },
+        };
+        const player = await sendChange(mocks.playerUser, change);
+        const paused = await sendChange(mocks.adminUser, change, { scenarioStatus: "paused" });
+
+        expect(player.response.statusCode, player.response.body).toBe(403);
+        expect(player.response.json()).toEqual({ error: "Only GM users can edit combat effects." });
+        expect(player.calls).toHaveLength(0);
+        expect(paused.response.statusCode, paused.response.body).toBe(403);
+        expect(paused.response.json()).toEqual({
+          error: "Scenario is not currently open for live updates.",
+        });
+        expect(paused.calls).toHaveLength(0);
+      });
+
+      it("refuses a payload carrying both a whole state and a change", async () => {
+        const stored = storedParticipant("player-1");
+        const { calls, response } = await sendChange(mocks.adminUser, {
+          combatEffectsChange: { effectId: "private-row", kind: "remove_effect" },
+          state: stored.state,
+        });
+
+        expect(response.statusCode, response.body).toBe(400);
+        expect(calls).toHaveLength(0);
       });
     });
 

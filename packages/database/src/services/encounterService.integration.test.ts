@@ -498,6 +498,127 @@ if (!process.env.DATABASE_URL_TEST) {
       }
     });
 
+    it("derives a participant-state change from the stored row under its lock, so no concurrent write is lost (#1126)", async () => {
+      const gm = await createTestUser(prisma!, { roles: ["game_master"] });
+      const owner = await createTestUser(prisma!);
+      const character = await createTestCharacter(prisma!, owner.id, { name: "Contested hero" });
+      const scenarioRepository = createPrismaScenarioRepository(prisma!);
+      const characterService = new CharacterService(createPrismaCharacterRepository(prisma!));
+      const campaignService = new CampaignService(scenarioRepository, characterService);
+      const scenarioService = new ScenarioService(
+        scenarioRepository,
+        characterService,
+        new CharacterEquipmentReadModelService(createPrismaCharacterEquipmentRepository(prisma!)),
+        prisma!,
+      );
+      const campaign = await campaignService.createCampaign({
+        gmUserId: gm.id,
+        name: "Lost update",
+        status: "active",
+      });
+      await campaignService.addCampaignRosterEntry({
+        campaignId: campaign.id,
+        category: "pc",
+        sourceId: character.id,
+        sourceType: "character",
+      });
+      const scenario = await scenarioService.createScenario({
+        campaignId: campaign.id,
+        name: "Lost update",
+        status: "live",
+      });
+      const loaded = await scenarioService.addCharacterParticipant({
+        characterId: character.id,
+        controlledByUserId: owner.id,
+        joinSource: "gm_added",
+        scenarioId: scenario.id,
+      });
+      const service = new EncounterService(
+        createPrismaEncounterRepository(prisma!),
+        scenarioRepository,
+      );
+      const effect = (id: string) => ({
+        createdAt: "2026-11-10T20:00:00.000Z",
+        damage: 1,
+        effectGroup: "none" as const,
+        generalDamage: 0,
+        id,
+        location: "chest",
+        sourceEventId: `${id}-event`,
+        status: "active" as const,
+        targetParticipantId: loaded.id,
+        type: "physical_damage" as const,
+        updatedAt: "2026-11-10T20:00:00.000Z",
+      });
+      const addEffect =
+        (id: string) =>
+        (current: { state: typeof loaded.state }): typeof loaded.state => {
+          const combatEffects = combatEffectsStateSchema.parse(current.state.combatEffects);
+          return {
+            ...current.state,
+            combatEffects: { ...combatEffects, effects: [...combatEffects.effects, effect(id)] },
+          };
+        };
+
+      // A combat write lands after the GM's screen loaded `loaded`; the GM's change is then
+      // derived from what is stored, not from `loaded`.
+      const afterCombat = await service.updateScenarioParticipantState({
+        participantId: loaded.id,
+        scenarioId: scenario.id,
+        state: addEffect("combat-hit")(loaded),
+      });
+      const afterGm = await service.updateScenarioParticipantState({
+        participantId: loaded.id,
+        scenarioId: scenario.id,
+        update: addEffect("gm-effect"),
+      });
+      expect(afterGm.state.combatEffects?.effects.map((entry) => entry.id)).toEqual([
+        "combat-hit",
+        "gm-effect",
+      ]);
+      // Combat's revision-checked writes key on this moving.
+      expect(afterGm.updatedAt > afterCombat.updatedAt).toBe(true);
+
+      // Concurrent changes each see the previous one's write: none is lost.
+      const ids = Array.from({ length: 8 }, (_unused, index) => `parallel-${index}`);
+      await Promise.all(
+        ids.map((id) =>
+          service.updateScenarioParticipantState({
+            participantId: loaded.id,
+            scenarioId: scenario.id,
+            update: addEffect(id),
+          }),
+        ),
+      );
+      const stored = await scenarioRepository.getScenarioParticipantById(loaded.id, scenario.id);
+      expect(stored?.state.combatEffects?.effects.map((entry) => entry.id).sort()).toEqual(
+        ["combat-hit", "gm-effect", ...ids].sort(),
+      );
+
+      // A refusal raised while deriving the change writes nothing.
+      await expect(
+        service.updateScenarioParticipantState({
+          participantId: loaded.id,
+          scenarioId: scenario.id,
+          update: () => {
+            throw new Error("refused");
+          },
+        }),
+      ).rejects.toThrow("refused");
+      expect(await scenarioRepository.getScenarioParticipantById(loaded.id, scenario.id)).toEqual(
+        stored,
+      );
+
+      // The row must belong to the Scenario named.
+      await expect(
+        scenarioRepository.updateScenarioParticipantStateFromCurrent({
+          participantId: loaded.id,
+          scenarioId: "another-scenario",
+          update: addEffect("misdirected"),
+        }),
+      ).rejects.toThrow("Scenario participant not found.");
+    });
+
     it("atomically persists and reloads C1 source state, roll-once rate, and exact remainder", async () => {
       const gm = await createTestUser(prisma!, { roles: ["game_master"] });
       const owner = await createTestUser(prisma!);
