@@ -1,7 +1,7 @@
 import type { ScenarioParticipant } from "../../campaign/scenario";
 import { scenarioParticipantCombatContextSchema } from "../../campaign/scenario";
 import { projectCanonicalCombatModifierReviewInput } from "../combatModifierReviewProjection";
-import { activeCombatRoundStateSchema, combatRoundStateSchema } from "../combatRoundManager";
+import { activeCombatRoundStateSchema, safeParseCombatRoundState } from "../combatRoundManager";
 import { projectCombatParticipation } from "./project";
 import type {
   CombatParticipationProjection,
@@ -18,7 +18,7 @@ export function projectActiveCombatParticipation(input: {
   readonly scenarioParticipants: readonly ScenarioParticipant[];
   readonly state: Parameters<typeof activeCombatRoundStateSchema.parse>[0];
 }): CombatParticipationProjection {
-  const fullState = combatRoundStateSchema.safeParse(input.state);
+  const fullState = safeParseCombatRoundState(input.state);
   const state = fullState.success
     ? activeCombatRoundStateSchema.parse(
         Object.fromEntries(Object.entries(fullState.data).filter(([key]) => key !== "rounds")),

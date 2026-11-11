@@ -1,5 +1,5 @@
 import {
-  combatRoundStateSchema,
+  parseCombatRoundState,
   getCombatRoundCurrentInitiativeExecutionGroup,
   getCombatRoundInitiativeExecutionGroups,
   getCombatRoundStepForCursorStep,
@@ -109,7 +109,7 @@ export function buildCombatProgressionProjection(
   state: CombatRoundState,
   options: { readonly participation?: CombatParticipationProjection } = {},
 ): CombatProgressionProjection {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const cursor = normalized.currentCursor;
   const boundaryKind = cursor
     ? boundaryForCursorStep(cursor.step, Boolean(cursor.participantId))

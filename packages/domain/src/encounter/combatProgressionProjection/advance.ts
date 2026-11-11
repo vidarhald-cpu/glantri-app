@@ -2,7 +2,7 @@ import {
   advanceCombatRoundStep,
   buildCombatRoundCommandId,
   combatRoundCommandSchema,
-  combatRoundStateSchema,
+  parseCombatRoundState,
   getCombatRoundCursorStepForStep,
   getFirstCombatRoundPendingModifierReviewParticipantId,
   getCombatRoundStartNextRoundBlocker,
@@ -88,7 +88,7 @@ function transitionWithoutCommand(input: {
   }
   const normalized = input.stepSnapshots
     ? upsertCombatRoundStepSnapshots({ snapshots: input.stepSnapshots, state: input.state })
-    : combatRoundStateSchema.parse(input.state);
+    : parseCombatRoundState(input.state);
   const participantId =
     input.targetBoundary === "phase2_modifier_review"
       ? (getFirstCombatRoundPendingModifierReviewParticipantId({
@@ -99,7 +99,7 @@ function transitionWithoutCommand(input: {
         normalized.selectedParticipantId ??
         normalized.participants[0]?.participantId);
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...normalized,
     currentCursor: {
       participantId,
@@ -137,7 +137,7 @@ export function advanceCombatProgressionBoundary(input: {
   targetBoundary: CombatProgressionBoundaryKind;
   visibility?: CombatRoundVisibility;
 }): CombatRoundState {
-  const normalized = combatRoundStateSchema.parse(input.state);
+  const normalized = parseCombatRoundState(input.state);
   const projection = buildCombatProgressionProjection(normalized, {
     participation: input.participation,
   });
@@ -195,7 +195,7 @@ export function advanceCombatProgressionBoundary(input: {
       stepSnapshots: input.stepSnapshots,
       visibility: input.visibility,
     });
-    return combatRoundStateSchema.parse({ ...completed, gmBacktrackHold: undefined });
+    return parseCombatRoundState({ ...completed, gmBacktrackHold: undefined });
   }
 
   const transitioned = transitionWithoutCommand({
@@ -247,7 +247,7 @@ export function advanceCombatProgressionBoundary(input: {
     type: commandType,
   });
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...transitioned,
     commands: [...transitioned.commands, command],
     gmBacktrackHold: undefined,

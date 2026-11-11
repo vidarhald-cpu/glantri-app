@@ -66,4 +66,31 @@ describe("modifier review input snapshots", () => {
     expect(next).not.toBe(original);
     expect(next?.expectedParticipantRevision).toBe("participant-revision-2");
   });
+
+  // #1145 repair cycle 1 (C1): a refused commit leaves the key unchanged, so the panel deletes the
+  // refused snapshot after its conflict refresh; the next render must then capture the refreshed
+  // participant revision and review input under the same key.
+  it("captures the refreshed participant revision once the refused snapshot is deleted", () => {
+    const snapshots = new Map();
+    const refused = getOrCreateCombatModifierReviewInputSnapshot({
+      combatContext: createEmptyPlayerEncounterCombatContext(),
+      descriptor: descriptor({ commandType: "review_modifiers_phase2" }),
+      expectedParticipantRevision: "participant-revision-1",
+      participantId: "participant-1",
+      snapshots,
+    })!;
+    snapshots.delete(refused.key);
+    const rebuilt = getOrCreateCombatModifierReviewInputSnapshot({
+      combatContext: { ...createEmptyPlayerEncounterCombatContext(), selectedOpponentId: "fresh" },
+      descriptor: descriptor({ commandType: "review_modifiers_phase2" }),
+      expectedParticipantRevision: "participant-revision-2",
+      participantId: "participant-1",
+      snapshots,
+    });
+
+    expect(rebuilt).not.toBe(refused);
+    expect(rebuilt?.key).toBe(refused.key);
+    expect(rebuilt?.expectedParticipantRevision).toBe("participant-revision-2");
+    expect(rebuilt?.combatContext.selectedOpponentId).toBe("fresh");
+  });
 });

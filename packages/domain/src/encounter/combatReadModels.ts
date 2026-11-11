@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   activeCombatRoundStateSchema,
-  combatRoundStateSchema,
+  parseCombatRoundState,
   completedCombatRoundSchema,
   type ActiveCombatRoundState,
   type CombatRoundState,
@@ -364,7 +364,7 @@ export function splitEncounterSessionForCombatPersistence(
     };
   }
 
-  const { rounds, ...activeCombatState } = combatRoundStateSchema.parse(combatRoundState);
+  const { rounds, ...activeCombatState } = parseCombatRoundState(combatRoundState);
 
   return {
     activeCombatState: activeCombatRoundStateSchema.parse(activeCombatState),
@@ -393,7 +393,7 @@ export function composeEncounterSessionFromSplitCombatPersistence(input: {
     ...session,
     campaignId: metadata.campaignId,
     combatRoundState: activeCombatState
-      ? combatRoundStateSchema.parse({
+      ? parseCombatRoundState({
           ...activeCombatState,
           encounterId: metadata.encounterId,
           rounds: archivedRounds,
@@ -630,7 +630,7 @@ export function materializeCombatHistoryRoundState(
     return undefined;
   }
 
-  return combatRoundStateSchema.parse({
+  return parseCombatRoundState({
     ...source.activeCombatState,
     encounterId: source.encounterId,
     rounds: source.archivedRounds,
@@ -641,7 +641,7 @@ export function withCombatHistoryRoundState(input: {
   source: CombatHistorySourceView;
   state: CombatRoundState;
 }): CombatHistorySourceView {
-  const { rounds, ...activeCombatState } = combatRoundStateSchema.parse(input.state);
+  const { rounds, ...activeCombatState } = parseCombatRoundState(input.state);
 
   return combatHistorySourceViewSchema.parse({
     ...input.source,
@@ -665,7 +665,7 @@ export function buildCombatHistorySourceViewFromState(input: {
   if (!encounterId) {
     throw new Error("Combat history source requires an encounter identity.");
   }
-  const { rounds, ...activeCombatState } = combatRoundStateSchema.parse(input.state);
+  const { rounds, ...activeCombatState } = parseCombatRoundState(input.state);
 
   return combatHistorySourceViewSchema.parse({
     activeCombatState,

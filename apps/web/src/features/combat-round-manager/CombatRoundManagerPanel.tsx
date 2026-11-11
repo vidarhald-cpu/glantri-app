@@ -10192,6 +10192,14 @@ export default function CombatRoundManagerPanel({
               : "Combat state changed and could not be refreshed.",
           );
         }
+        // #1145 C1: rebuild the refused review's snapshot from the refreshed participant.
+        if (
+          isModifierReview &&
+          modifierReviewInputSnapshot &&
+          getCombatMutationConflictCode(caughtError) === "stale_revision"
+        ) {
+          modifierReviewInputSnapshotsRef.current.delete(modifierReviewInputSnapshot.key);
+        }
       } else {
         setSaveError(
           caughtError instanceof Error ? caughtError.message : "Unable to save combat declaration.",
