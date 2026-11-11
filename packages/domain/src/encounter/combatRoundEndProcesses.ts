@@ -1,5 +1,5 @@
 import {
-  combatRoundStateSchema,
+  parseCombatRoundState,
   getCombatObservationManualReviews,
   getPendingCombatObservationAttempts,
   getCombatRoundEndDistanceProposalLifecycle,
@@ -148,7 +148,7 @@ function stage(input: {
  * sequencing only; existing commands remain the sole writers of distance, Health, and effects.
  */
 export function buildCombatRoundEndProcessPlan(state: CombatRoundState): CombatRoundEndProcessPlan {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const roundNumber = normalized.roundNumber;
   const review = normalized.roundEndReview;
   const validReview = review?.roundNumber === roundNumber ? review : undefined;

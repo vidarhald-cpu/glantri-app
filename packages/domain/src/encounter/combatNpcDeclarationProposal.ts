@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import {
   combatRoundDeclarationSchema,
-  combatRoundStateSchema,
+  parseCombatRoundState,
   type CombatAttackSourceRef,
   type CombatRoundAttackOpportunity,
   type CombatRoundState,
@@ -233,7 +233,7 @@ export function projectCombatNpcDeclarationProposal(input: {
   readonly proposalSequence: number;
   readonly state: CombatRoundState;
 }): CombatNpcDeclarationProposal | undefined {
-  const state = combatRoundStateSchema.parse(input.state);
+  const state = parseCombatRoundState(input.state);
   if (state.roundNumber <= 1) return undefined;
   const currentParticipant = state.participants.find(
     (participant) => participant.participantId === input.participantId,

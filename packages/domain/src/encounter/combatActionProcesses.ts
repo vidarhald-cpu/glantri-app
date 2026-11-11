@@ -1,5 +1,5 @@
 import {
-  combatRoundStateSchema,
+  parseCombatRoundState,
   buildCombatRoundDeclaredAttackOpportunities,
   getCombatRoundAttackResultId,
   getCombatRoundAttackResultForOpportunity,
@@ -1183,7 +1183,7 @@ export const combatActionProcessAdapters: readonly CombatActionProcessAdapter[] 
 export function buildCombatActionProcessPlans(
   state: CombatRoundState,
 ): readonly CombatActionProcessPlan[] {
-  const normalized = combatRoundStateSchema.parse(state);
+  const normalized = parseCombatRoundState(state);
   const attackOpportunities = normalized.participants.flatMap((participant) => {
     const declaration = participant.declaration;
     if (!declaration) return [];
