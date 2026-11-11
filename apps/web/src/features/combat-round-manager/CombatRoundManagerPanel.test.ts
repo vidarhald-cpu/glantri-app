@@ -57,6 +57,11 @@ describe("CombatRoundManagerPanel", () => {
     // every participant, so the client sends the review input and nothing else.
     expect(source).not.toContain("reviewStepSnapshot");
     expect(source).toContain("modifierReviewInputSnapshotsRef.current.clear()");
+    // #1145 repair cycle 1 (C1): a stale-revision refusal releases the refused review snapshot so
+    // the retry carries the refreshed participant revision instead of looping until a reload.
+    expect(source).toMatch(
+      /isModifierReview &&\s+modifierReviewInputSnapshot &&\s+getCombatMutationConflictCode\(caughtError\) === "stale_revision"\s+\) \{\s+discardCombatModifierReviewInputSnapshot\(\{\s+snapshot: modifierReviewInputSnapshot,\s+snapshots: modifierReviewInputSnapshotsRef\.current,/,
+    );
     expect(source).not.toContain("onChange={submitCombatDeclarationOnServer}");
   });
 
